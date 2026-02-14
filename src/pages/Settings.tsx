@@ -229,11 +229,11 @@ const Settings = () => {
                               type="number"
                               value={rem.value}
                               onChange={(e) => updateReminder(nt.key, rem.id, "value", e.target.value)}
-                              className="h-6 w-12 rounded-md text-[10px] text-center"
+                              className="h-6 w-16 rounded-md text-[10px] text-center"
                               min={1}
                             />
                             <Select value={rem.unit} onValueChange={(v) => updateReminder(nt.key, rem.id, "unit", v)}>
-                              <SelectTrigger className="h-6 w-16 rounded-md text-[10px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger className="h-6 w-20 rounded-md text-[10px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="mins">mins</SelectItem>
                                 <SelectItem value="hrs">hrs</SelectItem>
