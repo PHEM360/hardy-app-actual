@@ -29,26 +29,10 @@ const COLORS = [
   "hsl(280, 45%, 55%)", "hsl(152, 60%, 38%)",
 ];
 
-const INITIAL_ACCOUNTS: HHAccount[] = [
-  { id: "h1", name: "Joint Current", active: true, hidden: false },
-  { id: "h2", name: "Joint Savings", active: true, hidden: false },
-  { id: "h3", name: "Bills Account", active: true, hidden: false },
-];
+// Mock data removed. Real household finance data should be added via the app and stored in Firestore.
+const INITIAL_ACCOUNTS: HHAccount[] = [];
 
-const INITIAL_ENTRIES: HHEntry[] = [
-  { id: "he1", accountId: "h1", date: "2024-07-01", balance: 3200 },
-  { id: "he2", accountId: "h1", date: "2024-10-01", balance: 2800 },
-  { id: "he3", accountId: "h1", date: "2025-01-01", balance: 3500 },
-  { id: "he4", accountId: "h1", date: "2025-02-01", balance: 3100 },
-  { id: "he5", accountId: "h2", date: "2024-07-01", balance: 8500 },
-  { id: "he6", accountId: "h2", date: "2024-10-01", balance: 9200 },
-  { id: "he7", accountId: "h2", date: "2025-01-01", balance: 9800 },
-  { id: "he8", accountId: "h2", date: "2025-02-01", balance: 10100 },
-  { id: "he9", accountId: "h3", date: "2024-07-01", balance: 1200 },
-  { id: "he10", accountId: "h3", date: "2024-10-01", balance: 950 },
-  { id: "he11", accountId: "h3", date: "2025-01-01", balance: 1400 },
-  { id: "he12", accountId: "h3", date: "2025-02-01", balance: 1150 },
-];
+const INITIAL_ENTRIES: HHEntry[] = [];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {

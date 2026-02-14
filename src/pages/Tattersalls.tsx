@@ -4,27 +4,12 @@ import { Building, Plus, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
-const BALANCE_HISTORY = [
-  { month: "Aug 24", balance: 2400 }, { month: "Sep 24", balance: 2180 },
-  { month: "Oct 24", balance: 1950 }, { month: "Nov 24", balance: 2600 },
-  { month: "Dec 24", balance: 2350 }, { month: "Jan 25", balance: 2100 },
-  { month: "Feb 25", balance: 1875 },
-];
+// Mock data removed. Real Tattersalls data should be added via the app and stored in Firestore.
+const BALANCE_HISTORY = [];
 
-const EXPENSES = [
-  { desc: "Service Charge", amount: 450, date: "1 Feb 25", type: "Regular" },
-  { desc: "Ground Rent", amount: 250, date: "1 Jan 25", type: "Regular" },
-  { desc: "Boiler Repair", amount: 320, date: "15 Dec 24", type: "One-off" },
-  { desc: "Contents Insurance", amount: 22, date: "1 Dec 24", type: "Regular" },
-  { desc: "Window Cleaning", amount: 35, date: "20 Nov 24", type: "One-off" },
-];
+const EXPENSES = [];
 
-const DOCUMENTS = [
-  { name: "Lease Agreement", date: "2020-03-15" },
-  { name: "Service Charge Statement 2024", date: "2024-04-01" },
-  { name: "Buildings Insurance Certificate", date: "2024-08-01" },
-  { name: "EPC Certificate", date: "2023-09-20" },
-];
+const DOCUMENTS = [];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {

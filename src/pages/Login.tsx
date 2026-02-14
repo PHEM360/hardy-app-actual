@@ -9,6 +9,25 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 
+function getAuthErrorMessage(err: any): string {
+  const code = String(err?.code || "");
+
+  // Common Firebase Auth errors
+  if (code.includes("auth/invalid-email")) return "That email address doesn’t look right.";
+  if (code.includes("auth/missing-password")) return "Please enter your password.";
+  if (code.includes("auth/invalid-credential") || code.includes("auth/wrong-password")) {
+    return "Incorrect email or password.";
+  }
+  if (code.includes("auth/user-not-found")) return "No account found for that email.";
+  if (code.includes("auth/user-disabled")) return "This account has been disabled.";
+  if (code.includes("auth/too-many-requests")) {
+    return "Too many attempts. Please wait a moment and try again.";
+  }
+
+  // Fallback
+  return err?.message || "Login failed. Please try again.";
+}
+
 const SPLASH_ICONS = [
   { emoji: "🐕", delay: 0, x: "15%", y: "20%" },
   { emoji: "🚜", delay: 0.2, x: "75%", y: "15%" },
@@ -34,6 +53,9 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const { forbidden } = useAuth();
 
+  // Helps confirm deployments are updating. Remove anytime.
+  const BUILD_STAMP = "2026-02-14T15:30Z";
+
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 3000);
     return () => clearTimeout(timer);
@@ -54,15 +76,14 @@ const Login = () => {
       await signInWithEmailAndPassword(auth, email, password);
       navigate("/dashboard", { replace: true });
     } catch (err: any) {
-      const message = err?.message || "Login failed";
-      setError(message);
+      setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col overflow-hidden relative">
+    <div className="min-h-screen flex flex-col relative">
       <AnimatePresence>
         {showSplash && (
           <motion.div
@@ -147,7 +168,7 @@ const Login = () => {
       </AnimatePresence>
 
       {/* Main login page */}
-      <div className="min-h-screen flex flex-col bg-gradient-hero">
+  <div className="min-h-screen flex flex-col bg-gradient-hero overflow-x-hidden">
         {/* Floating background icons */}
         {FLOATING_ICONS.map((icon, i) => (
           <motion.div
@@ -178,7 +199,7 @@ const Login = () => {
         ))}
 
         {/* Top section with logo */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 pt-16 pb-8 relative z-10">
+  <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-2 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: -30, scale: 0.5 }}
             animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? -30 : 0, scale: showSplash ? 0.5 : 1 }}
@@ -189,7 +210,7 @@ const Login = () => {
               initial={{ rotate: -10 }}
               animate={{ rotate: [0, -5, 5, -3, 3, 0] }}
               transition={{ delay: showSplash ? 3.8 : 3.8 - SPLASH_DURATION, duration: 0.8, ease: "easeInOut" }}
-              className="w-20 h-20 rounded-2xl bg-primary-foreground/15 backdrop-blur-sm border border-primary-foreground/20 flex items-center justify-center mx-auto mb-4 shadow-elevated"
+              className="w-20 h-20 rounded-2xl bg-primary-foreground/15 backdrop-blur-sm border border-primary-foreground/20 flex items-center justify-center mx-auto mb-3 shadow-elevated"
             >
               <PawPrint className="w-9 h-9 text-primary-foreground" />
             </motion.div>
@@ -205,7 +226,7 @@ const Login = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: showSplash ? 0 : 1 }}
               transition={{ delay: showSplash ? 3.7 : 3.7 - SPLASH_DURATION }}
-              className="flex items-center justify-center gap-1.5 mt-2"
+              className="flex items-center justify-center gap-1.5 mt-1"
             >
               <Sparkles className="w-3.5 h-3.5 text-primary-foreground/60" />
               <p className="text-primary-foreground/70 text-sm">
@@ -221,16 +242,20 @@ const Login = () => {
           initial={{ opacity: 0, y: 80 }}
           animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 80 : 0 }}
           transition={{ type: "spring", stiffness: 120, damping: 20, delay: showSplash ? 3.4 : 3.4 - SPLASH_DURATION }}
-          className="bg-card rounded-t-3xl px-6 pt-8 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full"
+          className="bg-card rounded-t-3xl px-6 pt-6 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full"
         >
             <motion.h2
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: showSplash ? 3.7 : 3.7 - SPLASH_DURATION }}
-              className="text-lg font-semibold font-display text-card-foreground mb-6"
+              className="text-lg font-semibold font-display text-card-foreground mb-4"
             >
             Welcome home 👋
           </motion.h2>
+
+          <p className="text-[10px] text-muted-foreground -mt-3 mb-4">
+            Build: {BUILD_STAMP}
+          </p>
 
             {(forbidden || error) && (
               <div className="mb-4 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3">
@@ -256,6 +281,7 @@ const Login = () => {
                 placeholder="you@hardyhub.app"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 className="h-12 rounded-xl bg-muted/50 border-border"
                 required
               />
@@ -275,6 +301,7 @@ const Login = () => {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                   className="h-12 rounded-xl bg-muted/50 border-border pr-12"
                   required
                 />

@@ -37,27 +37,12 @@ interface HouseholdMember {
   role: string;
 }
 
-const MEMBERS: HouseholdMember[] = [
-  { name: "Hardy", role: "Admin" },
-  { name: "Sarah", role: "Member" },
-  { name: "Tom", role: "Member" },
-  { name: "Emma", role: "Member" },
-];
+// Mock data removed. Real household data should be added via the app and stored in Firestore.
+const MEMBERS: HouseholdMember[] = [];
 
-const INITIAL_POLICIES: PolicyRecord[] = [
-  { id: "p1", type: "Home Insurance", provider: "Aviva", policyNumber: "AV-2024-55123", startDate: "2024-08-01", endDate: "2025-08-01", monthlyPremium: 42, addedBy: "Hardy", documents: [{ id: "d1", name: "Home Insurance Certificate", category: "Insurance", date: "2024-08-01", linkedItemId: "p1" }], current: true },
-  { id: "p1h", type: "Home Insurance", provider: "LV=", policyNumber: "LV-2023-42100", startDate: "2023-08-01", endDate: "2024-07-31", monthlyPremium: 38, addedBy: "Hardy", documents: [], current: false },
-  { id: "p2", type: "Car Insurance", provider: "Direct Line", policyNumber: "DL-2024-88210", startDate: "2024-05-15", endDate: "2025-05-15", monthlyPremium: 55, addedBy: "Hardy", documents: [], current: true, notes: "Hardy's car" },
-  { id: "p3", type: "Car Insurance", provider: "Admiral", policyNumber: "AD-2024-91003", startDate: "2024-07-22", endDate: "2025-07-22", monthlyPremium: 38, addedBy: "Sarah", documents: [], current: true, notes: "Sarah's car" },
-  { id: "p4", type: "Life Insurance", provider: "Legal & General", policyNumber: "LG-2020-44100", startDate: "2020-12-01", endDate: "2025-12-01", monthlyPremium: 28, addedBy: "Hardy", documents: [], current: true },
-];
+const INITIAL_POLICIES: PolicyRecord[] = [];
 
-const INITIAL_DOCUMENTS: HouseholdDocument[] = [
-  { id: "d1", name: "Home Insurance Certificate", category: "Insurance", date: "2024-08-01", linkedItemId: "p1" },
-  { id: "d2", name: "Boiler Service Report", category: "Maintenance", date: "2024-11-15" },
-  { id: "d3", name: "EPC Certificate", category: "Property", date: "2023-06-10" },
-  { id: "d4", name: "Council Tax Bill 2024/25", category: "Tax", date: "2024-04-01" },
-];
+const INITIAL_DOCUMENTS: HouseholdDocument[] = [];
 
 const CATEGORY_TILES = [
   { key: "home_insurance", label: "Home Insurance", emoji: "🏠", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(145deg, hsl(190, 25%, 88%) 0%, hsl(195, 20%, 82%) 100%)" },

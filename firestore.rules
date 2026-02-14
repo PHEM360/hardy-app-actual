@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin";
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+      );
+    }
+    
+    // Users collection - users can read/write their own data, admins can manage all
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isOwner(userId) || isAdmin();
+      // Don't allow direct client writes to other users' docs unless they're admin.
+      // Superadmin/admin actions should prefer Cloud Functions.
+    }
+    
+    // Invites collection - only admins can manage
+    match /invites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Family collection - authenticated users can read, owners can write
+    match /families/{familyId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.members[request.auth.uid] != null || 
+         resource.data.admins[request.auth.uid] != null);
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        resource.data.admins[request.auth.uid] == true;
+      
+      // Family members subcollection
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && 
+          get(/databases/$(database)/documents/families/$(familyId)).data.members[request.auth.uid] != null;
+        allow write: if isAuthenticated() && 
+          get(/databases/$(database)/documents/families/$(familyId)).data.admins[request.auth.uid] == true;
+      }
+      
+      // Family documents subcollection
+      match /documents/{documentId} {
+        allow read: if isAuthenticated() && 
+          get(/databases/$(database)/documents/families/$(familyId)).data.members[request.auth.uid] != null;
+        allow write: if isAuthenticated() && 
+          get(/databases/$(database)/documents/families/$(familyId)).data.members[request.auth.uid] != null;
+      }
+    }
+    
+    // Shared documents - only accessible by specified users
+    match /sharedDocuments/{documentId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.sharedWith[request.auth.uid] != null || 
+         isOwner(resource.data.ownerId));
+      allow write: if isAuthenticated() && isOwner(resource.data.ownerId);
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

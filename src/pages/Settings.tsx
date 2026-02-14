@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2 } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AvatarType } from "@/types/app";
 import { useAuth } from "@/auth/AuthContext";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useNavigate } from "react-router-dom";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -59,6 +62,7 @@ const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }:
 
 const Settings = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [pushNotifications, setPushNotifications] = useState(true);
 
@@ -286,8 +290,15 @@ const Settings = () => {
           <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2">
             <Lock className="w-4 h-4" /> Change Password
           </Button>
-          <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive">
-            Sign Out
+          <Button
+            variant="outline"
+            className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive"
+            onClick={async () => {
+              await signOut(auth);
+              navigate("/", { replace: true });
+            }}
+          >
+            <LogOut className="w-4 h-4" /> Sign Out
           </Button>
         </div>
       </div>

@@ -30,21 +30,17 @@ function projectScenario(scenario: Scenario, years: number) {
   return data;
 }
 
+// Mock data removed. Real inheritance planning data should be added via the app and stored in Firestore.
 const DEFAULT_SCENARIO: Scenario = {
   id: "s1", name: "Current Plan",
-  assets: [
-    { id: "as1", name: "Family Home", value: 450000, growthRate: 3, type: "property" },
-    { id: "as2", name: "ISAs & Savings", value: 120000, growthRate: 4, type: "investment" },
-    { id: "as3", name: "Pension (death benefit)", value: 80000, growthRate: 5, type: "investment" },
-    { id: "as4", name: "Cash", value: 25000, growthRate: 1, type: "cash" },
-  ],
+  assets: [],
   gifts: [],
   nilRateBand: 325000, residenceNilRate: 175000, inflationRate: 2.5,
 };
 
 const GIFTING_SCENARIO: Scenario = {
   ...DEFAULT_SCENARIO, id: "s2", name: "With Gifting",
-  gifts: [{ id: "g1", recipientName: "Children", annualAmount: 6000, startYear: 2025, endYear: 2035 }],
+  gifts: [],
 };
 
 const Inheritance = () => {

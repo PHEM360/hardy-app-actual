@@ -1,6 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, PiggyBank, Heart, Shield, MoreHorizontal } from "lucide-react";
+import { Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useUserRole } from "@/auth/useUserRole";
 
 const NAV_ITEMS = [
   { icon: Home, label: "Home", path: "/dashboard", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(135deg, hsl(188, 33%, 38%), hsl(191, 33%, 43%))" },
@@ -13,11 +16,20 @@ const NAV_ITEMS = [
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { role, loading } = useUserRole();
+
+  const navItems = NAV_ITEMS.filter((i) => {
+    if (i.path !== "/admin") return true;
+    // Hide Admin tab for non-admin users.
+    // While loading, keep it hidden to avoid a brief flash.
+    if (loading) return false;
+    return role === "admin" || role === "superadmin";
+  });
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card safe-bottom">
       <div className="flex items-center justify-around h-16 px-2">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path !== "/" && location.pathname.startsWith(item.path));
           const Icon = item.icon;
@@ -49,6 +61,20 @@ const BottomNav = () => {
             </button>
           );
         })}
+
+        {/* Sign out (icon-only-ish) */}
+        <button
+          onClick={async () => {
+            await signOut(auth);
+            navigate("/", { replace: true });
+          }}
+          className="relative flex flex-col items-center justify-center gap-0.5 w-16 h-full transition-colors"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <LogOut className="w-5 h-5 text-muted-foreground" />
+          <span className="text-[10px] font-medium text-muted-foreground">Sign out</span>
+        </button>
       </div>
     </nav>
   );

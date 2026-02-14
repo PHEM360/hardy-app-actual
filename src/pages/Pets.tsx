@@ -46,68 +46,8 @@ interface Pet {
   insurance: { provider: string; policyNumber: string; renewalDate: string; monthlyPremium: number; coverLevel: string; excess: number };
 }
 
-const INITIAL_PETS: Pet[] = [
-  {
-    id: "1", name: "Billy", breed: "Labrador Retriever", birthday: "2021-06-15", avatar: "🐕",
-    fleaOptions: [
-      { id: "fo1", product: "Advocate", frequencyDays: 30 },
-      { id: "fo2", product: "NexGard Spectra", frequencyDays: 30 },
-    ],
-    wormOptions: [
-      { id: "wo1", product: "Droncit", frequencyDays: 90 },
-      { id: "wo2", product: "Drontal Plus", frequencyDays: 90 },
-    ],
-    selectedFlea: "Advocate",
-    selectedWorm: "Droncit",
-    treatmentNotes: "Advocate + Droncit or NexGard Spectra (covers both)",
-    weightHistory: [
-      { date: "2024-09-01", weight: 26.2 }, { date: "2024-10-01", weight: 26.8 },
-      { date: "2024-11-01", weight: 27.1 }, { date: "2024-12-01", weight: 27.9 },
-      { date: "2025-01-01", weight: 28.2 }, { date: "2025-02-01", weight: 28.5 },
-    ],
-    treatmentHistory: [
-      { id: "t1", type: "flea", name: "Advocate", dateDue: "2025-02-15", dateGiven: "2025-02-14" },
-      { id: "t1b", type: "flea", name: "Advocate", dateDue: "2025-01-15", dateGiven: "2025-01-15" },
-      { id: "t1c", type: "flea", name: "Advocate", dateDue: "2024-12-15", dateGiven: "2024-12-18" },
-      { id: "t1d", type: "flea", name: "Advocate", dateDue: "2024-11-15", dateGiven: "2024-11-25" },
-      { id: "t2", type: "worming", name: "Droncit", dateDue: "2025-04-01", dateGiven: "" },
-      { id: "t2b", type: "worming", name: "Droncit", dateDue: "2025-01-01", dateGiven: "2025-01-02" },
-      { id: "t2c", type: "worming", name: "Droncit", dateDue: "2024-10-01", dateGiven: "2024-10-01" },
-    ],
-    fleaNotifications: [{ id: "fn1", daysBeforeDue: 3 }],
-    wormNotifications: [{ id: "wn1", daysBeforeDue: 7 }],
-    insurance: { provider: "Petplan", policyNumber: "PP-2021-88431", renewalDate: "2025-06-15", monthlyPremium: 34.5, coverLevel: "Lifetime", excess: 110 },
-  },
-  {
-    id: "2", name: "Milo", breed: "Cockapoo", birthday: "2023-03-22", avatar: "🐶",
-    fleaOptions: [
-      { id: "fo3", product: "Advocate", frequencyDays: 30 },
-      { id: "fo4", product: "Anthelmin", frequencyDays: 30 },
-    ],
-    wormOptions: [
-      { id: "wo3", product: "Milbemax", frequencyDays: 90 },
-      { id: "wo4", product: "Drontal Plus", frequencyDays: 90 },
-    ],
-    selectedFlea: "Advocate",
-    selectedWorm: "Milbemax",
-    treatmentNotes: "Anthelmin + Advocate or Advocate alone (monthly)",
-    weightHistory: [
-      { date: "2024-09-01", weight: 8.1 }, { date: "2024-10-01", weight: 8.3 },
-      { date: "2024-11-01", weight: 8.4 }, { date: "2024-12-01", weight: 8.6 },
-      { date: "2025-01-01", weight: 8.7 }, { date: "2025-02-01", weight: 8.8 },
-    ],
-    treatmentHistory: [
-      { id: "t4", type: "flea", name: "Advocate", dateDue: "2025-02-22", dateGiven: "2025-02-22" },
-      { id: "t4b", type: "flea", name: "Advocate", dateDue: "2025-01-22", dateGiven: "2025-01-20" },
-      { id: "t4c", type: "flea", name: "Advocate", dateDue: "2024-12-22", dateGiven: "2024-12-30" },
-      { id: "t5", type: "worming", name: "Milbemax", dateDue: "2025-04-01", dateGiven: "" },
-      { id: "t5b", type: "worming", name: "Milbemax", dateDue: "2025-01-01", dateGiven: "2025-01-03" },
-    ],
-    fleaNotifications: [{ id: "fn2", daysBeforeDue: 3 }],
-    wormNotifications: [{ id: "wn2", daysBeforeDue: 7 }],
-    insurance: { provider: "Bought By Many", policyNumber: "BBM-2023-44210", renewalDate: "2025-03-22", monthlyPremium: 22.0, coverLevel: "Lifetime", excess: 85 },
-  },
-];
+// Mock data removed. Real pet data should be added via the app and stored in Firestore.
+const INITIAL_PETS: Pet[] = [];
 
 function getAge(b: string) {
   const bd = new Date(b), now = new Date();

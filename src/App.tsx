@@ -19,6 +19,7 @@ import Settings from "@/pages/Settings";
 import Themes from "@/pages/Themes";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/auth/RequireAuth";
+import RequireRole from "@/auth/RequireRole";
 
 const queryClient = new QueryClient();
 
@@ -41,7 +42,14 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/pets" element={<Pets />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route
+              path="/admin"
+              element={
+                <RequireRole minRole="admin">
+                  <Admin />
+                </RequireRole>
+              }
+            />
             <Route path="/household-finance" element={<HouseholdFinance />} />
             <Route path="/inheritance" element={<Inheritance />} />
             <Route path="/households" element={<Households />} />

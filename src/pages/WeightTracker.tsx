@@ -11,11 +11,8 @@ import { format } from "date-fns";
 
 interface WeightEntry { date: string; weight: number }
 
-const INITIAL_DATA: WeightEntry[] = [
-  { date: "2024-09-01", weight: 82.5 }, { date: "2024-10-01", weight: 81.8 },
-  { date: "2024-11-01", weight: 82.1 }, { date: "2024-12-01", weight: 83.4 },
-  { date: "2025-01-01", weight: 82.0 }, { date: "2025-02-01", weight: 81.2 },
-];
+// Mock data removed. Real weight data should be added via the app and stored in Firestore.
+const INITIAL_DATA: WeightEntry[] = [];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {

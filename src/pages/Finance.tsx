@@ -32,49 +32,10 @@ const COLORS = [
   "hsl(30, 80%, 50%)", "hsl(190, 70%, 45%)",
 ];
 
-const INITIAL_ACCOUNTS: Account[] = [
-  { id: "a1", name: "LISA", type: "LISA", active: true, hidden: false },
-  { id: "a2", name: "Cash ISA", type: "ISA", active: true, hidden: false },
-  { id: "a3", name: "Savings", type: "Savings", active: true, hidden: false },
-  { id: "a4", name: "Current Account", type: "Current", active: true, hidden: false },
-  { id: "a5", name: "Cash", type: "Cash", active: true, hidden: false },
-];
+// Mock data removed. Real finance data should be added via the app and stored in Firestore.
+const INITIAL_ACCOUNTS: Account[] = [];
 
-const INITIAL_ENTRIES: BalanceEntry[] = [
-  { id: "e1", accountId: "a1", date: "2023-04-10", balance: 6200 },
-  { id: "e1b", accountId: "a1", date: "2023-07-01", balance: 6800 },
-  { id: "e1c", accountId: "a1", date: "2023-10-01", balance: 7400 },
-  { id: "e1d", accountId: "a1", date: "2024-01-01", balance: 7900 },
-  { id: "e2", accountId: "a1", date: "2024-04-06", balance: 8200 },
-  { id: "e3", accountId: "a1", date: "2024-07-01", balance: 8900 },
-  { id: "e4", accountId: "a1", date: "2024-10-01", balance: 9600 },
-  { id: "e5", accountId: "a1", date: "2025-01-01", balance: 10200 },
-  { id: "e5b", accountId: "a1", date: "2025-02-01", balance: 10500 },
-  { id: "e6", accountId: "a2", date: "2023-04-10", balance: 12000 },
-  { id: "e6b", accountId: "a2", date: "2023-10-01", balance: 13200 },
-  { id: "e7", accountId: "a2", date: "2024-04-06", balance: 15000 },
-  { id: "e8", accountId: "a2", date: "2024-07-01", balance: 15400 },
-  { id: "e9", accountId: "a2", date: "2024-10-01", balance: 15800 },
-  { id: "e10", accountId: "a2", date: "2025-01-01", balance: 16100 },
-  { id: "e10b", accountId: "a2", date: "2025-02-01", balance: 16300 },
-  { id: "e11", accountId: "a3", date: "2023-04-10", balance: 4000 },
-  { id: "e11b", accountId: "a3", date: "2023-10-01", balance: 4600 },
-  { id: "e12", accountId: "a3", date: "2024-04-06", balance: 5000 },
-  { id: "e13", accountId: "a3", date: "2024-07-01", balance: 5200 },
-  { id: "e14", accountId: "a3", date: "2024-10-01", balance: 4800 },
-  { id: "e15", accountId: "a3", date: "2025-01-01", balance: 5100 },
-  { id: "e15b", accountId: "a3", date: "2025-02-01", balance: 5300 },
-  { id: "e16", accountId: "a4", date: "2024-04-06", balance: 2100 },
-  { id: "e17", accountId: "a4", date: "2024-07-01", balance: 2400 },
-  { id: "e18", accountId: "a4", date: "2024-10-01", balance: 1900 },
-  { id: "e19", accountId: "a4", date: "2025-01-01", balance: 2800 },
-  { id: "e20", accountId: "a4", date: "2025-02-01", balance: 3200 },
-  { id: "e21", accountId: "a5", date: "2024-04-06", balance: 200 },
-  { id: "e22", accountId: "a5", date: "2024-07-01", balance: 150 },
-  { id: "e23", accountId: "a5", date: "2024-10-01", balance: 100 },
-  { id: "e24", accountId: "a5", date: "2025-01-01", balance: 250 },
-  { id: "e25", accountId: "a5", date: "2025-02-01", balance: 145 },
-];
+const INITIAL_ENTRIES: BalanceEntry[] = [];
 
 const TAX_YEARS = [
   { label: "2022/23", start: "2022-04-06", end: "2023-04-05" },

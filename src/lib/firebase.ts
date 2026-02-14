@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { isSupported as analyticsIsSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAo635pLShsyf0VbS0ApvfTeLnh6yQnao0",
@@ -18,6 +19,7 @@ export const app = initializeApp(firebaseConfig);
 // Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const functions = getFunctions(app);
 
 // Analytics isn't supported in all environments (and requires top-level await if we try
 // to auto-detect support at module load). We expose a helper instead.
