@@ -127,33 +127,5 @@ export function getDisplayName(user: User): string {
   return user.displayName || user.firstName;
 }
 
-// Mock current user for demo
-export const MOCK_USER: User = {
-  id: "1",
-  firstName: "Hardy",
-  surname: "",
-  displayName: "",
-  email: "hardy@hardyhub.app",
-  role: "super_admin",
-  avatar: {
-    type: "initials",
-    initials: "H",
-    bgColor: "hsl(215, 60%, 28%)",
-    textColor: "hsl(0, 0%, 100%)",
-  },
-  enabledFeatures: [
-    "finance_personal",
-    "finance_household",
-    "inheritance_tax",
-    "households",
-    "pets",
-    "weight_tracking",
-    "tattersalls",
-    "admin",
-  ],
-  suspended: false,
-  lastLogin: new Date(),
-  stylePreferences: {
-    languageStyle: "default",
-  },
-};
+// Note: previous demo/mock user has been removed. The app now relies on
+// Firebase Auth for the signed-in user.

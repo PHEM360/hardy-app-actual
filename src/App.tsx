@@ -18,6 +18,7 @@ import More from "@/pages/More";
 import Settings from "@/pages/Settings";
 import Themes from "@/pages/Themes";
 import NotFound from "@/pages/NotFound";
+import RequireAuth from "@/auth/RequireAuth";
 
 const queryClient = new QueryClient();
 
@@ -29,7 +30,13 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<AppLayout />}>
+          <Route
+            element={
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
+            }
+          >
             {/* Make the root domain show the login page. Move dashboard to /dashboard */}
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/finance" element={<Finance />} />

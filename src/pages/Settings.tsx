@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MOCK_USER, type AvatarType } from "@/types/app";
+import { type AvatarType } from "@/types/app";
+import { useAuth } from "@/auth/AuthContext";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -57,19 +58,20 @@ const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }:
 };
 
 const Settings = () => {
+  const { user } = useAuth();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [pushNotifications, setPushNotifications] = useState(true);
 
-  const [firstName, setFirstName] = useState(MOCK_USER.firstName);
-  const [surname, setSurname] = useState(MOCK_USER.surname);
-  const [displayName, setDisplayName] = useState(MOCK_USER.displayName || "");
-  const [email, setEmail] = useState(MOCK_USER.email);
+  const [firstName, setFirstName] = useState(user?.displayName || "");
+  const [surname, setSurname] = useState("");
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [email, setEmail] = useState(user?.email || "");
 
-  const [avatarType, setAvatarType] = useState<AvatarType>(MOCK_USER.avatar.type);
-  const [avatarEmoji, setAvatarEmoji] = useState(MOCK_USER.avatar.emoji || "😊");
-  const [avatarInitials, setAvatarInitials] = useState(MOCK_USER.avatar.initials || firstName.charAt(0).toUpperCase());
-  const [avatarBgColor, setAvatarBgColor] = useState(MOCK_USER.avatar.bgColor || BG_COLOR_OPTIONS[0]);
-  const [avatarTextColor, setAvatarTextColor] = useState(MOCK_USER.avatar.textColor || "#ffffff");
+  const [avatarType, setAvatarType] = useState<AvatarType>("initials");
+  const [avatarEmoji, setAvatarEmoji] = useState("😊");
+  const [avatarInitials, setAvatarInitials] = useState(firstName ? firstName.charAt(0).toUpperCase() : "?");
+  const [avatarBgColor, setAvatarBgColor] = useState(BG_COLOR_OPTIONS[0]);
+  const [avatarTextColor, setAvatarTextColor] = useState("#ffffff");
 
   const [notifTypes, setNotifTypes] = useState(INITIAL_NOTIFICATION_TYPES);
 

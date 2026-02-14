@@ -5,6 +5,9 @@ import { Eye, EyeOff, PawPrint, Sparkles, Anchor, Tractor, Dog, Waves } from "lu
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 
 const SPLASH_ICONS = [
   { emoji: "🐕", delay: 0, x: "15%", y: "20%" },
@@ -28,6 +31,8 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { forbidden } = useAuth();
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 3000);
@@ -44,10 +49,16 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate("/dashboard", { replace: true });
+    } catch (err: any) {
+      const message = err?.message || "Login failed";
+      setError(message);
+    } finally {
       setLoading(false);
-      navigate("/");
-    }, 800);
+    }
   };
 
   return (
@@ -220,6 +231,16 @@ const Login = () => {
             >
             Welcome home 👋
           </motion.h2>
+
+            {(forbidden || error) && (
+              <div className="mb-4 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3">
+                <p className="text-xs text-destructive font-medium">
+                  {forbidden
+                    ? "This account isn't allowed to access Hardy Hub. Please sign in with an approved email."
+                    : error}
+                </p>
+              </div>
+            )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <motion.div

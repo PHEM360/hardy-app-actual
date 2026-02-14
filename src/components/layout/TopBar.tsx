@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { Bell, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { MOCK_USER, getDisplayName } from "@/types/app";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthContext";
 
 const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) => (
   <motion.div
@@ -22,8 +22,8 @@ const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay
 
 const TopBar = () => {
   const navigate = useNavigate();
-  const user = MOCK_USER;
-  const displayName = getDisplayName(user);
+  const { user } = useAuth();
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "";
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -47,14 +47,8 @@ const TopBar = () => {
   );
 
   const renderAvatar = () => {
-    const { avatar } = user;
-    if (avatar.type === "emoji") return <span className="text-lg">{avatar.emoji}</span>;
-    if (avatar.type === "image" && avatar.imageUrl) return <img src={avatar.imageUrl} alt="" className="w-full h-full object-cover rounded-full" />;
-    return (
-      <span className="text-xs font-bold" style={{ color: avatar.textColor || "#fff" }}>
-        {avatar.initials || displayName.charAt(0).toUpperCase()}
-      </span>
-    );
+    const initial = (displayName || "?").charAt(0).toUpperCase();
+    return <span className="text-xs font-bold" style={{ color: "#fff" }}>{initial}</span>;
   };
 
   return (
@@ -75,7 +69,7 @@ const TopBar = () => {
         <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/15"
-            style={{ background: user.avatar.bgColor || "hsl(188, 33%, 38%)" }}
+            style={{ background: "hsl(188, 33%, 38%)" }}
           >
             {renderAvatar()}
           </div>

@@ -1,5 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
+import { getAnalytics, isSupported as analyticsIsSupported } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAo635pLShsyf0VbS0ApvfTeLnh6yQnao0",
@@ -12,4 +14,17 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const analytics = getAnalytics(app);
+
+// Firebase services
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+// Analytics isn't supported in all environments (e.g. some browsers, SSR)
+export const analytics = await (async () => {
+  try {
+    if (await analyticsIsSupported()) return getAnalytics(app);
+  } catch {
+    // ignore
+  }
+  return undefined;
+})();

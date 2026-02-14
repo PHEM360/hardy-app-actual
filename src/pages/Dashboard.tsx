@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Bell, Check } from "lucide-react";
 import FeatureCard from "@/components/dashboard/FeatureCard";
-import { FEATURE_MODULES, MOCK_USER, getDisplayName } from "@/types/app";
+import { FEATURE_MODULES } from "@/types/app";
+import { useAuth } from "@/auth/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,15 +25,14 @@ interface Notification {
 const INITIAL_NOTIFICATIONS: Notification[] = [];
 
 const Dashboard = () => {
-  const user = MOCK_USER;
-  const displayName = getDisplayName(user);
+  const { user } = useAuth();
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "";
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [newReminder, setNewReminder] = useState("");
 
-  const enabledModules = FEATURE_MODULES.filter((m) =>
-    user.enabledFeatures.includes(m.key)
-  );
+  // Until feature flags/preferences are stored in Firestore, show all modules.
+  const enabledModules = FEATURE_MODULES;
 
   const visibleNotifications = notifications.filter(n => !n.hidden && !n.done);
 
