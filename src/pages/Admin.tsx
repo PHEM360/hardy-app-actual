@@ -18,12 +18,10 @@ interface MockUser {
   permissions: string[];
 }
 
-const MOCK_USERS: MockUser[] = [
-  { id: "u1", name: "Hardy", email: "hardy@hardyhub.app", role: "Super Admin", status: "active", lastLogin: "Just now", permissions: ["all"] },
-  { id: "u2", name: "Sarah", email: "sarah@hardyhub.app", role: "Member", status: "active", lastLogin: "2h ago", permissions: ["finance", "pets", "household"] },
-  { id: "u3", name: "Tom", email: "tom@hardyhub.app", role: "Member", status: "active", lastLogin: "1d ago", permissions: ["pets", "weight"] },
-  { id: "u4", name: "Emma", email: "emma@hardyhub.app", role: "Member", status: "active", lastLogin: "3d ago", permissions: ["pets"] },
-];
+// Demo/test users have been removed.
+// Until this page is wired to Firebase Auth/Firestore admin data,
+// start with an empty list and show empty states.
+const MOCK_USERS: MockUser[] = [];
 
 type EventType = "login" | "password_change" | "alert" | "settings_change";
 type EventStatus = "success" | "failed" | "suspicious";
@@ -38,16 +36,8 @@ interface SecurityEvent {
   timestamp: string;
 }
 
-const MOCK_EVENTS: SecurityEvent[] = [
-  { id: "ev1", type: "login", user: "Hardy", description: "Login from Chrome/Mac", ip: "82.132.45.12", status: "success", timestamp: "2025-02-13T17:30:00Z" },
-  { id: "ev2", type: "login", user: "Sarah", description: "Login from Safari/iPhone", ip: "82.132.45.15", status: "success", timestamp: "2025-02-13T15:22:00Z" },
-  { id: "ev3", type: "login", user: "Unknown", description: "Failed login attempt", ip: "194.56.78.99", status: "failed", timestamp: "2025-02-13T14:05:00Z" },
-  { id: "ev4", type: "password_change", user: "Hardy", description: "Password changed", ip: "82.132.45.12", status: "success", timestamp: "2025-02-12T10:00:00Z" },
-  { id: "ev5", type: "login", user: "Tom", description: "Login from unusual location", ip: "45.67.89.12", status: "suspicious", timestamp: "2025-02-11T22:15:00Z" },
-  { id: "ev6", type: "alert", user: "System", description: "Multiple failed login attempts detected", ip: "194.56.78.99", status: "suspicious", timestamp: "2025-02-11T14:10:00Z" },
-  { id: "ev7", type: "login", user: "Emma", description: "Login from Firefox/Windows", ip: "82.132.45.20", status: "success", timestamp: "2025-02-10T09:30:00Z" },
-  { id: "ev8", type: "settings_change", user: "Hardy", description: "Updated user permissions for Tom", ip: "82.132.45.12", status: "success", timestamp: "2025-02-09T16:00:00Z" },
-];
+// Demo/test events removed.
+const MOCK_EVENTS: SecurityEvent[] = [];
 
 const STATUS_STYLES: Record<EventStatus, string> = {
   success: "bg-success/10 text-success",
@@ -60,10 +50,10 @@ const TYPE_LABELS: Record<EventType, string> = {
 };
 
 const STATS = [
-  { label: "Active Users", value: "4", icon: Users, color: "text-success" },
-  { label: "Login Events", value: "12", icon: Activity, color: "text-info" },
-  { label: "Alerts", value: "1", icon: AlertTriangle, color: "text-warning" },
-  { label: "Health", value: "Good", icon: CheckCircle, color: "text-success" },
+  { label: "Active Users", value: "—", icon: Users, color: "text-muted-foreground" },
+  { label: "Login Events", value: "—", icon: Activity, color: "text-muted-foreground" },
+  { label: "Alerts", value: "—", icon: AlertTriangle, color: "text-muted-foreground" },
+  { label: "Health", value: "Not configured", icon: CheckCircle, color: "text-muted-foreground" },
 ];
 
 type AdminView = "main" | "security";

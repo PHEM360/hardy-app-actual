@@ -30,7 +30,8 @@ const App = () => (
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Dashboard />} />
+            {/* Make the root domain show the login page. Move dashboard to /dashboard */}
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/pets" element={<Pets />} />
             <Route path="/admin" element={<Admin />} />
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/themes" element={<Themes />} />
           </Route>
+          <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

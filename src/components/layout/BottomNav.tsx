@@ -3,7 +3,7 @@ import { Home, PiggyBank, Heart, Shield, MoreHorizontal } from "lucide-react";
 import { motion } from "framer-motion";
 
 const NAV_ITEMS = [
-  { icon: Home, label: "Home", path: "/", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(135deg, hsl(188, 33%, 38%), hsl(191, 33%, 43%))" },
+  { icon: Home, label: "Home", path: "/dashboard", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(135deg, hsl(188, 33%, 38%), hsl(191, 33%, 43%))" },
   { icon: PiggyBank, label: "Finance", path: "/finance", color: "hsl(25, 62%, 67%)", gradient: "linear-gradient(135deg, hsl(25, 62%, 67%), hsl(15, 55%, 58%))" },
   { icon: Heart, label: "Pets", path: "/pets", color: "hsl(0, 65%, 50%)", gradient: "linear-gradient(135deg, hsl(0, 65%, 50%), hsl(340, 55%, 45%))" },
   { icon: Shield, label: "Admin", path: "/admin", color: "hsl(205, 55%, 48%)", gradient: "linear-gradient(135deg, hsl(205, 55%, 48%), hsl(215, 50%, 42%))" },

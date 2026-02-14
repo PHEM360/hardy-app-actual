@@ -71,3 +71,25 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Firebase cleanup script
+
+This repository includes a conservative cleanup script template at `scripts/clean-firebase.ts` which can delete non-production test data from a Firebase project.
+
+Important notes:
+- The script is destructive. Do NOT run it without a full backup and verifying the whitelist constants inside the script.
+- You must provide service account credentials and set the environment variables before running.
+
+Quick usage:
+
+```bash
+# set path to your service account JSON key
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
+export FIREBASE_PROJECT_ID="hardyhub-7b30d"
+# safety flag: must be set to run deletions
+export REALLY_I_UNDERSTAND_THIS_IS_PERMANENT=1
+
+npx ts-node scripts/clean-firebase.ts
+```
+
+Edit the `WHITELISTED_USER_EMAILS` and `WHITELISTED_COLLECTIONS` arrays inside the script before running.

@@ -19,11 +19,9 @@ interface Notification {
   createdAt: string;
 }
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: "n1", message: "Billy's flea treatment is due in 2 days", type: "alert", icon: "🐾", done: false, hidden: false, createdAt: new Date().toISOString() },
-  { id: "n2", message: "Milo's insurance renewal coming up (18 days)", type: "reminder", icon: "🐾", done: false, hidden: false, createdAt: new Date().toISOString() },
-  { id: "n3", message: "Log this month's savings balance", type: "info", icon: "💰", done: false, hidden: false, createdAt: new Date().toISOString() },
-];
+// Demo/test notifications have been removed.
+// Until notifications are wired to Firestore, the dashboard starts empty.
+const INITIAL_NOTIFICATIONS: Notification[] = [];
 
 const Dashboard = () => {
   const user = MOCK_USER;
