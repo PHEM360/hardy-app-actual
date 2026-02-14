@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics, isSupported as analyticsIsSupported } from "firebase/analytics";
+import { isSupported as analyticsIsSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -19,12 +19,14 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Analytics isn't supported in all environments (e.g. some browsers, SSR)
-export const analytics = await (async () => {
+// Analytics isn't supported in all environments (and requires top-level await if we try
+// to auto-detect support at module load). We expose a helper instead.
+export async function getAnalyticsIfSupported() {
   try {
-    if (await analyticsIsSupported()) return getAnalytics(app);
+    if (!(await analyticsIsSupported())) return undefined;
+    const { getAnalytics } = await import("firebase/analytics");
+    return getAnalytics(app);
   } catch {
-    // ignore
+    return undefined;
   }
-  return undefined;
-})();
+}
