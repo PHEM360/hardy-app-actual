@@ -9,9 +9,15 @@ import {
   Palette,
   Bell,
   Settings,
+  CheckSquare,
+  Sun,
+  Building2,
 } from "lucide-react";
 
 const MORE_ITEMS = [
+  { label: "Tasks", icon: CheckSquare, route: "/tasks" },
+  { label: "Today", icon: Sun, route: "/today" },
+  { label: "Companies", icon: Building2, route: "/companies" },
   { label: "Household Finance", icon: Home, route: "/household-finance" },
   { label: "IHT Planner", icon: Calculator, route: "/inheritance" },
   { label: "Households", icon: Users, route: "/households" },

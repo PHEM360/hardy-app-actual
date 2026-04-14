@@ -10,6 +10,8 @@ export type FeatureKey =
   | "pets"
   | "weight_tracking"
   | "tattersalls"
+  | "tasks"
+  | "companies"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -113,6 +115,22 @@ export const FEATURE_MODULES: FeatureModule[] = [
     color: "info",
   },
   {
+    key: "tasks",
+    label: "Tasks",
+    description: "Track and manage everything",
+    icon: "check-square",
+    route: "/tasks",
+    color: "primary",
+  },
+  {
+    key: "companies",
+    label: "Companies",
+    description: "Business logins, services & expenses",
+    icon: "briefcase",
+    route: "/companies",
+    color: "secondary",
+  },
+  {
     key: "admin",
     label: "Admin",
     description: "Users, security & system settings",
@@ -129,3 +147,156 @@ export function getDisplayName(user: User): string {
 
 // Note: previous demo/mock user has been removed. The app now relies on
 // Firebase Auth for the signed-in user.
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+export type TaskPriority = "critical" | "high" | "medium" | "low";
+export type TaskStatus = "todo" | "in_progress" | "blocked" | "done" | "cancelled";
+
+export interface TaskSubtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export interface Task {
+  id?: string;
+  title: string;
+  description?: string;
+  notes?: string;          // free-form notes, separate from description
+  priority: TaskPriority;
+  status: TaskStatus;
+  category: string;       // e.g. "Admin", "Development", "Personal"
+  company?: string;       // company ID or name
+  dueDate?: string;       // ISO date string
+  isToday: boolean;
+  tags: string[];
+  subtasks?: TaskSubtask[];
+  customFields?: Record<string, string>; // keyed by TaskCustomField.id
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface TaskCustomField {
+  id: string;       // slug key, e.g. "client_name"
+  label: string;    // display name, e.g. "Client"
+  options: string[]; // always has "Other" appended at end
+  color?: string;   // hex colour for this field group
+}
+
+export interface TaskSettings {
+  categories: string[];
+  companies: string[];
+  customFields: TaskCustomField[];
+  categoryColors?: Record<string, string>;  // category → hex
+  companyColors?: Record<string, string>;   // company → hex
+  tileOrder?: string[];                     // task ids in user-defined order (tile view)
+}
+
+// ─── Companies ────────────────────────────────────────────────────────────────
+
+export interface CompanyLogin {
+  id?: string;
+  service: string;        // e.g. "Xero", "Companies House"
+  username: string;
+  password?: string;
+  url?: string;
+  notes?: string;
+}
+
+export interface CompanyService {
+  id?: string;
+  name: string;
+  description?: string;
+  price: number;           // per unit
+  unit: string;            // e.g. "per month", "per project", "per hour"
+  category?: string;
+}
+
+export interface CompanyExpense {
+  id?: string;
+  date: string;
+  description: string;
+  amount: number;
+  category: string;        // e.g. "Software", "Marketing", "Payroll"
+  receipts?: string[];     // Storage download URLs
+  createdAt?: any;
+}
+
+export interface CompanyContactDetails {
+  phone?: string;
+  email?: string;
+  website?: string;
+  address?: string;
+  vatNumber?: string;
+  companyNumber?: string;
+}
+
+export interface CompanySettings {
+  incomeCategories: string[];
+  expenseCategories: string[];
+  corporateTaxRate: number;       // default 19
+}
+
+export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
+  incomeCategories: ["Consulting", "Software", "Services", "Products", "Licences", "Other"],
+  expenseCategories: ["Software", "Marketing", "Payroll", "Equipment", "Travel", "Legal", "Accountancy", "Office", "Other"],
+  corporateTaxRate: 19,
+};
+
+export interface Company {
+  id?: string;
+  name: string;
+  description?: string;
+  color: string;           // e.g. "#6366f1"
+  emoji?: string;          // e.g. "🏢"
+  taxYearStart: string;    // ISO date, e.g. "2025-04-06"
+  contact: CompanyContactDetails;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// ─── Household ────────────────────────────────────────────────────────────────
+
+export interface HouseholdMember {
+  id: string;
+  name: string;
+  role: "admin" | "member";
+  emoji?: string;
+}
+
+export interface HouseholdReminder {
+  amount: number;              // e.g. 7
+  unit: "hours" | "days" | "weeks" | "months";
+  via: "push";
+}
+
+export interface HouseholdItem {
+  id?: string;
+  type: string;                // category key or custom label
+  provider: string;
+  policyNumber?: string;
+  monthlyPremium?: number;
+  startDate?: string;
+  endDate?: string;            // renewal / expiry date
+  assignedTo?: string;         // HouseholdMember.id or ""
+  notes?: string;
+  documents?: string[];        // storage URLs
+  reminders?: HouseholdReminder[];
+  pushEnabled?: boolean;
+  createdAt?: any;
+}
+
+export interface HouseholdSettings {
+  members: HouseholdMember[];
+  categories: string[];        // customisable list of item types
+}
+
+export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = {
+  members: [],
+  categories: [
+    "Home Insurance", "Car Insurance", "Life Insurance",
+    "Utilities", "Council Tax", "Mortgage",
+    "Phone Contract", "TV / Broadband", "Pet Insurance", "Other"
+  ],
+};

@@ -199,7 +199,7 @@ const Login = () => {
         ))}
 
         {/* Top section with logo */}
-  <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-2 relative z-10">
+  <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-2 relative z-10 sm:flex-none sm:pt-16 sm:pb-8">
           <motion.div
             initial={{ opacity: 0, y: -30, scale: 0.5 }}
             animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? -30 : 0, scale: showSplash ? 0.5 : 1 }}
@@ -242,7 +242,7 @@ const Login = () => {
           initial={{ opacity: 0, y: 80 }}
           animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 80 : 0 }}
           transition={{ type: "spring", stiffness: 120, damping: 20, delay: showSplash ? 3.4 : 3.4 - SPLASH_DURATION }}
-          className="bg-card rounded-t-3xl px-6 pt-6 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full"
+          className="bg-card rounded-t-3xl px-6 pt-6 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full sm:rounded-3xl sm:mb-16"
         >
             <motion.h2
               initial={{ opacity: 0, x: -10 }}

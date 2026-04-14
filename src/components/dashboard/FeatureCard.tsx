@@ -2,12 +2,14 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Wallet, Home, Calculator, Users, Heart, Activity, Building, Shield,
+  CheckSquare, Briefcase,
 } from "lucide-react";
 import type { FeatureModule } from "@/types/app";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   wallet: Wallet, home: Home, calculator: Calculator, users: Users,
   heart: Heart, activity: Activity, building: Building, shield: Shield,
+  "check-square": CheckSquare, briefcase: Briefcase,
 };
 
 const COLOR_MAP: Record<string, string> = {

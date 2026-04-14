@@ -1,0 +1,18 @@
+{
+  "name": "Hardy Hub",
+  "short_name": "Hardy Hub",
+  "description": "Private family platform — invite only",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1923",
+  "theme_color": "#0f1923",
+  "icons": [
+    {
+      "src": "/App Icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Lock, Trash2, UserX, UserCheck } from "lucide-react";
+import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
 
 interface MockUser {
   id: string;
@@ -21,6 +22,8 @@ interface MockUser {
   status: "active" | "suspended";
   lastLogin: string;
   permissions: string[];
+  enabledFeatures: FeatureKey[];
+  householdId?: string;
 }
 
 // Demo/test users have been removed.
@@ -97,6 +100,8 @@ const Admin = () => {
             status: data.enabled === false ? "suspended" : "active",
             lastLogin: lastLoginAt ? lastLoginAt.toLocaleString("en-GB") : "—",
             permissions: Array.isArray(data.permissions) ? data.permissions : [],
+            enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
+            householdId: data.householdId ?? undefined,
           } as MockUser;
         });
 
@@ -118,6 +123,7 @@ const Admin = () => {
   const [inviteSurname, setInviteSurname] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
+  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
 
@@ -136,21 +142,21 @@ const Admin = () => {
         surname: inviteSurname,
         email: inviteEmail,
         password: invitePassword,
-        role: "member",
+        role: inviteRole,
       });
 
-      // For now we don't auto-refresh from Firestore; just show a minimal confirmation
-      // by adding the user to the local list.
       const newUid = (result.data as any)?.uid || `u_${Date.now()}`;
       setUsers((prev) => [
         {
           id: newUid,
           name: `${inviteFirstName}${inviteSurname ? ` ${inviteSurname}` : ""}`,
           email: inviteEmail,
-          role: "Member",
+          role: inviteRole === "admin" ? "Admin" : "Member",
           status: "active",
           lastLogin: "—",
           permissions: [],
+          enabledFeatures: [],
+          householdId: undefined,
         },
         ...prev,
       ]);
@@ -166,6 +172,71 @@ const Admin = () => {
       setInviteLoading(false);
     }
   };
+
+  // ── User management actions (write to Firestore) ──────────────────────────
+
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const changeRole = async (userId: string, newRole: "member" | "admin" | "superadmin") => {
+    setActionLoading(true);
+    try {
+      await updateDoc(doc(db, "users", userId), { role: newRole });
+      setUsers(prev => prev.map(u => u.id === userId ? {
+        ...u,
+        role: newRole === "superadmin" ? "Superadmin" : newRole === "admin" ? "Admin" : "Member",
+      } : u));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const toggleSuspend = async (userId: string, currentStatus: "active" | "suspended") => {
+    const newEnabled = currentStatus === "suspended"; // reinstate → enabled:true; suspend → enabled:false
+    setActionLoading(true);
+    try {
+      await updateDoc(doc(db, "users", userId), { enabled: newEnabled });
+      setUsers(prev => prev.map(u => u.id === userId ? {
+        ...u,
+        status: newEnabled ? "active" : "suspended",
+      } : u));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doDeleteUser = async (userId: string) => {
+    setActionLoading(true);
+    try {
+      await deleteDoc(doc(db, "users", userId));
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setSelectedUser(null);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const updateFeatures = async (userId: string, features: FeatureKey[]) => {
+    await updateDoc(doc(db, "users", userId), { enabledFeatures: features });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, enabledFeatures: features } : u));
+  };
+
+  const updateHousehold = async (userId: string, householdId: string) => {
+    await updateDoc(doc(db, "users", userId), { householdId: householdId || null });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, householdId: householdId || undefined } : u));
+  };
+
+  // Local dialog edit state
+  const [editRole, setEditRole] = useState<"member" | "admin" | "superadmin">("member");
+  const [editHousehold, setEditHousehold] = useState("");
+
+  // Sync local edit state when selected user changes
+  useEffect(() => {
+    if (!currentUser) return;
+    const r = currentUser.role.toLowerCase() as "member" | "admin" | "superadmin";
+    setEditRole(r);
+    setEditHousehold(currentUser.householdId ?? "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser]);
 
   const filteredEvents = MOCK_EVENTS.filter((e) => {
     if (filterType !== "all" && e.type !== filterType) return false;
@@ -324,6 +395,19 @@ const Admin = () => {
                 </p>
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteRole">Role</Label>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "member" | "admin")}>
+                  <SelectTrigger id="inviteRole" className="h-9 rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">Member</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {inviteError && (
                 <p className="text-xs text-destructive">{inviteError}</p>
               )}
@@ -427,7 +511,7 @@ const Admin = () => {
 
       {/* User Profile Dialog */}
       <Dialog open={!!selectedUser} onOpenChange={(o) => !o && setSelectedUser(null)}>
-        <DialogContent className="max-w-md mx-4">
+        <DialogContent className="max-w-md mx-4 max-h-[90vh] overflow-y-auto">
           {currentUser && (
             <>
               <DialogHeader>
@@ -438,12 +522,12 @@ const Admin = () => {
                   {currentUser.name}
                 </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 pt-2">
+              <div className="space-y-5 pt-2">
+
                 {/* Details */}
                 <div className="space-y-2">
                   {[
                     ["Email", currentUser.email],
-                    ["Role", currentUser.role],
                     ["Status", currentUser.status === "active" ? "Active" : "Suspended"],
                     ["Last Login", currentUser.lastLogin],
                   ].map(([label, value]) => (
@@ -454,34 +538,104 @@ const Admin = () => {
                   ))}
                 </div>
 
-                {/* Permissions */}
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Permissions</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {currentUser.permissions.map((p) => (
-                      <span key={p} className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">{p}</span>
-                    ))}
+                {/* Role */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Role</p>
+                  <Select value={editRole} onValueChange={(v) => setEditRole(v as typeof editRole)}>
+                    <SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="superadmin">Superadmin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {editRole !== currentUser.role.toLowerCase() && (
+                    <Button
+                      size="sm"
+                      className="h-8 rounded-lg text-xs w-full mt-1"
+                      disabled={actionLoading}
+                      onClick={() => changeRole(currentUser.id, editRole)}
+                    >
+                      Save role change
+                    </Button>
+                  )}
+                </div>
+
+                {/* Household */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Household</p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={editHousehold}
+                      onChange={(e) => setEditHousehold(e.target.value)}
+                      placeholder="Household ID or name"
+                      className="h-9 rounded-lg text-xs flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 rounded-lg text-xs"
+                      disabled={actionLoading || editHousehold === (currentUser.householdId ?? "")}
+                      onClick={() => updateHousehold(currentUser.id, editHousehold)}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Feature Access */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Feature Access</p>
+                  <p className="text-[10px] text-muted-foreground -mt-1">Admins & superadmins always see everything. These toggles apply to members only.</p>
+                  <div className="space-y-1.5">
+                    {FEATURE_MODULES.map((mod) => {
+                      const enabled = currentUser.enabledFeatures.includes(mod.key);
+                      return (
+                        <button
+                          key={mod.key}
+                          disabled={actionLoading}
+                          onClick={async () => {
+                            const next = enabled
+                              ? currentUser.enabledFeatures.filter(k => k !== mod.key)
+                              : [...currentUser.enabledFeatures, mod.key];
+                            await updateFeatures(currentUser.id, next);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{mod.icon}</span>
+                            <span className="text-xs font-medium text-card-foreground">{mod.label}</span>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            enabled ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                          }`}>
+                            {enabled ? "On" : "Off"}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="space-y-2 pt-2">
-                  <Button variant="outline" className="w-full h-9 rounded-lg text-xs justify-start gap-2">
-                    <Lock className="w-3.5 h-3.5" /> Reset Password
-                  </Button>
+                <div className="space-y-2 pt-1 border-t border-border/40">
                   <Button
                     variant="outline"
                     className="w-full h-9 rounded-lg text-xs justify-start gap-2"
-                    onClick={() => {
-                      setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, status: u.status === "active" ? "suspended" : "active" } : u));
-                    }}
+                    disabled={actionLoading}
+                    onClick={() => toggleSuspend(currentUser.id, currentUser.status)}
                   >
                     {currentUser.status === "active"
                       ? <><UserX className="w-3.5 h-3.5" /> Suspend Account</>
                       : <><UserCheck className="w-3.5 h-3.5" /> Reinstate Account</>
                     }
                   </Button>
-                  <Button variant="outline" className="w-full h-9 rounded-lg text-xs justify-start gap-2 text-destructive hover:text-destructive">
+                  <Button
+                    variant="outline"
+                    className="w-full h-9 rounded-lg text-xs justify-start gap-2 text-destructive hover:text-destructive"
+                    disabled={actionLoading}
+                    onClick={() => doDeleteUser(currentUser.id)}
+                  >
                     <Trash2 className="w-3.5 h-3.5" /> Delete Account
                   </Button>
                 </div>

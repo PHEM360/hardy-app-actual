@@ -5,37 +5,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, Legend,
 } from "recharts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFinance } from "@/hooks/useFinance";
 
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  active: boolean;
-  hidden: boolean;
-}
-
-interface BalanceEntry {
-  id: string;
-  accountId: string;
-  date: string;
-  balance: number;
-}
+// Mock data removed — accounts and entries now come from Firestore via useFinance.
 
 const COLORS = [
   "hsl(168, 55%, 36%)", "hsl(36, 85%, 54%)", "hsl(215, 75%, 50%)",
   "hsl(280, 45%, 55%)", "hsl(152, 60%, 38%)", "hsl(0, 72%, 51%)",
   "hsl(30, 80%, 50%)", "hsl(190, 70%, 45%)",
 ];
-
-// Mock data removed. Real finance data should be added via the app and stored in Firestore.
-const INITIAL_ACCOUNTS: Account[] = [];
-
-const INITIAL_ENTRIES: BalanceEntry[] = [];
 
 const TAX_YEARS = [
   { label: "2022/23", start: "2022-04-06", end: "2023-04-05" },
@@ -74,10 +57,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 type ViewMode = "chart" | "table";
 
 const Finance = () => {
-  const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
-  const [entries, setEntries] = useState(INITIAL_ENTRIES);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts.map((a) => a.id));
-  const [timePeriod, setTimePeriod] = useState(0); // all time by default
+  const { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry } = useFinance();
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  // Keep selectedAccounts in sync when accounts load
+  useMemo(() => {
+    if (accounts.length > 0 && selectedAccounts.length === 0) {
+      setSelectedAccounts(accounts.map((a) => a.id));
+    }
+  }, [accounts.length]);
+  const [timePeriod, setTimePeriod] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [showHidden, setShowHidden] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -102,7 +90,7 @@ const Finance = () => {
     const dates = [...new Set(relevantEntries.map((e) => e.date))].sort();
 
     return dates.map((date) => {
-      const row: any = { date: new Date(date).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), rawDate: date };
+      const row: any = { date: new Date(date as string).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), rawDate: date };
       let total = 0;
       accounts.forEach((acc) => {
         const entry = relevantEntries.find((e) => e.accountId === acc.id && e.date === date);
@@ -141,28 +129,32 @@ const Finance = () => {
     );
   };
 
-  const handleAddAccount = () => {
+  const handleAddAccount = async () => {
     if (!newAccountName.trim()) return;
-    const id = `a${Date.now()}`;
-    setAccounts((prev) => [...prev, { id, name: newAccountName, type: newAccountType, active: true, hidden: false }]);
-    setSelectedAccounts((prev) => [...prev, id]);
+    await addAccount(newAccountName, newAccountType);
     setNewAccountName("");
     setAddAccountOpen(false);
   };
 
-  const handleAddBalance = () => {
+  const handleAddBalance = async () => {
     const amount = parseFloat(newBalanceAmount);
     if (!newBalanceAccountId || isNaN(amount)) return;
-    setEntries((prev) => [...prev, { id: `e${Date.now()}`, accountId: newBalanceAccountId, date: newBalanceDate, balance: amount }]);
+    await addBalanceEntry(newBalanceAccountId, newBalanceDate, amount);
     setNewBalanceAmount("");
     setAddBalanceOpen(false);
   };
 
-  const toggleHide = (id: string) => setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, hidden: !a.hidden } : a));
-  const toggleActive = (id: string) => setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, active: !a.active } : a));
+  const toggleHide = (id: string) => {
+    const acc = accounts.find((a) => a.id === id);
+    if (acc) updateAccount(id, { hidden: !acc.hidden });
+  };
+  const toggleActive = (id: string) => {
+    const acc = accounts.find((a) => a.id === id);
+    if (acc) updateAccount(id, { active: !acc.active });
+  };
   const renameAccount = (id: string) => {
     if (!renameValue.trim()) return;
-    setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, name: renameValue } : a));
+    updateAccount(id, { name: renameValue });
     setManageAccountId(null);
     setRenameValue("");
   };
@@ -194,10 +186,8 @@ const Finance = () => {
       <div className="flex items-center justify-between px-1 mb-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Accounts</h3>
         <div className="flex gap-1.5">
+          <button onClick={() => setAddAccountOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
           <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
-            <DialogTrigger asChild>
-              <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
-            </DialogTrigger>
             <DialogContent className="max-w-sm mx-4">
               <DialogHeader><DialogTitle className="font-display">New Account</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
@@ -216,7 +206,7 @@ const Finance = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleAddAccount} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
+                <Button onClick={handleAddAccount} disabled={!newAccountName.trim()} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -293,12 +283,10 @@ const Finance = () => {
 
         <div className="flex-1" />
 
+        <button onClick={() => setAddBalanceOpen(true)} className="h-8 px-3 rounded-lg text-xs font-semibold bg-primary text-primary-foreground flex items-center gap-1">
+          <Plus className="w-3.5 h-3.5" /> Log Balance
+        </button>
         <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
-          <DialogTrigger asChild>
-            <button className="h-8 px-3 rounded-lg text-xs font-semibold bg-primary text-primary-foreground flex items-center gap-1">
-              <Plus className="w-3.5 h-3.5" /> Log Balance
-            </button>
-          </DialogTrigger>
           <DialogContent className="max-w-sm mx-4">
             <DialogHeader><DialogTitle className="font-display">Log Balance</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
@@ -321,7 +309,7 @@ const Finance = () => {
                 <Label>Balance (£)</Label>
                 <Input type="number" step="0.01" placeholder="e.g. 12500.00" value={newBalanceAmount} onChange={(e) => setNewBalanceAmount(e.target.value)} className="h-11 rounded-xl" />
               </div>
-              <Button onClick={handleAddBalance} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
+              <Button onClick={handleAddBalance} disabled={!newBalanceAccountId || !newBalanceAmount} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
             </div>
           </DialogContent>
         </Dialog>

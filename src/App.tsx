@@ -14,9 +14,14 @@ import Inheritance from "@/pages/Inheritance";
 import Households from "@/pages/Households";
 import WeightTracker from "@/pages/WeightTracker";
 import Tattersalls from "@/pages/Tattersalls";
+import Tasks from "@/pages/Tasks";
+import Today from "@/pages/Today";
+import Companies from "@/pages/Companies";
+import CompanyDetail from "@/pages/CompanyDetail";
 import More from "@/pages/More";
 import Settings from "@/pages/Settings";
 import Themes from "@/pages/Themes";
+import LogInDetails from "@/pages/LogInDetails";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -55,9 +60,14 @@ const App = () => (
             <Route path="/households" element={<Households />} />
             <Route path="/weight" element={<WeightTracker />} />
             <Route path="/tattersalls" element={<Tattersalls />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/today" element={<Today />} />
+            <Route path="/companies" element={<Companies />} />
+            <Route path="/companies/:id" element={<CompanyDetail />} />
             <Route path="/more" element={<More />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/themes" element={<Themes />} />
+            <Route path="/login-details" element={<LogInDetails />} />
           </Route>
           <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />

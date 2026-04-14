@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Heart, Plus, Bug, Syringe, Stethoscope, ChevronDown, ChevronUp, StickyNote } from "lucide-react";
+import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, differenceInYears, differenceInMonths } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,42 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-interface TreatmentOption {
-  id: string;
-  product: string;
-  frequencyDays: number;
-}
-
-interface TreatmentRecord {
-  id: string;
-  type: "flea" | "worming" | "vaccination";
-  name: string;
-  dateDue: string;
-  dateGiven: string;
-}
-
-interface NotificationSetting {
-  id: string;
-  daysBeforeDue: number;
-}
-
-interface Pet {
-  id: string; name: string; breed: string; birthday: string; avatar: string;
-  fleaOptions: TreatmentOption[];
-  wormOptions: TreatmentOption[];
-  selectedFlea: string;
-  selectedWorm: string;
-  treatmentNotes: string;
-  weightHistory: { date: string; weight: number }[];
-  treatmentHistory: TreatmentRecord[];
-  fleaNotifications: NotificationSetting[];
-  wormNotifications: NotificationSetting[];
-  insurance: { provider: string; policyNumber: string; renewalDate: string; monthlyPremium: number; coverLevel: string; excess: number };
-}
-
-// Mock data removed. Real pet data should be added via the app and stored in Firestore.
-const INITIAL_PETS: Pet[] = [];
+import { usePets } from "@/hooks/usePets";
+import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting } from "@/hooks/usePets";
+import DogLoader from "@/components/DogLoader";
 
 function getAge(b: string) {
   const bd = new Date(b), now = new Date();
@@ -142,26 +109,52 @@ const DogEntrance = () => {
 };
 
 const Pets = () => {
-  const [pets, setPets] = useState(INITIAL_PETS);
-  const [showBilly, setShowBilly] = useState(true);
-  const [showMilo, setShowMilo] = useState(true);
+  const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord } = usePets();
+  const [visiblePets, setVisiblePets] = useState<Set<string>>(new Set());
   const [insuranceExpanded, setInsuranceExpanded] = useState<string | null>(null);
   const [addWeightOpen, setAddWeightOpen] = useState(false);
   const [addTreatmentOpen, setAddTreatmentOpen] = useState(false);
-  const [weightPetId, setWeightPetId] = useState(pets[0].id);
+  const [weightPetId, setWeightPetId] = useState("");
   const [newWeight, setNewWeight] = useState("");
-  const [treatmentPetId, setTreatmentPetId] = useState(pets[0].id);
+  const [treatmentPetId, setTreatmentPetId] = useState("");
   const [treatmentType, setTreatmentType] = useState<"flea" | "worming" | "vaccination">("flea");
   const [treatmentDate, setTreatmentDate] = useState(new Date().toISOString().split("T")[0]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsPetId, setSettingsPetId] = useState(pets[0].id);
+  const [settingsPetId, setSettingsPetId] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPetId, setHistoryPetId] = useState("");
   const [historyType, setHistoryType] = useState<"flea" | "worming">("flea");
+  const [addPetOpen, setAddPetOpen] = useState(false);
+  const [newPetName, setNewPetName] = useState("");
+  const [newPetBreed, setNewPetBreed] = useState("");
+  const [newPetBirthday, setNewPetBirthday] = useState("");
+  const [newPetAvatar, setNewPetAvatar] = useState("🐶");
+  const [addPetLoading, setAddPetLoading] = useState(false);
+  const [addPetError, setAddPetError] = useState<string | null>(null);
+  const [treatmentLoading, setTreatmentLoading] = useState(false);
+  const [treatmentError, setTreatmentError] = useState<string | null>(null);
+  const [weightLoading, setWeightLoading] = useState(false);
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [saveSettingsLoading, setSaveSettingsLoading] = useState<string | null>(null); // holds petId while saving
+  const [saveSettingsError, setSaveSettingsError] = useState<string | null>(null);
+  const [localEdits, setLocalEdits] = useState<Record<string, Partial<Pet>>>({});
+
+  // Merge Firestore data with any unsaved local edits for the settings dialog
+  const mergedPets = pets.map((p) => ({ ...p, ...(localEdits[p.id] ?? {}) }));
+
+  // Default selector IDs once pets load
+  const firstPetId = pets[0]?.id ?? "";
+
+  // Initialise all pets as visible in the weight chart once loaded
+  useEffect(() => {
+    if (pets.length > 0 && visiblePets.size === 0) {
+      setVisiblePets(new Set(pets.map((p) => p.id)));
+    }
+  }, [pets]);
 
   const dates = [...new Set(pets.flatMap((p) => p.weightHistory.map((w) => w.date)))].sort();
   const weightChartData = dates.map((d) => {
-    const row: any = { date: format(new Date(d), "MMM yy") };
+    const row: any = { date: format(new Date(d as string), "MMM yy") };
     pets.forEach((p) => {
       const entry = p.weightHistory.find((w) => w.date === d);
       if (entry) row[p.id] = entry.weight;
@@ -169,31 +162,134 @@ const Pets = () => {
     return row;
   });
 
-  const handleAddWeight = () => {
+  const handleAddWeight = async () => {
     const w = parseFloat(newWeight);
     if (isNaN(w)) return;
-    setPets((prev) => prev.map((p) => p.id === weightPetId ? { ...p, weightHistory: [...p.weightHistory, { date: new Date().toISOString().split("T")[0], weight: w }] } : p));
-    setNewWeight("");
-    setAddWeightOpen(false);
+    setWeightError(null);
+    setWeightLoading(true);
+    try {
+      await addWeightEntry(weightPetId || firstPetId, {
+        date: new Date().toISOString().split("T")[0],
+        weight: w,
+      });
+      setNewWeight("");
+      setAddWeightOpen(false);
+    } catch (err: any) {
+      setWeightError(err?.message ?? "Failed to save. Try again.");
+    } finally {
+      setWeightLoading(false);
+    }
   };
 
-  const handleAddTreatment = () => {
-    const pet = pets.find((p) => p.id === treatmentPetId)!;
-    const productName = treatmentType === "flea" ? pet.selectedFlea : treatmentType === "worming" ? pet.selectedWorm : "";
-    if (treatmentType === "vaccination" || !productName) return;
-    const option = (treatmentType === "flea" ? pet.fleaOptions : pet.wormOptions).find(o => o.product === productName);
+  const handleAddTreatment = async () => {
+    const pid = treatmentPetId || firstPetId;
+    const pet = pets.find((p) => p.id === pid);
+    if (!pet) return;
+    const productName =
+      treatmentType === "flea"
+        ? pet.selectedFlea
+        : treatmentType === "worming"
+        ? pet.selectedWorm
+        : "";
+    if (!productName) {
+      setTreatmentError(
+        `No active ${treatmentType === "flea" ? "flea" : "wormer"} product set for ${pet.name}. Open Pet Settings and add a product first.`
+      );
+      return;
+    }
+    const option = (treatmentType === "flea" ? pet.fleaOptions : pet.wormOptions).find(
+      (o) => o.product === productName
+    );
     const freq = option?.frequencyDays || 30;
     const givenDate = new Date(treatmentDate);
-    const nextDue = new Date(givenDate.getTime() + freq * 86400000).toISOString().split("T")[0];
-    setPets((prev) => prev.map((p) => p.id === treatmentPetId ? {
-      ...p,
-      treatmentHistory: [
-        { id: `t${Date.now()}`, type: treatmentType, name: productName, dateDue: nextDue, dateGiven: treatmentDate },
-        ...p.treatmentHistory,
-      ],
-    } : p));
-    setAddTreatmentOpen(false);
-    setTreatmentDate(new Date().toISOString().split("T")[0]);
+    const nextDue = new Date(givenDate.getTime() + freq * 86400000)
+      .toISOString()
+      .split("T")[0];
+    setTreatmentError(null);
+    setTreatmentLoading(true);
+    try {
+      await addTreatmentRecord(pid, {
+        id: `t${Date.now()}`,
+        type: treatmentType,
+        name: productName,
+        dateDue: nextDue,
+        dateGiven: treatmentDate,
+      });
+      setAddTreatmentOpen(false);
+      setTreatmentDate(new Date().toISOString().split("T")[0]);
+    } catch (err: any) {
+      setTreatmentError(err?.message ?? "Failed to save. Try again.");
+    } finally {
+      setTreatmentLoading(false);
+    }
+  };
+
+  const handleAddPet = async () => {
+    if (!newPetName.trim() || !newPetBirthday) return;
+    setAddPetError(null);
+    setAddPetLoading(true);
+    try {
+      await addPet({
+        name: newPetName.trim(),
+        breed: newPetBreed.trim(),
+        birthday: newPetBirthday,
+        avatar: newPetAvatar,
+        fleaOptions: [],
+        wormOptions: [],
+        selectedFlea: "",
+        selectedWorm: "",
+        treatmentNotes: "",
+        weightHistory: [],
+        treatmentHistory: [],
+        fleaNotifications: [],
+        wormNotifications: [],
+        insurance: {
+          provider: "",
+          policyNumber: "",
+          renewalDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+            .toISOString()
+            .split("T")[0],
+          monthlyPremium: 0,
+          coverLevel: "",
+          excess: 0,
+        },
+      });
+      setNewPetName("");
+      setNewPetBreed("");
+      setNewPetBirthday("");
+      setNewPetAvatar("🐶");
+      setAddPetOpen(false);
+    } catch (err: any) {
+      setAddPetError(err?.message ?? "Failed to add pet. Check your connection and try again.");
+    } finally {
+      setAddPetLoading(false);
+    }
+  };
+
+  const saveSettings = async (petId: string) => {
+    const edits = localEdits[petId];
+    if (!edits) return;
+    setSaveSettingsError(null);
+    setSaveSettingsLoading(petId);
+    try {
+      await updatePet(petId, edits);
+      setLocalEdits((prev) => {
+        const next = { ...prev };
+        delete next[petId];
+        return next;
+      });
+    } catch (err: any) {
+      setSaveSettingsError(err?.message ?? "Failed to save. Check your connection and try again.");
+    } finally {
+      setSaveSettingsLoading(null);
+    }
+  };
+
+  const patchLocal = (petId: string, patch: Partial<Pet>) => {
+    setLocalEdits((prev) => ({
+      ...prev,
+      [petId]: { ...(prev[petId] ?? {}), ...patch },
+    }));
   };
 
   const openHistory = (petId: string, type: "flea" | "worming") => {
@@ -202,42 +298,106 @@ const Pets = () => {
     setHistoryOpen(true);
   };
 
-  const historyPet = pets.find(p => p.id === historyPetId);
-  const historyProduct = historyPet ? (historyType === "flea" ? historyPet.selectedFlea : historyPet.selectedWorm) : "";
+  const historyPet = pets.find((p) => p.id === historyPetId);
+  const historyProduct = historyPet
+    ? historyType === "flea"
+      ? historyPet.selectedFlea
+      : historyPet.selectedWorm
+    : "";
   const historyRecords = historyPet
     ? historyPet.treatmentHistory
         .filter(t => t.type === historyType && t.name === historyProduct)
         .sort((a, b) => b.dateDue.localeCompare(a.dateDue))
     : [];
 
-  const settingsPet = pets.find(p => p.id === settingsPetId)!;
+  const settingsPet = mergedPets.find(p => p.id === (settingsPetId || firstPetId));
 
   const PET_BG_STYLES = [
     "linear-gradient(145deg, hsl(210, 12%, 78%) 0%, hsl(210, 8%, 86%) 50%, hsl(210, 10%, 82%) 100%)",
     "linear-gradient(145deg, hsl(196, 30%, 40%) 0%, hsl(196, 28%, 50%) 50%, hsl(196, 26%, 45%) 100%)",
+    "linear-gradient(145deg, hsl(25, 62%, 67%) 0%, hsl(15, 55%, 58%) 50%, hsl(25, 50%, 63%) 100%)",
+    "linear-gradient(145deg, hsl(280, 35%, 55%) 0%, hsl(270, 40%, 50%) 50%, hsl(280, 30%, 52%) 100%)",
   ];
-  const PET_LEFT_BORDER_COLORS = ["hsl(210, 10%, 55%)", "hsl(25, 40%, 50%)"];
+  const PET_LEFT_BORDER_COLORS = [
+    "hsl(210, 10%, 55%)",
+    "hsl(25, 40%, 50%)",
+    "hsl(15, 60%, 48%)",
+    "hsl(270, 50%, 45%)",
+  ];
+
+  if (loading) {
+    return (
+      <FeaturePageShell title="Pets" subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />}>
+        <div className="flex flex-col items-center justify-center py-20">
+          <DogLoader text="Loading pets…" />
+        </div>
+      </FeaturePageShell>
+    );
+  }
 
   return (
     <FeaturePageShell
-      title="Billy & Milo"
+      title="Pets"
       subtitle="Health, weight & care"
       icon={<Heart className="w-5 h-5" />}
     >
-      <DogEntrance />
+      {pets.length > 0 && <DogEntrance />}
 
-      {/* Dog Settings Button */}
-      <div className="flex justify-end mb-3">
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-semibold shadow-card"
-        >
-          <span className="text-lg">🐾</span>
-          Dog Settings
+      {/* Header Buttons */}
+      <div className="flex justify-end gap-2 mb-3">
+        <button onClick={() => setAddPetOpen(true)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border text-primary hover:bg-muted/30 transition-all text-xs font-semibold shadow-soft">
+          <Plus className="w-4 h-4" /> Add Pet
         </button>
+        <Dialog open={addPetOpen} onOpenChange={(o) => { setAddPetOpen(o); if (!o) setAddPetError(null); }}>
+          <DialogContent className="max-w-sm mx-4">
+            <DialogHeader><DialogTitle className="font-display">Add a Pet</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Name</Label>
+                  <Input value={newPetName} onChange={(e) => setNewPetName(e.target.value)} placeholder="e.g. Billy" className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Breed</Label>
+                  <Input value={newPetBreed} onChange={(e) => setNewPetBreed(e.target.value)} placeholder="e.g. Labrador" className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Date of Birth</Label>
+                  <Input type="date" value={newPetBirthday} onChange={(e) => setNewPetBirthday(e.target.value)} className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Avatar Emoji</Label>
+                  <Input value={newPetAvatar} onChange={(e) => setNewPetAvatar(e.target.value)} placeholder="🐶" className="h-11 rounded-xl text-2xl" maxLength={2} />
+                </div>
+              </div>
+              <Button onClick={handleAddPet} disabled={!newPetName.trim() || !newPetBirthday || addPetLoading} className="w-full h-11 rounded-xl bg-gradient-primary">
+                {addPetLoading ? "Adding…" : "Add Pet"}
+              </Button>
+              {addPetError && <p className="text-xs text-destructive text-center">{addPetError}</p>}
+            </div>
+          </DialogContent>
+        </Dialog>
+        {pets.length > 0 && (
+          <button
+            onClick={() => { setSettingsPetId(firstPetId); setSettingsOpen(true); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-xs font-semibold shadow-card"
+          >
+            <span className="text-lg">🐾</span>
+            Pet Settings
+          </button>
+        )}
       </div>
 
+      {pets.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="text-5xl mb-4">🐾</div>
+          <p className="text-sm font-semibold text-card-foreground mb-1">No pets yet</p>
+          <p className="text-xs text-muted-foreground mb-4">Add your first pet to get started.</p>
+        </div>
+      )}
+
       {/* Pet Tiles */}
+      {pets.length > 0 && (
       <div className="grid grid-cols-2 gap-3 mb-5">
         {pets.map((pet, i) => {
           const latestW = pet.weightHistory[pet.weightHistory.length - 1];
@@ -248,63 +408,29 @@ const Pets = () => {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: i * 0.15, type: "spring", stiffness: 200 }}
               className="p-4 rounded-2xl border border-border/40 shadow-card relative overflow-hidden"
-              style={{ background: PET_BG_STYLES[i], borderLeftWidth: 4, borderLeftColor: PET_LEFT_BORDER_COLORS[i] }}
+              style={{ background: PET_BG_STYLES[i % PET_BG_STYLES.length], borderLeftWidth: 4, borderLeftColor: PET_LEFT_BORDER_COLORS[i % PET_LEFT_BORDER_COLORS.length] }}
             >
               <div className="absolute top-2 right-2 opacity-15 text-5xl pointer-events-none">🐾</div>
               <div className="text-3xl mb-2">{pet.avatar}</div>
               <p className="text-xl font-extrabold font-display text-card-foreground tracking-wide">{pet.name}</p>
               <div className="flex items-center gap-1.5 mt-1.5">
-                <span className="text-sm">{getAge(pet.birthday)}</span>
+                <span className="text-sm">{pet.birthday ? getAge(pet.birthday) : "—"}</span>
                 <span className="text-muted-foreground">·</span>
-                <span className="text-sm">🎂 {getBirthdayCountdown(pet.birthday)}</span>
+                <span className="text-sm">🎂 {pet.birthday ? getBirthdayCountdown(pet.birthday) : "—"}</span>
               </div>
-              <p className="text-lg font-bold font-display text-card-foreground mt-2">{latestW.weight}kg</p>
+              <p className="text-lg font-bold font-display text-card-foreground mt-2">{latestW ? `${latestW.weight}kg` : "No weight"}</p>
             </motion.div>
           );
         })}
       </div>
+      )}
 
+      {pets.length > 0 && (<>
       {/* Treatment Status */}
       <div className="mb-5">
         <div className="flex items-center justify-between px-1 mb-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Treatment Status</h3>
-          <Dialog open={addTreatmentOpen} onOpenChange={setAddTreatmentOpen}>
-            <DialogTrigger asChild>
-              <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Record</button>
-            </DialogTrigger>
-            <DialogContent className="max-w-sm mx-4">
-              <DialogHeader><DialogTitle className="font-display">Record Treatment</DialogTitle></DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label>Pet</Label>
-                  <Select value={treatmentPetId} onValueChange={setTreatmentPetId}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>{pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={treatmentType} onValueChange={(v) => setTreatmentType(v as any)}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="flea">Flea</SelectItem>
-                      <SelectItem value="worming">Worming</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Date Given</Label>
-                  <Input type="date" value={treatmentDate} onChange={(e) => setTreatmentDate(e.target.value)} className="h-11 rounded-xl" />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Will record <span className="font-semibold text-card-foreground">
-                    {treatmentType === "flea" ? pets.find(p => p.id === treatmentPetId)?.selectedFlea : pets.find(p => p.id === treatmentPetId)?.selectedWorm}
-                  </span> as given on {treatmentDate}.
-                </p>
-                <Button onClick={handleAddTreatment} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <button onClick={() => setAddTreatmentOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Record</button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -359,39 +485,18 @@ const Pets = () => {
       <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-soft mb-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Weight History</h3>
-          <Dialog open={addWeightOpen} onOpenChange={setAddWeightOpen}>
-            <DialogTrigger asChild>
-              <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Log</button>
-            </DialogTrigger>
-            <DialogContent className="max-w-sm mx-4">
-              <DialogHeader><DialogTitle className="font-display">Log Weight</DialogTitle></DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label>Pet</Label>
-                  <Select value={weightPetId} onValueChange={setWeightPetId}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>{pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Weight (kg)</Label>
-                  <Input type="number" step="0.1" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} className="h-11 rounded-xl" />
-                </div>
-                <Button onClick={handleAddWeight} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <button onClick={() => setAddWeightOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Log</button>
         </div>
         <div className="flex gap-3 mb-3">
           {pets.map((p, i) => (
             <button
               key={p.id}
-              onClick={() => p.id === "1" ? setShowBilly(!showBilly) : setShowMilo(!showMilo)}
+              onClick={() => setVisiblePets((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
               className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
-                (p.id === "1" ? showBilly : showMilo) ? "border-primary/30 bg-card shadow-soft" : "border-border/30 opacity-50"
+                visiblePets.has(p.id) ? "border-primary/30 bg-card shadow-soft" : "border-border/30 opacity-50"
               }`}
             >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: WEIGHT_COLORS[i] }} />
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: WEIGHT_COLORS[i % WEIGHT_COLORS.length] }} />
               {p.name}
             </button>
           ))}
@@ -403,8 +508,9 @@ const Pets = () => {
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(220, 10%, 44%)" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "hsl(220, 10%, 44%)" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} width={35} tickFormatter={(v) => `${v}kg`} />
               <Tooltip content={<WeightTooltip />} />
-              {showBilly && <Line type="monotone" dataKey="1" name="Billy" stroke={WEIGHT_COLORS[0]} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />}
-              {showMilo && <Line type="monotone" dataKey="2" name="Milo" stroke={WEIGHT_COLORS[1]} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />}
+              {pets.map((p, i) => visiblePets.has(p.id) && (
+                <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={WEIGHT_COLORS[i % WEIGHT_COLORS.length]} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -422,7 +528,7 @@ const Pets = () => {
               <div
                 key={pet.id}
                 className="rounded-xl border border-border/40 shadow-soft overflow-hidden"
-                style={{ background: PET_BG_STYLES[i], borderLeftWidth: 3, borderLeftColor: PET_LEFT_BORDER_COLORS[i] }}
+                style={{ background: PET_BG_STYLES[i % PET_BG_STYLES.length], borderLeftWidth: 3, borderLeftColor: PET_LEFT_BORDER_COLORS[i % PET_LEFT_BORDER_COLORS.length] }}
               >
                 <button onClick={() => setInsuranceExpanded(expanded ? null : pet.id)} className="w-full flex items-center gap-3 p-4 text-left">
                   <div className="text-xl">{pet.avatar}</div>
@@ -451,6 +557,99 @@ const Pets = () => {
           })}
         </div>
       </div>
+      </>)}
+
+      {/* Record Treatment Dialog */}
+      <Dialog open={addTreatmentOpen} onOpenChange={(o) => { setAddTreatmentOpen(o); if (!o) setTreatmentError(null); }}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader><DialogTitle className="font-display">Record Treatment</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Pet</Label>
+              <Select value={treatmentPetId || firstPetId} onValueChange={setTreatmentPetId}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Select pet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.avatar} {p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={treatmentType} onValueChange={(v) => setTreatmentType(v as "flea" | "worming")}>
+                <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="flea">🛡️ Flea</SelectItem>
+                  <SelectItem value="worming">💉 Worming</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {(() => {
+              const activePet = pets.find(p => p.id === (treatmentPetId || firstPetId));
+              const product = treatmentType === "flea" ? activePet?.selectedFlea : activePet?.selectedWorm;
+              const options = treatmentType === "flea" ? activePet?.fleaOptions : activePet?.wormOptions;
+              return (
+                <>
+                  {!product && (
+                    <p className="text-xs text-warning font-medium bg-warning/10 rounded-lg px-3 py-2">
+                      ⚠️ No active {treatmentType === "flea" ? "flea" : "wormer"} product set for {activePet?.name}. Go to Pet Settings → {treatmentType === "flea" ? "Flea" : "Wormer"} Treatment and add a product first.
+                    </p>
+                  )}
+                  {product && (
+                    <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                      Will record <span className="font-semibold text-card-foreground">{product}</span> as given.
+                      {options?.find(o => o.product === product) && (
+                        <> Next due auto-calculated ({options.find(o => o.product === product)!.frequencyDays}d interval).</>
+                      )}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+            <div className="space-y-2">
+              <Label>Date Given</Label>
+              <Input type="date" value={treatmentDate} onChange={(e) => setTreatmentDate(e.target.value)} className="h-11 rounded-xl" />
+            </div>
+            {treatmentError && <p className="text-xs text-destructive">{treatmentError}</p>}
+            <Button
+              onClick={handleAddTreatment}
+              disabled={treatmentLoading || !(() => { const p = pets.find(x => x.id === (treatmentPetId || firstPetId)); return treatmentType === "flea" ? p?.selectedFlea : p?.selectedWorm; })()}
+              className="w-full h-11 rounded-xl bg-gradient-primary"
+            >
+              {treatmentLoading ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Weight Dialog */}
+      <Dialog open={addWeightOpen} onOpenChange={(o) => { setAddWeightOpen(o); if (!o) setWeightError(null); }}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader><DialogTitle className="font-display">Log Weight</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Pet</Label>
+              <Select value={weightPetId || firstPetId} onValueChange={setWeightPetId}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Select pet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pets.map((p) => <SelectItem key={p.id} value={p.id}>{p.avatar} {p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Weight (kg)</Label>
+              <Input type="number" step="0.1" placeholder="e.g. 14.2" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} className="h-11 rounded-xl" />
+            </div>
+            {weightError && <p className="text-xs text-destructive">{weightError}</p>}
+            <Button onClick={handleAddWeight} disabled={weightLoading || !newWeight} className="w-full h-11 rounded-xl bg-gradient-primary">
+              {weightLoading ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Treatment History Dialog */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -507,16 +706,16 @@ const Pets = () => {
             </DialogTitle>
           </DialogHeader>
 
-          <Tabs value={settingsPetId} onValueChange={setSettingsPetId} className="mt-2">
+          <Tabs value={settingsPetId || firstPetId} onValueChange={setSettingsPetId} className="mt-2">
             <TabsList className="w-full">
-              {pets.map((p) => (
+              {mergedPets.map((p) => (
                 <TabsTrigger key={p.id} value={p.id} className="flex-1 gap-1.5">
                   <span>{p.avatar}</span> {p.name}
                 </TabsTrigger>
               ))}
             </TabsList>
 
-            {pets.map((pet) => (
+            {mergedPets.map((pet) => (
               <TabsContent key={pet.id} value={pet.id} className="space-y-5 mt-4">
                 {/* Basic Info */}
                 <div>
@@ -524,11 +723,11 @@ const Pets = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Date of Birth</Label>
-                      <Input type="date" defaultValue={pet.birthday} onChange={(e) => setPets((prev) => prev.map((p) => p.id === pet.id ? { ...p, birthday: e.target.value } : p))} className="h-10 rounded-xl" />
+                      <Input type="date" value={pet.birthday} onChange={(e) => patchLocal(pet.id, { birthday: e.target.value })} className="h-10 rounded-xl" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Breed</Label>
-                      <Input defaultValue={pet.breed} onChange={(e) => setPets((prev) => prev.map((p) => p.id === pet.id ? { ...p, breed: e.target.value } : p))} className="h-10 rounded-xl" />
+                      <Input value={pet.breed} onChange={(e) => patchLocal(pet.id, { breed: e.target.value })} className="h-10 rounded-xl" />
                     </div>
                   </div>
                 </div>
@@ -539,10 +738,10 @@ const Pets = () => {
                   <div className="space-y-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Active Product</Label>
-                      <Select value={pet.selectedFlea} onValueChange={(v) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, selectedFlea: v } : p))}>
+                      <Select value={pet.selectedFlea} onValueChange={(v) => patchLocal(pet.id, { selectedFlea: v })}>
                         <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select flea product" /></SelectTrigger>
                         <SelectContent>
-                          {pet.fleaOptions.map(o => (
+                          {pet.fleaOptions.filter(o => o.product.trim() !== "").map(o => (
                             <SelectItem key={o.id} value={o.product}>{o.product} (every {o.frequencyDays}d)</SelectItem>
                           ))}
                         </SelectContent>
@@ -550,19 +749,33 @@ const Pets = () => {
                     </div>
                     <p className="text-[10px] text-muted-foreground">Available products:</p>
                     {pet.fleaOptions.map((opt, i) => (
-                      <div key={opt.id} className="flex gap-2">
-                        <Input defaultValue={opt.product} placeholder="Product" onChange={(e) => {
+                      <div key={opt.id} className="flex gap-2 items-center">
+                        <Input value={opt.product} placeholder="Product name" onChange={(e) => {
                           const val = e.target.value;
-                          setPets(prev => prev.map(p => p.id === pet.id ? { ...p, fleaOptions: p.fleaOptions.map((o, j) => j === i ? { ...o, product: val } : o) } : p));
+                          const updated = pet.fleaOptions.map((o, j) => j === i ? { ...o, product: val } : o);
+                          patchLocal(pet.id, { fleaOptions: updated });
                         }} className="h-9 rounded-lg flex-1 text-xs" />
-                        <Input type="number" defaultValue={opt.frequencyDays} onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setPets(prev => prev.map(p => p.id === pet.id ? { ...p, fleaOptions: p.fleaOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o) } : p));
-                        }} className="h-9 rounded-lg w-20 text-xs" />
-                        <span className="text-[10px] text-muted-foreground self-center">days</span>
+                        <Input type="number" min="1" value={opt.frequencyDays} onChange={(e) => {
+                          const val = Math.max(1, Number(e.target.value));
+                          const updated = pet.fleaOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o);
+                          patchLocal(pet.id, { fleaOptions: updated });
+                        }} className="h-9 rounded-lg w-16 text-xs" />
+                        <span className="text-[10px] text-muted-foreground shrink-0">days</span>
+                        <button
+                          onClick={() => {
+                            const updated = pet.fleaOptions.filter((_, j) => j !== i);
+                            const patch: Partial<Pet> = { fleaOptions: updated };
+                            if (pet.selectedFlea === opt.product) patch.selectedFlea = "";
+                            patchLocal(pet.id, patch);
+                          }}
+                          className="text-destructive/60 hover:text-destructive shrink-0 p-1 rounded-md hover:bg-destructive/10 transition-colors"
+                          title="Remove product"
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))}
-                    <button onClick={() => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, fleaOptions: [...p.fleaOptions, { id: `fo${Date.now()}`, product: "", frequencyDays: 30 }] } : p))} className="text-[10px] text-warning font-medium flex items-center gap-1">
+                    <button onClick={() => patchLocal(pet.id, { fleaOptions: [...pet.fleaOptions, { id: `fo${Date.now()}`, product: "", frequencyDays: 30 }] })} className="text-[10px] text-warning font-medium flex items-center gap-1">
                       <Plus className="w-3 h-3" /> Add product
                     </button>
                   </div>
@@ -574,10 +787,10 @@ const Pets = () => {
                   <div className="space-y-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Active Product</Label>
-                      <Select value={pet.selectedWorm} onValueChange={(v) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, selectedWorm: v } : p))}>
+                      <Select value={pet.selectedWorm} onValueChange={(v) => patchLocal(pet.id, { selectedWorm: v })}>
                         <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select worm product" /></SelectTrigger>
                         <SelectContent>
-                          {pet.wormOptions.map(o => (
+                          {pet.wormOptions.filter(o => o.product.trim() !== "").map(o => (
                             <SelectItem key={o.id} value={o.product}>{o.product} (every {o.frequencyDays}d)</SelectItem>
                           ))}
                         </SelectContent>
@@ -585,19 +798,33 @@ const Pets = () => {
                     </div>
                     <p className="text-[10px] text-muted-foreground">Available products:</p>
                     {pet.wormOptions.map((opt, i) => (
-                      <div key={opt.id} className="flex gap-2">
-                        <Input defaultValue={opt.product} placeholder="Product" onChange={(e) => {
+                      <div key={opt.id} className="flex gap-2 items-center">
+                        <Input value={opt.product} placeholder="Product name" onChange={(e) => {
                           const val = e.target.value;
-                          setPets(prev => prev.map(p => p.id === pet.id ? { ...p, wormOptions: p.wormOptions.map((o, j) => j === i ? { ...o, product: val } : o) } : p));
+                          const updated = pet.wormOptions.map((o, j) => j === i ? { ...o, product: val } : o);
+                          patchLocal(pet.id, { wormOptions: updated });
                         }} className="h-9 rounded-lg flex-1 text-xs" />
-                        <Input type="number" defaultValue={opt.frequencyDays} onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setPets(prev => prev.map(p => p.id === pet.id ? { ...p, wormOptions: p.wormOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o) } : p));
-                        }} className="h-9 rounded-lg w-20 text-xs" />
-                        <span className="text-[10px] text-muted-foreground self-center">days</span>
+                        <Input type="number" min="1" value={opt.frequencyDays} onChange={(e) => {
+                          const val = Math.max(1, Number(e.target.value));
+                          const updated = pet.wormOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o);
+                          patchLocal(pet.id, { wormOptions: updated });
+                        }} className="h-9 rounded-lg w-16 text-xs" />
+                        <span className="text-[10px] text-muted-foreground shrink-0">days</span>
+                        <button
+                          onClick={() => {
+                            const updated = pet.wormOptions.filter((_, j) => j !== i);
+                            const patch: Partial<Pet> = { wormOptions: updated };
+                            if (pet.selectedWorm === opt.product) patch.selectedWorm = "";
+                            patchLocal(pet.id, patch);
+                          }}
+                          className="text-destructive/60 hover:text-destructive shrink-0 p-1 rounded-md hover:bg-destructive/10 transition-colors"
+                          title="Remove product"
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))}
-                    <button onClick={() => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, wormOptions: [...p.wormOptions, { id: `wo${Date.now()}`, product: "", frequencyDays: 90 }] } : p))} className="text-[10px] text-info font-medium flex items-center gap-1">
+                    <button onClick={() => patchLocal(pet.id, { wormOptions: [...pet.wormOptions, { id: `wo${Date.now()}`, product: "", frequencyDays: 90 }] })} className="text-[10px] text-info font-medium flex items-center gap-1">
                       <Plus className="w-3 h-3" /> Add product
                     </button>
                   </div>
@@ -611,15 +838,16 @@ const Pets = () => {
                       <p className="text-[10px] font-medium text-card-foreground mb-1">Flea reminders</p>
                       {pet.fleaNotifications.map((n, i) => (
                         <div key={n.id} className="flex items-center gap-2 mb-1">
-                          <Input type="number" defaultValue={n.daysBeforeDue} onChange={(e) => {
+                          <Input type="number" value={n.daysBeforeDue} onChange={(e) => {
                             const val = Number(e.target.value);
-                            setPets(prev => prev.map(p => p.id === pet.id ? { ...p, fleaNotifications: p.fleaNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn) } : p));
+                            const updated = pet.fleaNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn);
+                            patchLocal(pet.id, { fleaNotifications: updated });
                           }} className="h-8 rounded-lg w-16 text-xs" />
                           <span className="text-[10px] text-muted-foreground">days before due</span>
                         </div>
                       ))}
                       {pet.fleaNotifications.length < 3 && (
-                        <button onClick={() => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, fleaNotifications: [...p.fleaNotifications, { id: `fn${Date.now()}`, daysBeforeDue: 1 }] } : p))} className="text-[10px] text-warning font-medium flex items-center gap-1">
+                        <button onClick={() => patchLocal(pet.id, { fleaNotifications: [...pet.fleaNotifications, { id: `fn${Date.now()}`, daysBeforeDue: 1 }] })} className="text-[10px] text-warning font-medium flex items-center gap-1">
                           <Plus className="w-3 h-3" /> Add another reminder
                         </button>
                       )}
@@ -628,15 +856,16 @@ const Pets = () => {
                       <p className="text-[10px] font-medium text-card-foreground mb-1">Wormer reminders</p>
                       {pet.wormNotifications.map((n, i) => (
                         <div key={n.id} className="flex items-center gap-2 mb-1">
-                          <Input type="number" defaultValue={n.daysBeforeDue} onChange={(e) => {
+                          <Input type="number" value={n.daysBeforeDue} onChange={(e) => {
                             const val = Number(e.target.value);
-                            setPets(prev => prev.map(p => p.id === pet.id ? { ...p, wormNotifications: p.wormNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn) } : p));
+                            const updated = pet.wormNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn);
+                            patchLocal(pet.id, { wormNotifications: updated });
                           }} className="h-8 rounded-lg w-16 text-xs" />
                           <span className="text-[10px] text-muted-foreground">days before due</span>
                         </div>
                       ))}
                       {pet.wormNotifications.length < 3 && (
-                        <button onClick={() => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, wormNotifications: [...p.wormNotifications, { id: `wn${Date.now()}`, daysBeforeDue: 1 }] } : p))} className="text-[10px] text-info font-medium flex items-center gap-1">
+                        <button onClick={() => patchLocal(pet.id, { wormNotifications: [...pet.wormNotifications, { id: `wn${Date.now()}`, daysBeforeDue: 1 }] })} className="text-[10px] text-info font-medium flex items-center gap-1">
                           <Plus className="w-3 h-3" /> Add another reminder
                         </button>
                       )}
@@ -649,7 +878,7 @@ const Pets = () => {
                   <p className="text-xs font-semibold text-accent uppercase tracking-wider mb-2">Treatment Notes</p>
                   <Textarea
                     value={pet.treatmentNotes}
-                    onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, treatmentNotes: e.target.value } : p))}
+                    onChange={(e) => patchLocal(pet.id, { treatmentNotes: e.target.value })}
                     placeholder="e.g. Advocate + Droncit or Anthelmin + Advocate"
                     className="rounded-xl min-h-[60px] text-xs"
                   />
@@ -661,35 +890,51 @@ const Pets = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Provider</Label>
-                      <Input defaultValue={pet.insurance.provider} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, provider: e.target.value } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input value={pet.insurance.provider} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, provider: e.target.value } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Policy No.</Label>
-                      <Input defaultValue={pet.insurance.policyNumber} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, policyNumber: e.target.value } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input value={pet.insurance.policyNumber} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, policyNumber: e.target.value } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Cover Level</Label>
-                      <Input defaultValue={pet.insurance.coverLevel} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, coverLevel: e.target.value } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input value={pet.insurance.coverLevel} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, coverLevel: e.target.value } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Monthly (£)</Label>
-                      <Input type="number" step="0.01" defaultValue={pet.insurance.monthlyPremium} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, monthlyPremium: Number(e.target.value) } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input type="number" step="0.01" value={pet.insurance.monthlyPremium} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, monthlyPremium: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Excess (£)</Label>
-                      <Input type="number" defaultValue={pet.insurance.excess} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, excess: Number(e.target.value) } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input type="number" value={pet.insurance.excess} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, excess: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Renewal Date</Label>
-                      <Input type="date" defaultValue={pet.insurance.renewalDate} onChange={(e) => setPets(prev => prev.map(p => p.id === pet.id ? { ...p, insurance: { ...p.insurance, renewalDate: e.target.value } } : p))} className="h-9 rounded-lg text-xs" />
+                      <Input type="date" value={pet.insurance.renewalDate} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, renewalDate: e.target.value } })} className="h-9 rounded-lg text-xs" />
                     </div>
                   </div>
                 </div>
+
+                {localEdits[pet.id] && (
+                  <p className="text-[11px] font-medium text-warning flex items-center gap-1.5 bg-warning/10 rounded-lg px-3 py-2">
+                    <span>●</span> Unsaved changes — press Save to apply
+                  </p>
+                )}
+                {saveSettingsError && saveSettingsLoading === null && (
+                  <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveSettingsError}</p>
+                )}
+                <Button
+                  onClick={() => saveSettings(pet.id)}
+                  disabled={saveSettingsLoading === pet.id || !localEdits[pet.id]}
+                  className="w-full h-10 rounded-xl bg-gradient-primary text-xs"
+                >
+                  {saveSettingsLoading === pet.id ? "Saving…" : `Save ${pet.name}'s Settings`}
+                </Button>
               </TabsContent>
             ))}
           </Tabs>
 
-          <Button onClick={() => setSettingsOpen(false)} className="w-full h-11 rounded-xl bg-gradient-primary mt-2">Done</Button>
+          <Button variant="outline" onClick={() => setSettingsOpen(false)} className="w-full h-10 rounded-xl mt-1 text-xs">Close</Button>
         </DialogContent>
       </Dialog>
     </FeaturePageShell>
@@ -697,3 +942,4 @@ const Pets = () => {
 };
 
 export default Pets;
+

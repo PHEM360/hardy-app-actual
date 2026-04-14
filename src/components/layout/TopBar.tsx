@@ -24,6 +24,7 @@ const TopBar = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const displayName = user?.displayName || user?.email?.split("@")[0] || "";
+  const firstName = displayName.split(" ")[0];
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -47,7 +48,7 @@ const TopBar = () => {
   );
 
   const renderAvatar = () => {
-    const initial = (displayName || "?").charAt(0).toUpperCase();
+    const initial = (firstName || "?").charAt(0).toUpperCase();
     return <span className="text-xs font-bold" style={{ color: "#fff" }}>{initial}</span>;
   };
 
@@ -74,7 +75,7 @@ const TopBar = () => {
             {renderAvatar()}
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold font-display text-white/95 tracking-wide">{displayName}</p>
+            <p className="text-sm font-semibold font-display text-white/95 tracking-wide">{firstName}</p>
             <p className="text-[10px] text-white/55 font-medium tracking-wide">{dateStr} · {timeStr}</p>
           </div>
         </div>

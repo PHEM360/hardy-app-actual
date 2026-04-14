@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useUserRole } from "@/auth/useUserRole";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 const NAV_ITEMS = [
   { icon: Home, label: "Home", path: "/dashboard", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(135deg, hsl(188, 33%, 38%), hsl(191, 33%, 43%))" },
@@ -17,18 +18,36 @@ const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { role, loading } = useUserRole();
+  const { profile } = useUserProfile();
+
+  const isAdmin = role === "admin" || role === "superadmin";
+  // Members without an explicit enabledFeatures list default to seeing everything.
+  const memberHasFeature = (key: string) => {
+    if (isAdmin) return true;
+    if (!profile || profile.enabledFeatures.length === 0) return true;
+    return profile.enabledFeatures.includes(key as any);
+  };
 
   const navItems = NAV_ITEMS.filter((i) => {
-    if (i.path !== "/admin") return true;
-    // Hide Admin tab for non-admin users.
-    // While loading, keep it hidden to avoid a brief flash.
-    if (loading) return false;
-    return role === "admin" || role === "superadmin";
+    if (i.path === "/admin") {
+      if (loading) return false;
+      return isAdmin;
+    }
+    if (i.path === "/pets") {
+      if (loading) return false;
+      return memberHasFeature("pets");
+    }
+    if (i.path === "/finance") {
+      if (loading) return false;
+      return memberHasFeature("finance");
+    }
+    return true;
   });
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card safe-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="flex items-center justify-around h-16 px-2 max-w-2xl mx-auto">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path !== "/" && location.pathname.startsWith(item.path));

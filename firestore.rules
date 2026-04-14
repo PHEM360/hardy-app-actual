@@ -73,6 +73,80 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isOwner(resource.data.ownerId);
     }
     
+    // Pets collection - shared across all household members
+    match /pets/{petId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      
+      match /weightHistory/{entryId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+      
+      match /treatmentHistory/{entryId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // Finance - each user's personal accounts
+    match /finance/{userId}/accounts/{accountId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /finance/{userId}/entries/{entryId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Weight tracking - per user
+    match /weightTracker/{userId}/entries/{entryId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Notifications - per user
+    match /notifications/{userId}/items/{notifId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Tattersalls - shared flat management data
+    match /tattersalls/{docId} {
+      allow read, write: if isAuthenticated();
+      
+      match /documents/{documentId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Tasks - per user
+    match /tasks/{userId}/items/{taskId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Task settings - per user
+    match /taskSettings/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Credentials (login details vault) - strictly per user only
+    match /users/{userId}/credentials/{credId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Companies - per user
+    match /companies/{userId}/items/{companyId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+
+      match /logins/{loginId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      match /services/{serviceId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      match /expenses/{expenseId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

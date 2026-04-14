@@ -9,9 +9,9 @@ const AppLayout = () => {
   if (isLogin) return <Outlet />;
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-[100dvh] bg-background">
       <TopBar />
-      <main className="flex-1 pb-20 overflow-y-auto max-w-3xl mx-auto w-full">
+      <main className="flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] max-w-2xl mx-auto w-full">
         <Outlet />
       </main>
       <BottomNav />

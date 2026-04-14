@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AvatarType } from "@/types/app";
 import { useAuth } from "@/auth/AuthContext";
-import { signOut } from "firebase/auth";
+import { signOut, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -78,6 +78,26 @@ const Settings = () => {
   const [avatarTextColor, setAvatarTextColor] = useState("#ffffff");
 
   const [notifTypes, setNotifTypes] = useState(INITIAL_NOTIFICATION_TYPES);
+  const [saveProfileLoading, setSaveProfileLoading] = useState(false);
+  const [saveProfileError, setSaveProfileError] = useState<string | null>(null);
+  const [saveProfileSuccess, setSaveProfileSuccess] = useState(false);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    setSaveProfileError(null);
+    setSaveProfileSuccess(false);
+    setSaveProfileLoading(true);
+    try {
+      const name = displayName.trim() || [firstName.trim(), surname.trim()].filter(Boolean).join(" ") || firstName.trim();
+      await updateProfile(user, { displayName: name });
+      setSaveProfileSuccess(true);
+      setTimeout(() => setSaveProfileSuccess(false), 3000);
+    } catch (err: any) {
+      setSaveProfileError(err?.message ?? "Failed to save. Please try again.");
+    } finally {
+      setSaveProfileLoading(false);
+    }
+  };
 
   // Dark mode effect
   useEffect(() => {
@@ -197,6 +217,20 @@ const Settings = () => {
             <Label className="text-xs">Email</Label>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 rounded-xl text-sm" />
           </div>
+
+          {saveProfileError && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveProfileError}</p>
+          )}
+          {saveProfileSuccess && (
+            <p className="text-xs text-success bg-success/10 rounded-lg px-3 py-2">✓ Profile saved successfully</p>
+          )}
+          <Button
+            onClick={saveProfile}
+            disabled={saveProfileLoading}
+            className="w-full h-10 rounded-xl bg-gradient-primary text-sm"
+          >
+            {saveProfileLoading ? "Saving…" : "Save Profile"}
+          </Button>
         </div>
       </div>
 
