@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut, GripVertical, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { signOut, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -24,16 +25,28 @@ const TEXT_COLOR_OPTIONS = [
   "hsl(36, 85%, 54%)", "hsl(168, 55%, 60%)", "hsl(280, 45%, 75%)", "hsl(0, 72%, 70%)",
 ];
 
+// All available nav destinations
+const ALL_NAV_OPTIONS = [
+  { path: "/dashboard",         label: "Home" },
+  { path: "/tasks",             label: "Tasks" },
+  { path: "/finance",           label: "Finance" },
+  { path: "/pets",              label: "Pets" },
+  { path: "/admin",             label: "Admin" },
+  { path: "/more",              label: "More" },
+  { path: "/companies",         label: "Companies" },
+  { path: "/login-details",     label: "Log In Details" },
+  { path: "/weight",            label: "Weight" },
+  { path: "/households",        label: "Households" },
+  { path: "/household-finance", label: "Household Finance" },
+  { path: "/tattersalls",       label: "Tattersalls" },
+];
+const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
+
 // ── Notification types ──
 interface ReminderSetting { id: string; value: number; unit: "mins" | "hrs" | "days" | "weeks" }
 interface NotificationType {
-  key: string;
-  label: string;
-  group: string;
-  enabled: boolean;
-  reminders: ReminderSetting[];
+  key: string; label: string; group: string; enabled: boolean; reminders: ReminderSetting[];
 }
-
 const INITIAL_NOTIFICATION_TYPES: NotificationType[] = [
   { key: "billy_flea", label: "Billy Flea Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r1", value: 3, unit: "days" }] },
   { key: "milo_flea", label: "Milo Flea Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r2", value: 3, unit: "days" }] },
@@ -63,13 +76,13 @@ const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }:
 const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { profile, saveProfile } = useUserProfile();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [pushNotifications, setPushNotifications] = useState(true);
 
   const [firstName, setFirstName] = useState(user?.displayName || "");
   const [surname, setSurname] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName || "");
-  const [email, setEmail] = useState(user?.email || "");
 
   const [avatarType, setAvatarType] = useState<AvatarType>("initials");
   const [avatarEmoji, setAvatarEmoji] = useState("😊");
@@ -77,19 +90,49 @@ const Settings = () => {
   const [avatarBgColor, setAvatarBgColor] = useState(BG_COLOR_OPTIONS[0]);
   const [avatarTextColor, setAvatarTextColor] = useState("#ffffff");
 
+  // Bottom nav customisation
+  const [navItems, setNavItems] = useState<string[]>(DEFAULT_NAV);
+  const [navSaveSuccess, setNavSaveSuccess] = useState(false);
+
   const [notifTypes, setNotifTypes] = useState(INITIAL_NOTIFICATION_TYPES);
   const [saveProfileLoading, setSaveProfileLoading] = useState(false);
   const [saveProfileError, setSaveProfileError] = useState<string | null>(null);
   const [saveProfileSuccess, setSaveProfileSuccess] = useState(false);
 
-  const saveProfile = async () => {
+  // Populate from Firestore profile once loaded
+  useEffect(() => {
+    if (!profile) return;
+    if (profile.firstName) setFirstName(profile.firstName);
+    if (profile.surname) setSurname(profile.surname);
+    if (profile.displayName) setDisplayName(profile.displayName);
+    if (profile.avatarType) setAvatarType(profile.avatarType as AvatarType);
+    if (profile.avatarEmoji) setAvatarEmoji(profile.avatarEmoji);
+    if (profile.avatarInitials) setAvatarInitials(profile.avatarInitials);
+    if (profile.avatarBgColor) setAvatarBgColor(profile.avatarBgColor);
+    if (profile.avatarTextColor) setAvatarTextColor(profile.avatarTextColor);
+    if (profile.navItems && profile.navItems.length > 0) setNavItems(profile.navItems);
+  }, [profile?.uid]); // only run once when profile first loads
+
+  const saveProfileHandler = async () => {
     if (!user) return;
     setSaveProfileError(null);
     setSaveProfileSuccess(false);
     setSaveProfileLoading(true);
     try {
       const name = displayName.trim() || [firstName.trim(), surname.trim()].filter(Boolean).join(" ") || firstName.trim();
+      // Update Firebase Auth display name
       await updateProfile(user, { displayName: name });
+      // Persist everything to Firestore
+      await saveProfile({
+        firstName: firstName.trim(),
+        surname: surname.trim(),
+        displayName: name,
+        avatarType,
+        avatarEmoji,
+        avatarInitials,
+        avatarBgColor,
+        avatarTextColor,
+      });
       setSaveProfileSuccess(true);
       setTimeout(() => setSaveProfileSuccess(false), 3000);
     } catch (err: any) {
@@ -97,6 +140,18 @@ const Settings = () => {
     } finally {
       setSaveProfileLoading(false);
     }
+  };
+
+  const saveNavItems = async () => {
+    await saveProfile({ navItems });
+    setNavSaveSuccess(true);
+    setTimeout(() => setNavSaveSuccess(false), 2000);
+  };
+
+  const toggleNavItem = (path: string) => {
+    setNavItems((prev) =>
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+    );
   };
 
   // Dark mode effect
@@ -111,18 +166,15 @@ const Settings = () => {
   const toggleNotifType = (key: string) => {
     setNotifTypes(prev => prev.map(n => n.key === key ? { ...n, enabled: !n.enabled } : n));
   };
-
   const addReminder = (key: string) => {
     setNotifTypes(prev => prev.map(n => {
       if (n.key !== key || n.reminders.length >= 3) return n;
       return { ...n, reminders: [...n.reminders, { id: `r${Date.now()}`, value: 1, unit: "days" }] };
     }));
   };
-
   const removeReminder = (key: string, remId: string) => {
     setNotifTypes(prev => prev.map(n => n.key === key ? { ...n, reminders: n.reminders.filter(r => r.id !== remId) } : n));
   };
-
   const updateReminder = (key: string, remId: string, field: "value" | "unit", val: string) => {
     setNotifTypes(prev => prev.map(n => n.key === key ? {
       ...n,
@@ -130,7 +182,6 @@ const Settings = () => {
     } : n));
   };
 
-  // Group notifications
   const groups = [...new Set(notifTypes.map(n => n.group))];
 
   return (
@@ -139,7 +190,6 @@ const Settings = () => {
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Profile</h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
-          {/* Avatar section - tightly grouped */}
           <div className="flex gap-4 items-start">
             <div className="flex flex-col items-center gap-2">
               <AvatarPreview type={avatarType} emoji={avatarEmoji} initials={avatarInitials} bgColor={avatarBgColor} textColor={avatarTextColor} firstName={firstName} />
@@ -152,8 +202,6 @@ const Settings = () => {
                 ))}
               </div>
             </div>
-
-            {/* Contextual editors right beside avatar */}
             <div className="flex-1 space-y-3 pt-1">
               {avatarType === "emoji" && (
                 <div className="space-y-1.5">
@@ -168,7 +216,6 @@ const Settings = () => {
                   </div>
                 </div>
               )}
-
               {avatarType === "initials" && (
                 <div className="space-y-1.5">
                   <Label className="text-[10px]">Display Text</Label>
@@ -183,7 +230,6 @@ const Settings = () => {
                   </div>
                 </div>
               )}
-
               {avatarType !== "image" && (
                 <div className="space-y-1.5">
                   <Label className="text-[10px]">Background</Label>
@@ -198,7 +244,6 @@ const Settings = () => {
               )}
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">First Name</Label>
@@ -213,24 +258,39 @@ const Settings = () => {
             <Label className="text-xs">Display Name <span className="text-muted-foreground">(optional)</span></Label>
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="Leave blank to use first name" />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 rounded-xl text-sm" />
-          </div>
-
           {saveProfileError && (
             <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveProfileError}</p>
           )}
           {saveProfileSuccess && (
-            <p className="text-xs text-success bg-success/10 rounded-lg px-3 py-2">✓ Profile saved successfully</p>
+            <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Profile saved successfully</p>
           )}
-          <Button
-            onClick={saveProfile}
-            disabled={saveProfileLoading}
-            className="w-full h-10 rounded-xl bg-gradient-primary text-sm"
-          >
+          <Button onClick={saveProfileHandler} disabled={saveProfileLoading} className="w-full h-10 rounded-xl bg-gradient-primary text-sm">
             {saveProfileLoading ? "Saving…" : "Save Profile"}
           </Button>
+        </div>
+      </div>
+
+      {/* Bottom Nav customisation */}
+      <div className="mb-5">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Bottom Navigation</h3>
+        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
+          <p className="text-xs text-muted-foreground">Choose which links appear in the bottom bar. Tap to toggle. Sign Out is always shown.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {ALL_NAV_OPTIONS.map((item) => {
+              const active = navItems.includes(item.path);
+              return (
+                <button key={item.path} onClick={() => toggleNavItem(item.path)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                    active ? "bg-primary/10 text-primary border-primary/30" : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
+                  }`}>
+                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          {navSaveSuccess && <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Navigation saved</p>}
+          <Button onClick={saveNavItems} className="w-full h-10 rounded-xl text-sm">Save Navigation</Button>
         </div>
       </div>
 
@@ -238,7 +298,6 @@ const Settings = () => {
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Notifications</h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
-          {/* Global toggle */}
           <div className="flex items-center justify-between pb-3 border-b border-border/30">
             <div>
               <p className="text-sm font-medium text-card-foreground">Push Notifications</p>
@@ -246,8 +305,6 @@ const Settings = () => {
             </div>
             <Switch checked={pushNotifications} onCheckedChange={setPushNotifications} />
           </div>
-
-          {/* Grouped notification types in 2 columns */}
           {groups.map((group) => (
             <div key={group}>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{group}</p>
@@ -258,18 +315,11 @@ const Settings = () => {
                       <p className="text-[11px] font-medium text-card-foreground leading-tight">{nt.label}</p>
                       <Switch checked={nt.enabled} onCheckedChange={() => toggleNotifType(nt.key)} className="scale-90" />
                     </div>
-
                     {nt.enabled && (
                       <div className="space-y-1.5">
                         {nt.reminders.map((rem) => (
                           <div key={rem.id} className="flex items-center gap-1.5">
-                            <Input
-                              type="number"
-                              value={rem.value}
-                              onChange={(e) => updateReminder(nt.key, rem.id, "value", e.target.value)}
-                              className="h-6 w-16 rounded-md text-[10px] text-center"
-                              min={1}
-                            />
+                            <Input type="number" value={rem.value} onChange={(e) => updateReminder(nt.key, rem.id, "value", e.target.value)} className="h-6 w-16 rounded-md text-[10px] text-center" min={1} />
                             <Select value={rem.unit} onValueChange={(v) => updateReminder(nt.key, rem.id, "unit", v)}>
                               <SelectTrigger className="h-6 w-20 rounded-md text-[10px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -324,14 +374,8 @@ const Settings = () => {
           <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2">
             <Lock className="w-4 h-4" /> Change Password
           </Button>
-          <Button
-            variant="outline"
-            className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive"
-            onClick={async () => {
-              await signOut(auth);
-              navigate("/", { replace: true });
-            }}
-          >
+          <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive"
+            onClick={async () => { await signOut(auth); navigate("/", { replace: true }); }}>
             <LogOut className="w-4 h-4" /> Sign Out
           </Button>
         </div>

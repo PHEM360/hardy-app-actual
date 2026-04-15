@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import type { FeatureKey } from "@/types/app";
@@ -14,6 +14,12 @@ export interface UserProfile {
   enabledFeatures: FeatureKey[];
   householdId?: string;
   suspended: boolean;
+  avatarType?: string;
+  avatarEmoji?: string;
+  avatarInitials?: string;
+  avatarBgColor?: string;
+  avatarTextColor?: string;
+  navItems?: string[];   // ordered list of route paths for bottom nav
 }
 
 export function useUserProfile() {
@@ -54,6 +60,12 @@ export function useUserProfile() {
           enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
           householdId: data.householdId,
           suspended: data.enabled === false,
+          avatarType: data.avatarType ?? "initials",
+          avatarEmoji: data.avatarEmoji ?? "😊",
+          avatarInitials: data.avatarInitials,
+          avatarBgColor: data.avatarBgColor,
+          avatarTextColor: data.avatarTextColor,
+          navItems: Array.isArray(data.navItems) ? data.navItems : undefined,
         });
         setLoading(false);
       },
@@ -66,5 +78,11 @@ export function useUserProfile() {
     return () => unsub();
   }, [user?.uid]);
 
-  return { profile, loading };
+  const saveProfile = async (updates: Partial<Omit<UserProfile, "uid" | "role" | "enabledFeatures" | "suspended">>) => {
+    if (!user) return;
+    const ref = doc(db, "users", user.uid);
+    await setDoc(ref, updates, { merge: true });
+  };
+
+  return { profile, loading, saveProfile };
 }

@@ -11,6 +11,11 @@ service firebase.storage {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Household item documents — owner only
+    match /household/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // Default: deny everything else
     match /{allPaths=**} {
       allow read, write: if false;

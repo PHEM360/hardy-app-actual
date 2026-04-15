@@ -147,6 +147,16 @@ service cloud.firestore {
       }
     }
 
+    // Household items - per user
+    match /household/{userId}/items/{itemId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Household settings - per user
+    match /household/{userId}/settings/{settingId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

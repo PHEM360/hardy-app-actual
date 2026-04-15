@@ -59,6 +59,7 @@ const TopBar = () => {
         background: isNight
           ? "linear-gradient(135deg, hsl(210, 32%, 18%) 0%, hsl(200, 30%, 24%) 35%, hsl(192, 30%, 30%) 65%, hsl(188, 28%, 38%) 100%)"
           : "linear-gradient(135deg, hsl(210, 28%, 25%) 0%, hsl(200, 28%, 30%) 35%, hsl(192, 30%, 36%) 65%, hsl(188, 28%, 44%) 100%)",
+        paddingTop: "env(safe-area-inset-top)",
       }}
     >
       {isNight && (
@@ -66,7 +67,7 @@ const TopBar = () => {
           {stars.map((s, i) => <Star key={i} {...s} />)}
         </div>
       )}
-      <div className="relative flex items-center justify-between h-16 px-4">
+      <div className="relative flex items-center justify-between h-16 px-4 max-w-screen-xl mx-auto w-full">
         <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/15"

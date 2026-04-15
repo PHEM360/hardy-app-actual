@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CheckSquare, Plus, Trash2, Sun, Circle, CheckCircle2,
-  XCircle, AlertCircle, Clock, Settings2, X, Flag,
+  Clock, Settings2, X, Flag,
   LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
 } from "lucide-react";
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
-import { Task, TaskPriority, TaskStatus, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
+import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,12 +28,23 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: strin
 ];
 
 const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
-  { value: "todo",        label: "To Do",       icon: Circle,       color: "text-muted-foreground", hex: "#94a3b8" },
-  { value: "in_progress", label: "In Progress", icon: Clock,        color: "text-blue-500",         hex: "#3b82f6" },
-  { value: "blocked",     label: "Blocked",     icon: AlertCircle,  color: "text-red-500",          hex: "#ef4444" },
-  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",        hex: "#22c55e" },
-  { value: "cancelled",   label: "Cancelled",   icon: XCircle,      color: "text-muted-foreground/50", hex: "#64748b" },
+  { value: "todo",        label: "To Do",       icon: Circle, color: "text-muted-foreground", hex: "#94a3b8" },
+  { value: "in_progress", label: "In Progress", icon: Clock,  color: "text-blue-500",         hex: "#3b82f6" },
+  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#22c55e" },
 ];
+
+// Urgency levels cycle: none → amber → red
+type UrgencyLevel = "none" | "amber" | "red";
+function cycleUrgency(u: UrgencyLevel): UrgencyLevel {
+  if (u === "none") return "amber";
+  if (u === "amber") return "red";
+  return "none";
+}
+function urgencyDotStyle(u: UrgencyLevel): string {
+  if (u === "red")   return "bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.5)]";
+  if (u === "amber") return "bg-amber-400 shadow-[0_0_4px_1px_rgba(251,191,36,0.5)]";
+  return "bg-muted-foreground/30";
+}
 
 type ColourBy = "none" | "priority" | "status" | "category" | "company";
 
@@ -53,6 +64,34 @@ function StatusIcon({ status, className = "w-4 h-4" }: { status: TaskStatus; cla
   const s = STATUSES.find((x) => x.value === status)!;
   const Icon = s.icon;
   return <Icon className={`flex-shrink-0 ${className} ${s.color}`} />;
+}
+
+// Urgency dot — shown left of title, cycles none→amber→red
+function UrgencyDot({ urgency, done, onClick }: { urgency: UrgencyLevel; done: boolean; onClick: (e: React.MouseEvent) => void }) {
+  const dotColour = done ? "bg-green-500 shadow-[0_0_4px_1px_rgba(34,197,94,0.5)]" : urgencyDotStyle(urgency);
+  return (
+    <button
+      onClick={onClick}
+      title={done ? "Done" : urgency === "none" ? "No urgency — click to set amber" : urgency === "amber" ? "Amber urgency — click for red" : "Red urgency — click to clear"}
+      className={`w-3 h-3 rounded-full flex-shrink-0 transition-all duration-150 hover:scale-125 ${dotColour}`}
+    />
+  );
+}
+
+// Done checkbox — clicking toggles done status
+function DoneCheckbox({ done, onClick, size = "md" }: { done: boolean; onClick: (e: React.MouseEvent) => void; size?: "sm" | "md" }) {
+  const dim = size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4";
+  return (
+    <button
+      onClick={onClick}
+      title={done ? "Mark incomplete" : "Mark done"}
+      className={`flex-shrink-0 rounded transition-all duration-150 hover:scale-110 ${dim} flex items-center justify-center border-2 ${
+        done ? "border-green-500 bg-green-500 text-white" : "border-muted-foreground/40 hover:border-green-400"
+      }`}
+    >
+      {done && <CheckCircle2 className="w-2.5 h-2.5" />}
+    </button>
+  );
 }
 
 function getTaskColour(task: Task, colourBy: ColourBy, settings: TaskSettings): string {
@@ -100,7 +139,7 @@ function TaskDetailSheet({
   const status = STATUSES.find((s) => s.value === task.status)!;
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
-  const isDone = task.status === "done" || task.status === "cancelled";
+  const isDone = task.status === "done";
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -114,7 +153,7 @@ function TaskDetailSheet({
                 onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
               }}
               className="mt-0.5 flex-shrink-0 hover:scale-110 transition-transform"
-              title="Cycle status"
+              title="Cycle status (To Do → In Progress → Done)"
             >
               <StatusIcon status={task.status} className="w-5 h-5" />
             </button>
@@ -255,6 +294,7 @@ const EMPTY_TASK: Omit<Task, "id" | "createdAt" | "updatedAt"> = {
   notes: "",
   priority: "medium",
   status: "todo",
+  urgency: "none",
   category: "Admin",
   company: "",
   dueDate: "",
@@ -818,22 +858,28 @@ type TaskView = "list" | "tile" | "kanban";
 
 // ─── Task Card (List view) ────────────────────────────────────────────────────
 
-function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, settings, colourBy }: {
+function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, settings, colourBy }: {
   task: Task; onOpen: () => void; onDelete: () => void;
   onToggleToday: () => void; onStatusChange: (s: TaskStatus) => void;
+  onUrgencyChange: (u: UrgencyLevel) => void;
   settings: TaskSettings; colourBy: ColourBy;
 }) {
-  const isDone = task.status === "done" || task.status === "cancelled";
+  const isDone = task.status === "done";
   const isHighPriority = task.priority === "critical" || task.priority === "high";
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const hasNotes = !!task.notes?.trim();
   const accentColour = getTaskColour(task, colourBy, settings);
+  const urgency = (task.urgency ?? "none") as UrgencyLevel;
 
-  const cycleStatus = (e: React.MouseEvent) => {
+  const toggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const idx = STATUSES.findIndex((s) => s.value === task.status);
-    onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
+    onStatusChange(isDone ? "todo" : "done");
+  };
+
+  const handleUrgency = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUrgencyChange(cycleUrgency(urgency));
   };
 
   return (
@@ -847,9 +893,8 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
     >
       {accentColour && <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
-        <button onClick={cycleStatus} className="flex-shrink-0 hover:scale-110 transition-transform" title="Cycle status">
-          <StatusIcon status={task.status} />
-        </button>
+        {/* Urgency dot */}
+        <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <p className={`text-sm font-semibold leading-snug truncate ${isDone ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{task.title}</p>
@@ -872,11 +917,15 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
             {hasNotes && <StickyNote className="w-2.5 h-2.5 text-muted-foreground/50" />}
           </div>
         </div>
-        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-          <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Toggle Today"><Sun className="w-3.5 h-3.5" /></button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Toggle Today"><Sun className="w-3.5 h-3.5" /></button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+          {task.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+          {/* Done checkbox — always visible */}
+          <DoneCheckbox done={isDone} onClick={toggleDone} />
         </div>
-        {task.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
       </div>
       {subtaskCount > 0 && (
         <div className="h-0.5 bg-muted mx-3 mb-2 rounded-full overflow-hidden">
@@ -889,23 +938,29 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
 
 // ─── Tile Card (drag-reorderable) ─────────────────────────────────────────────
 
-function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, settings, colourBy, isDragging, onDragStart, onDragOver, onDrop }: {
+function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, settings, colourBy, isDragging, onDragStart, onDragOver, onDrop }: {
   task: Task; onOpen: () => void; onDelete: () => void;
   onToggleToday: () => void; onStatusChange: (s: TaskStatus) => void;
+  onUrgencyChange: (u: UrgencyLevel) => void;
   settings: TaskSettings; colourBy: ColourBy;
   isDragging: boolean;
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: () => void;
 }) {
   const isHighPriority = task.priority === "critical" || task.priority === "high";
-  const isDone = task.status === "done" || task.status === "cancelled";
+  const isDone = task.status === "done";
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const accentColour = getTaskColour(task, colourBy, settings);
+  const urgency = (task.urgency ?? "none") as UrgencyLevel;
 
-  const cycleStatus = (e: React.MouseEvent) => {
+  const toggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const idx = STATUSES.findIndex((s) => s.value === task.status);
-    onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
+    onStatusChange(isDone ? "todo" : "done");
+  };
+
+  const handleUrgency = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUrgencyChange(cycleUrgency(urgency));
   };
 
   return (
@@ -924,9 +979,7 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
       {accentColour && <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="p-3">
         <div className="flex items-start gap-1.5 mb-2">
-          <button onClick={cycleStatus} className="mt-0.5 flex-shrink-0 hover:scale-110 transition-transform">
-            <StatusIcon status={task.status} className="w-3.5 h-3.5" />
-          </button>
+          <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-xs font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
@@ -945,9 +998,12 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
           <div className="flex items-center gap-1.5">
             {subtaskCount > 0 && <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground"><ListChecks className="w-2.5 h-2.5" />{subtaskDone}/{subtaskCount}</span>}
           </div>
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+          <div className="flex gap-0.5 items-center">
+            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+            </div>
+            <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
           </div>
         </div>
       </div>
@@ -966,21 +1022,27 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
 
 // ─── KanbanCard ───────────────────────────────────────────────────────────────
 
-function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, settings, colourBy }: {
+function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, settings, colourBy }: {
   task: Task; onOpen: () => void; onDelete: () => void;
   onToggleToday: () => void; onStatusChange: (s: TaskStatus) => void;
+  onUrgencyChange: (u: UrgencyLevel) => void;
   settings: TaskSettings; colourBy: ColourBy;
 }) {
   const isHighPriority = task.priority === "critical" || task.priority === "high";
-  const isDone = task.status === "done" || task.status === "cancelled";
+  const isDone = task.status === "done";
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const accentColour = getTaskColour(task, colourBy, settings);
+  const urgency = (task.urgency ?? "none") as UrgencyLevel;
 
-  const cycleStatus = (e: React.MouseEvent) => {
+  const toggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const idx = STATUSES.findIndex((s) => s.value === task.status);
-    onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
+    onStatusChange(isDone ? "todo" : "done");
+  };
+
+  const handleUrgency = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUrgencyChange(cycleUrgency(urgency));
   };
 
   return (
@@ -995,7 +1057,7 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, set
       {accentColour && <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="p-2">
         <div className="flex items-start gap-1.5 mb-1">
-          <button onClick={cycleStatus} className="mt-0.5 flex-shrink-0"><StatusIcon status={task.status} className="w-3.5 h-3.5" /></button>
+          <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-[11px] font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
@@ -1014,9 +1076,12 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, set
           <div className="flex items-center gap-1.5">
             {subtaskCount > 0 && <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground"><ListChecks className="w-2.5 h-2.5" />{subtaskDone}/{subtaskCount}</span>}
           </div>
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+          <div className="flex gap-0.5 items-center">
+            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+            </div>
+            <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
           </div>
         </div>
       </div>
@@ -1031,10 +1096,11 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, set
 
 // ─── KanbanView ───────────────────────────────────────────────────────────────
 
-function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatusChange, colourBy }: {
+function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, colourBy }: {
   tasks: Task[]; settings: TaskSettings; colourBy: ColourBy;
   onOpen: (t: Task) => void; onDelete: (t: Task) => void;
   onToggleToday: (t: Task) => void; onStatusChange: (t: Task, s: TaskStatus) => void;
+  onUrgencyChange: (t: Task, u: UrgencyLevel) => void;
 }) {
   const [groupBy, setGroupBy] = useState<string>("status");
   const [filterCategory, setFilterCategory] = useState<string>("");
@@ -1197,6 +1263,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
                       <KanbanCard key={task.id} task={task} settings={settings} colourBy={colourBy}
                         onOpen={() => onOpen(task)} onDelete={() => onDelete(task)}
                         onToggleToday={() => onToggleToday(task)} onStatusChange={(s) => onStatusChange(task, s)}
+                        onUrgencyChange={(u) => onUrgencyChange(task, u)}
                       />
                     ))
                   )}
@@ -1232,6 +1299,10 @@ const Tasks = () => {
   const dragId = useRef<string | null>(null);
   const dragOverId = useRef<string | null>(null);
 
+  const setUrgency = useCallback(async (id: string, urgency: UrgencyLevel) => {
+    await updateTask(id, { urgency } as Partial<Task>);
+  }, [updateTask]);
+
   const filterTabs = useMemo(() => [...BASE_FILTER_TABS, ...settings.customFields.map((f) => f.label)], [settings.customFields]);
 
   const companyFilterOptions = useMemo(() => {
@@ -1250,8 +1321,8 @@ const Tasks = () => {
     if (customField && filterValue) list = list.filter((t) => t.customFields?.[customField.id] === filterValue);
     const pw: Record<TaskPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
     list.sort((a, b) => {
-      const aDone = a.status === "done" || a.status === "cancelled" ? 1 : 0;
-      const bDone = b.status === "done" || b.status === "cancelled" ? 1 : 0;
+      const aDone = a.status === "done" ? 1 : 0;
+      const bDone = b.status === "done" ? 1 : 0;
       if (aDone !== bDone) return aDone - bDone;
       return pw[a.priority] - pw[b.priority];
     });
@@ -1402,6 +1473,7 @@ const Tasks = () => {
           onOpen={openDetail} onDelete={(t) => t.id && deleteTask(t.id)}
           onToggleToday={(t) => t.id && toggleToday(t.id, t.isToday)}
           onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
+          onUrgencyChange={(t, u) => t.id && setUrgency(t.id, u)}
         />
       ) : viewMode === "tile" ? (
         <div>
@@ -1420,6 +1492,7 @@ const Tasks = () => {
                   onDelete={() => task.id && deleteTask(task.id)}
                   onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
                   onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                  onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
                   onDragStart={() => { dragId.current = task.id!; }}
                   onDragOver={() => { dragOverId.current = task.id!; }}
                   onDrop={() => handleDrop(task.id!)}
@@ -1442,6 +1515,7 @@ const Tasks = () => {
                   onDelete={() => task.id && deleteTask(task.id)}
                   onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
                   onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                  onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
                 />
               ))
             )}

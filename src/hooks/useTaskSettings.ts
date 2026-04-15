@@ -30,6 +30,8 @@ export function useTaskSettings() {
           categories: data.categories ?? DEFAULT_CATEGORIES,
           companies: data.companies ?? [],
           customFields: data.customFields ?? [],
+          categoryColors: data.categoryColors ?? {},
+          companyColors: data.companyColors ?? {},
         });
       }
     }).finally(() => setLoading(false));

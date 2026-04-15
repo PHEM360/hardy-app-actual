@@ -151,7 +151,8 @@ export function getDisplayName(user: User): string {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export type TaskPriority = "critical" | "high" | "medium" | "low";
-export type TaskStatus = "todo" | "in_progress" | "blocked" | "done" | "cancelled";
+export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskUrgency = "none" | "amber" | "red";
 
 export interface TaskSubtask {
   id: string;
@@ -166,6 +167,7 @@ export interface Task {
   notes?: string;          // free-form notes, separate from description
   priority: TaskPriority;
   status: TaskStatus;
+  urgency?: TaskUrgency;   // red/amber dot — separate from priority
   category: string;       // e.g. "Admin", "Development", "Personal"
   company?: string;       // company ID or name
   dueDate?: string;       // ISO date string
@@ -271,12 +273,30 @@ export interface HouseholdReminder {
   via: "push";
 }
 
+export type CostPeriod = "days" | "weeks" | "months" | "years" | "one-off" | "other";
+
+export interface HouseholdHistoryEntry {
+  archivedAt: string;          // ISO date string
+  costAmount?: number;
+  costPeriod?: CostPeriod;
+  costPeriodCustom?: string;
+  startDate?: string;
+  endDate?: string;
+  provider?: string;
+  policyNumber?: string;
+  notes?: string;
+}
+
 export interface HouseholdItem {
   id?: string;
   type: string;                // category key or custom label
   provider: string;
   policyNumber?: string;
+  /** @deprecated use costAmount + costPeriod */
   monthlyPremium?: number;
+  costAmount?: number;
+  costPeriod?: CostPeriod;
+  costPeriodCustom?: string;   // shown when costPeriod === "other"
   startDate?: string;
   endDate?: string;            // renewal / expiry date
   assignedTo?: string;         // HouseholdMember.id or ""
@@ -284,6 +304,7 @@ export interface HouseholdItem {
   documents?: string[];        // storage URLs
   reminders?: HouseholdReminder[];
   pushEnabled?: boolean;
+  history?: HouseholdHistoryEntry[];
   createdAt?: any;
 }
 

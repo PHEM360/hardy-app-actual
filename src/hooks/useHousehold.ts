@@ -10,6 +10,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import {
   HouseholdItem,
@@ -22,8 +23,12 @@ import {
 export function useHouseholdItems() {
   const [items, setItems] = useState<HouseholdItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
 
-  const uid = auth.currentUser?.uid;
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!uid) return;
@@ -39,29 +44,32 @@ export function useHouseholdItems() {
 
   const addItem = useCallback(
     async (item: Omit<HouseholdItem, "id">) => {
-      if (!uid) return;
-      await addDoc(collection(db, "household", uid, "items"), {
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
+      await addDoc(collection(db, "household", currentUid, "items"), {
         ...item,
         createdAt: serverTimestamp(),
       });
     },
-    [uid]
+    []
   );
 
   const updateItem = useCallback(
     async (id: string, data: Partial<HouseholdItem>) => {
-      if (!uid) return;
-      await updateDoc(doc(db, "household", uid, "items", id), data);
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
+      await updateDoc(doc(db, "household", currentUid, "items", id), data as Record<string, unknown>);
     },
-    [uid]
+    []
   );
 
   const deleteItem = useCallback(
     async (id: string) => {
-      if (!uid) return;
-      await deleteDoc(doc(db, "household", uid, "items", id));
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
+      await deleteDoc(doc(db, "household", currentUid, "items", id));
     },
-    [uid]
+    []
   );
 
   return { items, loading, addItem, updateItem, deleteItem };
@@ -74,8 +82,12 @@ export function useHouseholdSettings() {
     DEFAULT_HOUSEHOLD_SETTINGS
   );
   const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
 
-  const uid = auth.currentUser?.uid;
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!uid) return;
@@ -90,12 +102,13 @@ export function useHouseholdSettings() {
 
   const saveSettings = useCallback(
     async (next: HouseholdSettings) => {
-      if (!uid) return;
-      const ref = doc(db, "household", uid, "settings", "main");
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
+      const ref = doc(db, "household", currentUid, "settings", "main");
       await setDoc(ref, next, { merge: true });
       setSettings(next);
     },
-    [uid]
+    []
   );
 
   return { settings, loading, saveSettings };

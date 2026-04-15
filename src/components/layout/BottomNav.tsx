@@ -1,18 +1,32 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut } from "lucide-react";
+import {
+  Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
+  CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useUserRole } from "@/auth/useUserRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
-const NAV_ITEMS = [
-  { icon: Home, label: "Home", path: "/dashboard", color: "hsl(188, 33%, 38%)", gradient: "linear-gradient(135deg, hsl(188, 33%, 38%), hsl(191, 33%, 43%))" },
-  { icon: PiggyBank, label: "Finance", path: "/finance", color: "hsl(25, 62%, 67%)", gradient: "linear-gradient(135deg, hsl(25, 62%, 67%), hsl(15, 55%, 58%))" },
-  { icon: Heart, label: "Pets", path: "/pets", color: "hsl(0, 65%, 50%)", gradient: "linear-gradient(135deg, hsl(0, 65%, 50%), hsl(340, 55%, 45%))" },
-  { icon: Shield, label: "Admin", path: "/admin", color: "hsl(205, 55%, 48%)", gradient: "linear-gradient(135deg, hsl(205, 55%, 48%), hsl(215, 50%, 42%))" },
-  { icon: MoreHorizontal, label: "More", path: "/more", color: "hsl(191, 33%, 43%)", gradient: "linear-gradient(135deg, hsl(191, 33%, 43%), hsl(200, 40%, 38%))" },
-];
+type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
+
+const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
+  "/dashboard":         { icon: Home,          label: "Home",       color: "hsl(188,33%,38%)",  gradient: "linear-gradient(135deg,hsl(188,33%,38%),hsl(191,33%,43%))" },
+  "/finance":           { icon: PiggyBank,     label: "Finance",    color: "hsl(25,62%,67%)",   gradient: "linear-gradient(135deg,hsl(25,62%,67%),hsl(15,55%,58%))" },
+  "/pets":              { icon: Heart,         label: "Pets",       color: "hsl(0,65%,50%)",    gradient: "linear-gradient(135deg,hsl(0,65%,50%),hsl(340,55%,45%))" },
+  "/admin":             { icon: Shield,        label: "Admin",      color: "hsl(205,55%,48%)",  gradient: "linear-gradient(135deg,hsl(205,55%,48%),hsl(215,50%,42%))" },
+  "/more":              { icon: MoreHorizontal,label: "More",       color: "hsl(191,33%,43%)",  gradient: "linear-gradient(135deg,hsl(191,33%,43%),hsl(200,40%,38%))" },
+  "/tasks":             { icon: CheckSquare,   label: "Tasks",      color: "hsl(260,55%,55%)",  gradient: "linear-gradient(135deg,hsl(260,55%,55%),hsl(270,50%,50%))" },
+  "/companies":         { icon: Briefcase,     label: "Companies",  color: "hsl(210,50%,50%)",  gradient: "linear-gradient(135deg,hsl(210,50%,50%),hsl(220,45%,44%))" },
+  "/login-details":     { icon: Key,           label: "Log Ins",    color: "hsl(265,55%,55%)",  gradient: "linear-gradient(135deg,hsl(265,55%,55%),hsl(275,50%,48%))" },
+  "/weight":            { icon: Activity,      label: "Weight",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,55%,40%),hsl(160,50%,35%))" },
+  "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,60%,50%),hsl(20,55%,44%))" },
+  "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,55%,40%),hsl(150,50%,35%))" },
+  "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,50%,45%),hsl(205,45%,40%))" },
+};
+
+const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
 
 const BottomNav = () => {
   const location = useLocation();
@@ -28,26 +42,23 @@ const BottomNav = () => {
     return profile.enabledFeatures.includes(key as any);
   };
 
-  const navItems = NAV_ITEMS.filter((i) => {
-    if (i.path === "/admin") {
-      if (loading) return false;
-      return isAdmin;
-    }
-    if (i.path === "/pets") {
-      if (loading) return false;
-      return memberHasFeature("pets");
-    }
-    if (i.path === "/finance") {
-      if (loading) return false;
-      return memberHasFeature("finance");
-    }
-    return true;
-  });
+  // Use user's saved nav paths, or fall back to defaults
+  const navPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
+
+  const navItems = navPaths
+    .filter((path) => {
+      if (path === "/admin") return !loading && isAdmin;
+      if (path === "/pets") return !loading && memberHasFeature("pets");
+      if (path === "/finance") return !loading && memberHasFeature("finance");
+      return true;
+    })
+    .map((path) => ({ path, ...ALL_NAV_ITEMS[path] }))
+    .filter((item) => Boolean(item.icon)); // guard unknown paths
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-      <div className="flex items-center justify-around h-16 px-2 max-w-2xl mx-auto">
+      <div className="flex items-center justify-around h-16 px-2 max-w-screen-xl mx-auto w-full">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path !== "/" && location.pathname.startsWith(item.path));
