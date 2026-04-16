@@ -463,10 +463,10 @@ function AddEditDialog({
           {members.length > 0 && (
             <div className="space-y-1.5">
               <Label>Assign To</Label>
-              <Select value={form.assignedTo ?? ""} onValueChange={(v) => set("assignedTo", v)}>
+              <Select value={form.assignedTo || "none"} onValueChange={(v) => set("assignedTo", v === "none" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="Nobody (shared)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nobody (shared)</SelectItem>
+                  <SelectItem value="none">Nobody (shared)</SelectItem>
                   {members.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.emoji ? `${m.emoji} ` : ""}{m.name}
