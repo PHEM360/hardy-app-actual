@@ -281,7 +281,7 @@ function EmptyState({ label, onAdd }: { label: string; onAdd: () => void }) {
 
 const REMINDER_UNITS: HouseholdReminder["unit"][] = ["hours", "days", "weeks", "months"];
 
-const BLANK: Omit<HouseholdItem, "id" | "createdAt"> = {
+const getBlankForm = (): Omit<HouseholdItem, "id" | "createdAt"> => ({
   type: "",
   provider: "",
   policyNumber: "",
@@ -295,7 +295,7 @@ const BLANK: Omit<HouseholdItem, "id" | "createdAt"> = {
   pushEnabled: false,
   reminders: [{ amount: 7, unit: "days", via: "push" }],
   history: [],
-};
+});
 
 function AddEditDialog({
   open,
@@ -316,7 +316,7 @@ function AddEditDialog({
   permission: NotificationPermission;
   requestPermission: () => Promise<NotificationPermission>;
 }) {
-  const [form, setForm] = useState<Omit<HouseholdItem, "id" | "createdAt">>(BLANK);
+  const [form, setForm] = useState<Omit<HouseholdItem, "id" | "createdAt">>(getBlankForm());
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -331,7 +331,7 @@ function AddEditDialog({
       migrated.costPeriod = migrated.costPeriod ?? "months";
       setForm(migrated);
     } else {
-      setForm(BLANK);
+      setForm(getBlankForm());
     }
   }, [item, open]);
 
@@ -957,13 +957,18 @@ export default function Households() {
 
   const handleSave = async (data: Omit<HouseholdItem, "id" | "createdAt">) => {
     const clean = sanitiseForFirestore(data as unknown as Record<string, unknown>) as Omit<HouseholdItem, "id" | "createdAt">;
-    if (editId) {
-      await updateItem(editId, clean);
-    } else {
-      await addItem(clean);
+    try {
+      if (editId) {
+        await updateItem(editId, clean);
+      } else {
+        await addItem(clean);
+      }
+      if (clean.pushEnabled) scheduleReminder(clean as HouseholdItem);
+      setAddOpen(false); setEditItem(null); setEditId(null);
+    } catch (err: any) {
+      console.error("Save failed", err);
+      alert("Failed to save item: " + err.message);
     }
-    if (clean.pushEnabled) scheduleReminder(clean as HouseholdItem);
-    setAddOpen(false); setEditItem(null); setEditId(null);
   };
 
   const handleRenew = async (item: HouseholdItem) => {
