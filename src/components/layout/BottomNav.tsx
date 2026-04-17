@@ -42,10 +42,11 @@ const BottomNav = () => {
     return profile.enabledFeatures.includes(key as any);
   };
 
-  // Use user's saved nav paths, or fall back to defaults
-  const navPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
+  // Use user's saved nav paths (excluding pinned items), or fall back to defaults
+  const rawPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
 
-  const navItems = navPaths
+  const navItems = rawPaths
+    .filter((path) => path !== "/more") // More is pinned, remove from orderable list
     .filter((path) => {
       if (path === "/admin") return !loading && isAdmin;
       if (path === "/pets") return !loading && memberHasFeature("pets");
@@ -91,6 +92,40 @@ const BottomNav = () => {
             </button>
           );
         })}
+
+        {/* Pinned: More */}
+        {(() => {
+          const morePath = "/more";
+          const moreItem = ALL_NAV_ITEMS[morePath];
+          const isActive = location.pathname === morePath || location.pathname.startsWith(morePath);
+          const Icon = moreItem.icon;
+          return (
+            <button
+              key={morePath}
+              onClick={() => navigate(morePath)}
+              className="relative flex flex-col items-center justify-center gap-0.5 w-16 h-full transition-colors"
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="nav-indicator"
+                  className="absolute -top-px left-3 right-3 h-[2.5px] rounded-b-full"
+                  style={{ background: moreItem.gradient }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                />
+              )}
+              <Icon
+                className={`w-5 h-5 transition-colors ${isActive ? "" : "text-muted-foreground"}`}
+                style={isActive ? { color: moreItem.color } : {}}
+              />
+              <span
+                className={`text-[10px] font-medium transition-colors ${isActive ? "font-bold" : "text-muted-foreground"}`}
+                style={isActive ? { color: moreItem.color } : {}}
+              >
+                {moreItem.label}
+              </span>
+            </button>
+          );
+        })()}
 
         {/* Sign out (icon-only-ish) */}
         <button

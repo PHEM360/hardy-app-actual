@@ -25,14 +25,13 @@ const TEXT_COLOR_OPTIONS = [
   "hsl(36, 85%, 54%)", "hsl(168, 55%, 60%)", "hsl(280, 45%, 75%)", "hsl(0, 72%, 70%)",
 ];
 
-// All available nav destinations
+// All available nav destinations (More and Sign Out are pinned — not user-orderable)
 const ALL_NAV_OPTIONS = [
   { path: "/dashboard",         label: "Home" },
   { path: "/tasks",             label: "Tasks" },
   { path: "/finance",           label: "Finance" },
   { path: "/pets",              label: "Pets" },
   { path: "/admin",             label: "Admin" },
-  { path: "/more",              label: "More" },
   { path: "/companies",         label: "Companies" },
   { path: "/login-details",     label: "Log In Details" },
   { path: "/weight",            label: "Weight" },
@@ -274,20 +273,58 @@ const Settings = () => {
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Bottom Navigation</h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
-          <p className="text-xs text-muted-foreground">Choose which links appear in the bottom bar. Tap to toggle. Sign Out is always shown.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {ALL_NAV_OPTIONS.map((item) => {
+          <p className="text-xs text-muted-foreground">Drag to reorder. Tap to toggle on/off. <strong>More</strong> and <strong>Sign Out</strong> are always shown on the right.</p>
+          <div className="space-y-1.5">
+            {ALL_NAV_OPTIONS.map((item, index) => {
               const active = navItems.includes(item.path);
               return (
-                <button key={item.path} onClick={() => toggleNavItem(item.path)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
-                    active ? "bg-primary/10 text-primary border-primary/30" : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
-                  }`}>
-                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? "bg-primary" : "bg-muted-foreground/40"}`} />
-                  {item.label}
-                </button>
+                <div
+                  key={item.path}
+                  draggable
+                  onDragStart={(e) => { e.dataTransfer.setData("navPath", item.path); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from = e.dataTransfer.getData("navPath");
+                    if (from === item.path) return;
+                    setNavItems((prev) => {
+                      // Work from all orderable paths, inserting missing ones at end
+                      const allPaths = ALL_NAV_OPTIONS.map(o => o.path);
+                      const ordered = allPaths.filter(p => prev.includes(p) || p === from);
+                      const fromIdx = ordered.indexOf(from);
+                      const toIdx = ordered.indexOf(item.path);
+                      if (fromIdx === -1 || toIdx === -1) return prev;
+                      const next = [...ordered];
+                      next.splice(fromIdx, 1);
+                      next.splice(toIdx, 0, from);
+                      // Preserve only what was previously active, but in new order
+                      return next.filter(p => prev.includes(p));
+                    });
+                  }}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all cursor-grab active:cursor-grabbing ${
+                    active ? "bg-primary/10 border-primary/30" : "bg-muted/40 border-transparent opacity-50"
+                  }`}
+                >
+                  <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className={`flex-1 text-xs font-medium ${active ? "text-primary" : "text-muted-foreground"}`}>{item.label}</span>
+                  <button
+                    onClick={() => toggleNavItem(item.path)}
+                    className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-all ${
+                      active ? "bg-primary border-primary" : "bg-transparent border-muted-foreground/40"
+                    }`}
+                    aria-label={active ? "Remove from nav" : "Add to nav"}
+                  >
+                    {active && <X className="w-3 h-3 text-primary-foreground m-auto" />}
+                  </button>
+                </div>
               );
             })}
+          </div>
+          {/* Pinned items preview */}
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-[10px] text-muted-foreground">Always shown:</span>
+            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">More</span>
+            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">Sign Out</span>
           </div>
           {navSaveSuccess && <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Navigation saved</p>}
           <Button onClick={saveNavItems} className="w-full h-10 rounded-xl text-sm">Save Navigation</Button>

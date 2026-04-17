@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) => (
   <motion.div
@@ -23,7 +24,8 @@ const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay
 const TopBar = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const displayName = user?.displayName || user?.email?.split("@")[0] || "";
+  const { profile } = useUserProfile();
+  const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
   const [now, setNow] = useState(new Date());
 
@@ -48,8 +50,30 @@ const TopBar = () => {
   );
 
   const renderAvatar = () => {
-    const initial = (firstName || "?").charAt(0).toUpperCase();
-    return <span className="text-xs font-bold" style={{ color: "#fff" }}>{initial}</span>;
+    const avatarType = profile?.avatarType ?? "initials";
+    const bgColor = profile?.avatarBgColor ?? "hsl(188, 33%, 38%)";
+    const textColor = profile?.avatarTextColor ?? "#fff";
+
+    if (avatarType === "emoji") {
+      return (
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/15 text-xl"
+          style={{ background: bgColor }}
+        >
+          {profile?.avatarEmoji ?? "😊"}
+        </div>
+      );
+    }
+
+    const initials = profile?.avatarInitials || (firstName || "?").charAt(0).toUpperCase();
+    return (
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/15"
+        style={{ background: bgColor }}
+      >
+        <span className="text-xs font-bold" style={{ color: textColor }}>{initials}</span>
+      </div>
+    );
   };
 
   return (
@@ -69,12 +93,7 @@ const TopBar = () => {
       )}
       <div className="relative flex items-center justify-between h-16 px-4 max-w-screen-xl mx-auto w-full">
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/15"
-            style={{ background: "hsl(188, 33%, 38%)" }}
-          >
-            {renderAvatar()}
-          </div>
+          {renderAvatar()}
           <div className="leading-tight">
             <p className="text-sm font-semibold font-display text-white/95 tracking-wide">{firstName}</p>
             <p className="text-[10px] text-white/55 font-medium tracking-wide">{dateStr} · {timeStr}</p>

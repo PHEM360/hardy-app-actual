@@ -78,6 +78,8 @@ import {
 } from "@/types/app";
 import { useHouseholdItems, useHouseholdSettings } from "@/hooks/useHousehold";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useAuth } from "@/auth/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 // ─── Category meta ─────────────────────────────────────────────────────────────
 
@@ -1015,16 +1017,27 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ─── Summary card ──────────────────────────────────────────────────────────────
 
-function SummaryCard({ items }: { items: HouseholdItem[] }) {
-  const monthlyTotal = items.reduce((sum, item) => {
-    const m = toMonthly(item.costAmount, item.costPeriod)
-      ?? toMonthly(item.monthlyPremium, "months")
-      ?? 0;
-    return sum + m;
-  }, 0);
+function SummaryCard({ items, members }: { items: HouseholdItem[]; members: HouseholdMember[] }) {
+  const calc = (subset: HouseholdItem[]) =>
+    subset.reduce((sum, item) => {
+      const m = toMonthly(item.costAmount, item.costPeriod)
+        ?? toMonthly(item.monthlyPremium, "months")
+        ?? 0;
+      return sum + m;
+    }, 0);
+
+  const monthlyTotal = calc(items);
   const yearlyTotal = monthlyTotal * 12;
 
   if (monthlyTotal === 0) return null;
+
+  const sharedItems = items.filter((i) => !i.assignedTo);
+  const sharedMonthly = calc(sharedItems);
+
+  const memberRows = members.map((m) => {
+    const mItems = items.filter((i) => i.assignedTo === m.id);
+    return { member: m, monthly: calc(mItems) };
+  }).filter((r) => r.monthly > 0);
 
   const recurringCount = items.filter(
     (i) => i.costAmount && i.costPeriod !== "one-off" && i.costPeriod !== "other"
@@ -1036,13 +1049,33 @@ function SummaryCard({ items }: { items: HouseholdItem[] }) {
         <TrendingUp className="w-4 h-4 text-primary" />
         Expenditure Summary
       </div>
+
+      {/* Per-member breakdown */}
+      {(sharedMonthly > 0 || memberRows.length > 0) && (
+        <div className="space-y-1.5 border-b border-border/40 pb-3">
+          {sharedMonthly > 0 && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Shared</span>
+              <span className="font-medium">£{sharedMonthly.toFixed(2)}/mo</span>
+            </div>
+          )}
+          {memberRows.map(({ member, monthly }) => (
+            <div key={member.id} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{member.emoji ?? "👤"} {member.name}</span>
+              <span className="font-medium">£{monthly.toFixed(2)}/mo</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Grand total */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-0.5">
-          <div className="text-xs text-muted-foreground">Per Month</div>
+          <div className="text-xs text-muted-foreground">Total / Month</div>
           <div className="text-xl font-bold">£{monthlyTotal.toFixed(2)}</div>
         </div>
         <div className="space-y-0.5">
-          <div className="text-xs text-muted-foreground">Per Year</div>
+          <div className="text-xs text-muted-foreground">Total / Year</div>
           <div className="text-xl font-bold">£{yearlyTotal.toFixed(2)}</div>
         </div>
       </div>
@@ -1059,6 +1092,25 @@ export default function Households() {
   const { items, loading, addItem, updateItem, deleteItem } = useHouseholdItems();
   const { settings, saveSettings } = useHouseholdSettings();
   const { permission, requestPermission, checkAndScheduleAll, scheduleReminder } = usePushNotifications();
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
+
+  // Auto-include the logged-in user in the members list if not already present
+  const effectiveMembers: HouseholdMember[] = (() => {
+    if (!user) return settings.members;
+    const userName = profile?.displayName || profile?.firstName || user.displayName || user.email?.split("@")[0] || "Me";
+    const alreadyIn = settings.members.some(
+      (m) => m.name.toLowerCase() === userName.toLowerCase()
+    );
+    if (alreadyIn) return settings.members;
+    const selfMember: HouseholdMember = {
+      id: user.uid,
+      name: userName,
+      emoji: profile?.avatarType === "emoji" ? (profile?.avatarEmoji ?? "👤") : "👤",
+      role: "member",
+    };
+    return [selfMember, ...settings.members];
+  })();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -1169,7 +1221,7 @@ export default function Households() {
           )}
         </section>
 
-        {settings.members.map((m) => (
+        {effectiveMembers.map((m) => (
           <section key={m.id} className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">{m.emoji ?? "👤"}</span>
@@ -1187,7 +1239,7 @@ export default function Households() {
           </section>
         ))}
 
-        {items.length > 0 && <SummaryCard items={items} />}
+        {items.length > 0 && <SummaryCard items={items} members={effectiveMembers} />}
       </div>
 
       {/* Settings sheet */}
