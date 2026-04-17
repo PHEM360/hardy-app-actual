@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -179,7 +180,13 @@ function DatePicker({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent
+          className="w-auto p-0"
+          align="start"
+          side="bottom"
+          avoidCollisions={false}
+          sticky="always"
+        >
           <Calendar
             mode="single"
             selected={valid ? parsed : undefined}
@@ -379,14 +386,120 @@ function AddEditDialog({
     onSave(cleaned as unknown as Omit<HouseholdItem, "id" | "createdAt">);
   };
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{item?.provider ? "Edit Item" : "Add Item"}</DialogTitle>
-        </DialogHeader>
+  // ── Draggable / resizable panel ──────────────────────────────────────────
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number }>({ width: 448, height: 600 });
+  const resizeState = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
-        <div className="space-y-4 pt-2">
+  // Centre on first open
+  useEffect(() => {
+    if (open) {
+      setPos({
+        left: Math.max(16, (window.innerWidth - size.width) / 2),
+        top: Math.max(16, (window.innerHeight - size.height) / 2),
+      });
+    }
+  }, [open]);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    if (!panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
+    dragState.current = { startX: e.clientX, startY: e.clientY, origLeft: rect.left, origTop: rect.top };
+    e.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragState.current) return;
+      const dx = e.clientX - dragState.current.startX;
+      const dy = e.clientY - dragState.current.startY;
+      setPos({
+        left: Math.max(0, dragState.current.origLeft + dx),
+        top: Math.max(0, dragState.current.origTop + dy),
+      });
+    };
+    const onUp = () => { dragState.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    resizeState.current = { startX: e.clientX, startY: e.clientY, origW: size.width, origH: size.height };
+    e.preventDefault();
+    e.stopPropagation();
+  }, [size]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizeState.current) return;
+      const dw = e.clientX - resizeState.current.startX;
+      const dh = e.clientY - resizeState.current.startY;
+      setSize({
+        width: Math.max(320, resizeState.current.origW + dw),
+        height: Math.max(300, resizeState.current.origH + dh),
+      });
+    };
+    const onUp = () => { resizeState.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  if (!open) return null;
+
+  return createPortal(
+    <>
+      {/* Backdrop — clicking it closes, but doesn't block interaction behind */}
+      <div
+        className="fixed inset-0 bg-black/40 z-40"
+        onClick={onClose}
+      />
+
+      {/* Floating panel */}
+      <div
+        ref={panelRef}
+        style={{
+          position: "fixed",
+          left: pos?.left ?? "50%",
+          top: pos?.top ?? "50%",
+          transform: pos ? "none" : "translate(-50%, -50%)",
+          width: size.width,
+          height: size.height,
+          zIndex: 50,
+          display: "flex",
+          flexDirection: "column",
+        }}
+        className="bg-background border rounded-2xl shadow-2xl overflow-hidden"
+      >
+        {/* Drag handle */}
+        <div
+          className="flex items-center justify-between px-5 py-3.5 border-b cursor-grab active:cursor-grabbing select-none shrink-0 bg-muted/30"
+          onMouseDown={onDragStart}
+        >
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              <div className="w-3 h-3 rounded-full bg-red-400 hover:bg-red-500 cursor-pointer" onClick={onClose} title="Close" />
+              <div className="w-3 h-3 rounded-full bg-yellow-400" />
+              <div className="w-3 h-3 rounded-full bg-green-400" />
+            </div>
+            <span className="text-sm font-semibold ml-1">
+              {item?.provider ? "Edit Item" : "Add Item"}
+            </span>
+          </div>
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Type */}
           <div className="space-y-1.5">
             <Label>Type</Label>
@@ -582,14 +695,27 @@ function AddEditDialog({
           </div>
         </div>
 
-        <div className="flex gap-2 pt-2">
+        {/* Footer */}
+        <div className="flex gap-2 px-5 py-3.5 border-t shrink-0 bg-muted/20">
           <Button variant="outline" className="flex-1 rounded-xl" onClick={onClose}>Cancel</Button>
           <Button className="flex-1 rounded-xl" onClick={handleSave} disabled={!form.type || !form.provider || uploading}>
             {uploading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Uploading…</> : "Save"}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        {/* Resize handle */}
+        <div
+          className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize"
+          onMouseDown={onResizeStart}
+          style={{ zIndex: 10 }}
+        >
+          <svg viewBox="0 0 10 10" className="w-4 h-4 absolute bottom-1 right-1 text-muted-foreground/50">
+            <path d="M0 10 L10 0 M5 10 L10 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+      </div>
+    </>,
+    document.body
   );
 }
 
