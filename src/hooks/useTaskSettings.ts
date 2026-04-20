@@ -32,6 +32,7 @@ export function useTaskSettings() {
           customFields: data.customFields ?? [],
           categoryColors: data.categoryColors ?? {},
           companyColors: data.companyColors ?? {},
+          showCompleted: data.showCompleted ?? false,
         });
       }
     }).finally(() => setLoading(false));

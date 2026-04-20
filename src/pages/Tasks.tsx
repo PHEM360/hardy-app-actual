@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
 import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
@@ -74,6 +75,23 @@ function UrgencyDot({ urgency, done, onClick }: { urgency: UrgencyLevel; done: b
       onClick={onClick}
       title={done ? "Done" : urgency === "none" ? "No urgency — click to set amber" : urgency === "amber" ? "Amber urgency — click for red" : "Red urgency — click to clear"}
       className={`w-3 h-3 rounded-full flex-shrink-0 transition-all duration-150 hover:scale-125 ${dotColour}`}
+    />
+  );
+}
+
+// Status circle — clicking cycles todo ↔ in_progress (done handled by checkbox)
+function StatusCircle({ status, onClick }: { status: TaskStatus; onClick: (e: React.MouseEvent) => void }) {
+  if (status === "done") return null;
+  const isInProgress = status === "in_progress";
+  return (
+    <button
+      onClick={onClick}
+      title={isInProgress ? "In Progress — click for Not Started" : "Not Started — click for In Progress"}
+      className={`w-3.5 h-3.5 rounded-full flex-shrink-0 border-2 transition-all duration-150 hover:scale-125 ${
+        isInProgress
+          ? "bg-orange-400 border-orange-400 shadow-[0_0_4px_1px_rgba(251,146,60,0.5)]"
+          : "bg-red-400 border-red-400 shadow-[0_0_4px_1px_rgba(248,113,113,0.4)]"
+      }`}
     />
   );
 }
@@ -536,13 +554,33 @@ function TaskForm({
 
 // ─── SubFilter ────────────────────────────────────────────────────────────────
 
-function SubFilter({ items, active, onSelect }: { items: { value: string; label: string }[]; active: string; onSelect: (v: string) => void }) {
+function SubFilter({ items, active, onToggle, onClear }: {
+  items: { value: string; label: string }[];
+  active: string[];
+  onToggle: (v: string) => void;
+  onClear: () => void;
+}) {
+  const allSelected = active.length === 0;
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 no-scrollbar">
-      <button onClick={() => onSelect("")} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${!active ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>All</button>
-      {items.map((item) => (
-        <button key={item.value} onClick={() => onSelect(item.value)} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${active === item.value ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>{item.label}</button>
-      ))}
+      <button
+        onClick={onClear}
+        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${allSelected ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+      >
+        All
+      </button>
+      {items.map((item) => {
+        const isActive = active.includes(item.value);
+        return (
+          <button
+            key={item.value}
+            onClick={() => onToggle(item.value)}
+            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${isActive ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -703,6 +741,21 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
           <DialogTitle className="font-display text-base">Task Settings</DialogTitle>
         </DialogHeader>
         <div className="space-y-5 pt-1">
+
+          {/* Completed tasks visibility */}
+          <section>
+            <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Display</h3>
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/40">
+              <div>
+                <p className="text-xs font-medium text-card-foreground">Show completed tasks</p>
+                <p className="text-[10px] text-muted-foreground">Off by default — completed tasks are hidden</p>
+              </div>
+              <Switch
+                checked={draft.showCompleted ?? false}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, showCompleted: v }))}
+              />
+            </div>
+          </section>
 
           {/* Colour by */}
           <section>
@@ -893,8 +946,8 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
     >
       {accentColour && <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
-        {/* Urgency dot */}
-        <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
+        {/* Done checkbox — left side, replaces the old urgency dot */}
+        <DoneCheckbox done={isDone} onClick={toggleDone} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <p className={`text-sm font-semibold leading-snug truncate ${isDone ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{task.title}</p>
@@ -917,14 +970,20 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
             {hasNotes && <StickyNote className="w-2.5 h-2.5 text-muted-foreground/50" />}
           </div>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Toggle Today"><Sun className="w-3.5 h-3.5" /></button>
             <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
           {task.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-          {/* Done checkbox — always visible */}
-          <DoneCheckbox done={isDone} onClick={toggleDone} />
+          {/* Status circle — right side: red (todo) or orange (in progress) */}
+          <StatusCircle
+            status={task.status}
+            onClick={(e) => {
+              e.stopPropagation();
+              onStatusChange(task.status === "in_progress" ? "todo" : "in_progress");
+            }}
+          />
         </div>
       </div>
       {subtaskCount > 0 && (
@@ -1284,7 +1343,8 @@ const Tasks = () => {
   const { settings, loading: settingsLoading, saveSettings } = useTaskSettings();
 
   const [activeTab, setActiveTab] = useState("All");
-  const [filterValue, setFilterValue] = useState("");
+  const [filterValues, setFilterValues] = useState<string[]>([]);
+  const [showCompleted, setShowCompleted] = useState(() => false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
@@ -1312,13 +1372,15 @@ const Tasks = () => {
 
   const filtered = useMemo(() => {
     let list = [...tasks];
+    // Hide completed unless user has toggled them on
+    if (!showCompleted && !settings.showCompleted) list = list.filter((t) => t.status !== "done");
     if (activeTab === "Today") list = list.filter((t) => t.isToday);
-    if (activeTab === "Priority" && filterValue) list = list.filter((t) => t.priority === filterValue);
-    if (activeTab === "Status" && filterValue) list = list.filter((t) => t.status === filterValue);
-    if (activeTab === "Category" && filterValue) list = list.filter((t) => t.category === filterValue);
-    if (activeTab === "Company" && filterValue) list = list.filter((t) => t.company === filterValue);
+    if (activeTab === "Priority" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.priority));
+    if (activeTab === "Status" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.status));
+    if (activeTab === "Category" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.category));
+    if (activeTab === "Company" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.company ?? ""));
     const customField = settings.customFields.find((f) => f.label === activeTab);
-    if (customField && filterValue) list = list.filter((t) => t.customFields?.[customField.id] === filterValue);
+    if (customField && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.customFields?.[customField.id] ?? ""));
     const pw: Record<TaskPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
     list.sort((a, b) => {
       const aDone = a.status === "done" ? 1 : 0;
@@ -1327,7 +1389,7 @@ const Tasks = () => {
       return pw[a.priority] - pw[b.priority];
     });
     return list;
-  }, [tasks, activeTab, filterValue, settings.customFields]);
+  }, [tasks, activeTab, filterValues, settings.customFields, settings.showCompleted, showCompleted]);
 
   // Tile view: apply custom order
   const orderedTiles = useMemo(() => {
@@ -1405,8 +1467,16 @@ const Tasks = () => {
             </button>
           ))}
         </div>
-        {/* Right: settings + new */}
+        {/* Right: show-done toggle + settings + new */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => setShowCompleted((v) => !v)}
+            title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
+            className={`p-2 rounded-full transition-colors ${showCompleted ? "text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20" : "text-muted-foreground hover:text-foreground hover:bg-muted/70"}`}
+            aria-label={showCompleted ? "Hide completed" : "Show completed"}
+          >
+            {showCompleted ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          </button>
           <button onClick={() => setSettingsOpen(true)} className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors" aria-label="Settings">
             <Settings2 className="w-4 h-4" />
           </button>
@@ -1438,7 +1508,7 @@ const Tasks = () => {
           return (
             <button
               key={tab}
-              onClick={() => { setActiveTab(tab); setFilterValue(""); }}
+              onClick={() => { setActiveTab(tab); setFilterValues([]); }}
               style={catColour ? {
                 background: isActive ? catColour : `${catColour}18`,
                 color: isActive ? "#fff" : catColour,
@@ -1459,12 +1529,12 @@ const Tasks = () => {
       </div>
 
       {/* Sub-filters */}
-      {activeTab === "Priority" && <SubFilter items={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} active={filterValue} onSelect={setFilterValue} />}
-      {activeTab === "Status" && <SubFilter items={STATUSES.map((s) => ({ value: s.value, label: s.label }))} active={filterValue} onSelect={setFilterValue} />}
-      {activeTab === "Category" && <SubFilter items={settings.categories.map((c) => ({ value: c, label: c }))} active={filterValue} onSelect={setFilterValue} />}
-      {activeTab === "Company" && <SubFilter items={companyFilterOptions.map((c) => ({ value: c, label: c }))} active={filterValue} onSelect={setFilterValue} />}
+      {activeTab === "Priority" && <SubFilter items={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+      {activeTab === "Status" && <SubFilter items={STATUSES.map((s) => ({ value: s.value, label: s.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+      {activeTab === "Category" && <SubFilter items={settings.categories.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+      {activeTab === "Company" && <SubFilter items={companyFilterOptions.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
       {settings.customFields.map((field) =>
-        activeTab === field.label ? <SubFilter key={field.id} items={field.options.map((o) => ({ value: o, label: o }))} active={filterValue} onSelect={setFilterValue} /> : null
+        activeTab === field.label ? <SubFilter key={field.id} items={field.options.map((o) => ({ value: o, label: o }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} /> : null
       )}
 
       {/* Views */}

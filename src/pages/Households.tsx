@@ -164,42 +164,88 @@ function DatePicker({
   onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Raw text as the user types — kept in sync with value prop
+  const [text, setText] = useState(() => {
+    if (!value) return "";
+    const p = parse(value, "yyyy-MM-dd", new Date());
+    return isValid(p) ? format(p, "dd/MM/yyyy") : value;
+  });
+
   const parsed = value ? parse(value, "yyyy-MM-dd", new Date()) : undefined;
   const valid = parsed && isValid(parsed);
+
+  // When the parent value changes externally (e.g. calendar pick), sync text
+  const prevValue = useRef(value);
+  if (prevValue.current !== value) {
+    prevValue.current = value;
+    const p = value ? parse(value, "yyyy-MM-dd", new Date()) : undefined;
+    setText(p && isValid(p) ? format(p, "dd/MM/yyyy") : "");
+  }
+
+  const handleTextChange = (raw: string) => {
+    setText(raw);
+    // Accept dd/MM/yyyy, d/M/yyyy, dd-MM-yyyy, and plain YYYY-MM-DD
+    const formats = ["dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd"];
+    for (const fmt of formats) {
+      const p = parse(raw, fmt, new Date());
+      if (isValid(p)) {
+        onChange(format(p, "yyyy-MM-dd"));
+        return;
+      }
+    }
+    // If cleared, reset value
+    if (!raw.trim()) onChange("");
+  };
+
+  const handleTextBlur = () => {
+    // Re-format to dd/MM/yyyy on blur if we have a valid date
+    if (valid) setText(format(parsed!, "dd/MM/yyyy"));
+    else if (!text.trim()) setText("");
+  };
 
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="w-full flex items-center gap-2 rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-left hover:bg-accent transition-colors"
+      <div className="flex items-center gap-1.5">
+        {/* Typed input */}
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => handleTextChange(e.target.value)}
+          onBlur={handleTextBlur}
+          placeholder="dd/mm/yyyy"
+          className="flex-1 rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 transition-colors"
+        />
+        {/* Calendar picker button */}
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              title="Pick from calendar"
+              className={`flex items-center justify-center w-10 h-10 rounded-xl border border-input bg-background hover:bg-accent transition-colors shrink-0 ${valid ? "text-primary" : "text-muted-foreground"}`}
+            >
+              <CalendarIcon className="w-4 h-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-auto p-0"
+            align="end"
+            side="bottom"
+            avoidCollisions={false}
+            sticky="always"
           >
-            <CalendarIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className={valid ? "text-foreground" : "text-muted-foreground"}>
-              {valid ? format(parsed!, "d MMM yyyy") : "Pick a date…"}
-            </span>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          className="w-auto p-0"
-          align="start"
-          side="bottom"
-          avoidCollisions={false}
-          sticky="always"
-        >
-          <Calendar
-            mode="single"
-            selected={valid ? parsed : undefined}
-            onSelect={(d) => {
-              onChange(d ? format(d, "yyyy-MM-dd") : "");
-              setOpen(false);
-            }}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
+            <Calendar
+              mode="single"
+              selected={valid ? parsed : undefined}
+              onSelect={(d) => {
+                onChange(d ? format(d, "yyyy-MM-dd") : "");
+                setOpen(false);
+              }}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }

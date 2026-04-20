@@ -7,12 +7,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
+
+const ADMIN_EMAIL = "chris.hardy.07@googlemail.co.uk";
 
 interface MockUser {
   id: string;
@@ -75,6 +78,19 @@ const Admin = () => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [users, setUsers] = useState(MOCK_USERS);
   const [usersLoading, setUsersLoading] = useState(true);
+
+  // ── Restrict to admin email ───────────────────────────────────────────────
+  if (user && user.email !== ADMIN_EMAIL) {
+    return (
+      <FeaturePageShell title="Admin" subtitle="System management" icon={<Shield className="w-5 h-5" />}>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Shield className="w-10 h-10 text-muted-foreground/40" />
+          <p className="text-sm font-semibold text-muted-foreground">Access restricted</p>
+          <p className="text-xs text-muted-foreground text-center max-w-xs">This page is only accessible to the system administrator.</p>
+        </div>
+      </FeaturePageShell>
+    );
+  }
 
   useEffect(() => {
     // Live list of all users from Firestore.
@@ -591,27 +607,25 @@ const Admin = () => {
                     {FEATURE_MODULES.map((mod) => {
                       const enabled = currentUser.enabledFeatures.includes(mod.key);
                       return (
-                        <button
+                        <div
                           key={mod.key}
-                          disabled={actionLoading}
-                          onClick={async () => {
-                            const next = enabled
-                              ? currentUser.enabledFeatures.filter(k => k !== mod.key)
-                              : [...currentUser.enabledFeatures, mod.key];
-                            await updateFeatures(currentUser.id, next);
-                          }}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors"
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/40"
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-base">{mod.icon}</span>
                             <span className="text-xs font-medium text-card-foreground">{mod.label}</span>
                           </div>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            enabled ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-                          }`}>
-                            {enabled ? "On" : "Off"}
-                          </span>
-                        </button>
+                          <Switch
+                            checked={enabled}
+                            disabled={actionLoading}
+                            onCheckedChange={async (checked) => {
+                              const next = checked
+                                ? [...currentUser.enabledFeatures, mod.key]
+                                : currentUser.enabledFeatures.filter((k) => k !== mod.key);
+                              await updateFeatures(currentUser.id, next);
+                            }}
+                          />
+                        </div>
                       );
                     })}
                   </div>

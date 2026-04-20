@@ -193,6 +193,7 @@ export interface TaskSettings {
   categoryColors?: Record<string, string>;  // category → hex
   companyColors?: Record<string, string>;   // company → hex
   tileOrder?: string[];                     // task ids in user-defined order (tile view)
+  showCompleted?: boolean;                  // default false — hide completed tasks
 }
 
 // ─── Companies ────────────────────────────────────────────────────────────────
