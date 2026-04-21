@@ -196,6 +196,39 @@ export interface TaskSettings {
   showCompleted?: boolean;                  // default false — hide completed tasks
 }
 
+// ─── Marketing ────────────────────────────────────────────────────────────────
+
+export type SocialPlatform = "instagram" | "linkedin" | "facebook";
+export type ContentStatus = "suggestion" | "draft" | "approved" | "posted";
+export type ContentType = "social_post" | "article" | "campaign_idea";
+
+export interface MarketingProfile {
+  brandVoice: string;          // e.g. "Direct, no-nonsense, expert tone"
+  targetAudience: string;      // e.g. "Neurodivergent professionals aged 25-45"
+  keyMessages: string[];       // Core things to always communicate
+  competitors: string[];       // Competitor names/URLs for context
+  platforms: SocialPlatform[]; // Active platforms
+  tradingNames: string[];      // Trading names for this company
+  relatedCompanyIds: string[]; // Other companies with overlapping audience
+  industry: string;            // e.g. "Executive coaching / neurodiversity"
+  updatedAt?: any;
+}
+
+export interface ContentPiece {
+  id?: string;
+  type: ContentType;
+  platform: SocialPlatform | "website";
+  topic: string;
+  trendReason?: string;         // Why AI suggested this now
+  draft: string;                // AI-generated draft
+  refinedDraft?: string;        // After user edits
+  hashtags?: string[];
+  status: ContentStatus;
+  postedAt?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 // ─── Companies ────────────────────────────────────────────────────────────────
 
 export interface CompanyLogin {
