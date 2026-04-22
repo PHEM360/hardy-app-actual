@@ -13,14 +13,19 @@ service cloud.firestore {
     }
     
     function isSuperAdmin() {
-      return isAuthenticated() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin";
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Superadmin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true
+      );
     }
     
     function isAdmin() {
       return isAuthenticated() && (
         isSuperAdmin() ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Admin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
       );
     }
     
