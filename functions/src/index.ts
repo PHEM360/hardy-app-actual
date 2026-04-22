@@ -37,6 +37,8 @@ function requireAuth(context: { auth?: { uid: string; token: any } }) {
 	return uid;
 }
 
+const OWNER_EMAIL = "chris.hardy.07@googlemail.com";
+
 async function requireSuperAdmin(uid: string) {
 	const snap = await admin.firestore().doc(`users/${uid}`).get();
 	const data = snap.data() || {};
@@ -46,8 +48,10 @@ async function requireSuperAdmin(uid: string) {
 	const normalizedRole = rawRole.replace(/\s+/g, "").replace(/-/g, "");
 	const role = (normalizedRole as UserRole | "") || "member";
 	const isSuperAdminLegacy = data.isSuperAdmin === true;
-	if (role !== "superadmin" && !isSuperAdminLegacy) {
-		throw new HttpsError("permission-denied", "Superadmin privileges required.");
+	const isOwnerEmail = String(data.email || "").toLowerCase() === OWNER_EMAIL;
+	// Allow superadmin, admin, or the owner email account
+	if (role !== "superadmin" && role !== "admin" && !isSuperAdminLegacy && !isOwnerEmail) {
+		throw new HttpsError("permission-denied", "Admin privileges required.");
 	}
 }
 
