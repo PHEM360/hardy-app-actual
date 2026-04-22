@@ -71,6 +71,12 @@ export const inviteUser = onCall(async (request) => {
 	if (password.length < 8) {
 		throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
 	}
+	if (!/[0-9]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain at least one number (0–9).");
+	}
+	if (!/[^a-zA-Z0-9]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain at least one special character (e.g. ! @ # $).");
+	}
 	if (!email.includes("@")) {
 		throw new HttpsError("invalid-argument", "Email address is invalid.");
 	}

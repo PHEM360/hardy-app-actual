@@ -183,7 +183,7 @@ const Admin = () => {
       setInviteEmail("");
       setInvitePassword("");
     } catch (err: any) {
-      setInviteError(err?.message || "Failed to invite user");
+      setInviteError(err?.message?.replace(/^.*HttpsError:\s*/i, "").replace(/\s*\(.*\)$/, "").trim() || "Failed to invite user");
     } finally {
       setInviteLoading(false);
     }
@@ -403,11 +403,11 @@ const Admin = () => {
                   id="invitePassword"
                   value={invitePassword}
                   onChange={(e) => setInvitePassword(e.target.value)}
-                  placeholder="Set a temp password"
+                  placeholder="Min 8 chars, 1 number, 1 special char"
                   type="password"
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  The user can change this later.
+                  Must be 8+ characters, include a number (0–9) and a special character (e.g. ! @ # $). The user can change this after logging in.
                 </p>
               </div>
 
