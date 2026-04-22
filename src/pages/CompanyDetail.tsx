@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -376,29 +376,137 @@ function ExpensesTab({ companyId }: { companyId: string }) {
 
 // ─── Projection Tab ───────────────────────────────────────────────────────────
 
-const PROJ_PERIODS = ["per year", "per month", "per week", "per day"] as const;
-type ProjPeriod = typeof PROJ_PERIODS[number];
+const PROJ_YEARS = 5; // number of future years after "This TY"
+const YEAR_LABELS = ["This TY", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"];
 
-// How many times that period occurs in a year
-const PERIOD_MULTIPLIER: Record<ProjPeriod, number> = {
-  "per year": 1,
-  "per month": 12,
-  "per week": 52,
-  "per day": 365,
+interface ProjIncomeLine {
+  id: string;
+  name: string;
+  unitPrice: number;
+  qty: number;
+  period: "per year" | "per month" | "per week" | "per day" | "one-off";
+}
+
+interface ProjExpenseLine {
+  id: string;
+  name: string;
+  amount: number;
+  period: "per year" | "per month" | "one-off";
+}
+
+interface ProjYear {
+  income: ProjIncomeLine[];
+  expenditure: ProjExpenseLine[];
+}
+
+const INCOME_PERIODS = ["per year", "per month", "per week", "per day", "one-off"] as const;
+const EXPENSE_PERIODS = ["per year", "per month", "one-off"] as const;
+
+const ANNUAL_MULT: Record<string, number> = {
+  "per year": 1, "per month": 12, "per week": 52, "per day": 365, "one-off": 1,
 };
 
-// Per-service quantity + period for each projection year
-interface SvcYear {
-  qty: number;
-  period: ProjPeriod;
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function calcYearTotals(year: ProjYear, prorateFactor = 1, isThisTY = false) {
+  const revenue = year.income.reduce((s, l) => {
+    const annual = l.unitPrice * l.qty * ANNUAL_MULT[l.period];
+    return s + (isThisTY ? annual * prorateFactor : annual);
+  }, 0);
+  const expenses = year.expenditure.reduce((s, l) => {
+    const annual = l.amount * ANNUAL_MULT[l.period];
+    return s + (isThisTY ? annual * prorateFactor : annual);
+  }, 0);
+  return { revenue: Math.round(revenue), expenses: Math.round(expenses) };
 }
 
-// Per-year expenditure override (carries forward from actual by default)
-interface YearExpenses {
-  value: number;   // absolute £ total for that year
+// ── Income line editor ──
+function IncomeLineRow({
+  line, onUpdate, onDelete,
+}: { line: ProjIncomeLine; onUpdate: (patch: Partial<ProjIncomeLine>) => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-2 py-2 border-b border-border/20 last:border-0">
+      <Input
+        value={line.name}
+        onChange={(e) => onUpdate({ name: e.target.value })}
+        placeholder="Service name"
+        className="h-8 rounded-lg text-xs flex-1 min-w-0"
+      />
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[10px] text-muted-foreground">£</span>
+        <Input
+          type="number" min={0} step={0.01}
+          value={line.unitPrice}
+          onChange={(e) => onUpdate({ unitPrice: parseFloat(e.target.value) || 0 })}
+          className="h-8 rounded-lg text-xs w-20 text-right"
+          placeholder="Price"
+        />
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[10px] text-muted-foreground">×</span>
+        <Input
+          type="number" min={0} step={1}
+          value={line.qty}
+          onChange={(e) => onUpdate({ qty: parseFloat(e.target.value) || 0 })}
+          className="h-8 rounded-lg text-xs w-14 text-center"
+          placeholder="Qty"
+        />
+      </div>
+      <select
+        value={line.period}
+        onChange={(e) => onUpdate({ period: e.target.value as ProjIncomeLine["period"] })}
+        className="h-8 rounded-lg text-[10px] bg-muted border border-border px-1.5 shrink-0 cursor-pointer"
+      >
+        {INCOME_PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
+      <span className="text-[10px] text-green-700 font-medium tabular-nums shrink-0 w-16 text-right">
+        {fmt(Math.round(line.unitPrice * line.qty * ANNUAL_MULT[line.period]))}<span className="text-muted-foreground">/yr</span>
+      </span>
+      <button onClick={onDelete} className="p-1 text-muted-foreground hover:text-destructive shrink-0">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
 }
 
-const YEAR_LABELS = ["This TY", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"];
+// ── Expense line editor ──
+function ExpenseLineRow({
+  line, onUpdate, onDelete,
+}: { line: ProjExpenseLine; onUpdate: (patch: Partial<ProjExpenseLine>) => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-2 py-2 border-b border-border/20 last:border-0">
+      <Input
+        value={line.name}
+        onChange={(e) => onUpdate({ name: e.target.value })}
+        placeholder="Expense name"
+        className="h-8 rounded-lg text-xs flex-1 min-w-0"
+      />
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[10px] text-muted-foreground">£</span>
+        <Input
+          type="number" min={0} step={0.01}
+          value={line.amount}
+          onChange={(e) => onUpdate({ amount: parseFloat(e.target.value) || 0 })}
+          className="h-8 rounded-lg text-xs w-24 text-right"
+          placeholder="Amount"
+        />
+      </div>
+      <select
+        value={line.period}
+        onChange={(e) => onUpdate({ period: e.target.value as ProjExpenseLine["period"] })}
+        className="h-8 rounded-lg text-[10px] bg-muted border border-border px-1.5 shrink-0 cursor-pointer"
+      >
+        {EXPENSE_PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
+      <span className="text-[10px] text-red-600 font-medium tabular-nums shrink-0 w-16 text-right">
+        {fmt(Math.round(line.amount * ANNUAL_MULT[line.period]))}<span className="text-muted-foreground">/yr</span>
+      </span>
+      <button onClick={onDelete} className="p-1 text-muted-foreground hover:text-destructive shrink-0">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 function ProjectionTab({ companyId, taxYearStart }: { companyId: string; taxYearStart?: string }) {
   const { services } = useCompanyServices(companyId);
@@ -406,210 +514,337 @@ function ProjectionTab({ companyId, taxYearStart }: { companyId: string; taxYear
   const { settings } = useCompanySettings(companyId);
 
   const [taxRate, setTaxRate] = useState(settings.corporateTaxRate ?? 19);
+  const [activeYear, setActiveYear] = useState(0);
   const [chartType, setChartType] = useState<"bar" | "area">("bar");
 
   const taxYearEnd = useMemo(() => getCurrentTaxYearEnd(taxYearStart || ""), [taxYearStart]);
   const daysLeft = useMemo(() => daysRemaining(taxYearEnd), [taxYearEnd]);
   const prorateFactor = Math.min(1, daysLeft / 365);
 
-  // Total actual expenses from Firestore records
-  const baseExpenses = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
-
-  // Per-year expense overrides — initialised once when baseExpenses is first known
-  const [yearExpenses, setYearExpenses] = useState<YearExpenses[]>(() =>
-    YEAR_LABELS.map(() => ({ value: 0 }))
+  // Initialise per-year data
+  const [years, setYears] = useState<ProjYear[]>(() =>
+    YEAR_LABELS.map(() => ({ income: [], expenditure: [] }))
   );
-  // Seed expenses when Firestore data arrives (only if still at 0)
-  const expensesSeeded = useState(false);
-  useMemo(() => {
-    if (!expensesSeeded[0] && baseExpenses > 0) {
-      setYearExpenses(YEAR_LABELS.map(() => ({ value: Math.round(baseExpenses) })));
-      expensesSeeded[1](true);
+
+  // Seed income lines from services (once)
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!seeded.current && services.length > 0) {
+      seeded.current = true;
+      setYears((prev) =>
+        prev.map((yr) => ({
+          ...yr,
+          income: services.map((s) => ({
+            id: uid(),
+            name: s.name,
+            unitPrice: s.price,
+            qty: 1,
+            period: (s.unit === "per month" || s.unit === "per week" || s.unit === "per day" || s.unit === "per year")
+              ? s.unit as ProjIncomeLine["period"]
+              : "one-off",
+          })),
+        }))
+      );
     }
-  }, [baseExpenses]);
+  }, [services]);
 
-  // Per-service, per-year qty + period
-  // [yearIndex][serviceIndex]
-  const [svcYears, setSvcYears] = useState<SvcYear[][]>(() =>
-    YEAR_LABELS.map(() => [])
-  );
+  // Seed expenditure lines from actual expenses (once, This TY only)
+  const expSeeded = useRef(false);
+  useEffect(() => {
+    if (!expSeeded.current && expenses.length > 0) {
+      expSeeded.current = true;
+      const byCategory: Record<string, number> = {};
+      expenses.forEach((e) => { byCategory[e.category] = (byCategory[e.category] || 0) + e.amount; });
+      const lines: ProjExpenseLine[] = Object.entries(byCategory).map(([name, amount]) => ({
+        id: uid(), name, amount, period: "one-off",
+      }));
+      setYears((prev) => prev.map((yr, i) => i === 0 ? { ...yr, expenditure: lines } : yr));
+    }
+  }, [expenses]);
 
-  // Keep svcYears columns in sync when services list changes
-  useMemo(() => {
-    setSvcYears((prev) =>
-      YEAR_LABELS.map((_, yi) =>
-        services.map((svc, si) => {
-          const existing = prev[yi]?.[si];
-          if (existing) return existing;
-          // default: derive sensible qty+period from the service's own unit
-          const defaultPeriod: ProjPeriod =
-            svc.unit === "per month" ? "per month"
-            : svc.unit === "per week" ? "per week"
-            : svc.unit === "per day" ? "per day"
-            : "per year";
-          return { qty: 1, period: defaultPeriod };
-        })
-      )
-    );
-  }, [services.length]);
+  // Mutators
+  const updateIncomeLine = (yi: number, id: string, patch: Partial<ProjIncomeLine>) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, income: yr.income.map((l) => l.id === id ? { ...l, ...patch } : l) }
+      : yr));
 
-  const setExpense = (yi: number, val: number) =>
-    setYearExpenses((prev) => prev.map((v, i) => i === yi ? { value: val } : v));
+  const deleteIncomeLine = (yi: number, id: string) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, income: yr.income.filter((l) => l.id !== id) }
+      : yr));
 
-  const setSvcYear = (yi: number, si: number, patch: Partial<SvcYear>) =>
-    setSvcYears((prev) =>
-      prev.map((row, i) =>
-        i === yi ? row.map((cell, j) => j === si ? { ...cell, ...patch } : cell) : row
-      )
-    );
+  const addIncomeLine = (yi: number) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, income: [...yr.income, { id: uid(), name: "", unitPrice: 0, qty: 1, period: "per year" }] }
+      : yr));
 
-  const projections = useMemo(() => {
-    return YEAR_LABELS.map((label, yi) => {
-      // Revenue = sum over services of (qty × price × annualMultiplier × prorateFactor if This TY)
-      const revenue = services.reduce((sum, svc, si) => {
-        const sy = svcYears[yi]?.[si] ?? { qty: 1, period: "per year" as ProjPeriod };
-        const annualIncome = sy.qty * svc.price * PERIOD_MULTIPLIER[sy.period];
-        return sum + (yi === 0 ? annualIncome * prorateFactor : annualIncome);
-      }, 0);
+  const updateExpenseLine = (yi: number, id: string, patch: Partial<ProjExpenseLine>) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, expenditure: yr.expenditure.map((l) => l.id === id ? { ...l, ...patch } : l) }
+      : yr));
 
-      const exp = yi === 0
-        ? (yearExpenses[yi]?.value ?? 0) * prorateFactor
-        : (yearExpenses[yi]?.value ?? 0);
+  const deleteExpenseLine = (yi: number, id: string) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, expenditure: yr.expenditure.filter((l) => l.id !== id) }
+      : yr));
 
+  const addExpenseLine = (yi: number) =>
+    setYears((prev) => prev.map((yr, i) => i === yi
+      ? { ...yr, expenditure: [...yr.expenditure, { id: uid(), name: "", amount: 0, period: "per year" }] }
+      : yr));
+
+  // Computed projections
+  const projections = useMemo(() =>
+    YEAR_LABELS.map((label, yi) => {
+      const { revenue, expenses: exp } = calcYearTotals(years[yi], prorateFactor, yi === 0);
       const grossProfit = revenue - exp;
       const tax = Math.max(0, grossProfit * (taxRate / 100));
-      return {
-        label,
-        revenue: Math.round(revenue),
-        expenses: Math.round(exp),
-        grossProfit: Math.round(grossProfit),
-        tax: Math.round(tax),
-        netProfit: Math.round(grossProfit - tax),
-      };
-    });
-  }, [services, svcYears, yearExpenses, taxRate, prorateFactor]);
+      return { label, revenue, expenses: exp, grossProfit, tax, netProfit: Math.round(grossProfit - tax) };
+    }), [years, taxRate, prorateFactor]);
 
   const chartData = projections.map((p) => ({ name: p.label, Revenue: p.revenue, Expenses: p.expenses, "Net Profit": p.netProfit }));
   const COLORS = { Revenue: "#22c55e", Expenses: "#ef4444", "Net Profit": "#6366f1" } as const;
 
+  const thisYear = years[activeYear];
+  const proj = projections[activeYear];
+
+  // Income breakdown for pie-style bars
+  const incomeLines = thisYear.income.filter((l) => l.name);
+  const totalIncome = proj.revenue;
+  const expLines = thisYear.expenditure.filter((l) => l.name);
+  const totalExp = proj.expenses;
+
   return (
     <div className="space-y-5">
-      {/* Controls bar */}
-      <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl border border-border/50 bg-card">
-        <div className="flex items-center gap-2">
-          <Label className="text-xs flex-shrink-0">Corp Tax %</Label>
-          <Input type="number" min={0} max={100} value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)} className="h-8 rounded-lg w-16 text-xs" />
-        </div>
-        <div className="ml-auto flex gap-1">
-          <button onClick={() => setChartType("bar")} className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${chartType === "bar" ? "bg-primary text-white border-primary" : "bg-muted border-border text-muted-foreground"}`}>Bar</button>
-          <button onClick={() => setChartType("area")} className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${chartType === "area" ? "bg-primary text-white border-primary" : "bg-muted border-border text-muted-foreground"}`}>Area</button>
-        </div>
+
+      {/* Year selector tabs */}
+      <div className="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
+        {YEAR_LABELS.map((label, yi) => {
+          const p = projections[yi];
+          const isProfit = p.netProfit >= 0;
+          return (
+            <button
+              key={yi}
+              onClick={() => setActiveYear(yi)}
+              className={`flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-[10px] font-medium transition-colors min-w-[72px] ${
+                activeYear === yi
+                  ? "bg-primary text-white border-primary shadow-sm"
+                  : "bg-card border-border/50 text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <span className="font-semibold text-[11px]">{label}</span>
+              <span className={`mt-0.5 tabular-nums ${activeYear === yi ? "text-white/80" : isProfit ? "text-green-600" : "text-red-500"}`}>
+                {isProfit ? "+" : ""}{fmt(p.netProfit)}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Services sold per year */}
-      {services.length > 0 && (
-        <div className="rounded-xl border border-border/50 bg-card overflow-x-auto">
-          <div className="px-3 pt-3 pb-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Services Sold</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Set quantity &amp; period per service per year. Revenue = qty × unit price × period.</p>
+      {/* Year editor card */}
+      <div className="rounded-xl border border-border/50 bg-card shadow-soft overflow-hidden">
+
+        {/* ── Income section ── */}
+        <div className="px-4 pt-4 pb-2">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Income</p>
+              <p className="text-xs font-bold text-green-700 mt-0.5">{fmt(totalIncome)} projected</p>
+            </div>
+            <button
+              onClick={() => addIncomeLine(activeYear)}
+              className="flex items-center gap-1 text-xs text-primary font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Service
+            </button>
           </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-border/30">
-                <th className="text-left px-3 py-2 font-semibold text-muted-foreground w-32">Service (£{"{"}price{"}"})</th>
-                {YEAR_LABELS.map((l) => (
-                  <th key={l} className="text-center px-2 py-2 font-semibold text-card-foreground min-w-[110px]">{l}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/20">
-              {services.map((svc, si) => (
-                <tr key={svc.id ?? si}>
-                  <td className="px-3 py-2 text-card-foreground">
-                    <span className="font-medium">{svc.name}</span>
-                    <br />
-                    <span className="text-muted-foreground">£{svc.price} {svc.unit}</span>
-                  </td>
-                  {YEAR_LABELS.map((_, yi) => {
-                    const sy = svcYears[yi]?.[si] ?? { qty: 1, period: "per year" as ProjPeriod };
-                    const annual = sy.qty * svc.price * PERIOD_MULTIPLIER[sy.period];
-                    return (
-                      <td key={yi} className="px-2 py-2">
-                        <div className="flex flex-col gap-1 items-center">
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number" min={0} step={1}
-                              value={sy.qty}
-                              onChange={(e) => setSvcYear(yi, si, { qty: parseFloat(e.target.value) || 0 })}
-                              className="h-6 rounded-md text-xs text-center px-1 w-12"
-                            />
-                            <select
-                              value={sy.period}
-                              onChange={(e) => setSvcYear(yi, si, { period: e.target.value as ProjPeriod })}
-                              className="h-6 rounded-md text-[10px] bg-muted border border-border px-1 cursor-pointer"
-                            >
-                              {PROJ_PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground tabular-nums">
-                            {yi === 0 ? fmt(Math.round(annual * prorateFactor)) : fmt(Math.round(annual))} /yr
-                          </span>
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Column headers */}
+          {thisYear.income.length > 0 && (
+            <div className="flex items-center gap-2 pb-1 border-b border-border/30">
+              <span className="text-[10px] text-muted-foreground flex-1">Service</span>
+              <span className="text-[10px] text-muted-foreground w-20 text-right shrink-0">Price (£)</span>
+              <span className="text-[10px] text-muted-foreground w-14 text-center shrink-0">Qty</span>
+              <span className="text-[10px] text-muted-foreground w-[90px] shrink-0">Period</span>
+              <span className="text-[10px] text-muted-foreground w-16 text-right shrink-0">Annual</span>
+              <span className="w-6 shrink-0" />
+            </div>
+          )}
+          {thisYear.income.length === 0 && (
+            <p className="text-xs text-muted-foreground py-3 text-center">No income lines. Add a service above.</p>
+          )}
+          {thisYear.income.map((line) => (
+            <IncomeLineRow
+              key={line.id}
+              line={line}
+              onUpdate={(p) => updateIncomeLine(activeYear, line.id, p)}
+              onDelete={() => deleteIncomeLine(activeYear, line.id)}
+            />
+          ))}
         </div>
-      )}
 
-      {services.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center py-2">
-          Add services in the Services tab to model revenue.
-        </p>
-      )}
+        <div className="h-px bg-border/40 mx-4" />
 
-      {/* Expenditure per year */}
-      <div className="rounded-xl border border-border/50 bg-card overflow-x-auto">
-        <div className="px-3 pt-3 pb-1">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Expenditure</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Carried forward from your recorded expenses. Edit each year as needed.</p>
+        {/* ── Expenditure section ── */}
+        <div className="px-4 pt-3 pb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Expenditure</p>
+              <p className="text-xs font-bold text-red-600 mt-0.5">{fmt(totalExp)} projected</p>
+            </div>
+            <button
+              onClick={() => addExpenseLine(activeYear)}
+              className="flex items-center gap-1 text-xs text-primary font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Expense
+            </button>
+          </div>
+          {thisYear.expenditure.length > 0 && (
+            <div className="flex items-center gap-2 pb-1 border-b border-border/30">
+              <span className="text-[10px] text-muted-foreground flex-1">Description</span>
+              <span className="text-[10px] text-muted-foreground w-24 text-right shrink-0">Amount (£)</span>
+              <span className="text-[10px] text-muted-foreground w-[90px] shrink-0">Period</span>
+              <span className="text-[10px] text-muted-foreground w-16 text-right shrink-0">Annual</span>
+              <span className="w-6 shrink-0" />
+            </div>
+          )}
+          {thisYear.expenditure.length === 0 && (
+            <p className="text-xs text-muted-foreground py-3 text-center">No expenditure lines. Add one above.</p>
+          )}
+          {thisYear.expenditure.map((line) => (
+            <ExpenseLineRow
+              key={line.id}
+              line={line}
+              onUpdate={(p) => updateExpenseLine(activeYear, line.id, p)}
+              onDelete={() => deleteExpenseLine(activeYear, line.id)}
+            />
+          ))}
         </div>
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="border-b border-border/30">
-              <th className="text-left px-3 py-2 font-semibold text-muted-foreground w-32">Year</th>
-              {YEAR_LABELS.map((l) => (
-                <th key={l} className="text-center px-2 py-2 font-semibold text-card-foreground min-w-[90px]">{l}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="px-3 py-2 text-muted-foreground">Total (£)</td>
-              {YEAR_LABELS.map((_, yi) => (
-                <td key={yi} className="px-2 py-2 text-center">
-                  <Input
-                    type="number" min={0}
-                    value={yearExpenses[yi]?.value ?? 0}
-                    onChange={(e) => setExpense(yi, parseFloat(e.target.value) || 0)}
-                    className="h-6 rounded-md text-xs text-center px-1 w-20 mx-auto"
-                  />
-                  {yi === 0 && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      {fmt(Math.round((yearExpenses[0]?.value ?? 0) * prorateFactor))} prorated
-                    </div>
-                  )}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
       </div>
 
-      {/* Projection table */}
+      {/* Summary card for active year */}
+      <div className="rounded-xl border border-border/50 bg-card shadow-soft overflow-hidden">
+        <div className="px-4 pt-3 pb-1 border-b border-border/30 flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            {YEAR_LABELS[activeYear]} Summary
+          </p>
+          <div className="flex items-center gap-2">
+            <Label className="text-[10px] text-muted-foreground">Corp Tax</Label>
+            <Input
+              type="number" min={0} max={100}
+              value={taxRate}
+              onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+              className="h-7 rounded-lg w-14 text-xs"
+            />
+            <span className="text-[10px] text-muted-foreground">%</span>
+          </div>
+        </div>
+        <div className="p-4 space-y-2.5">
+          {/* Summary rows */}
+          {[
+            { label: "Turnover (Revenue)", value: proj.revenue, color: "text-green-700", bold: false },
+            { label: "Total Expenditure", value: -proj.expenses, color: "text-red-600", bold: false },
+            { label: "Gross Profit / Loss", value: proj.grossProfit, color: proj.grossProfit >= 0 ? "text-blue-700" : "text-red-600", bold: false },
+            { label: `Corporation Tax (${taxRate}%)`, value: -proj.tax, color: "text-orange-600", bold: false },
+            { label: "Net Profit / Loss", value: proj.netProfit, color: proj.netProfit >= 0 ? "text-indigo-700" : "text-red-600", bold: true },
+          ].map(({ label, value, color, bold }) => (
+            <div key={label} className={`flex justify-between items-center ${bold ? "pt-2 border-t border-border/40" : ""}`}>
+              <span className={`text-xs ${bold ? "font-bold text-card-foreground" : "text-muted-foreground"}`}>{label}</span>
+              <span className={`text-sm tabular-nums font-${bold ? "bold" : "medium"} ${color}`}>
+                {value < 0 ? `-${fmt(Math.abs(value))}` : fmt(value)}
+              </span>
+            </div>
+          ))}
+
+          {/* Proportion bars */}
+          {(totalIncome > 0 || totalExp > 0) && (
+            <div className="pt-3 space-y-3">
+              {/* Income breakdown */}
+              {incomeLines.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Income breakdown</p>
+                  <div className="flex h-4 rounded-full overflow-hidden w-full gap-px">
+                    {incomeLines.map((l, i) => {
+                      const annual = l.unitPrice * l.qty * ANNUAL_MULT[l.period];
+                      const pct = totalIncome > 0 ? (annual / totalIncome) * 100 : 0;
+                      const PALETTE = ["#22c55e","#16a34a","#4ade80","#86efac","#bbf7d0","#6ee7b7"];
+                      return pct > 0 ? (
+                        <div key={l.id} style={{ width: `${pct}%`, backgroundColor: PALETTE[i % PALETTE.length] }} title={`${l.name}: ${pct.toFixed(1)}%`} />
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                    {incomeLines.map((l, i) => {
+                      const annual = l.unitPrice * l.qty * ANNUAL_MULT[l.period];
+                      const pct = totalIncome > 0 ? (annual / totalIncome) * 100 : 0;
+                      const PALETTE = ["#22c55e","#16a34a","#4ade80","#86efac","#bbf7d0","#6ee7b7"];
+                      return pct > 0 ? (
+                        <div key={l.id} className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PALETTE[i % PALETTE.length] }} />
+                          <span className="text-[10px] text-muted-foreground">{l.name || "Unnamed"} <span className="font-medium text-card-foreground">{pct.toFixed(0)}%</span></span>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Expenditure breakdown */}
+              {expLines.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Expenditure breakdown</p>
+                  <div className="flex h-4 rounded-full overflow-hidden w-full gap-px">
+                    {expLines.map((l, i) => {
+                      const annual = l.amount * ANNUAL_MULT[l.period];
+                      const pct = totalExp > 0 ? (annual / totalExp) * 100 : 0;
+                      const PALETTE = ["#ef4444","#dc2626","#f87171","#fca5a5","#fecaca","#fda4af"];
+                      return pct > 0 ? (
+                        <div key={l.id} style={{ width: `${pct}%`, backgroundColor: PALETTE[i % PALETTE.length] }} title={`${l.name}: ${pct.toFixed(1)}%`} />
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                    {expLines.map((l, i) => {
+                      const annual = l.amount * ANNUAL_MULT[l.period];
+                      const pct = totalExp > 0 ? (annual / totalExp) * 100 : 0;
+                      const PALETTE = ["#ef4444","#dc2626","#f87171","#fca5a5","#fecaca","#fda4af"];
+                      return pct > 0 ? (
+                        <div key={l.id} className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PALETTE[i % PALETTE.length] }} />
+                          <span className="text-[10px] text-muted-foreground">{l.name || "Unnamed"} <span className="font-medium text-card-foreground">{pct.toFixed(0)}%</span></span>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Income vs Expenditure bar */}
+              {totalIncome > 0 && totalExp > 0 && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Income vs Expenditure</p>
+                  <div className="flex h-4 rounded-full overflow-hidden w-full">
+                    {(() => {
+                      const total = totalIncome + totalExp;
+                      const iPct = (totalIncome / total) * 100;
+                      const ePct = (totalExp / total) * 100;
+                      return <>
+                        <div style={{ width: `${iPct}%` }} className="bg-green-500" title={`Income ${iPct.toFixed(1)}%`} />
+                        <div style={{ width: `${ePct}%` }} className="bg-red-400" title={`Expenditure ${ePct.toFixed(1)}%`} />
+                      </>;
+                    })()}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    <span className="text-green-700 font-medium">Income {((totalIncome / (totalIncome + totalExp)) * 100).toFixed(0)}%</span>
+                    <span className="text-red-600 font-medium">Expenditure {((totalExp / (totalIncome + totalExp)) * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Multi-year overview table */}
       <div className="overflow-x-auto rounded-xl border border-border/50">
         <table className="w-full text-xs">
           <thead>
@@ -623,7 +858,7 @@ function ProjectionTab({ companyId, taxYearStart }: { companyId: string; taxYear
           <tbody className="divide-y divide-border/30">
             {(["revenue", "expenses", "grossProfit", "tax", "netProfit"] as const).map((key) => {
               const rowLabels: Record<string, string> = {
-                revenue: "Revenue", expenses: "Expenses", grossProfit: "Gross Profit",
+                revenue: "Revenue", expenses: "Expenditure", grossProfit: "Gross Profit",
                 tax: `Corp Tax (${taxRate}%)`, netProfit: "Net Profit",
               };
               const colorMap: Record<string, string> = {
@@ -651,7 +886,13 @@ function ProjectionTab({ companyId, taxYearStart }: { companyId: string; taxYear
 
       {/* Chart */}
       <div className="p-4 rounded-xl border border-border/50 bg-card shadow-soft">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">5-Year Projection Chart</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">5-Year Projection Chart</p>
+          <div className="flex gap-1">
+            <button onClick={() => setChartType("bar")} className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${chartType === "bar" ? "bg-primary text-white border-primary" : "bg-muted border-border text-muted-foreground"}`}>Bar</button>
+            <button onClick={() => setChartType("area")} className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${chartType === "area" ? "bg-primary text-white border-primary" : "bg-muted border-border text-muted-foreground"}`}>Area</button>
+          </div>
+        </div>
         <ResponsiveContainer width="100%" height={220}>
           {chartType === "bar" ? (
             <BarChart data={chartData} barCategoryGap="25%">
