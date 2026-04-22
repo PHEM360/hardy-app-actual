@@ -3,7 +3,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -360,6 +360,7 @@ const Admin = () => {
           <DialogContent className="max-w-md mx-4">
             <DialogHeader>
               <DialogTitle className="font-display">Invite user</DialogTitle>
+              <DialogDescription>Fill in the details below to create a new account and send an invitation.</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 pt-2">
@@ -537,6 +538,7 @@ const Admin = () => {
                   </div>
                   {currentUser.name}
                 </DialogTitle>
+                <DialogDescription>Manage role, household, feature access and account status.</DialogDescription>
               </DialogHeader>
               <div className="space-y-5 pt-2">
 
