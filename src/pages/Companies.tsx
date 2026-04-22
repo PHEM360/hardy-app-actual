@@ -212,7 +212,7 @@ const Companies = () => {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditCompany(null); }}>
-        <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="font-display">{editCompany ? "Edit Company" : "Add Company"}</DialogTitle>
           </DialogHeader>

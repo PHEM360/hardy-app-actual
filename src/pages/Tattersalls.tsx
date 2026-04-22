@@ -200,7 +200,7 @@ const Tattersalls = () => {
 
       {/* Add Balance Dialog */}
       <Dialog open={addBalOpen} onOpenChange={(o) => { setAddBalOpen(o); if (!o) { setNewBalDate(new Date().toISOString().split("T")[0]); setNewBal(""); } }}>
-        <DialogContent className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Add Balance</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
@@ -220,7 +220,7 @@ const Tattersalls = () => {
 
       {/* Add Expense Dialog */}
       <Dialog open={addExpOpen} onOpenChange={setAddExpOpen}>
-        <DialogContent className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
@@ -264,7 +264,7 @@ const Tattersalls = () => {
 
       {/* Upload Document Dialog */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Upload Document</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             {/* Upload a file from device */}

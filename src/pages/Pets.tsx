@@ -349,7 +349,7 @@ const Pets = () => {
           <Plus className="w-4 h-4" /> Add Pet
         </button>
         <Dialog open={addPetOpen} onOpenChange={(o) => { setAddPetOpen(o); if (!o) setAddPetError(null); }}>
-          <DialogContent className="max-w-sm mx-4">
+          <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
             <DialogHeader><DialogTitle className="font-display">Add a Pet</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-3">
@@ -561,7 +561,7 @@ const Pets = () => {
 
       {/* Record Treatment Dialog */}
       <Dialog open={addTreatmentOpen} onOpenChange={(o) => { setAddTreatmentOpen(o); if (!o) setTreatmentError(null); }}>
-        <DialogContent className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Record Treatment</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
@@ -625,7 +625,7 @@ const Pets = () => {
 
       {/* Log Weight Dialog */}
       <Dialog open={addWeightOpen} onOpenChange={(o) => { setAddWeightOpen(o); if (!o) setWeightError(null); }}>
-        <DialogContent className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Log Weight</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
@@ -653,7 +653,7 @@ const Pets = () => {
 
       {/* Treatment History Dialog */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="max-w-md mx-4 max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">
               {historyPet?.name} — {historyType === "flea" ? "Flea" : "Wormer"} ({historyProduct})
@@ -699,7 +699,7 @@ const Pets = () => {
 
       {/* Dog Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
               <span className="text-xl">🐾</span> Dog Settings

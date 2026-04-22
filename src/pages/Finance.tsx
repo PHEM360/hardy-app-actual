@@ -188,7 +188,7 @@ const Finance = () => {
         <div className="flex gap-1.5">
           <button onClick={() => setAddAccountOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
           <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
-            <DialogContent className="max-w-sm mx-4">
+            <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
               <DialogHeader><DialogTitle className="font-display">New Account</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
@@ -287,7 +287,7 @@ const Finance = () => {
           <Plus className="w-3.5 h-3.5" /> Log Balance
         </button>
         <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
-          <DialogContent className="max-w-sm mx-4">
+          <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
             <DialogHeader><DialogTitle className="font-display">Log Balance</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
@@ -379,7 +379,7 @@ const Finance = () => {
 
       {/* Account Management Dialog — click on account card gear icon */}
       <Dialog open={!!manageAccountId} onOpenChange={(o) => !o && setManageAccountId(null)}>
-        <DialogContent className="max-w-md mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-md mx-4">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
               {managingAccount && (

@@ -179,7 +179,7 @@ const HouseholdFinance = () => {
                 <DialogTrigger asChild>
                   <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add</button>
                 </DialogTrigger>
-                <DialogContent className="max-w-sm mx-4">
+                <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
                   <DialogHeader><DialogTitle className="font-display">New Account</DialogTitle></DialogHeader>
                   <div className="space-y-4 pt-2">
                     <div className="space-y-2">
@@ -226,7 +226,7 @@ const HouseholdFinance = () => {
                 <DialogTrigger asChild>
                   <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Log Balance</button>
                 </DialogTrigger>
-                <DialogContent className="max-w-sm mx-4">
+                <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
                   <DialogHeader><DialogTitle className="font-display">Log Balance</DialogTitle></DialogHeader>
                   <div className="space-y-4 pt-2">
                     <div className="space-y-2">

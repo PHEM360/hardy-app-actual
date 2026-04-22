@@ -113,7 +113,7 @@ function LoginsTab({ companyId }: { companyId: string }) {
         </div>
       ))}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Login" : "Add Login"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Xero, Companies House" className="h-9 rounded-xl" /></div>
@@ -187,7 +187,7 @@ function ServicesTab({ companyId }: { companyId: string }) {
         </div>
       ))}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Service" : "Add Service"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Service Name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="h-9 rounded-xl" /></div>
@@ -338,7 +338,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
           <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Description *</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9 rounded-xl" /></div>

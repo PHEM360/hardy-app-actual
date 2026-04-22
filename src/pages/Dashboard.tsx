@@ -188,7 +188,7 @@ const Dashboard = () => {
 
       {/* Add Expense Dialog */}
       <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
-        <DialogContent className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
           <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1">
@@ -267,7 +267,7 @@ const Dashboard = () => {
                 <Plus className="w-3 h-3" /> Add
               </button>
             </DialogTrigger>
-            <DialogContent className="max-w-sm mx-4">
+            <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
               <DialogHeader><DialogTitle className="font-display">Add Reminder</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
