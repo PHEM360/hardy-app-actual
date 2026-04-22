@@ -15,7 +15,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
 
-const ADMIN_EMAIL = "chris.hardy.07@googlemail.co.uk";
+const ADMIN_EMAIL = "chris.hardy.07@googlemail.com";
 
 interface MockUser {
   id: string;
