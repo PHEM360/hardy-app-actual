@@ -78,20 +78,18 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isOwner(resource.data.ownerId);
     }
     
-    // Pets collection - shared across all household members
+    // Pets collection - per-user with optional sharing
     match /pets/{petId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-      
-      match /weightHistory/{entryId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated();
-      }
-      
-      match /treatmentHistory/{entryId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated();
-      }
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid in resource.data.sharedWith
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid in resource.data.sharedWith
+      );
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.ownerId;
     }
 
     // Finance - each user's personal accounts

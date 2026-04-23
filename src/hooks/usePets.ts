@@ -8,9 +8,12 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
   serverTimestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 
 export interface TreatmentOption {
   id: string;
@@ -46,6 +49,8 @@ export interface Pet {
   breed: string;
   birthday: string;
   avatar: string;
+  ownerId: string;
+  sharedWith: string[];
   fleaOptions: TreatmentOption[];
   wormOptions: TreatmentOption[];
   selectedFlea: string;
@@ -70,50 +75,90 @@ const DEFAULT_INSURANCE: PetInsurance = {
 };
 
 export function usePets() {
+  const { user } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "pets"), orderBy("name"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next = snap.docs.map((d) => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            name: data.name ?? "",
-            breed: data.breed ?? "",
-            birthday: data.birthday ?? "",
-            avatar: data.avatar ?? "🐶",
-            fleaOptions: data.fleaOptions ?? [],
-            wormOptions: data.wormOptions ?? [],
-            selectedFlea: data.selectedFlea ?? "",
-            selectedWorm: data.selectedWorm ?? "",
-            treatmentNotes: data.treatmentNotes ?? "",
-            weightHistory: data.weightHistory ?? [],
-            treatmentHistory: data.treatmentHistory ?? [],
-            fleaNotifications: data.fleaNotifications ?? [],
-            wormNotifications: data.wormNotifications ?? [],
-            insurance: data.insurance ?? DEFAULT_INSURANCE,
-          } as Pet;
-        });
-        setPets(next);
-        setLoading(false);
-      },
-      () => {
-        setPets([]);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
-  }, []);
+    if (!user) {
+      setPets([]);
+      setLoading(false);
+      return;
+    }
+
+    // Listen to pets owned by user
+    const ownedQ = query(collection(db, "pets"), where("ownerId", "==", user.uid), orderBy("name"));
+    // Listen to pets shared with user
+    const sharedQ = query(collection(db, "pets"), where("sharedWith", "array-contains", user.uid), orderBy("name"));
+
+    const petsMap = new Map<string, Pet>();
+
+    const toTyped = (d: any): Pet => ({
+      id: d.id,
+      name: d.data().name ?? "",
+      breed: d.data().breed ?? "",
+      birthday: d.data().birthday ?? "",
+      avatar: d.data().avatar ?? "🐶",
+      ownerId: d.data().ownerId ?? "",
+      sharedWith: d.data().sharedWith ?? [],
+      fleaOptions: d.data().fleaOptions ?? [],
+      wormOptions: d.data().wormOptions ?? [],
+      selectedFlea: d.data().selectedFlea ?? "",
+      selectedWorm: d.data().selectedWorm ?? "",
+      treatmentNotes: d.data().treatmentNotes ?? "",
+      weightHistory: d.data().weightHistory ?? [],
+      treatmentHistory: d.data().treatmentHistory ?? [],
+      fleaNotifications: d.data().fleaNotifications ?? [],
+      wormNotifications: d.data().wormNotifications ?? [],
+      insurance: d.data().insurance ?? DEFAULT_INSURANCE,
+    });
+
+    const merge = () => {
+      setPets([...petsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      setLoading(false);
+    };
+
+    let ownedReady = false, sharedReady = false;
+
+    const unsubOwned = onSnapshot(ownedQ, (snap) => {
+      snap.docs.forEach(d => petsMap.set(d.id, toTyped(d)));
+      // Remove docs that are no longer in owned set
+      snap.docChanges().filter(c => c.type === "removed").forEach(c => {
+        if (petsMap.get(c.doc.id)?.ownerId === user.uid) petsMap.delete(c.doc.id);
+      });
+      ownedReady = true;
+      if (sharedReady) merge();
+    }, () => { ownedReady = true; if (sharedReady) merge(); });
+
+    const unsubShared = onSnapshot(sharedQ, (snap) => {
+      snap.docs.forEach(d => petsMap.set(d.id, toTyped(d)));
+      snap.docChanges().filter(c => c.type === "removed").forEach(c => {
+        if (petsMap.get(c.doc.id)?.ownerId !== user.uid) petsMap.delete(c.doc.id);
+      });
+      sharedReady = true;
+      if (ownedReady) merge();
+    }, () => { sharedReady = true; if (ownedReady) merge(); });
+
+    return () => { unsubOwned(); unsubShared(); };
+  }, [user]);
 
   const addPet = useCallback(
-    async (pet: Omit<Pet, "id">) => {
+    async (pet: Omit<Pet, "id" | "ownerId" | "sharedWith">) => {
+      if (!user) return;
       await addDoc(collection(db, "pets"), {
         ...pet,
+        ownerId: user.uid,
+        sharedWith: [],
         createdAt: serverTimestamp(),
+      });
+    },
+    [user]
+  );
+
+  const sharePet = useCallback(
+    async (petId: string, targetUid: string) => {
+      await updateDoc(doc(db, "pets", petId), {
+        sharedWith: arrayUnion(targetUid),
       });
     },
     []
@@ -145,5 +190,5 @@ export function usePets() {
     [pets]
   );
 
-  return { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord };
+  return { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet };
 }

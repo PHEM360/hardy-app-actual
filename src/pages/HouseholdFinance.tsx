@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Home, Upload, Plus, Sparkles, Eye, EyeOff, Edit2, Archive, RotateCcw, Settings2 } from "lucide-react";
+import { Home, Upload, Plus, Sparkles, Eye, EyeOff, Edit2, Archive, RotateCcw, Settings2, CalendarRange } from "lucide-react";
 import { motion } from "framer-motion";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceArea } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,14 @@ const COLORS = [
 const INITIAL_ACCOUNTS: HHAccount[] = [];
 
 const INITIAL_ENTRIES: HHEntry[] = [];
+
+const TAX_YEARS = [
+  { label: "22/23", start: "2022-04-06", end: "2023-04-05" },
+  { label: "23/24", start: "2023-04-06", end: "2024-04-05" },
+  { label: "24/25", start: "2024-04-06", end: "2025-04-05" },
+  { label: "25/26", start: "2025-04-06", end: "2026-04-05" },
+  { label: "26/27", start: "2026-04-06", end: "2027-04-05" },
+];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {
@@ -68,6 +76,7 @@ const HouseholdFinance = () => {
   const [csvText, setCsvText] = useState("");
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysing, setAnalysing] = useState(false);
+  const [showTaxYears, setShowTaxYears] = useState(true);
 
   const latestBalances = useMemo(() => {
     return accounts.map(acc => {
@@ -81,7 +90,7 @@ const HouseholdFinance = () => {
   const chartData = useMemo(() => {
     const dates = [...new Set(entries.map(e => e.date))].sort();
     return dates.map(date => {
-      const row: any = { date: new Date(date).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }) };
+      const row: any = { date: new Date(date).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), rawDate: date };
       let total = 0;
       accounts.forEach(acc => {
         const entry = entries.find(e => e.accountId === acc.id && e.date === date);
@@ -94,6 +103,16 @@ const HouseholdFinance = () => {
       return row;
     });
   }, [entries, accounts, selectedAccounts]);
+
+  const taxYearAreas = useMemo(() => {
+    if (chartData.length < 2) return [];
+    return TAX_YEARS.map((ty, i) => {
+      const start = chartData.find((d) => d.rawDate >= ty.start);
+      const end = chartData.filter((d) => d.rawDate <= ty.end).pop();
+      if (start && end && start.date !== end.date) return { x1: start.date, x2: end.date, label: ty.label, shade: i % 2 === 1 };
+      return null;
+    }).filter(Boolean);
+  }, [chartData]);
 
   const toggleAccount = (id: string) => {
     setSelectedAccounts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -222,7 +241,15 @@ const HouseholdFinance = () => {
           <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Balance Over Time</h3>
-              <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowTaxYears(!showTaxYears)}
+                  className={`h-7 px-2.5 rounded-lg text-[10px] font-medium flex items-center gap-1 transition-colors ${showTaxYears ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                >
+                  <CalendarRange className="w-3 h-3" />
+                  Tax years
+                </button>
+                <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
                 <DialogTrigger asChild>
                   <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Log Balance</button>
                 </DialogTrigger>
@@ -252,11 +279,15 @@ const HouseholdFinance = () => {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
             <div className="h-56 sm:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(40, 18%, 86%)" />
+                  {showTaxYears && (taxYearAreas as any[]).map((area, i) => (
+                    <ReferenceArea key={i} x1={area.x1} x2={area.x2} fill="hsl(168, 55%, 36%)" fillOpacity={area.shade ? 0.09 : 0.03} label={{ value: area.label, position: "insideTopLeft", fontSize: 9, fill: "hsl(220, 10%, 44%)" }} />
+                  ))}
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(220, 10%, 44%)" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "hsl(220, 10%, 44%)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `£${(v / 1000).toFixed(0)}k`} width={42} />
                   <Tooltip content={<CustomTooltip />} />
