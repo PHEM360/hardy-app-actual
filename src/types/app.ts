@@ -340,6 +340,7 @@ export interface HouseholdItem {
   reminders?: HouseholdReminder[];
   pushEnabled?: boolean;
   history?: HouseholdHistoryEntry[];
+  tileBg?: string;             // key into TILE_BACKGROUNDS catalogue
   createdAt?: any;
 }
 

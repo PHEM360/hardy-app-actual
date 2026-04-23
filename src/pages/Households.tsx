@@ -82,6 +82,56 @@ import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAppUsers } from "@/hooks/useAppUsers";
 
+// ─── Tile background catalogue ────────────────────────────────────────────────
+
+export interface TileBgDef {
+  label: string;
+  gradient: string;   // CSS background value
+  dark?: boolean;     // true → white text on tile
+}
+
+export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
+  // ── Utilities / services
+  water:       { label: "Water",         gradient: "linear-gradient(135deg,#e0f2fe 0%,#bae6fd 60%,#e0f2fe 100%)" },
+  gas:         { label: "Gas",           gradient: "linear-gradient(135deg,#fef9c3 0%,#fde68a 60%,#fef9c3 100%)" },
+  electricity: { label: "Electric",      gradient: "linear-gradient(135deg,#eef2ff 0%,#c7d2fe 60%,#eef2ff 100%)" },
+  internet:    { label: "Broadband",     gradient: "linear-gradient(135deg,#f0fdfa 0%,#99f6e4 60%,#f0fdfa 100%)" },
+  phone:       { label: "Phone",         gradient: "linear-gradient(135deg,#f0f9ff 0%,#bae6fd 60%,#f0f9ff 100%)" },
+  mobile:      { label: "Mobile",        gradient: "linear-gradient(135deg,#fdf4ff 0%,#e9d5ff 60%,#fdf4ff 100%)" },
+  email:       { label: "Email",         gradient: "linear-gradient(135deg,#f8fafc 0%,#cbd5e1 60%,#f8fafc 100%)" },
+  // ── Insurance / protection
+  insurance:   { label: "Insurance",     gradient: "linear-gradient(135deg,#eff6ff 0%,#bfdbfe 60%,#eff6ff 100%)" },
+  fire:        { label: "Fire / Home",   gradient: "linear-gradient(135deg,#fff7ed 0%,#fdba74 60%,#fff7ed 100%)" },
+  life:        { label: "Life",          gradient: "linear-gradient(135deg,#fdf2f8 0%,#fbcfe8 60%,#fdf2f8 100%)" },
+  health:      { label: "Health",        gradient: "linear-gradient(135deg,#ecfdf5 0%,#86efac 60%,#ecfdf5 100%)" },
+  // ── Entertainment / subscriptions
+  streaming:   { label: "Streaming",     gradient: "linear-gradient(135deg,#1e1b4b 0%,#3730a3 60%,#1e1b4b 100%)", dark: true },
+  tv:          { label: "TV",            gradient: "linear-gradient(135deg,#0f172a 0%,#1e293b 60%,#334155 100%)", dark: true },
+  amazon:      { label: "Amazon Prime",  gradient: "linear-gradient(135deg,#082f49 0%,#0c4a6e 60%,#082f49 100%)", dark: true },
+  // ── Travel
+  travel:      { label: "Travel",        gradient: "linear-gradient(135deg,#ecfdf5 0%,#6ee7b7 60%,#ecfdf5 100%)" },
+  flights:     { label: "Flights",       gradient: "linear-gradient(160deg,#e0f2fe 0%,#7dd3fc 50%,#e0f2fe 100%)" },
+  // ── Vehicles
+  car:         { label: "Car",           gradient: "linear-gradient(135deg,#f1f5f9 0%,#94a3b8 60%,#f1f5f9 100%)" },
+  // ── Pets / dogs
+  pets:        { label: "Pets",          gradient: "linear-gradient(135deg,#fffbeb 0%,#fde68a 60%,#fffbeb 100%)" },
+  dogs:        { label: "Dogs",          gradient: "linear-gradient(135deg,#fef3c7 0%,#d97706 40%,#fef3c7 100%)" },
+  // ── Home / finance
+  home:        { label: "Home",          gradient: "linear-gradient(135deg,#fffbf7 0%,#fed7aa 60%,#fffbf7 100%)" },
+  mortgage:    { label: "Mortgage",      gradient: "linear-gradient(135deg,#f0fdf4 0%,#86efac 60%,#f0fdf4 100%)" },
+  council:     { label: "Council Tax",   gradient: "linear-gradient(135deg,#f5f3ff 0%,#c4b5fd 60%,#f5f3ff 100%)" },
+  finance:     { label: "Finance",       gradient: "linear-gradient(135deg,#fffbeb 0%,#fef08a 60%,#fffbeb 100%)" },
+  // ── Accent / general
+  ocean:       { label: "Ocean",         gradient: "linear-gradient(160deg,#0369a1 0%,#0ea5e9 50%,#0369a1 100%)", dark: true },
+  forest:      { label: "Forest",        gradient: "linear-gradient(160deg,#14532d 0%,#16a34a 50%,#14532d 100%)", dark: true },
+  slate:       { label: "Slate",         gradient: "linear-gradient(160deg,#1e293b 0%,#475569 50%,#1e293b 100%)", dark: true },
+  rose:        { label: "Rose",          gradient: "linear-gradient(160deg,#9f1239 0%,#e11d48 50%,#9f1239 100%)", dark: true },
+  arctic:      { label: "Arctic",        gradient: "linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 50%,#bfdbfe 100%)" },
+  stone:       { label: "Stone",         gradient: "linear-gradient(135deg,#fafaf9 0%,#e7e5e4 60%,#fafaf9 100%)" },
+  night:       { label: "Night",         gradient: "linear-gradient(160deg,#020617 0%,#0f172a 50%,#1e1b4b 100%)", dark: true },
+  neutral:     { label: "Plain",         gradient: "" },
+};
+
 // ─── Category meta ─────────────────────────────────────────────────────────────
 
 const CATEGORY_META: Record<
@@ -286,24 +336,29 @@ function ItemTile({
   const costStr = formatCost(item.costAmount, item.costPeriod, item.costPeriodCustom)
     ?? (item.monthlyPremium != null ? `£${item.monthlyPremium}/mo` : null);
 
+  const bg = item.tileBg ? TILE_BACKGROUNDS[item.tileBg] : null;
+  const isDark = bg?.dark ?? false;
+
   return (
     <div className="relative group">
       <button
         onClick={onOpen}
-        className="w-full text-left rounded-2xl border bg-card p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col gap-2"
+        className="w-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col gap-2 overflow-hidden"
+        style={bg?.gradient ? { background: bg.gradient } : undefined}
       >
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-          <Icon className="w-5 h-5" />
+        {/* Icon badge */}
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? "bg-white/15" : color}`}>
+          <Icon className={`w-5 h-5 ${isDark ? "text-white" : ""}`} />
         </div>
-        <div className="font-medium text-sm leading-tight">{item.type}</div>
-        <div className="text-xs text-muted-foreground truncate">{item.provider}</div>
-        {costStr && <div className="text-xs font-semibold">{costStr}</div>}
+        <div className={`font-medium text-sm leading-tight ${isDark ? "text-white" : ""}`}>{item.type}</div>
+        <div className={`text-xs truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>{item.provider}</div>
+        {costStr && <div className={`text-xs font-semibold ${isDark ? "text-white/90" : ""}`}>{costStr}</div>}
         <RenewalBadge days={days} />
         {item.pushEnabled && (
-          <Bell className="w-3 h-3 text-muted-foreground absolute bottom-3 right-3" />
+          <Bell className={`w-3 h-3 absolute bottom-3 right-3 ${isDark ? "text-white/50" : "text-muted-foreground"}`} />
         )}
         {(item.history?.length ?? 0) > 0 && (
-          <History className="w-3 h-3 text-muted-foreground absolute bottom-3 left-3" />
+          <History className={`w-3 h-3 absolute bottom-3 left-3 ${isDark ? "text-white/50" : "text-muted-foreground"}`} />
         )}
       </button>
 
@@ -351,6 +406,7 @@ const getBlankForm = (): Omit<HouseholdItem, "id" | "createdAt"> => ({
   pushEnabled: false,
   reminders: [{ amount: 7, unit: "days", via: "push" }],
   history: [],
+  tileBg: "",
 });
 
 function AddEditDialog({
@@ -607,8 +663,8 @@ function AddEditDialog({
             )}
           </div>
 
-          {/* Dates — stacked on mobile, side-by-side on sm+ */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Dates — stacked to avoid calendar popover overlap */}
+          <div className="grid grid-cols-1 gap-3">
             <DatePicker
               label="Start Date"
               value={form.startDate ?? ""}
@@ -638,6 +694,39 @@ function AddEditDialog({
               </Select>
             </div>
           )}
+
+          {/* Tile Background */}
+          <div className="space-y-2">
+            <Label>Tile Background</Label>
+            <div className="grid grid-cols-6 gap-1.5">
+              {/* "None" swatch */}
+              <button
+                type="button"
+                title="None"
+                onClick={() => set("tileBg", "")}
+                className={`h-8 rounded-lg border-2 bg-card transition-all ${
+                  !form.tileBg ? "border-primary scale-105 shadow-md" : "border-muted hover:border-primary/40"
+                }`}
+              />
+              {Object.entries(TILE_BACKGROUNDS).map(([key, bgDef]) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={bgDef.label}
+                  onClick={() => set("tileBg", form.tileBg === key ? "" : key)}
+                  style={{ background: bgDef.gradient }}
+                  className={`h-8 rounded-lg border-2 transition-all ${
+                    form.tileBg === key
+                      ? "border-primary scale-105 shadow-md"
+                      : "border-transparent hover:border-primary/40"
+                  }`}
+                />
+              ))}
+            </div>
+            {form.tileBg && TILE_BACKGROUNDS[form.tileBg] && (
+              <p className="text-[10px] text-muted-foreground">{TILE_BACKGROUNDS[form.tileBg].label}</p>
+            )}
+          </div>
 
           {/* Notes */}
           <div className="space-y-1.5">
