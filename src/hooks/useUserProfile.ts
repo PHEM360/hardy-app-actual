@@ -13,6 +13,7 @@ export interface UserProfile {
   role: "superadmin" | "admin" | "member";
   enabledFeatures: FeatureKey[];
   householdId?: string;
+  householdIds?: string[];   // user can belong to multiple named households
   suspended: boolean;
   avatarType?: string;
   avatarEmoji?: string;
@@ -59,6 +60,7 @@ export function useUserProfile() {
           role,
           enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
           householdId: data.householdId,
+          householdIds: Array.isArray(data.householdIds) ? data.householdIds : (data.householdId ? [data.householdId] : []),
           suspended: data.enabled === false,
           avatarType: data.avatarType ?? "initials",
           avatarEmoji: data.avatarEmoji ?? "😊",

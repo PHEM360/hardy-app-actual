@@ -12,6 +12,8 @@ import { signOut, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useHouseholdNames } from "@/hooks/useHouseholdNames";
+import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -76,13 +78,14 @@ const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { profile, saveProfile } = useUserProfile();
+  const existingHouseholdNames = useHouseholdNames();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [pushNotifications, setPushNotifications] = useState(true);
 
   const [firstName, setFirstName] = useState(user?.displayName || "");
   const [surname, setSurname] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName || "");
-  const [householdName, setHouseholdName] = useState("");
+  const [householdNames, setHouseholdNames] = useState<string[]>([]);
 
   const [avatarType, setAvatarType] = useState<AvatarType>("initials");
   const [avatarEmoji, setAvatarEmoji] = useState("😊");
@@ -105,7 +108,7 @@ const Settings = () => {
     if (profile.firstName) setFirstName(profile.firstName);
     if (profile.surname) setSurname(profile.surname);
     if (profile.displayName) setDisplayName(profile.displayName);
-    if (profile.householdId) setHouseholdName(profile.householdId);
+    if (profile.householdId) setHouseholdNames(profile.householdIds?.length ? profile.householdIds : [profile.householdId]);
     if (profile.avatarType) setAvatarType(profile.avatarType as AvatarType);
     if (profile.avatarEmoji) setAvatarEmoji(profile.avatarEmoji);
     if (profile.avatarInitials) setAvatarInitials(profile.avatarInitials);
@@ -128,7 +131,8 @@ const Settings = () => {
         firstName: firstName.trim(),
         surname: surname.trim(),
         displayName: name,
-        householdId: householdName.trim() || undefined,
+        householdId: householdNames[0] || undefined,
+        householdIds: householdNames.length ? householdNames : undefined,
         avatarType,
         avatarEmoji,
         avatarInitials,
@@ -261,9 +265,14 @@ const Settings = () => {
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="Leave blank to use first name" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Household Name <span className="text-muted-foreground">(optional)</span></Label>
-            <Input value={householdName} onChange={(e) => setHouseholdName(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="e.g. The Hardy House" />
-            <p className="text-[10px] text-muted-foreground">This name appears as the title on your Household page.</p>
+            <Label className="text-xs">Household Name(s) <span className="text-muted-foreground">(optional)</span></Label>
+            <CreatableMultiSelect
+              value={householdNames}
+              onChange={setHouseholdNames}
+              options={existingHouseholdNames}
+              placeholder="Select or type a household name…"
+            />
+            <p className="text-[10px] text-muted-foreground">The first name appears as the title on your Household page. You can belong to more than one.</p>
           </div>
           {saveProfileError && (
             <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveProfileError}</p>

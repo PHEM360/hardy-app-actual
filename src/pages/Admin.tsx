@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
 
 const ADMIN_EMAIL = "chris.hardy.07@googlemail.com";
@@ -28,6 +30,7 @@ interface MockUser {
   permissions: string[];
   enabledFeatures: FeatureKey[];
   householdId?: string;
+  householdIds?: string[];
 }
 
 // Demo/test users have been removed.
@@ -119,6 +122,7 @@ const Admin = () => {
             permissions: Array.isArray(data.permissions) ? data.permissions : [],
             enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
             householdId: data.householdId ?? undefined,
+            householdIds: Array.isArray(data.householdIds) ? data.householdIds : (data.householdId ? [data.householdId] : []),
           } as MockUser;
         });
 
@@ -266,21 +270,23 @@ const Admin = () => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, enabledFeatures: features } : u));
   };
 
-  const updateHousehold = async (userId: string, householdId: string) => {
-    await updateDoc(doc(db, "users", userId), { householdId: householdId || null });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, householdId: householdId || undefined } : u));
+  const updateHousehold = async (userId: string, householdIds: string[]) => {
+    const householdId = householdIds[0] || null;
+    await updateDoc(doc(db, "users", userId), { householdId, householdIds: householdIds.length ? householdIds : [] });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, householdId: householdId ?? undefined, householdIds } : u));
   };
 
   // Local dialog edit state
   const [editRole, setEditRole] = useState<"member" | "admin" | "superadmin">("member");
-  const [editHousehold, setEditHousehold] = useState("");
+  const [editHouseholds, setEditHouseholds] = useState<string[]>([]);
+  const existingHouseholdNames = useHouseholdNames();
 
   // Sync local edit state when selected user changes
   useEffect(() => {
     if (!currentUser) return;
     const r = currentUser.role.toLowerCase() as "member" | "admin" | "superadmin";
     setEditRole(r);
-    setEditHousehold(currentUser.householdId ?? "");
+    setEditHouseholds(currentUser.householdIds ?? (currentUser.householdId ? [currentUser.householdId] : []));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUser]);
 
@@ -611,24 +617,22 @@ const Admin = () => {
 
                 {/* Household */}
                 <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Household</p>
-                  <div className="flex gap-2">
-                    <Input
-                      value={editHousehold}
-                      onChange={(e) => setEditHousehold(e.target.value)}
-                      placeholder="Household ID or name"
-                      className="h-9 rounded-lg text-xs flex-1"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 rounded-lg text-xs"
-                      disabled={actionLoading || editHousehold === (currentUser.householdId ?? "")}
-                      onClick={() => updateHousehold(currentUser.id, editHousehold)}
-                    >
-                      Save
-                    </Button>
-                  </div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Household(s)</p>
+                  <CreatableMultiSelect
+                    value={editHouseholds}
+                    onChange={setEditHouseholds}
+                    options={existingHouseholdNames}
+                    placeholder="Select or add a household…"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg text-xs w-full mt-1"
+                    disabled={actionLoading || JSON.stringify(editHouseholds) === JSON.stringify(currentUser.householdIds ?? [])}
+                    onClick={() => updateHousehold(currentUser.id, editHouseholds)}
+                  >
+                    Save households
+                  </Button>
                 </div>
 
                 {/* Feature Access */}

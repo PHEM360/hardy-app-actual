@@ -80,6 +80,7 @@ import { useHouseholdItems, useHouseholdSettings } from "@/hooks/useHousehold";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useAppUsers } from "@/hooks/useAppUsers";
 
 // ─── Category meta ─────────────────────────────────────────────────────────────
 
@@ -769,29 +770,55 @@ function AddEditDialog({
 
 // ─── Settings sheet ────────────────────────────────────────────────────────────
 
-function SettingsSheet({ open, onClose, settings, onSave }: {
+function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
   open: boolean;
   onClose: () => void;
   settings: HouseholdSettings;
   onSave: (s: HouseholdSettings) => void;
+  appUsers: { id: string; name: string; email: string }[];
 }) {
   const [members, setMembers] = useState<HouseholdMember[]>(settings.members);
   const [categories, setCategories] = useState<string[]>(settings.categories);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("👤");
   const [newCat, setNewCat] = useState("");
+  const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
+  const memberInputRef = useRef<HTMLInputElement>(null);
+  const memberContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMembers(settings.members);
     setCategories(settings.categories);
   }, [settings, open]);
 
+  // Close member dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!memberContainerRef.current?.contains(e.target as Node)) setMemberDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const save = (m: HouseholdMember[], c: string[]) => onSave({ members: m, categories: c });
 
-  const addMember = () => {
+  // Filtered app users: those not already added as members
+  const filteredAppUsers = appUsers.filter(
+    (u) => !members.some((m) => m.userId === u.id || m.name.toLowerCase() === u.name.toLowerCase())
+  ).filter((u) => !newName || u.name.toLowerCase().includes(newName.toLowerCase()) || u.email.toLowerCase().includes(newName.toLowerCase()));
+
+  const showManualAdd = newName.trim() && !appUsers.some((u) => u.name.toLowerCase() === newName.trim().toLowerCase());
+
+  const addAppUser = (appUser: { id: string; name: string; email: string }) => {
+    const next = [...members, { id: crypto.randomUUID(), name: appUser.name, role: "member" as const, emoji: "👤", userId: appUser.id }];
+    setMembers(next); save(next, categories); setNewName(""); setMemberDropdownOpen(false);
+  };
+
+  const addManualMember = () => {
     if (!newName.trim()) return;
     const next = [...members, { id: crypto.randomUUID(), name: newName.trim(), role: "member" as const, emoji: newEmoji }];
     setMembers(next); save(next, categories); setNewName(""); setNewEmoji("👤");
+    setMemberDropdownOpen(false);
   };
 
   const removeMember = (id: string) => {
@@ -851,31 +878,70 @@ function SettingsSheet({ open, onClose, settings, onSave }: {
               <p className="text-xs text-muted-foreground text-center py-2">No members yet</p>
             )}
 
-            {/* Add member row */}
-            <div className="flex gap-2 pt-1">
-              <div className="w-10 h-10 rounded-xl border bg-background flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+            {/* Add member — app user or manual */}
+            <div ref={memberContainerRef} className="relative pt-1">
+              <div className="flex gap-2">
+                <div className="w-10 h-10 rounded-xl border bg-background flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                  <Input
+                    className="w-full h-full border-0 text-center text-xl p-0 bg-transparent focus-visible:ring-0 shadow-none"
+                    value={newEmoji}
+                    onChange={(e) => setNewEmoji(e.target.value)}
+                    placeholder="👤"
+                  />
+                </div>
                 <Input
-                  className="w-full h-full border-0 text-center text-xl p-0 bg-transparent focus-visible:ring-0 shadow-none"
-                  value={newEmoji}
-                  onChange={(e) => setNewEmoji(e.target.value)}
-                  placeholder="👤"
+                  ref={memberInputRef}
+                  className="flex-1 rounded-xl"
+                  placeholder="Search app users or type a name…"
+                  value={newName}
+                  onChange={(e) => { setNewName(e.target.value); setMemberDropdownOpen(true); }}
+                  onFocus={() => setMemberDropdownOpen(true)}
+                  onKeyDown={(e) => e.key === "Enter" && showManualAdd && addManualMember()}
                 />
+                <Button
+                  onClick={addManualMember}
+                  disabled={!newName.trim()}
+                  size="sm"
+                  className="rounded-xl px-3 shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
-              <Input
-                className="flex-1 rounded-xl"
-                placeholder="Member name…"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addMember()}
-              />
-              <Button
-                onClick={addMember}
-                disabled={!newName.trim()}
-                size="sm"
-                className="rounded-xl px-3 shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
+
+              {/* Dropdown */}
+              {memberDropdownOpen && (filteredAppUsers.length > 0 || showManualAdd) && (
+                <div className="absolute top-full left-0 right-0 mt-1 rounded-xl border bg-popover shadow-lg z-50 overflow-hidden max-h-48 overflow-y-auto">
+                  {filteredAppUsers.length > 0 && (
+                    <>
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">App Users</p>
+                      {filteredAppUsers.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); addAppUser(u); }}
+                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-accent transition-colors flex items-center gap-2"
+                        >
+                          <span className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">{u.name.charAt(0)}</span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-card-foreground truncate">{u.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{u.email}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {showManualAdd && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); addManualMember(); }}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-accent transition-colors flex items-center gap-2 text-primary border-t border-border/40"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span>Add <span className="font-semibold">"{newName.trim()}"</span> manually</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
@@ -1140,6 +1206,7 @@ export default function Households() {
   const { permission, requestPermission, checkAndScheduleAll, scheduleReminder } = usePushNotifications();
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const appUsers = useAppUsers();
 
   // Auto-include the logged-in user in the members list if not already present
   const effectiveMembers: HouseholdMember[] = (() => {
@@ -1241,7 +1308,7 @@ export default function Households() {
   const memberItems = (id: string) => items.filter((i) => i.assignedTo === id);
 
   return (
-    <FeaturePageShell title={profile?.householdId || "Household"} subtitle="Manage household items, policies & renewals">
+    <FeaturePageShell title={profile?.householdIds?.[0] || profile?.householdId || "Household"} subtitle="Manage household items, policies & renewals">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <Button size="sm" className="rounded-full" onClick={openAdd}>
@@ -1294,6 +1361,7 @@ export default function Households() {
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onSave={saveSettings}
+        appUsers={appUsers}
       />
 
       {/* Add / Edit */}

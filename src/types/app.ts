@@ -299,6 +299,7 @@ export interface HouseholdMember {
   name: string;
   role: "admin" | "member";
   emoji?: string;
+  userId?: string;   // links to a registered app user (optional)
 }
 
 export interface HouseholdReminder {
