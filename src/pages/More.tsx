@@ -21,7 +21,7 @@ const MORE_ITEMS = [
   { label: "Household Finance", icon: Home, route: "/household-finance" },
   { label: "IHT Planner", icon: Calculator, route: "/inheritance" },
   { label: "Households", icon: Users, route: "/households" },
-  { label: "Weight Tracker", icon: Activity, route: "/weight" },
+  { label: "Health", icon: Activity, route: "/weight" },
   { label: "Tattersalls", icon: Building, route: "/tattersalls" },
   { label: "Themes", icon: Palette, route: "/themes" },
   { label: "Notifications", icon: Bell, route: "/notifications" },

@@ -34,7 +34,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/admin",             label: "Admin" },
   { path: "/companies",         label: "Companies" },
   { path: "/login-details",     label: "Log In Details" },
-  { path: "/weight",            label: "Weight" },
+  { path: "/weight",            label: "Health" },
   { path: "/households",        label: "Households" },
   { path: "/household-finance", label: "Household Finance" },
   { path: "/tattersalls",       label: "Tattersalls" },

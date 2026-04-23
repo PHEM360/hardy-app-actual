@@ -20,7 +20,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/tasks":             { icon: CheckSquare,   label: "Tasks",      color: "hsl(260,55%,55%)",  gradient: "linear-gradient(135deg,hsl(260,55%,55%),hsl(270,50%,50%))" },
   "/companies":         { icon: Briefcase,     label: "Companies",  color: "hsl(210,50%,50%)",  gradient: "linear-gradient(135deg,hsl(210,50%,50%),hsl(220,45%,44%))" },
   "/login-details":     { icon: Key,           label: "Log Ins",    color: "hsl(265,55%,55%)",  gradient: "linear-gradient(135deg,hsl(265,55%,55%),hsl(275,50%,48%))" },
-  "/weight":            { icon: Activity,      label: "Weight",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,55%,40%),hsl(160,50%,35%))" },
+  "/weight":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,55%,40%),hsl(160,50%,35%))" },
   "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,60%,50%),hsl(20,55%,44%))" },
   "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,55%,40%),hsl(150,50%,35%))" },
   "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,50%,45%),hsl(205,45%,40%))" },
