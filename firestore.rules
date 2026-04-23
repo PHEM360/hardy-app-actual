@@ -79,17 +79,26 @@ service cloud.firestore {
     }
     
     // Pets collection - per-user with optional sharing
+    // Legacy pets (no ownerId) remain readable by all authenticated users during migration
     match /pets/{petId} {
       allow read: if isAuthenticated() && (
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
         request.auth.uid in resource.data.sharedWith
       );
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
         request.auth.uid in resource.data.sharedWith
       );
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.ownerId;
+      allow delete: if isAuthenticated() && (
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
+        request.auth.uid == resource.data.ownerId
+      );
     }
 
     // Finance - each user's personal accounts

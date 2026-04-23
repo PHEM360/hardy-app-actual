@@ -8,7 +8,6 @@ import {
   updateDoc,
   query,
   orderBy,
-  where,
   serverTimestamp,
   arrayUnion,
 } from "firebase/firestore";
@@ -86,12 +85,9 @@ export function usePets() {
       return;
     }
 
-    // Listen to pets owned by user
-    const ownedQ = query(collection(db, "pets"), where("ownerId", "==", user.uid), orderBy("name"));
-    // Listen to pets shared with user
-    const sharedQ = query(collection(db, "pets"), where("sharedWith", "array-contains", user.uid), orderBy("name"));
-
-    const petsMap = new Map<string, Pet>();
+    // Query all pets — filter client-side so legacy pets (no ownerId) remain visible
+    // and new pets are scoped to owner + sharedWith
+    const allQ = query(collection(db, "pets"), orderBy("name"));
 
     const toTyped = (d: any): Pet => ({
       id: d.id,
@@ -113,33 +109,25 @@ export function usePets() {
       insurance: d.data().insurance ?? DEFAULT_INSURANCE,
     });
 
-    const merge = () => {
-      setPets([...petsMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+    const unsub = onSnapshot(allQ, (snap) => {
+      const next = snap.docs
+        .map(toTyped)
+        .filter((p) =>
+          // Legacy pet (no ownerId) — visible to all authenticated users during migration
+          !p.ownerId ||
+          // Owned by current user
+          p.ownerId === user.uid ||
+          // Shared with current user
+          p.sharedWith.includes(user.uid)
+        );
+      setPets(next);
       setLoading(false);
-    };
+    }, () => {
+      setPets([]);
+      setLoading(false);
+    });
 
-    let ownedReady = false, sharedReady = false;
-
-    const unsubOwned = onSnapshot(ownedQ, (snap) => {
-      snap.docs.forEach(d => petsMap.set(d.id, toTyped(d)));
-      // Remove docs that are no longer in owned set
-      snap.docChanges().filter(c => c.type === "removed").forEach(c => {
-        if (petsMap.get(c.doc.id)?.ownerId === user.uid) petsMap.delete(c.doc.id);
-      });
-      ownedReady = true;
-      if (sharedReady) merge();
-    }, () => { ownedReady = true; if (sharedReady) merge(); });
-
-    const unsubShared = onSnapshot(sharedQ, (snap) => {
-      snap.docs.forEach(d => petsMap.set(d.id, toTyped(d)));
-      snap.docChanges().filter(c => c.type === "removed").forEach(c => {
-        if (petsMap.get(c.doc.id)?.ownerId !== user.uid) petsMap.delete(c.doc.id);
-      });
-      sharedReady = true;
-      if (ownedReady) merge();
-    }, () => { sharedReady = true; if (ownedReady) merge(); });
-
-    return () => { unsubOwned(); unsubShared(); };
+    return () => unsub();
   }, [user]);
 
   const addPet = useCallback(
