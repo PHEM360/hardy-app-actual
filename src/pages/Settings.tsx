@@ -82,6 +82,7 @@ const Settings = () => {
   const [firstName, setFirstName] = useState(user?.displayName || "");
   const [surname, setSurname] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [householdName, setHouseholdName] = useState("");
 
   const [avatarType, setAvatarType] = useState<AvatarType>("initials");
   const [avatarEmoji, setAvatarEmoji] = useState("😊");
@@ -104,6 +105,7 @@ const Settings = () => {
     if (profile.firstName) setFirstName(profile.firstName);
     if (profile.surname) setSurname(profile.surname);
     if (profile.displayName) setDisplayName(profile.displayName);
+    if (profile.householdId) setHouseholdName(profile.householdId);
     if (profile.avatarType) setAvatarType(profile.avatarType as AvatarType);
     if (profile.avatarEmoji) setAvatarEmoji(profile.avatarEmoji);
     if (profile.avatarInitials) setAvatarInitials(profile.avatarInitials);
@@ -126,6 +128,7 @@ const Settings = () => {
         firstName: firstName.trim(),
         surname: surname.trim(),
         displayName: name,
+        householdId: householdName.trim() || undefined,
         avatarType,
         avatarEmoji,
         avatarInitials,
@@ -256,6 +259,11 @@ const Settings = () => {
           <div className="space-y-1.5">
             <Label className="text-xs">Display Name <span className="text-muted-foreground">(optional)</span></Label>
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="Leave blank to use first name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Household Name <span className="text-muted-foreground">(optional)</span></Label>
+            <Input value={householdName} onChange={(e) => setHouseholdName(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="e.g. The Hardy House" />
+            <p className="text-[10px] text-muted-foreground">This name appears as the title on your Household page.</p>
           </div>
           {saveProfileError && (
             <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveProfileError}</p>

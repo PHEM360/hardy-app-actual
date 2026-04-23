@@ -1241,7 +1241,7 @@ export default function Households() {
   const memberItems = (id: string) => items.filter((i) => i.assignedTo === id);
 
   return (
-    <FeaturePageShell title="Household" subtitle="Manage household items, policies & renewals">
+    <FeaturePageShell title={profile?.householdId || "Household"} subtitle="Manage household items, policies & renewals">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <Button size="sm" className="rounded-full" onClick={openAdd}>

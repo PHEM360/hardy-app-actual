@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck } from "lucide-react";
+import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
 
@@ -192,6 +193,35 @@ const Admin = () => {
   // ── User management actions (write to Firestore) ──────────────────────────
 
   const [actionLoading, setActionLoading] = useState(false);
+
+  // ── Password reset ─────────────────────────────────────────────────────────
+  const [resetPwOpen, setResetPwOpen] = useState(false);
+  const [resetPwMode, setResetPwMode] = useState<"email" | "temp">("email");
+  const [tempPassword, setTempPassword] = useState("");
+  const [resetPwLoading, setResetPwLoading] = useState(false);
+  const [resetPwResult, setResetPwResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const doResetPassword = async () => {
+    if (!currentUser) return;
+    setResetPwLoading(true);
+    setResetPwResult(null);
+    try {
+      if (resetPwMode === "email") {
+        await sendPasswordResetEmail(auth, currentUser.email);
+        setResetPwResult({ ok: true, msg: `Reset link sent to ${currentUser.email}` });
+      } else {
+        // Set temporary password via Cloud Function
+        const call = httpsCallable(functions, "resetUserPassword");
+        await call({ uid: currentUser.id, newPassword: tempPassword });
+        setResetPwResult({ ok: true, msg: "Temporary password set successfully." });
+        setTempPassword("");
+      }
+    } catch (err: any) {
+      setResetPwResult({ ok: false, msg: err?.message ?? "Failed to reset password." });
+    } finally {
+      setResetPwLoading(false);
+    }
+  };
 
   const changeRole = async (userId: string, newRole: "member" | "admin" | "superadmin") => {
     setActionLoading(true);
@@ -639,6 +669,14 @@ const Admin = () => {
                     variant="outline"
                     className="w-full h-9 rounded-lg text-xs justify-start gap-2"
                     disabled={actionLoading}
+                    onClick={() => { setResetPwResult(null); setTempPassword(""); setResetPwMode("email"); setResetPwOpen(true); }}
+                  >
+                    <KeyRound className="w-3.5 h-3.5" /> Reset Password
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full h-9 rounded-lg text-xs justify-start gap-2"
+                    disabled={actionLoading}
                     onClick={() => toggleSuspend(currentUser.id, currentUser.status)}
                   >
                     {currentUser.status === "active"
@@ -660,6 +698,66 @@ const Admin = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={resetPwOpen} onOpenChange={(o) => { setResetPwOpen(o); if (!o) setResetPwResult(null); }}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2"><KeyRound className="w-4 h-4" /> Reset Password</DialogTitle>
+            <DialogDescription>Choose how to reset the password for {currentUser?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {/* Mode toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-border/50 text-xs font-medium">
+              <button
+                onClick={() => { setResetPwMode("email"); setResetPwResult(null); }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${resetPwMode === "email" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted"}`}
+              >
+                <Mail className="w-3.5 h-3.5" /> Send Reset Link
+              </button>
+              <button
+                onClick={() => { setResetPwMode("temp"); setResetPwResult(null); }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${resetPwMode === "temp" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted"}`}
+              >
+                <KeyRound className="w-3.5 h-3.5" /> Set Temporary
+              </button>
+            </div>
+
+            {resetPwMode === "email" ? (
+              <p className="text-xs text-muted-foreground">
+                A password reset link will be emailed to <span className="font-medium text-card-foreground">{currentUser?.email}</span>. The link expires after 1 hour.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs">New Temporary Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Min 8 chars, 1 number, 1 special char"
+                  value={tempPassword}
+                  onChange={(e) => setTempPassword(e.target.value)}
+                  className="h-10 rounded-xl text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground">The user should change this after logging in.</p>
+              </div>
+            )}
+
+            {resetPwResult && (
+              <p className={`text-xs rounded-lg px-3 py-2 ${resetPwResult.ok ? "text-green-700 bg-green-50 dark:bg-green-900/20" : "text-destructive bg-destructive/10"}`}>
+                {resetPwResult.ok ? "✓ " : "✗ "}{resetPwResult.msg}
+              </p>
+            )}
+
+            <Button
+              onClick={doResetPassword}
+              disabled={resetPwLoading || (resetPwMode === "temp" && !tempPassword.trim())}
+              className="w-full h-10 rounded-xl bg-gradient-primary text-sm"
+            >
+              {resetPwLoading ? "Processing…" : resetPwMode === "email" ? "Send Reset Email" : "Set Password"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </FeaturePageShell>
   );
 };
