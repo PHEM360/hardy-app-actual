@@ -120,6 +120,9 @@ service cloud.firestore {
     match /weightTracker/{userId}/botox/{recordId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
+    match /weightTracker/{userId}/bloodPressure/{entryId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
 
     // Notifications - per user
     match /notifications/{userId}/items/{notifId} {
