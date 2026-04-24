@@ -301,13 +301,27 @@ function daysUntil(dateStr?: string) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+function formatDaysLeft(days: number): string {
+  if (days <= 30) return `${days}d`;
+  const years  = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  const rem    = days % 30;
+  const parts: string[] = [];
+  if (years  > 0) parts.push(`${years}y`);
+  if (months > 0) parts.push(`${months}mo`);
+  if (rem    > 0) parts.push(`${rem}d`);
+  return parts.join(" ");
+}
+
 function RenewalBadge({ days }: { days: number | null }) {
   if (days === null) return null;
   if (days < 0)
     return <span className="text-xs font-medium text-red-500">Expired</span>;
+  if (days <= 7)
+    return <span className="text-xs font-semibold text-red-500">{formatDaysLeft(days)} left</span>;
   if (days <= 30)
-    return <span className="text-xs font-medium text-amber-500">{days}d left</span>;
-  return <span className="text-xs text-muted-foreground">{days}d left</span>;
+    return <span className="text-xs font-medium text-amber-500">{formatDaysLeft(days)} left</span>;
+  return <span className="text-xs text-muted-foreground">{formatDaysLeft(days)} left</span>;
 }
 
 // ─── Cost helpers ──────────────────────────────────────────────────────────────
