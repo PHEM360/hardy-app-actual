@@ -126,13 +126,13 @@ import { useAppUsers } from "@/hooks/useAppUsers";
 
 // ─── Tile background catalogue ────────────────────────────────────────────────
 
-export interface TileBgDef {
+interface TileBgDef {
   label: string;
   gradient: string;   // CSS background value
   dark?: boolean;     // true → white text on tile
 }
 
-export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
+const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
   // ── Utilities / services (soft pastels)
   water:       { label: "Water",         gradient: "linear-gradient(135deg,#e0f2fe 0%,#bae6fd 60%,#e0f2fe 100%)" },
   gas:         { label: "Gas",           gradient: "linear-gradient(135deg,#fef9c3 0%,#fde68a 60%,#fef9c3 100%)" },
@@ -198,12 +198,12 @@ export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
 
 // ─── Tile icon catalogue ───────────────────────────────────────────────────────
 
-export interface TileIconDef {
+interface TileIconDef {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export const TILE_ICONS: Record<string, TileIconDef> = {
+const TILE_ICONS: Record<string, TileIconDef> = {
   // Utilities
   droplets:     { label: "Water",        icon: Droplets },
   flame:        { label: "Gas / Fire",   icon: Flame },
