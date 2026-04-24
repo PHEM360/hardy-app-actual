@@ -64,6 +64,48 @@ import {
   Camera,
   FileText,
   Loader2,
+  // ── Additional tile icons
+  Droplets,
+  Flame,
+  Thermometer,
+  Router,
+  Monitor,
+  Smartphone,
+  Shield,
+  ShieldCheck,
+  Lock,
+  Umbrella,
+  CreditCard,
+  PiggyBank,
+  Wallet,
+  Banknote,
+  Receipt,
+  Key,
+  DoorOpen,
+  Sofa,
+  Bed,
+  Plane,
+  Train,
+  Bus,
+  Bike,
+  Dog,
+  Cat,
+  Bird,
+  Fish,
+  Tv,
+  Film,
+  Music,
+  Headphones,
+  Gamepad2,
+  Activity,
+  Stethoscope,
+  Pill,
+  ShoppingCart,
+  Coffee,
+  TreePine,
+  Sun,
+  Cloud,
+  Dumbbell,
 } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -91,7 +133,7 @@ export interface TileBgDef {
 }
 
 export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
-  // ── Utilities / services
+  // ── Utilities / services (soft pastels)
   water:       { label: "Water",         gradient: "linear-gradient(135deg,#e0f2fe 0%,#bae6fd 60%,#e0f2fe 100%)" },
   gas:         { label: "Gas",           gradient: "linear-gradient(135deg,#fef9c3 0%,#fde68a 60%,#fef9c3 100%)" },
   electricity: { label: "Electric",      gradient: "linear-gradient(135deg,#eef2ff 0%,#c7d2fe 60%,#eef2ff 100%)" },
@@ -121,7 +163,7 @@ export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
   mortgage:    { label: "Mortgage",      gradient: "linear-gradient(135deg,#f0fdf4 0%,#86efac 60%,#f0fdf4 100%)" },
   council:     { label: "Council Tax",   gradient: "linear-gradient(135deg,#f5f3ff 0%,#c4b5fd 60%,#f5f3ff 100%)" },
   finance:     { label: "Finance",       gradient: "linear-gradient(135deg,#fffbeb 0%,#fef08a 60%,#fffbeb 100%)" },
-  // ── Accent / general
+  // ── Vivid accent (dark)
   ocean:       { label: "Ocean",         gradient: "linear-gradient(160deg,#0369a1 0%,#0ea5e9 50%,#0369a1 100%)", dark: true },
   forest:      { label: "Forest",        gradient: "linear-gradient(160deg,#14532d 0%,#16a34a 50%,#14532d 100%)", dark: true },
   slate:       { label: "Slate",         gradient: "linear-gradient(160deg,#1e293b 0%,#475569 50%,#1e293b 100%)", dark: true },
@@ -130,6 +172,101 @@ export const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
   stone:       { label: "Stone",         gradient: "linear-gradient(135deg,#fafaf9 0%,#e7e5e4 60%,#fafaf9 100%)" },
   night:       { label: "Night",         gradient: "linear-gradient(160deg,#020617 0%,#0f172a 50%,#1e1b4b 100%)", dark: true },
   neutral:     { label: "Plain",         gradient: "" },
+
+  // ── 20 extra styles ──────────────────────────────────────────────────────────
+  coral:       { label: "Coral",         gradient: "radial-gradient(ellipse at top left,#fecdd3 0%,#fda4af 50%,#fb7185 100%)" },
+  mint:        { label: "Mint",          gradient: "linear-gradient(135deg,#d1fae5 0%,#6ee7b7 50%,#34d399 100%)" },
+  lavender:    { label: "Lavender",      gradient: "linear-gradient(150deg,#ede9fe 0%,#ddd6fe 50%,#c4b5fd 100%)" },
+  sunset:      { label: "Sunset",        gradient: "linear-gradient(135deg,#f97316 0%,#ec4899 50%,#8b5cf6 100%)", dark: true },
+  dawn:        { label: "Dawn",          gradient: "linear-gradient(160deg,#fff1f2 0%,#ffe4e6 40%,#fecdd3 100%)" },
+  steel:       { label: "Steel",         gradient: "linear-gradient(135deg,#94a3b8 0%,#64748b 60%,#475569 100%)", dark: true },
+  cobalt:      { label: "Cobalt",        gradient: "linear-gradient(135deg,#1d4ed8 0%,#3b82f6 60%,#1d4ed8 100%)", dark: true },
+  amber:       { label: "Amber",         gradient: "linear-gradient(135deg,#92400e 0%,#d97706 60%,#f59e0b 100%)", dark: true },
+  crimson:     { label: "Crimson",       gradient: "linear-gradient(135deg,#7f1d1d 0%,#b91c1c 60%,#ef4444 100%)", dark: true },
+  teal:        { label: "Teal",          gradient: "linear-gradient(135deg,#134e4a 0%,#0d9488 60%,#2dd4bf 100%)", dark: true },
+  sage:        { label: "Sage",          gradient: "linear-gradient(135deg,#ecfdf5 0%,#d1fae5 40%,#a7f3d0 100%)" },
+  sand:        { label: "Sand",          gradient: "linear-gradient(135deg,#fef9c3 0%,#fef3c7 50%,#fde68a 100%)" },
+  plum:        { label: "Plum",          gradient: "linear-gradient(135deg,#4a044e 0%,#7e22ce 60%,#a855f7 100%)", dark: true },
+  copper:      { label: "Copper",        gradient: "linear-gradient(135deg,#92400e 0%,#b45309 40%,#d97706 80%,#92400e 100%)", dark: true },
+  navy:        { label: "Navy",          gradient: "linear-gradient(160deg,#172554 0%,#1e3a8a 50%,#1d4ed8 100%)", dark: true },
+  jade:        { label: "Jade",          gradient: "linear-gradient(135deg,#052e16 0%,#14532d 50%,#166534 100%)", dark: true },
+  dusk:        { label: "Dusk",          gradient: "linear-gradient(160deg,#312e81 0%,#4c1d95 40%,#1e1b4b 100%)", dark: true },
+  gold:        { label: "Gold",          gradient: "linear-gradient(135deg,#78350f 0%,#d97706 40%,#fbbf24 70%,#d97706 100%)", dark: true },
+  storm:       { label: "Storm",         gradient: "linear-gradient(160deg,#1e293b 0%,#334155 50%,#475569 100%)", dark: true },
+  blush:       { label: "Blush",         gradient: "radial-gradient(ellipse at bottom right,#fce7f3 0%,#fbcfe8 50%,#f9a8d4 100%)" },
+};
+
+// ─── Tile icon catalogue ───────────────────────────────────────────────────────
+
+export interface TileIconDef {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+export const TILE_ICONS: Record<string, TileIconDef> = {
+  // Utilities
+  droplets:     { label: "Water",        icon: Droplets },
+  flame:        { label: "Gas / Fire",   icon: Flame },
+  zap:          { label: "Electricity",  icon: Zap },
+  thermometer:  { label: "Heating",      icon: Thermometer },
+  // Internet / Tech
+  wifi:         { label: "Wi-Fi",        icon: Wifi },
+  router:       { label: "Broadband",    icon: Router },
+  monitor:      { label: "Monitor",      icon: Monitor },
+  smartphone:   { label: "Mobile",       icon: Smartphone },
+  phone_icon:   { label: "Phone",        icon: Phone },
+  // Insurance / Protection
+  shield:       { label: "Insurance",    icon: Shield },
+  shield_check: { label: "Protected",    icon: ShieldCheck },
+  lock:         { label: "Security",     icon: Lock },
+  umbrella:     { label: "Cover",        icon: Umbrella },
+  // Finance
+  credit_card:  { label: "Card",         icon: CreditCard },
+  piggy_bank:   { label: "Savings",      icon: PiggyBank },
+  wallet:       { label: "Wallet",       icon: Wallet },
+  banknote:     { label: "Cash",         icon: Banknote },
+  receipt:      { label: "Bills",        icon: Receipt },
+  landmark:     { label: "Bank",         icon: Landmark },
+  trending_up:  { label: "Investments",  icon: TrendingUp },
+  // Home
+  home_icon:    { label: "Home",         icon: Home },
+  key:          { label: "Keys",         icon: Key },
+  door:         { label: "Entry",        icon: DoorOpen },
+  sofa:         { label: "Living Room",  icon: Sofa },
+  bed:          { label: "Bedroom",      icon: Bed },
+  building:     { label: "Building",     icon: Building2 },
+  // Travel / Transport
+  plane:        { label: "Flights",      icon: Plane },
+  car_icon:     { label: "Car",          icon: Car },
+  train:        { label: "Train",        icon: Train },
+  bus:          { label: "Bus",          icon: Bus },
+  bike:         { label: "Cycling",      icon: Bike },
+  // Pets
+  paw:          { label: "Pets",         icon: PawPrint },
+  dog:          { label: "Dog",          icon: Dog },
+  cat:          { label: "Cat",          icon: Cat },
+  bird:         { label: "Bird",         icon: Bird },
+  fish:         { label: "Fish",         icon: Fish },
+  // Entertainment
+  tv:           { label: "TV",           icon: Tv },
+  film:         { label: "Films",        icon: Film },
+  music:        { label: "Music",        icon: Music },
+  headphones:   { label: "Audio",        icon: Headphones },
+  gamepad:      { label: "Gaming",       icon: Gamepad2 },
+  package_icon: { label: "Subscriptions",icon: Package },
+  // Health / Life
+  heart:        { label: "Health / Life",icon: Heart },
+  activity:     { label: "Activity",     icon: Activity },
+  stethoscope:  { label: "Medical",      icon: Stethoscope },
+  pill:         { label: "Medication",   icon: Pill },
+  dumbbell:     { label: "Fitness",      icon: Dumbbell },
+  // Shopping / Lifestyle
+  shopping:     { label: "Shopping",     icon: ShoppingCart },
+  coffee:       { label: "Coffee",       icon: Coffee },
+  // Nature / Environment
+  tree:         { label: "Garden",       icon: TreePine },
+  sun:          { label: "Solar",        icon: Sun },
+  cloud:        { label: "Cloud",        icon: Cloud },
 };
 
 // ─── Category meta ─────────────────────────────────────────────────────────────
@@ -331,7 +468,7 @@ function ItemTile({
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const { icon: Icon, color } = getCategoryMeta(item.type);
+  const { icon: CategoryIcon, color } = getCategoryMeta(item.type);
   const days = daysUntil(item.endDate);
   const costStr = formatCost(item.costAmount, item.costPeriod, item.costPeriodCustom)
     ?? (item.monthlyPremium != null ? `£${item.monthlyPremium}/mo` : null);
@@ -339,26 +476,49 @@ function ItemTile({
   const bg = item.tileBg ? TILE_BACKGROUNDS[item.tileBg] : null;
   const isDark = bg?.dark ?? false;
 
+  // Resolve the icon: custom selection → category default
+  const iconDef = item.tileIcon ? TILE_ICONS[item.tileIcon] : null;
+  const TileIcon = iconDef?.icon ?? CategoryIcon;
+
+  const iconBg = isDark ? "bg-white/15" : color;
+  const iconColor = isDark ? "text-white" : "";
+
   return (
-    <div className="relative group">
+    <div className="relative group h-full">
       <button
         onClick={onOpen}
-        className="w-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col gap-2 overflow-hidden"
+        className="w-full h-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[10rem]"
         style={bg?.gradient ? { background: bg.gradient } : undefined}
       >
-        {/* Icon badge */}
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? "bg-white/15" : color}`}>
-          <Icon className={`w-5 h-5 ${isDark ? "text-white" : ""}`} />
+        {/* Icon badge — always same size */}
+        <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${iconBg}`}>
+          <TileIcon className={`w-5 h-5 ${iconColor}`} />
         </div>
-        <div className={`font-medium text-sm leading-tight ${isDark ? "text-white" : ""}`}>{item.type}</div>
-        <div className={`text-xs truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>{item.provider}</div>
-        {costStr && <div className={`text-xs font-semibold ${isDark ? "text-white/90" : ""}`}>{costStr}</div>}
-        <RenewalBadge days={days} />
+
+        {/* Main content — grows to fill available space */}
+        <div className="flex-1 flex flex-col gap-0.5 mt-2 min-w-0">
+          <div className={`font-medium text-sm leading-snug line-clamp-2 ${isDark ? "text-white" : ""}`}>
+            {item.type}
+          </div>
+          <div className={`text-xs truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>
+            {item.provider}
+          </div>
+        </div>
+
+        {/* Footer — always at bottom */}
+        <div className="flex flex-col gap-1 mt-2 shrink-0">
+          {costStr && (
+            <div className={`text-xs font-semibold ${isDark ? "text-white/90" : ""}`}>{costStr}</div>
+          )}
+          <RenewalBadge days={days} />
+        </div>
+
+        {/* Floating micro-indicators */}
         {item.pushEnabled && (
-          <Bell className={`w-3 h-3 absolute bottom-3 right-3 ${isDark ? "text-white/50" : "text-muted-foreground"}`} />
+          <Bell className={`w-3 h-3 absolute bottom-3 right-3 ${isDark ? "text-white/40" : "text-muted-foreground"}`} />
         )}
         {(item.history?.length ?? 0) > 0 && (
-          <History className={`w-3 h-3 absolute bottom-3 left-3 ${isDark ? "text-white/50" : "text-muted-foreground"}`} />
+          <History className={`w-3 h-3 absolute bottom-3 ${item.pushEnabled ? "right-7" : "right-3"} ${isDark ? "text-white/40" : "text-muted-foreground"}`} />
         )}
       </button>
 
@@ -407,6 +567,7 @@ const getBlankForm = (): Omit<HouseholdItem, "id" | "createdAt"> => ({
   reminders: [{ amount: 7, unit: "days", via: "push" }],
   history: [],
   tileBg: "",
+  tileIcon: "",
 });
 
 function AddEditDialog({
@@ -694,6 +855,45 @@ function AddEditDialog({
               </Select>
             </div>
           )}
+
+          {/* Tile Icon */}
+          <div className="space-y-2">
+            <Label>Tile Icon</Label>
+            <div className="grid grid-cols-8 gap-1.5">
+              {/* "Auto" slot — uses category default */}
+              <button
+                type="button"
+                title="Auto (category default)"
+                onClick={() => set("tileIcon", "")}
+                className={`h-9 w-full rounded-lg border-2 bg-card flex items-center justify-center transition-all ${
+                  !form.tileIcon ? "border-primary shadow-md" : "border-muted hover:border-primary/40"
+                }`}
+              >
+                <Settings className="w-4 h-4 text-muted-foreground" />
+              </button>
+              {Object.entries(TILE_ICONS).map(([key, def]) => {
+                const IconEl = def.icon;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    title={def.label}
+                    onClick={() => set("tileIcon", form.tileIcon === key ? "" : key)}
+                    className={`h-9 w-full rounded-lg border-2 bg-card flex items-center justify-center transition-all ${
+                      form.tileIcon === key
+                        ? "border-primary shadow-md bg-primary/5"
+                        : "border-transparent hover:border-primary/40"
+                    }`}
+                  >
+                    <IconEl className="w-4 h-4 text-foreground" />
+                  </button>
+                );
+              })}
+            </div>
+            {form.tileIcon && TILE_ICONS[form.tileIcon] && (
+              <p className="text-[10px] text-muted-foreground">{TILE_ICONS[form.tileIcon].label}</p>
+            )}
+          </div>
 
           {/* Tile Background */}
           <div className="space-y-2">
@@ -1415,7 +1615,7 @@ export default function Households() {
           {items.length === 0 ? (
             <EmptyState label="Add your first household item" onAdd={openAdd} />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
               {shared.map((item) => (
                 <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
               ))}
@@ -1432,7 +1632,7 @@ export default function Households() {
             {memberItems(m.id).length === 0 ? (
               <p className="text-xs text-muted-foreground">No items assigned to {m.name} yet.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
                 {memberItems(m.id).map((item) => (
                   <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
                 ))}

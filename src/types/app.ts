@@ -341,6 +341,7 @@ export interface HouseholdItem {
   pushEnabled?: boolean;
   history?: HouseholdHistoryEntry[];
   tileBg?: string;             // key into TILE_BACKGROUNDS catalogue
+  tileIcon?: string;           // key into TILE_ICONS catalogue
   createdAt?: any;
 }
 
