@@ -30,11 +30,21 @@ export interface BotoxRecord {
   notes: string;
 }
 
+export interface BPEntry {
+  id: string;
+  date: string;
+  systolic: number;
+  diastolic: number;
+  heartRate?: number;
+  notes?: string;
+}
+
 export function useWeightTracker() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [heightEntries, setHeightEntries] = useState<HeightEntry[]>([]);
   const [botoxRecords, setBotoxRecords] = useState<BotoxRecord[]>([]);
+  const [bpEntries, setBpEntries] = useState<BPEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,13 +52,14 @@ export function useWeightTracker() {
       setEntries([]);
       setHeightEntries([]);
       setBotoxRecords([]);
+      setBpEntries([]);
       setLoading(false);
       return;
     }
 
-    let weightLoaded = false, heightLoaded = false, botoxLoaded = false;
+    let weightLoaded = false, heightLoaded = false, botoxLoaded = false, bpLoaded = false;
     const checkDone = () => {
-      if (weightLoaded && heightLoaded && botoxLoaded) setLoading(false);
+      if (weightLoaded && heightLoaded && botoxLoaded && bpLoaded) setLoading(false);
     };
 
     const unsubWeight = onSnapshot(
@@ -78,14 +89,23 @@ export function useWeightTracker() {
       () => { botoxLoaded = true; checkDone(); }
     );
 
-    return () => { unsubWeight(); unsubHeight(); unsubBotox(); };
+    const unsubBP = onSnapshot(
+      query(collection(db, "weightTracker", user.uid, "bloodPressure"), orderBy("date")),
+      (snap) => {
+        setBpEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BPEntry, "id">) })));
+        bpLoaded = true; checkDone();
+      },
+      () => { bpLoaded = true; checkDone(); }
+    );
+
+    return () => { unsubWeight(); unsubHeight(); unsubBotox(); unsubBP(); };
   }, [user?.uid]);
 
   const addEntry = useCallback(
-    async (weight: number) => {
+    async (weight: number, date?: string) => {
       if (!user) return;
       await addDoc(collection(db, "weightTracker", user.uid, "entries"), {
-        date: new Date().toISOString().split("T")[0],
+        date: date ?? new Date().toISOString().split("T")[0],
         weight,
         createdAt: serverTimestamp(),
       });
@@ -116,5 +136,16 @@ export function useWeightTracker() {
     [user]
   );
 
-  return { entries, heightEntries, botoxRecords, loading, addEntry, addHeightEntry, addBotoxRecord };
+  const addBPEntry = useCallback(
+    async (entry: Omit<BPEntry, "id">) => {
+      if (!user) return;
+      await addDoc(collection(db, "weightTracker", user.uid, "bloodPressure"), {
+        ...entry,
+        createdAt: serverTimestamp(),
+      });
+    },
+    [user]
+  );
+
+  return { entries, heightEntries, botoxRecords, bpEntries, loading, addEntry, addHeightEntry, addBotoxRecord, addBPEntry };
 }
