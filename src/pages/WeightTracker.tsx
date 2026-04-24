@@ -83,13 +83,15 @@ function bpCategory(sys: number, dia: number): { label: string; colour: string }
 
 function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   return (
-    <div className="flex gap-1 p-0.5 bg-muted rounded-lg">
+    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-full border border-border/30">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           onClick={() => onChange(p.value)}
-          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-            value === p.value ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+          className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+            value === p.value
+              ? "bg-card shadow-sm text-foreground ring-1 ring-border/40"
+              : "text-muted-foreground hover:text-foreground hover:bg-card/50"
           }`}
         >
           {p.label}
@@ -101,13 +103,15 @@ function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period
 
 function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v: "chart" | "table") => void }) {
   return (
-    <div className="flex gap-1 p-0.5 bg-muted rounded-lg">
+    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-full border border-border/30">
       {(["chart", "table"] as const).map((v) => (
         <button
           key={v}
           onClick={() => onChange(v)}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-            view === v ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+            view === v
+              ? "bg-card shadow-sm text-foreground ring-1 ring-border/40"
+              : "text-muted-foreground hover:text-foreground hover:bg-card/50"
           }`}
         >
           {v === "chart" ? <LineChartIcon className="w-3 h-3" /> : <Table2 className="w-3 h-3" />}
