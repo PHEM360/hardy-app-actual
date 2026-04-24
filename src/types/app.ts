@@ -319,6 +319,7 @@ export interface HouseholdHistoryEntry {
   endDate?: string;
   provider?: string;
   policyNumber?: string;
+  carReg?: string;
   notes?: string;
 }
 
@@ -342,6 +343,7 @@ export interface HouseholdItem {
   history?: HouseholdHistoryEntry[];
   tileBg?: string;             // key into TILE_BACKGROUNDS catalogue
   tileIcon?: string;           // key into TILE_ICONS catalogue
+  carReg?: string;             // vehicle registration (Car Insurance / Car Tax)
   createdAt?: any;
 }
 

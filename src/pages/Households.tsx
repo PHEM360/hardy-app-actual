@@ -568,6 +568,7 @@ const getBlankForm = (): Omit<HouseholdItem, "id" | "createdAt"> => ({
   history: [],
   tileBg: "",
   tileIcon: "",
+  carReg: "",
 });
 
 function AddEditDialog({
@@ -790,6 +791,19 @@ function AddEditDialog({
             <Label>Policy / Account Number</Label>
             <Input value={form.policyNumber ?? ""} onChange={(e) => set("policyNumber", e.target.value)} placeholder="Optional" />
           </div>
+
+          {/* Car registration — shown for car-related types */}
+          {(form.type === "Car Insurance" || form.type.toLowerCase().includes("car tax") || form.type.toLowerCase().includes("vehicle")) && (
+            <div className="space-y-1.5">
+              <Label>Car Registration</Label>
+              <Input
+                value={form.carReg ?? ""}
+                onChange={(e) => set("carReg", e.target.value.toUpperCase())}
+                placeholder="e.g. AB12 CDE"
+                className="uppercase tracking-widest font-mono"
+              />
+            </div>
+          )}
 
           {/* Cost */}
           <div className="space-y-1.5">
@@ -1334,6 +1348,7 @@ function DetailDialog({
           <div className="space-y-3 text-sm">
             <Row label="Provider" value={item.provider} />
             {item.policyNumber && <Row label="Policy #" value={item.policyNumber} />}
+            {item.carReg && <Row label="Reg" value={<span className="font-mono tracking-widest uppercase">{item.carReg}</span>} />}
             {costStr && <Row label="Cost" value={costStr} />}
             {item.startDate && <Row label="Start" value={item.startDate} />}
             {item.endDate && (
@@ -1365,6 +1380,7 @@ function DetailDialog({
                       {h.startDate && <div>Start: {h.startDate}</div>}
                       {h.endDate && <div>End: {h.endDate}</div>}
                       {h.policyNumber && <div>Policy: {h.policyNumber}</div>}
+                      {h.carReg && <div>Reg: {h.carReg}</div>}
                       {h.notes && <div>Notes: {h.notes}</div>}
                     </div>
                   ))}
