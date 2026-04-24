@@ -166,6 +166,9 @@ service cloud.firestore {
       match /expenses/{expenseId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
+      match /insurance/{policyId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Household items - per user

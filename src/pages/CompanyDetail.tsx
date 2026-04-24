@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
-  Key, Briefcase, Receipt, BarChart3, Info, Settings2, X,
+  Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -20,9 +20,10 @@ import {
   useCompanyLogins,
   useCompanyServices,
   useCompanyExpenses,
+  useCompanyInsurance,
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
-import { CompanyLogin, CompanyService, CompanyExpense } from "@/types/app";
+import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ const TABS = [
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
   { id: "expenses",    label: "Expenses",    icon: Receipt },
+  { id: "insurance",   label: "Insurance",   icon: Shield },
   { id: "projection",  label: "Projection",  icon: BarChart3 },
   { id: "settings",    label: "Settings",    icon: Settings2 },
 ];
@@ -1051,6 +1053,186 @@ function OverviewTab({ company }: { company: any }) {
   );
 }
 
+// ─── Insurance Tab ────────────────────────────────────────────────────────────
+
+function formatRenewal(dateStr?: string): { label: string; urgent: boolean } {
+  if (!dateStr) return { label: "No date", urgent: false };
+  const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
+  if (diff < 0) return { label: "Expired", urgent: true };
+  if (diff === 0) return { label: "Today!", urgent: true };
+  if (diff <= 30) return { label: `${diff}d`, urgent: true };
+  if (diff < 365) {
+    const m = Math.floor(diff / 30.44);
+    const d = diff - Math.round(m * 30.44);
+    return { label: d > 0 ? `${m}m ${d}d` : `${m}m`, urgent: false };
+  }
+  const y = Math.floor(diff / 365);
+  const rem = diff - y * 365;
+  const m = Math.floor(rem / 30.44);
+  return { label: m > 0 ? `${y}y ${m}m` : `${y}y`, urgent: false };
+}
+
+const POLICY_TYPES = [
+  "Public Liability","Professional Indemnity","Employers Liability",
+  "Product Liability","Directors & Officers","Cyber","Commercial Vehicle",
+  "Building & Contents","Business Interruption","Other",
+];
+
+const INSURANCE_EMPTY: Omit<CompanyInsurance, "id" | "createdAt"> = {
+  type: "", provider: "", policyNumber: "", coverAmount: undefined,
+  coverDetails: "", premium: undefined, premiumPeriod: "annually",
+  startDate: "", renewalDate: "", notes: "",
+};
+
+function InsuranceTab({ companyId }: { companyId: string }) {
+  const { policies, addPolicy, updatePolicy, deletePolicy } = useCompanyInsurance(companyId);
+  const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState<CompanyInsurance | null>(null);
+  const [form, setForm] = useState<Omit<CompanyInsurance, "id" | "createdAt">>(INSURANCE_EMPTY);
+  const [saving, setSaving] = useState(false);
+
+  const openAdd = () => { setEdit(null); setForm(INSURANCE_EMPTY); setOpen(true); };
+  const openEdit = (p: CompanyInsurance) => {
+    setEdit(p);
+    setForm({
+      type: p.type, provider: p.provider, policyNumber: p.policyNumber || "",
+      coverAmount: p.coverAmount, coverDetails: p.coverDetails || "",
+      premium: p.premium, premiumPeriod: p.premiumPeriod || "annually",
+      startDate: p.startDate || "", renewalDate: p.renewalDate || "", notes: p.notes || "",
+    });
+    setOpen(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (edit?.id) await updatePolicy(edit.id, form);
+      else await addPolicy(form);
+      setOpen(false);
+    } finally { setSaving(false); }
+  };
+
+  const setF = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{policies.length} {policies.length === 1 ? "policy" : "policies"}</p>
+        <Button size="sm" onClick={openAdd} className="h-8 rounded-xl gap-1 text-xs"><Plus className="w-3 h-3" /> Add Policy</Button>
+      </div>
+
+      {policies.length === 0 ? (
+        <div className="flex flex-col items-center py-10 gap-2 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+            <Shield className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No insurance policies</p>
+          <p className="text-xs text-muted-foreground">Add policies to track coverage &amp; renewals</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {policies.map((p) => {
+            const { label, urgent } = formatRenewal(p.renewalDate);
+            return (
+              <div key={p.id} className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-card-foreground">{p.type || "Policy"}</p>
+                    <p className="text-xs text-muted-foreground">{p.provider}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {p.renewalDate && (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                        {label}
+                      </span>
+                    )}
+                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground"><Edit2 className="w-3 h-3" /></button>
+                    <button onClick={() => p.id && deletePolicy(p.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {p.policyNumber && <div><span className="text-[10px] text-muted-foreground">Policy #</span><p className="text-xs font-mono">{p.policyNumber}</p></div>}
+                  {p.coverAmount !== undefined && <div><span className="text-[10px] text-muted-foreground">Cover</span><p className="text-xs font-semibold">{fmt(p.coverAmount)}</p></div>}
+                  {p.premium !== undefined && <div><span className="text-[10px] text-muted-foreground">Premium</span><p className="text-xs">{fmt(p.premium)}<span className="text-muted-foreground"> /{p.premiumPeriod === "monthly" ? "mo" : "yr"}</span></p></div>}
+                  {p.renewalDate && <div><span className="text-[10px] text-muted-foreground">Renewal</span><p className="text-xs">{new Date(p.renewalDate).toLocaleDateString("en-GB")}</p></div>}
+                </div>
+                {p.coverDetails && <p className="text-[11px] text-muted-foreground border-t border-border/30 pt-2 mt-1">{p.coverDetails}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEdit(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{edit ? "Edit Policy" : "Add Policy"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <Label>Policy Type *</Label>
+              <Select value={form.type} onValueChange={(v) => setF("type", v)}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select type…" /></SelectTrigger>
+                <SelectContent>{POLICY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Provider *</Label>
+              <Input value={form.provider} onChange={(e) => setF("provider", e.target.value)} placeholder="e.g. AXA, Aviva" className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Policy Number</Label>
+              <Input value={form.policyNumber || ""} onChange={(e) => setF("policyNumber", e.target.value)} placeholder="e.g. POL-12345" className="h-10 rounded-xl font-mono" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label>Cover Amount (£)</Label>
+                <Input type="number" value={form.coverAmount ?? ""} onChange={(e) => setF("coverAmount", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 1000000" className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Premium (£)</Label>
+                <Input type="number" value={form.premium ?? ""} onChange={(e) => setF("premium", e.target.value ? Number(e.target.value) : undefined)} placeholder="e.g. 1200" className="h-10 rounded-xl" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Premium Period</Label>
+              <Select value={form.premiumPeriod || "annually"} onValueChange={(v) => setF("premiumPeriod", v)}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="annually">Annually</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>What it Covers</Label>
+              <Textarea value={form.coverDetails || ""} onChange={(e) => setF("coverDetails", e.target.value)} placeholder="Describe what this policy covers…" className="rounded-xl resize-none" rows={2} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label>Start Date</Label>
+                <Input type="date" value={form.startDate || ""} onChange={(e) => setF("startDate", e.target.value)} className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Renewal Date</Label>
+                <Input type="date" value={form.renewalDate || ""} onChange={(e) => setF("renewalDate", e.target.value)} className="h-10 rounded-xl" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Textarea value={form.notes || ""} onChange={(e) => setF("notes", e.target.value)} placeholder="Any additional notes…" className="rounded-xl resize-none" rows={2} />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-xl">Cancel</Button>
+              <Button onClick={save} disabled={!form.type || !form.provider || saving} className="flex-1 h-10 rounded-xl">{saving ? "Saving…" : "Save Policy"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CompanyDetail = () => {
@@ -1133,6 +1315,7 @@ const CompanyDetail = () => {
           {activeTab === "logins"     && <LoginsTab companyId={id!} />}
           {activeTab === "services"   && <ServicesTab companyId={id!} />}
           {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}
+          {activeTab === "insurance"  && <InsuranceTab companyId={id!} />}
           {activeTab === "projection" && <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />}
           {activeTab === "settings"   && <SettingsTab companyId={id!} />}
         </motion.div>

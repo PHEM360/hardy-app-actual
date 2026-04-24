@@ -259,6 +259,21 @@ export interface CompanyExpense {
   createdAt?: any;
 }
 
+export interface CompanyInsurance {
+  id?: string;
+  type: string;            // e.g. "Public Liability", "Professional Indemnity"
+  provider: string;
+  policyNumber?: string;
+  coverAmount?: number;    // £ amount insured
+  coverDetails?: string;   // What it covers (free text)
+  premium?: number;
+  premiumPeriod?: "monthly" | "annually";
+  startDate?: string;
+  renewalDate?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
 export interface CompanyContactDetails {
   phone?: string;
   email?: string;
@@ -287,6 +302,7 @@ export interface Company {
   color: string;           // e.g. "#6366f1"
   emoji?: string;          // e.g. "🏢"
   taxYearStart: string;    // ISO date, e.g. "2025-04-06"
+  isRegistered?: boolean;  // Companies House registered
   contact: CompanyContactDetails;
   createdAt?: any;
   updatedAt?: any;

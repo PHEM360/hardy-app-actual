@@ -21,6 +21,7 @@ import {
   CompanyLogin,
   CompanyService,
   CompanyExpense,
+  CompanyInsurance,
 } from "@/types/app";
 
 export function useCompanies() {
@@ -182,4 +183,42 @@ export function useCompanyExpenses(companyId: string | undefined) {
   }, [uid, companyId]);
 
   return { expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense, uploadReceipt };
+}
+
+// ─── Insurance ─────────────────────────────────────────────────────────────────
+
+export function useCompanyInsurance(companyId: string | undefined) {
+  const [policies, setPolicies] = useState<CompanyInsurance[]>([]);
+  const uid = auth.currentUser?.uid;
+
+  useEffect(() => {
+    if (!uid || !companyId) return;
+    const q = query(
+      collection(db, "companies", uid, "items", companyId, "insurance"),
+      orderBy("renewalDate")
+    );
+    return onSnapshot(q, (snap) => {
+      setPolicies(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyInsurance)));
+    });
+  }, [uid, companyId]);
+
+  const addPolicy = useCallback(async (policy: Omit<CompanyInsurance, "id" | "createdAt">) => {
+    if (!uid || !companyId) return;
+    await addDoc(collection(db, "companies", uid, "items", companyId, "insurance"), {
+      ...policy,
+      createdAt: serverTimestamp(),
+    });
+  }, [uid, companyId]);
+
+  const updatePolicy = useCallback(async (id: string, updates: Partial<CompanyInsurance>) => {
+    if (!uid || !companyId) return;
+    await updateDoc(doc(db, "companies", uid, "items", companyId, "insurance", id), updates);
+  }, [uid, companyId]);
+
+  const deletePolicy = useCallback(async (id: string) => {
+    if (!uid || !companyId) return;
+    await deleteDoc(doc(db, "companies", uid, "items", companyId, "insurance", id));
+  }, [uid, companyId]);
+
+  return { policies, addPolicy, updatePolicy, deletePolicy };
 }
