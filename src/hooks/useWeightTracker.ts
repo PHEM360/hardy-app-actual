@@ -95,7 +95,7 @@ export function useWeightTracker() {
         setBpEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BPEntry, "id">) })));
         bpLoaded = true; checkDone();
       },
-      () => { bpLoaded = true; checkDone(); }
+      (err) => { console.error("bloodPressure listener error:", err); bpLoaded = true; checkDone(); }
     );
 
     return () => { unsubWeight(); unsubHeight(); unsubBotox(); unsubBP(); };
