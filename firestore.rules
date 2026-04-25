@@ -169,6 +169,12 @@ service cloud.firestore {
       match /insurance/{policyId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
+      match /income/{incomeId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      match /taxReturns/{returnId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Household items - per user

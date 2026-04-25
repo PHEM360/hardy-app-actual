@@ -274,6 +274,26 @@ export interface CompanyInsurance {
   createdAt?: any;
 }
 
+export interface CompanyIncome {
+  id?: string;
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  invoiceRef?: string;
+  createdAt?: any;
+}
+
+export interface CompanyTaxReturn {
+  id?: string;
+  taxYear: string;       // e.g. "2024/25"
+  taxPaid?: number;
+  filingDate?: string;
+  pdfUrl?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
 export interface CompanyContactDetails {
   phone?: string;
   email?: string;
@@ -303,6 +323,8 @@ export interface Company {
   emoji?: string;          // e.g. "🏢"
   taxYearStart: string;    // ISO date, e.g. "2025-04-06"
   isRegistered?: boolean;  // Companies House registered
+  companyType?: "registered" | "sole_trader" | "trading_name" | "other";
+  parentCompanyId?: string; // for trading_name: ID of the registered parent company
   contact: CompanyContactDetails;
   createdAt?: any;
   updatedAt?: any;

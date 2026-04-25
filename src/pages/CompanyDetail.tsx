@@ -1,9 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
+  TrendingUp, FileText, Pencil, Download, ChevronRight,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -21,18 +22,23 @@ import {
   useCompanyServices,
   useCompanyExpenses,
   useCompanyInsurance,
+  useCompanyIncome,
+  useCompanyTaxReturns,
+  useMultiCompanyFinance,
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
-import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance } from "@/types/app";
+import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: "overview",    label: "Overview",    icon: Info },
+  { id: "finance",     label: "Finance",     icon: TrendingUp },
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
   { id: "expenses",    label: "Expenses",    icon: Receipt },
   { id: "insurance",   label: "Insurance",   icon: Shield },
+  { id: "tax",         label: "Tax",         icon: FileText },
   { id: "projection",  label: "Projection",  icon: BarChart3 },
   { id: "settings",    label: "Settings",    icon: Settings2 },
 ];
@@ -1233,12 +1239,555 @@ function InsuranceTab({ companyId }: { companyId: string }) {
   );
 }
 
+// ─── Finance Tab ─────────────────────────────────────────────────────────────
+
+function getTaxYearBounds(taxYearStart: string) {
+  const base = taxYearStart ? new Date(taxYearStart) : new Date(`${new Date().getFullYear()}-04-06`);
+  const now = new Date();
+  let start = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  while (new Date(start.getFullYear() + 1, start.getMonth(), start.getDate()) <= now) {
+    start = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
+  }
+  const end = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
+  end.setDate(end.getDate() - 1);
+  const totalDays = Math.ceil((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const daysPassed = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / 86_400_000));
+  const daysLeft = Math.max(0, totalDays - daysPassed);
+  const progress = Math.min(100, Math.round((daysPassed / totalDays) * 100));
+  const startStr = start.toISOString().split("T")[0];
+  const endStr = end.toISOString().split("T")[0];
+  const label = `${start.getFullYear()}/${String(start.getFullYear() + 1).slice(2)}`;
+  return { start: startStr, end: endStr, label, daysLeft, progress, totalDays };
+}
+
+const INCOME_EMPTY: Omit<CompanyIncome, "id" | "createdAt"> = {
+  date: new Date().toISOString().split("T")[0],
+  description: "",
+  amount: 0,
+  category: "",
+  invoiceRef: "",
+};
+
+function EntityFinanceSummary({
+  companyId,
+  company,
+  ty,
+  isChild,
+  onNavigate,
+}: {
+  companyId: string;
+  company: Company;
+  ty: { start: string; end: string };
+  isChild: boolean;
+  onNavigate?: () => void;
+}) {
+  const financeData = useMultiCompanyFinance([companyId]);
+  const d = financeData[companyId] || { income: [], expenses: [] };
+  const income = d.income.filter((i) => i.date >= ty.start && i.date <= ty.end).reduce((s, i) => s + i.amount, 0);
+  const expenses = d.expenses.filter((e) => e.date >= ty.start && e.date <= ty.end).reduce((s, e) => s + e.amount, 0);
+  const net = income - expenses;
+  return (
+    <div className={`rounded-xl border border-border/50 bg-muted/30 p-3 ${isChild ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`} onClick={onNavigate}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm" style={{ backgroundColor: `${company.color}20` }}>
+          {company.emoji || "🏢"}
+        </div>
+        <span className="text-xs font-semibold text-foreground flex-1">{company.name}</span>
+        {isChild && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <div className="rounded-lg bg-green-500/10 p-2 text-center">
+          <p className="text-[10px] text-green-700 dark:text-green-400 font-medium">Income</p>
+          <p className="text-xs font-bold text-green-700 dark:text-green-400">{fmt(income)}</p>
+        </div>
+        <div className="rounded-lg bg-red-500/10 p-2 text-center">
+          <p className="text-[10px] text-red-600 font-medium">Expenses</p>
+          <p className="text-xs font-bold text-red-600">{fmt(expenses)}</p>
+        </div>
+        <div className={`rounded-lg p-2 text-center ${net >= 0 ? "bg-primary/10" : "bg-orange-500/10"}`}>
+          <p className={`text-[10px] font-medium ${net >= 0 ? "text-primary" : "text-orange-600"}`}>Net</p>
+          <p className={`text-xs font-bold ${net >= 0 ? "text-primary" : "text-orange-600"}`}>{fmt(Math.abs(net))}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
+  companyId: string;
+  company: Company;
+  allCompanies: Company[];
+  updateCompany: (id: string, updates: Partial<Company>) => Promise<void>;
+}) {
+  const children = allCompanies.filter((c) => c.parentCompanyId === companyId);
+  const parent = company.parentCompanyId ? allCompanies.find((c) => c.id === company.parentCompanyId) : null;
+  const { settings } = useCompanySettings(companyId);
+
+  const allIds = useMemo(() => [companyId, ...children.map((c) => c.id!).filter(Boolean)], [companyId, children.map((c) => c.id).join(",")]);
+  const financeData = useMultiCompanyFinance(allIds);
+  const { incomes, addIncome, updateIncome, deleteIncome } = useCompanyIncome(companyId);
+
+  const [selectedEntity, setSelectedEntity] = useState<string>("consolidated");
+  const [incomeOpen, setIncomeOpen] = useState(false);
+  const [editIncome, setEditIncome] = useState<CompanyIncome | null>(null);
+  const [incomeForm, setIncomeForm] = useState<Omit<CompanyIncome, "id" | "createdAt">>(INCOME_EMPTY);
+  const [saving, setSaving] = useState(false);
+  const [editTaxYear, setEditTaxYear] = useState(false);
+  const [tempTaxStart, setTempTaxStart] = useState(company.taxYearStart || "");
+
+  const ty = useMemo(() => getTaxYearBounds(company.taxYearStart || ""), [company.taxYearStart]);
+
+  const filterToTY = (items: { date: string; amount: number }[]) =>
+    items.filter((i) => i.date >= ty.start && i.date <= ty.end);
+
+  // Consolidated totals
+  const consolidated = useMemo(() => {
+    let income = 0;
+    let expenses = 0;
+    allIds.forEach((id) => {
+      const d = financeData[id] || { income: [], expenses: [] };
+      income += filterToTY(d.income).reduce((s, i) => s + i.amount, 0);
+      expenses += filterToTY(d.expenses).reduce((s, e) => s + e.amount, 0);
+    });
+    return { income, expenses, net: income - expenses };
+  }, [financeData, allIds, ty]);
+
+  // Own entity data
+  const own = useMemo(() => {
+    const d = financeData[companyId] || { income: [], expenses: [] };
+    const inc = filterToTY(d.income);
+    const exp = filterToTY(d.expenses);
+    const incTotal = inc.reduce((s, i) => s + i.amount, 0);
+    const expTotal = exp.reduce((s, e) => s + e.amount, 0);
+    return {
+      income: incTotal,
+      expenses: expTotal,
+      net: incTotal - expTotal,
+      incomeItems: inc as CompanyIncome[],
+      expenseItems: exp as CompanyExpense[],
+    };
+  }, [financeData, companyId, ty]);
+
+  const isParent = children.length > 0;
+  const shown = selectedEntity === "consolidated" ? consolidated : {
+    income: own.income,
+    expenses: own.expenses,
+    net: own.income - own.expenses,
+  };
+
+  const openAddIncome = () => {
+    setEditIncome(null);
+    setIncomeForm(INCOME_EMPTY);
+    setIncomeOpen(true);
+  };
+  const openEditIncome = (inc: CompanyIncome) => {
+    setEditIncome(inc);
+    setIncomeForm({ date: inc.date, description: inc.description, amount: inc.amount, category: inc.category, invoiceRef: inc.invoiceRef || "" });
+    setIncomeOpen(true);
+  };
+
+  const saveIncome = async () => {
+    setSaving(true);
+    try {
+      if (editIncome?.id) await updateIncome(editIncome.id, incomeForm);
+      else await addIncome(incomeForm);
+      setIncomeOpen(false);
+    } finally { setSaving(false); }
+  };
+
+  const saveTaxYear = async () => {
+    if (company.id) await updateCompany(company.id, { taxYearStart: tempTaxStart });
+    setEditTaxYear(false);
+  };
+
+  const taxRate = settings.corporateTaxRate ?? 19;
+  const estTax = Math.max(0, (isParent ? consolidated : own).net * (taxRate / 100));
+
+  // Expense breakdown by category
+  const expByCategory = useMemo(() => {
+    const d = financeData[companyId] || { income: [], expenses: [] };
+    const bycat: Record<string, number> = {};
+    (d.expenses as CompanyExpense[]).filter((e) => e.date >= ty.start && e.date <= ty.end)
+      .forEach((e) => { bycat[e.category] = (bycat[e.category] || 0) + e.amount; });
+    return Object.entries(bycat).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [financeData, companyId, ty]);
+
+  return (
+    <div className="space-y-4">
+      {/* Tax year header */}
+      <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Tax Year</p>
+            {editTaxYear ? (
+              <div className="flex items-center gap-2 mt-1">
+                <Input type="date" value={tempTaxStart} onChange={(e) => setTempTaxStart(e.target.value)} className="h-8 rounded-lg text-sm w-36" />
+                <button onClick={saveTaxYear} className="text-xs text-primary font-semibold">Save</button>
+                <button onClick={() => setEditTaxYear(false)} className="text-xs text-muted-foreground">Cancel</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-base font-bold">{ty.label}</p>
+                <button onClick={() => { setTempTaxStart(company.taxYearStart || ""); setEditTaxYear(true); }} className="text-muted-foreground hover:text-foreground">
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">{new Date(ty.start).toLocaleDateString("en-GB")} – {new Date(ty.end).toLocaleDateString("en-GB")}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">{ty.daysLeft}d left</p>
+            <p className="text-sm font-bold">{ty.progress}%</p>
+          </div>
+        </div>
+        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${ty.progress}%`, backgroundColor: company.color }} />
+        </div>
+      </div>
+
+      {/* Entity selector (parent companies) */}
+      {isParent && (
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <button
+            onClick={() => setSelectedEntity("consolidated")}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === "consolidated" ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            style={selectedEntity === "consolidated" ? { backgroundColor: company.color } : {}}
+          >
+            All Entities
+          </button>
+          <button
+            onClick={() => setSelectedEntity(companyId)}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === companyId ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            style={selectedEntity === companyId ? { backgroundColor: company.color } : {}}
+          >
+            {company.emoji} {company.name}
+          </button>
+          {children.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => setSelectedEntity(child.id!)}
+              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === child.id ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+              style={selectedEntity === child.id ? { backgroundColor: child.color } : {}}
+            >
+              {child.emoji} {child.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Note for trading names */}
+      {parent && (
+        <div className="rounded-xl bg-muted/50 p-3 text-[11px] text-muted-foreground">
+          This is a trading name of <span className="font-semibold text-foreground">{parent.name}</span>. Track income and expenses here; consolidated view is on the parent company.
+        </div>
+      )}
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-green-500/10 p-3">
+          <p className="text-[10px] text-green-700 dark:text-green-400 font-medium uppercase tracking-wider">Income</p>
+          <p className="text-lg font-bold text-green-700 dark:text-green-400">{fmt(selectedEntity === "consolidated" ? consolidated.income : own.income)}</p>
+        </div>
+        <div className="rounded-xl bg-red-500/10 p-3">
+          <p className="text-[10px] text-red-600 font-medium uppercase tracking-wider">Expenses</p>
+          <p className="text-lg font-bold text-red-600">{fmt(selectedEntity === "consolidated" ? consolidated.expenses : own.expenses)}</p>
+        </div>
+        <div className={`rounded-xl p-3 ${(selectedEntity === "consolidated" ? consolidated : own).net >= 0 ? "bg-primary/10" : "bg-orange-500/10"}`}>
+          <p className={`text-[10px] font-medium uppercase tracking-wider ${(selectedEntity === "consolidated" ? consolidated : own).net >= 0 ? "text-primary" : "text-orange-600"}`}>
+            {(selectedEntity === "consolidated" ? consolidated : own).net >= 0 ? "Net Profit" : "Net Loss"}
+          </p>
+          <p className={`text-lg font-bold ${(selectedEntity === "consolidated" ? consolidated : own).net >= 0 ? "text-primary" : "text-orange-600"}`}>
+            {fmt(Math.abs((selectedEntity === "consolidated" ? consolidated : own).net))}
+          </p>
+        </div>
+        <div className="rounded-xl bg-amber-500/10 p-3">
+          <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium uppercase tracking-wider">Est. Tax ({taxRate}%)</p>
+          <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{fmt(estTax)}</p>
+        </div>
+      </div>
+
+      {/* Consolidated entity breakdown */}
+      {isParent && selectedEntity === "consolidated" && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entity Breakdown</p>
+          <EntityFinanceSummary companyId={companyId} company={company} ty={ty} isChild={false} />
+          {children.map((child) => (
+            <EntityFinanceSummary key={child.id} companyId={child.id!} company={child} ty={ty} isChild={true} />
+          ))}
+        </div>
+      )}
+
+      {/* Income section */}
+      {(selectedEntity === companyId || !isParent || selectedEntity !== "consolidated") && selectedEntity !== "consolidated" ? (
+        // showing a specific child — note only
+        selectedEntity !== companyId ? (
+          <div className="rounded-xl bg-muted/50 p-3 text-[11px] text-muted-foreground text-center">
+            Open {children.find((c) => c.id === selectedEntity)?.name}'s company page to manage their income and expenses.
+          </div>
+        ) : null
+      ) : null}
+
+      {/* Own income list (when on own entity or not a parent) */}
+      {(selectedEntity === companyId || !isParent) && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Income This Year</p>
+            <Button size="sm" onClick={openAddIncome} className="h-7 rounded-xl gap-1 text-xs px-2.5">
+              <Plus className="w-3 h-3" /> Add
+            </Button>
+          </div>
+          {own.incomeItems.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/50 p-4 text-center">
+              <p className="text-xs text-muted-foreground">No income recorded this tax year</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {own.incomeItems.map((inc) => (
+                <div key={inc.id} className="flex items-center gap-2 rounded-xl bg-muted/30 px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">{inc.description}</p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(inc.date).toLocaleDateString("en-GB")} · {inc.category}</p>
+                  </div>
+                  <p className="text-xs font-bold text-green-700 dark:text-green-400 flex-shrink-0">{fmt(inc.amount)}</p>
+                  <div className="flex gap-0.5 flex-shrink-0">
+                    <button onClick={() => openEditIncome(inc)} className="p-1 rounded text-muted-foreground hover:text-foreground"><Edit2 className="w-3 h-3" /></button>
+                    <button onClick={() => inc.id && deleteIncome(inc.id)} className="p-1 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expense breakdown by category */}
+      {(selectedEntity === companyId || !isParent) && expByCategory.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses by Category</p>
+          <div className="space-y-2">
+            {expByCategory.map(([cat, total]) => {
+              const pct = own.expenses > 0 ? (total / own.expenses) * 100 : 0;
+              return (
+                <div key={cat}>
+                  <div className="flex justify-between text-[11px] mb-0.5">
+                    <span className="text-muted-foreground">{cat}</span>
+                    <span className="font-semibold">{fmt(total)}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-red-400" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Income entry dialog */}
+      <Dialog open={incomeOpen} onOpenChange={(o) => { setIncomeOpen(o); if (!o) setEditIncome(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editIncome ? "Edit Income" : "Add Income"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <Label>Description *</Label>
+              <Input value={incomeForm.description} onChange={(e) => setIncomeForm((f) => ({ ...f, description: e.target.value }))} placeholder="e.g. Consulting fee – Jan" className="h-10 rounded-xl" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label>Amount (£) *</Label>
+                <Input type="number" value={incomeForm.amount || ""} onChange={(e) => setIncomeForm((f) => ({ ...f, amount: Number(e.target.value) }))} placeholder="0.00" className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date *</Label>
+                <Input type="date" value={incomeForm.date} onChange={(e) => setIncomeForm((f) => ({ ...f, date: e.target.value }))} className="h-10 rounded-xl" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={incomeForm.category} onValueChange={(v) => setIncomeForm((f) => ({ ...f, category: v }))}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select category…" /></SelectTrigger>
+                <SelectContent>{settings.incomeCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Invoice Ref</Label>
+              <Input value={incomeForm.invoiceRef || ""} onChange={(e) => setIncomeForm((f) => ({ ...f, invoiceRef: e.target.value }))} placeholder="e.g. INV-0042" className="h-10 rounded-xl font-mono" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={() => setIncomeOpen(false)} className="flex-1 h-10 rounded-xl">Cancel</Button>
+              <Button onClick={saveIncome} disabled={!incomeForm.description || !incomeForm.amount || saving} className="flex-1 h-10 rounded-xl">{saving ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Tax Tab ──────────────────────────────────────────────────────────────────
+
+const TAX_RETURN_EMPTY: Omit<CompanyTaxReturn, "id" | "createdAt"> = {
+  taxYear: "", taxPaid: undefined, filingDate: "", pdfUrl: "", notes: "",
+};
+
+function TaxTab({ companyId, company, allCompanies }: {
+  companyId: string;
+  company: Company;
+  allCompanies: Company[];
+}) {
+  const parent = company.parentCompanyId ? allCompanies.find((c) => c.id === company.parentCompanyId) : null;
+  const { taxReturns, uploadingPdf, addReturn, updateReturn, deleteReturn, uploadPdf } = useCompanyTaxReturns(companyId);
+  const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState<CompanyTaxReturn | null>(null);
+  const [form, setForm] = useState<Omit<CompanyTaxReturn, "id" | "createdAt">>(TAX_RETURN_EMPTY);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
+
+  const openAdd = () => { setEdit(null); setForm(TAX_RETURN_EMPTY); setOpen(true); };
+  const openEdit = (r: CompanyTaxReturn) => {
+    setEdit(r);
+    setForm({ taxYear: r.taxYear, taxPaid: r.taxPaid, filingDate: r.filingDate || "", pdfUrl: r.pdfUrl || "", notes: r.notes || "" });
+    setOpen(true);
+  };
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (edit?.id) await updateReturn(edit.id, form);
+      else await addReturn(form);
+      setOpen(false);
+    } finally { setSaving(false); }
+  };
+  const setF = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!pendingUploadId || !e.target.files?.[0]) return;
+    await uploadPdf(pendingUploadId, e.target.files[0]);
+    setPendingUploadId(null);
+  };
+
+  if (parent && company.companyType === "trading_name") {
+    return (
+      <div className="rounded-2xl border border-border/50 bg-muted/30 p-6 text-center space-y-2">
+        <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto">
+          <FileText className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-semibold">Tax filing via parent company</p>
+        <p className="text-xs text-muted-foreground">
+          As a trading name, tax returns are filed under <span className="font-medium text-foreground">{parent.name}</span>. View tax on their company page.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{taxReturns.length} {taxReturns.length === 1 ? "return" : "returns"} filed</p>
+        <Button size="sm" onClick={openAdd} className="h-8 rounded-xl gap-1 text-xs"><Plus className="w-3 h-3" /> Add Return</Button>
+      </div>
+
+      {taxReturns.length === 0 ? (
+        <div className="flex flex-col items-center py-10 gap-2 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center">
+            <FileText className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No tax returns yet</p>
+          <p className="text-xs text-muted-foreground">Add your annual tax / self-assessment returns here</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {taxReturns.map((r) => (
+            <div key={r.id} className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{r.taxYear}</span>
+                  {r.filingDate && (
+                    <span className="text-[10px] text-muted-foreground">Filed {new Date(r.filingDate).toLocaleDateString("en-GB")}</span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground"><Edit2 className="w-3 h-3" /></button>
+                  <button onClick={() => r.id && deleteReturn(r.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                </div>
+              </div>
+
+              {r.taxPaid !== undefined && (
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs text-muted-foreground">Tax paid:</span>
+                  <span className="text-base font-bold">{fmt(r.taxPaid)}</span>
+                </div>
+              )}
+
+              {r.notes && <p className="text-[11px] text-muted-foreground line-clamp-2">{r.notes}</p>}
+
+              <div className="flex items-center gap-2 pt-1">
+                {r.pdfUrl ? (
+                  <a href={r.pdfUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-primary font-medium">
+                    <Download className="w-3 h-3" /> Download PDF
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => { setPendingUploadId(r.id!); fileRef.current?.click(); }}
+                    disabled={uploadingPdf}
+                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    <Upload className="w-3 h-3" /> {uploadingPdf && pendingUploadId === r.id ? "Uploading…" : "Upload PDF"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileUpload} />
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEdit(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{edit ? "Edit Tax Return" : "Add Tax Return"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <Label>Tax Year *</Label>
+              <Input value={form.taxYear} onChange={(e) => setF("taxYear", e.target.value)} placeholder="e.g. 2024/25" className="h-10 rounded-xl font-mono" />
+              <p className="text-[11px] text-muted-foreground">Format: YYYY/YY (e.g. 2024/25)</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label>Tax Paid (£)</Label>
+                <Input type="number" value={form.taxPaid ?? ""} onChange={(e) => setF("taxPaid", e.target.value ? Number(e.target.value) : undefined)} placeholder="0.00" className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Filing Date</Label>
+                <Input type="date" value={form.filingDate || ""} onChange={(e) => setF("filingDate", e.target.value)} className="h-10 rounded-xl" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Textarea value={form.notes || ""} onChange={(e) => setF("notes", e.target.value)} placeholder="Accountant details, reference numbers, notes…" className="rounded-xl resize-none" rows={3} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">📎 You can upload the PDF after saving the return.</p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={() => setOpen(false)} className="flex-1 h-10 rounded-xl">Cancel</Button>
+              <Button onClick={save} disabled={!form.taxYear || saving} className="flex-1 h-10 rounded-xl">{saving ? "Saving…" : "Save"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CompanyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { companies, loading } = useCompanies();
+  const { companies, loading, updateCompany } = useCompanies();
   const [activeTab, setActiveTab] = useState("overview");
 
   const company = companies.find((c) => c.id === id);
@@ -1312,10 +1861,12 @@ const CompanyDetail = () => {
           transition={{ duration: 0.15 }}
         >
           {activeTab === "overview"   && <OverviewTab company={company} />}
+          {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
           {activeTab === "logins"     && <LoginsTab companyId={id!} />}
           {activeTab === "services"   && <ServicesTab companyId={id!} />}
           {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}
           {activeTab === "insurance"  && <InsuranceTab companyId={id!} />}
+          {activeTab === "tax"        && <TaxTab companyId={id!} company={company} allCompanies={companies} />}
           {activeTab === "projection" && <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />}
           {activeTab === "settings"   && <SettingsTab companyId={id!} />}
         </motion.div>
