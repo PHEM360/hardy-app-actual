@@ -45,12 +45,14 @@ const EMPTY: Omit<Company, "id" | "createdAt" | "updatedAt"> = {
 function CompanyForm({
   initial,
   allCompanies,
+  editId,
   onSave,
   onCancel,
   saving,
 }: {
   initial: Omit<Company, "id" | "createdAt" | "updatedAt">;
   allCompanies: Company[];
+  editId?: string;
   onSave: (c: Omit<Company, "id" | "createdAt" | "updatedAt">) => void;
   onCancel: () => void;
   saving: boolean;
@@ -61,7 +63,7 @@ function CompanyForm({
     setForm((f) => ({ ...f, contact: { ...f.contact, [k]: v } }));
 
   const parentCandidates = allCompanies.filter(
-    (c) => c.companyType === "registered" || c.companyType === "sole_trader"
+    (c) => c.companyType !== "trading_name" && c.id !== editId
   );
   const isTrading = form.companyType === "trading_name";
   const showCompanyNo = form.companyType === "registered" || form.isRegistered;
@@ -380,6 +382,7 @@ const Companies = () => {
           </DialogHeader>
           <CompanyForm
             allCompanies={companies}
+            editId={editCompany?.id}
             initial={editCompany ? {
               name: editCompany.name,
               description: editCompany.description || "",
