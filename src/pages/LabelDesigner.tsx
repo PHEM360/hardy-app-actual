@@ -25,6 +25,19 @@ import {
 
 const PRINT_PX_PER_CM = 96 / 2.54; // browser print resolution
 
+const FONT_OPTIONS = [
+  { label: "Default (System)", value: "system-ui, sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Times New Roman", value: "'Times New Roman', serif" },
+  { label: "Courier New", value: "'Courier New', monospace" },
+  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+  { label: "Verdana", value: "Verdana, sans-serif" },
+  { label: "Impact", value: "Impact, sans-serif" },
+  { label: "Palatino", value: "Palatino, serif" },
+  { label: "Comic Sans MS", value: "'Comic Sans MS', cursive" },
+];
+
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId() {
@@ -110,6 +123,7 @@ function ElContent({ el, item, allItems, pxPerCm }: ElContentProps) {
           overflow: "hidden",
           userSelect: "none",
           fontSize: el.fontSizePt ? `${el.fontSizePt}pt` : undefined,
+          fontFamily: el.fontFamily || undefined,
         }}
         dangerouslySetInnerHTML={{ __html: el.html || "" }}
       />
@@ -392,6 +406,28 @@ function PropertiesPanel({
                 className="h-7 w-14 rounded-lg text-xs px-2"
               />
             </div>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Font Family</p>
+            <Select
+              value={el.fontFamily || "system-ui, sans-serif"}
+              onValueChange={(v) => onUpdateEl(el.id, { fontFamily: v })}
+            >
+              <SelectTrigger className="h-8 rounded-xl text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_OPTIONS.map((f) => (
+                  <SelectItem
+                    key={f.value}
+                    value={f.value}
+                    style={{ fontFamily: f.value }}
+                  >
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <p className="text-[10px] text-muted-foreground">Content</p>

@@ -434,6 +434,7 @@ export interface LabelElement {
   // Text
   html?: string;
   fontSizePt?: number;
+  fontFamily?: string;
   // Image
   src?: string;
   objectFit?: "contain" | "cover" | "fill";
