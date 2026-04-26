@@ -409,6 +409,7 @@ export interface QRCodeItem {
   content: string;
   fgColor: string;
   bgColor: string;
+  showName?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useQRCodes, useQRCodeSettings } from "@/hooks/useQRCodes";
 import { QRCodeItem } from "@/types/app";
 
@@ -104,12 +105,12 @@ function PrintDialog({ item, open, onClose }: {
               bgColor={item.bgColor}
               size={previewPx}
             />
-            <p id="qr-print-name" className="text-xs font-medium text-center" style={{ color: item.fgColor }}>
-              {item.name}
-            </p>
+            {item.showName && (
+              <p id="qr-print-name" className="text-xs font-medium text-center" style={{ color: item.fgColor }}>
+                {item.name}
+              </p>
+            )}
           </div>
-
-          {/* Size picker */}
           <div className="space-y-1.5">
             <Label>Print Size</Label>
             <div className="grid grid-cols-4 gap-1.5">
@@ -176,6 +177,11 @@ function QRCard({ item, index, onEdit, onDelete, onPrint }: {
             bgColor={item.bgColor}
             size={64}
           />
+          {item.showName && (
+            <p className="text-[9px] font-medium text-center mt-1 leading-tight max-w-[64px] truncate" style={{ color: item.fgColor }}>
+              {item.name}
+            </p>
+          )}
         </div>
         <div className="flex-1 min-w-0 pt-0.5 space-y-1">
           <p className="text-sm font-bold text-card-foreground leading-tight truncate">{item.name}</p>
@@ -233,6 +239,7 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
     content:     editItem?.content     ?? "",
     fgColor:     editItem?.fgColor     ?? settings.fgColor,
     bgColor:     editItem?.bgColor     ?? settings.bgColor,
+    showName:    editItem?.showName    ?? true,
   });
   const setF = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const isValid = form.name.trim().length > 0 && form.content.trim().length > 0;
@@ -263,7 +270,7 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
             bgColor={form.bgColor}
             size={160}
           />
-          {form.name && (
+          {form.name && form.showName && (
             <p className="text-center text-xs mt-3 font-medium" style={{ color: form.fgColor }}>
               {form.name}
             </p>
@@ -282,6 +289,15 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
             placeholder="e.g. BGM Health Website"
             className="h-10 rounded-xl"
           />
+        </div>
+
+        {/* Show name toggle */}
+        <div className="flex items-center justify-between py-0.5">
+          <div>
+            <p className="text-sm font-medium leading-tight">Show name below QR code</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Displays on the code itself and when printing</p>
+          </div>
+          <Switch checked={!!form.showName} onCheckedChange={(v) => setF("showName", v)} />
         </div>
 
         {/* Content type selector */}
