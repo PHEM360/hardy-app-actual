@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, Fragment } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import QRCodeSVG from "react-qr-code";
@@ -6,7 +6,7 @@ import { toPng } from "html-to-image";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
-  Globe, FileText, Image, X, Check, Download,
+  Globe, FileText, Image, X, Check, Download, Tag,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -236,14 +236,462 @@ function PrintDialog({ item, open, onClose }: {
   );
 }
 
+// ─── Label Designer Dialog ────────────────────────────────────────────────────
+
+type QRPosition  = "left" | "centre" | "right";
+type TextPos     = "above" | "below" | "left" | "right";
+
+interface LabelConfig {
+  widthCm:       number;
+  heightCm:      number;
+  bgColor:       string;
+  // border
+  borderOn:      boolean;
+  borderWidth:   number;   // px
+  borderColor:   string;
+  borderRadius:  number;   // px
+  // QR
+  qrPosition:    QRPosition;
+  qrSizePct:     number;   // % of label height
+  // name text
+  nameOn:        boolean;
+  namePos:       TextPos;
+  nameSizePt:    number;
+  nameBold:      boolean;
+  nameItalic:    boolean;
+  nameColor:     string;
+  // extra text
+  extraOn:       boolean;
+  extraText:     string;
+  extraPos:      TextPos;
+  extraSizePt:   number;
+  extraBold:     boolean;
+  extraItalic:   boolean;
+  extraColor:    string;
+}
+
+const DEFAULT_LABEL: LabelConfig = {
+  widthCm: 8, heightCm: 5,
+  bgColor: "#ffffff",
+  borderOn: true, borderWidth: 2, borderColor: "#000000", borderRadius: 8,
+  qrPosition: "centre", qrSizePct: 70,
+  nameOn: true, namePos: "below", nameSizePt: 11, nameBold: true, nameItalic: false, nameColor: "#000000",
+  extraOn: false, extraText: "", extraPos: "below", extraSizePt: 9, extraBold: false, extraItalic: false, extraColor: "#555555",
+};
+
+// Scale factor: render at 96px/cm then scale preview down to fit dialog
+const CM_TO_PX = 96 / 2.54;
+
+function LabelPreview({ item, cfg, scale = 1 }: { item: QRCodeItem; cfg: LabelConfig; scale?: number }) {
+  const W = cfg.widthCm  * CM_TO_PX;
+  const H = cfg.heightCm * CM_TO_PX;
+  const qrPx = Math.round((cfg.qrSizePct / 100) * H);
+
+  // Which text positions are beside the QR (row layout)?
+  const nameBeside  = cfg.nameOn  && (cfg.namePos  === "left" || cfg.namePos  === "right");
+  const extraBeside = cfg.extraOn && cfg.extraText.trim() && (cfg.extraPos === "left" || cfg.extraPos === "right");
+
+  const NameEl = cfg.nameOn ? (
+    <p style={{
+      fontSize: cfg.nameSizePt,
+      fontWeight: cfg.nameBold    ? "bold"   : "normal",
+      fontStyle:  cfg.nameItalic  ? "italic" : "normal",
+      color: cfg.nameColor,
+      textAlign: "center",
+      lineHeight: 1.3,
+      whiteSpace: "nowrap",
+    }}>{item.name}</p>
+  ) : null;
+
+  const ExtraEl = (cfg.extraOn && cfg.extraText.trim()) ? (
+    <p style={{
+      fontSize: cfg.extraSizePt,
+      fontWeight: cfg.extraBold   ? "bold"   : "normal",
+      fontStyle:  cfg.extraItalic ? "italic" : "normal",
+      color: cfg.extraColor,
+      textAlign: "center",
+      lineHeight: 1.3,
+      whiteSpace: "pre-wrap",
+    }}>{cfg.extraText}</p>
+  ) : null;
+
+  const QREl = (
+    <QRCodeSVG
+      value={item.content || " "}
+      fgColor={item.fgColor}
+      bgColor="transparent"
+      size={qrPx}
+      style={{ display: "block", flexShrink: 0 }}
+    />
+  );
+
+  // Build inner content based on positions
+  const renderInner = () => {
+    // Collect row (beside) elements
+    const leftOfQR:  React.ReactNode[] = [];
+    const rightOfQR: React.ReactNode[] = [];
+    if (cfg.nameOn  && cfg.namePos  === "left")  leftOfQR.push(<Fragment key="name">{NameEl}</Fragment>);
+    if (cfg.nameOn  && cfg.namePos  === "right") rightOfQR.push(<Fragment key="name">{NameEl}</Fragment>);
+    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "left")  leftOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "right") rightOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+
+    const topItems: React.ReactNode[] = [];
+    const bottomItems: React.ReactNode[] = [];
+    if (cfg.nameOn  && cfg.namePos  === "above") topItems.push(<Fragment key="name">{NameEl}</Fragment>);
+    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "above") topItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.nameOn  && cfg.namePos  === "below") bottomItems.push(<Fragment key="name">{NameEl}</Fragment>);
+    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "below") bottomItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+
+    const qrAlign = cfg.qrPosition === "left" ? "flex-start" : cfg.qrPosition === "right" ? "flex-end" : "center";
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: qrAlign, justifyContent: "center", width: "100%", height: "100%", gap: 4 }}>
+        {topItems.length > 0 && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>{topItems}</div>}
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {leftOfQR.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>{leftOfQR}</div>}
+          {QREl}
+          {rightOfQR.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>{rightOfQR}</div>}
+        </div>
+        {bottomItems.length > 0 && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>{bottomItems}</div>}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      width: W, height: H,
+      backgroundColor: cfg.bgColor,
+      border: cfg.borderOn ? `${cfg.borderWidth}px solid ${cfg.borderColor}` : "none",
+      borderRadius: cfg.borderRadius,
+      overflow: "hidden",
+      boxSizing: "border-box",
+      padding: 8,
+      transform: `scale(${scale})`,
+      transformOrigin: "top left",
+      position: "relative",
+    }}>
+      {renderInner()}
+    </div>
+  );
+}
+
+// Mini helper row for a labelled control
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-muted-foreground flex-shrink-0 w-24">{label}</span>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+}
+
+// Pill selector
+function Pills<T extends string>({ options, value, onChange }: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-colors ${
+            value === o.value
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LabelDesignerDialog({ item, open, onClose }: {
+  item: QRCodeItem | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [cfg, setCfg] = useState<LabelConfig>(DEFAULT_LABEL);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const set = <K extends keyof LabelConfig>(k: K, v: LabelConfig[K]) =>
+    setCfg((c) => ({ ...c, [k]: v }));
+
+  // Scale preview to fit ~280px wide
+  const PREVIEW_MAX_W = 280;
+  const naturalW = cfg.widthCm * CM_TO_PX;
+  const scale = Math.min(1, PREVIEW_MAX_W / naturalW);
+  const scaledH = cfg.heightCm * CM_TO_PX * scale;
+
+  const handlePrint = useCallback(() => {
+    if (!item) return;
+    const W = cfg.widthCm  * CM_TO_PX;
+    const H = cfg.heightCm * CM_TO_PX;
+    const styleId = "qr-label-print";
+    let s = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!s) { s = document.createElement("style"); s.id = styleId; document.head.appendChild(s); }
+    s.textContent = `
+      @media print {
+        * { visibility: hidden !important; }
+        #qr-label-print-target, #qr-label-print-target * { visibility: visible !important; }
+        #qr-label-print-target {
+          position: fixed !important;
+          top: 50% !important; left: 50% !important;
+          transform: translate(-50%,-50%) scale(1) !important;
+          width: ${cfg.widthCm}cm !important;
+          height: ${cfg.heightCm}cm !important;
+        }
+      }
+    `;
+    window.print();
+    setTimeout(() => s?.remove(), 2000);
+  }, [cfg, item]);
+
+  const handleSave = useCallback(async () => {
+    if (!previewRef.current || !item) return;
+    setExporting(true);
+    try {
+      // Temporarily scale to 1 for export
+      const el = previewRef.current.firstElementChild as HTMLElement | null;
+      if (el) el.style.transform = "scale(1)";
+      const dataUrl = await toPng(previewRef.current, { cacheBust: true, pixelRatio: 3 });
+      if (el) el.style.transform = `scale(${scale})`;
+      const link = document.createElement("a");
+      link.download = `${item.name.replace(/\s+/g, "-").toLowerCase()}-label.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally { setExporting(false); }
+  }, [item, scale]);
+
+  if (!item) return null;
+
+  const qrPosPills: { value: QRPosition; label: string }[] = [
+    { value: "left",   label: "Left"   },
+    { value: "centre", label: "Centre" },
+    { value: "right",  label: "Right"  },
+  ];
+  const textPosPills: { value: TextPos; label: string }[] = [
+    { value: "above", label: "Above" },
+    { value: "below", label: "Below" },
+    { value: "left",  label: "Left"  },
+    { value: "right", label: "Right" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="max-w-md mx-2 max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Tag className="w-4 h-4" /> Label Designer — {item.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 pt-1">
+
+          {/* ── Live preview ── */}
+          <div
+            className="flex justify-center"
+            ref={previewRef}
+            style={{ height: scaledH + 2, overflow: "visible" }}
+          >
+            <div id="qr-label-print-target">
+              <LabelPreview item={item} cfg={cfg} scale={scale} />
+            </div>
+          </div>
+
+          {/* ── Label size ── */}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5 space-y-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Label Size</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Width (cm)</p>
+                <Input type="number" min="1" max="50" step="0.5" value={cfg.widthCm}
+                  onChange={(e) => set("widthCm", parseFloat(e.target.value) || 8)}
+                  className="h-9 rounded-xl text-sm" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Height (cm)</p>
+                <Input type="number" min="1" max="50" step="0.5" value={cfg.heightCm}
+                  onChange={(e) => set("heightCm", parseFloat(e.target.value) || 5)}
+                  className="h-9 rounded-xl text-sm" />
+              </div>
+            </div>
+            <Row label="Background">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md border border-border flex-shrink-0" style={{ backgroundColor: cfg.bgColor }} />
+                <Input type="color" value={cfg.bgColor} onChange={(e) => set("bgColor", e.target.value)}
+                  className="h-8 w-12 rounded-lg border border-border cursor-pointer p-0.5" />
+                <span className="text-[11px] font-mono text-muted-foreground">{cfg.bgColor}</span>
+              </div>
+            </Row>
+          </div>
+
+          {/* ── Border ── */}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Border</p>
+              <Switch checked={cfg.borderOn} onCheckedChange={(v) => set("borderOn", v)} />
+            </div>
+            {cfg.borderOn && (
+              <div className="space-y-2">
+                <Row label="Colour">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md border border-border flex-shrink-0" style={{ backgroundColor: cfg.borderColor }} />
+                    <Input type="color" value={cfg.borderColor} onChange={(e) => set("borderColor", e.target.value)}
+                      className="h-8 w-12 rounded-lg cursor-pointer p-0.5" />
+                    <span className="text-[11px] font-mono text-muted-foreground">{cfg.borderColor}</span>
+                  </div>
+                </Row>
+                <Row label="Thickness">
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="1" max="12" value={cfg.borderWidth}
+                      onChange={(e) => set("borderWidth", Number(e.target.value))}
+                      className="flex-1 accent-primary" />
+                    <span className="text-xs w-8 text-right text-muted-foreground">{cfg.borderWidth}px</span>
+                  </div>
+                </Row>
+                <Row label="Corners">
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="0" max="40" value={cfg.borderRadius}
+                      onChange={(e) => set("borderRadius", Number(e.target.value))}
+                      className="flex-1 accent-primary" />
+                    <span className="text-xs w-8 text-right text-muted-foreground">{cfg.borderRadius}px</span>
+                  </div>
+                </Row>
+              </div>
+            )}
+          </div>
+
+          {/* ── QR Code position & size ── */}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5 space-y-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">QR Code</p>
+            <Row label="Position">
+              <Pills options={qrPosPills} value={cfg.qrPosition} onChange={(v) => set("qrPosition", v)} />
+            </Row>
+            <Row label="Size">
+              <div className="flex items-center gap-2">
+                <input type="range" min="20" max="95" value={cfg.qrSizePct}
+                  onChange={(e) => set("qrSizePct", Number(e.target.value))}
+                  className="flex-1 accent-primary" />
+                <span className="text-xs w-10 text-right text-muted-foreground">{cfg.qrSizePct}%</span>
+              </div>
+            </Row>
+          </div>
+
+          {/* ── Name text ── */}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Name Text</p>
+              <Switch checked={cfg.nameOn} onCheckedChange={(v) => set("nameOn", v)} />
+            </div>
+            {cfg.nameOn && (
+              <div className="space-y-2">
+                <Row label="Position">
+                  <Pills options={textPosPills} value={cfg.namePos} onChange={(v) => set("namePos", v)} />
+                </Row>
+                <Row label="Size">
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="6" max="28" value={cfg.nameSizePt}
+                      onChange={(e) => set("nameSizePt", Number(e.target.value))}
+                      className="flex-1 accent-primary" />
+                    <span className="text-xs w-8 text-right text-muted-foreground">{cfg.nameSizePt}pt</span>
+                  </div>
+                </Row>
+                <Row label="Style">
+                  <div className="flex gap-1.5">
+                    <button onClick={() => set("nameBold",   !cfg.nameBold)}
+                      className={`px-3 py-1 rounded-lg border text-xs font-bold transition-colors ${cfg.nameBold ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>B</button>
+                    <button onClick={() => set("nameItalic", !cfg.nameItalic)}
+                      className={`px-3 py-1 rounded-lg border text-xs italic transition-colors ${cfg.nameItalic ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>I</button>
+                  </div>
+                </Row>
+                <Row label="Colour">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md border border-border flex-shrink-0" style={{ backgroundColor: cfg.nameColor }} />
+                    <Input type="color" value={cfg.nameColor} onChange={(e) => set("nameColor", e.target.value)}
+                      className="h-8 w-12 rounded-lg cursor-pointer p-0.5" />
+                    <span className="text-[11px] font-mono text-muted-foreground">{cfg.nameColor}</span>
+                  </div>
+                </Row>
+              </div>
+            )}
+          </div>
+
+          {/* ── Extra text ── */}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Extra Text</p>
+              <Switch checked={cfg.extraOn} onCheckedChange={(v) => set("extraOn", v)} />
+            </div>
+            {cfg.extraOn && (
+              <div className="space-y-2">
+                <Input
+                  value={cfg.extraText}
+                  onChange={(e) => set("extraText", e.target.value)}
+                  placeholder="e.g. Scan to visit our website"
+                  className="h-9 rounded-xl text-sm"
+                />
+                <Row label="Position">
+                  <Pills options={textPosPills} value={cfg.extraPos} onChange={(v) => set("extraPos", v)} />
+                </Row>
+                <Row label="Size">
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="6" max="28" value={cfg.extraSizePt}
+                      onChange={(e) => set("extraSizePt", Number(e.target.value))}
+                      className="flex-1 accent-primary" />
+                    <span className="text-xs w-8 text-right text-muted-foreground">{cfg.extraSizePt}pt</span>
+                  </div>
+                </Row>
+                <Row label="Style">
+                  <div className="flex gap-1.5">
+                    <button onClick={() => set("extraBold",   !cfg.extraBold)}
+                      className={`px-3 py-1 rounded-lg border text-xs font-bold transition-colors ${cfg.extraBold ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>B</button>
+                    <button onClick={() => set("extraItalic", !cfg.extraItalic)}
+                      className={`px-3 py-1 rounded-lg border text-xs italic transition-colors ${cfg.extraItalic ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>I</button>
+                  </div>
+                </Row>
+                <Row label="Colour">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md border border-border flex-shrink-0" style={{ backgroundColor: cfg.extraColor }} />
+                    <Input type="color" value={cfg.extraColor} onChange={(e) => set("extraColor", e.target.value)}
+                      className="h-8 w-12 rounded-lg cursor-pointer p-0.5" />
+                    <span className="text-[11px] font-mono text-muted-foreground">{cfg.extraColor}</span>
+                  </div>
+                </Row>
+              </div>
+            )}
+          </div>
+
+          {/* ── Actions ── */}
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="outline" onClick={onClose} className="h-10 rounded-xl text-xs px-2">Cancel</Button>
+            <Button variant="outline" onClick={handleSave} disabled={exporting} className="h-10 rounded-xl gap-1 text-xs px-2">
+              <Download className="w-3.5 h-3.5" />{exporting ? "Saving…" : "Save PNG"}
+            </Button>
+            <Button onClick={handlePrint} className="h-10 rounded-xl gap-1 text-xs px-2">
+              <Printer className="w-3.5 h-3.5" /> Print
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── QR Card ──────────────────────────────────────────────────────────────────
 
-function QRCard({ item, index, onEdit, onDelete, onPrint }: {
+function QRCard({ item, index, onEdit, onDelete, onPrint, onLabel }: {
   item: QRCodeItem;
   index: number;
   onEdit: () => void;
   onDelete: () => void;
   onPrint: () => void;
+  onLabel: () => void;
 }) {
   const typeInfo = CONTENT_TYPES.find((t) => t.value === item.contentType) || CONTENT_TYPES[0];
   const TypeIcon = typeInfo.icon;
@@ -301,6 +749,9 @@ function QRCard({ item, index, onEdit, onDelete, onPrint }: {
         </Button>
         <Button size="sm" variant="outline" onClick={onPrint} className="flex-1 h-8 rounded-lg text-xs gap-1 px-2">
           <Printer className="w-3 h-3" /> Print
+        </Button>
+        <Button size="sm" variant="outline" onClick={onLabel} className="flex-1 h-8 rounded-lg text-xs gap-1 px-2 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-900/20">
+          <Tag className="w-3 h-3" /> Label
         </Button>
         <button
           onClick={onDelete}
@@ -635,13 +1086,14 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 
 // ─── Library View ─────────────────────────────────────────────────────────────
 
-function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onSettings, selectedCategory, onCategoryChange }: {
+function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLabel, onSettings, selectedCategory, onCategoryChange }: {
   qrCodes: QRCodeItem[];
   loading: boolean;
   onNew: () => void;
   onEdit: (item: QRCodeItem) => void;
   onDelete: (id: string) => void;
   onPrint: (item: QRCodeItem) => void;
+  onLabel: (item: QRCodeItem) => void;
   onSettings: () => void;
   selectedCategory: string;
   onCategoryChange: (c: string) => void;
@@ -738,6 +1190,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onSet
                 onEdit={() => onEdit(item)}
                 onDelete={() => item.id && onDelete(item.id)}
                 onPrint={() => onPrint(item)}
+                onLabel={() => onLabel(item)}
               />
             ))}
           </AnimatePresence>
@@ -758,6 +1211,8 @@ const QRCodes = () => {
   const [editItem, setEditItem] = useState<QRCodeItem | null>(null);
   const [printItem, setPrintItem] = useState<QRCodeItem | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
+  const [labelItem, setLabelItem] = useState<QRCodeItem | null>(null);
+  const [labelOpen, setLabelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
 
@@ -807,6 +1262,7 @@ const QRCodes = () => {
               onEdit={(item) => { setEditItem(item); setView("generator"); }}
               onDelete={deleteQRCode}
               onPrint={(item) => { setPrintItem(item); setPrintOpen(true); }}
+              onLabel={(item) => { setLabelItem(item); setLabelOpen(true); }}
               onSettings={() => setView("settings")}
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
@@ -832,6 +1288,12 @@ const QRCodes = () => {
         item={printItem}
         open={printOpen}
         onClose={() => setPrintOpen(false)}
+      />
+
+      <LabelDesignerDialog
+        item={labelItem}
+        open={labelOpen}
+        onClose={() => setLabelOpen(false)}
       />
     </FeaturePageShell>
   );
