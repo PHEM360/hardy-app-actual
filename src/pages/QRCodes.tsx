@@ -4,11 +4,11 @@ import { useNavigate } from "react-router-dom";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
 import RichTextEditor, { hasRichContent } from "@/components/RichTextEditor";
-import LabelDesigner, { makeDefaultDesign } from "@/pages/LabelDesigner";
+import LabelDesigner, { makeDefaultDesign, LabelPreviewCanvas } from "@/pages/LabelDesigner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
-  Globe, FileText, Image, X, Check, Download, Tag, Phone, MapPin,
+  Globe, FileText, Image, X, Check, Download, Tag, Phone, MapPin, Layers,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -696,9 +696,144 @@ function SettingsView({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ─── Label Card ───────────────────────────────────────────────────────────────
+
+function LabelCard({ item, allItems, onEdit, onDelete, onPrint }: {
+  item: QRCodeItem;
+  allItems: QRCodeItem[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onPrint: () => void;
+}) {
+  const design = item.labelDesign!;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-border/50 bg-card shadow-soft p-3 space-y-2.5"
+    >
+      {/* Thumbnail */}
+      <div className="w-full overflow-hidden rounded-xl border border-border/30 bg-muted/20 flex items-center justify-center py-2">
+        <LabelPreviewCanvas
+          design={design}
+          item={item}
+          allItems={allItems}
+          widthPx={140}
+        />
+      </div>
+      {/* Info */}
+      <div className="space-y-0.5 px-0.5">
+        <p className="text-xs font-semibold truncate">{item.name}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {design.widthCm}×{design.heightCm} cm · {design.elements.length} element{design.elements.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+      {/* Actions */}
+      <div className="flex gap-1.5 border-t border-border/30 pt-2">
+        <Button size="sm" variant="outline" onClick={onEdit} className="flex-1 h-8 rounded-lg text-xs gap-1 px-2">
+          <Edit2 className="w-3 h-3" /> Edit
+        </Button>
+        <Button size="sm" variant="outline" onClick={onPrint} className="flex-1 h-8 rounded-lg text-xs gap-1 px-2">
+          <Printer className="w-3 h-3" /> Print
+        </Button>
+        <button
+          onClick={onDelete}
+          className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Remove label design"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── New Label Dialog ─────────────────────────────────────────────────────────
+
+function NewLabelDialog({ open, onClose, onConfirm }: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (name: string, contentType: QRCodeItem["contentType"], content: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [contentType, setContentType] = useState<QRCodeItem["contentType"]>("url");
+  const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Reset on open
+  useEffect(() => {
+    if (open) { setName(""); setContentType("url"); setContent(""); }
+  }, [open]);
+
+  const placeholder = CONTENT_TYPES.find(t => t.value === contentType)?.placeholder ?? "";
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await onConfirm(name.trim(), contentType, content.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="w-4 h-4" /> New Label
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Label Name *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Product Tag"
+              className="h-10 rounded-xl"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">QR Code Type</Label>
+            <Select value={contentType} onValueChange={(v) => setContentType(v as QRCodeItem["contentType"])}>
+              <SelectTrigger className="h-10 rounded-xl text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONTENT_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">QR Code Content <span className="text-muted-foreground">(optional — can add later)</span></Label>
+            <Input
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={placeholder}
+              className="h-10 rounded-xl"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} className="h-10 rounded-xl">Cancel</Button>
+            <Button onClick={handleCreate} disabled={!name.trim() || saving} className="h-10 rounded-xl gap-1.5">
+              {saving ? "Creating…" : <><Plus className="w-3.5 h-3.5" /> Create & Design</>}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Library View ─────────────────────────────────────────────────────────────
 
-function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLabel, onSettings, selectedCategory, onCategoryChange }: {
+function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLabel, onDeleteLabel, onNewLabel, onSettings, selectedCategory, onCategoryChange }: {
   qrCodes: QRCodeItem[];
   loading: boolean;
   onNew: () => void;
@@ -706,6 +841,8 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
   onDelete: (id: string) => void;
   onPrint: (item: QRCodeItem) => void;
   onLabel: (item: QRCodeItem) => void;
+  onDeleteLabel: (id: string) => void;
+  onNewLabel: () => void;
   onSettings: () => void;
   selectedCategory: string;
   onCategoryChange: (c: string) => void;
@@ -719,6 +856,8 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
     ? qrCodes.filter((q) => q.category === selectedCategory)
     : qrCodes;
 
+  const labelItems = useMemo(() => qrCodes.filter((q) => q.labelDesign), [qrCodes]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -728,86 +867,135 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
   }
 
   return (
-    <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {qrCodes.length} {qrCodes.length === 1 ? "code" : "codes"} saved
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={onSettings}
-            className="p-2 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            title="Settings"
-          >
-            <Settings2 className="w-4 h-4" />
-          </button>
-          <Button size="sm" onClick={onNew} className="h-9 rounded-xl gap-1.5 text-xs px-3">
-            <Plus className="w-3.5 h-3.5" /> New QR Code
-          </Button>
-        </div>
-      </div>
-
-      {/* Category filter pills */}
-      {usedCategories.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-          <button
-            onClick={() => onCategoryChange("")}
-            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              !selectedCategory ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
-            }`}
-          >
-            All
-          </button>
-          {usedCategories.map((cat) => (
+    <div className="space-y-6">
+      {/* ── QR Codes section ── */}
+      <div className="space-y-4">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-muted-foreground" />
+            <p className="text-sm font-semibold">QR Codes</p>
+            <span className="text-xs text-muted-foreground">({qrCodes.length})</span>
+          </div>
+          <div className="flex gap-2">
             <button
-              key={cat}
-              onClick={() => onCategoryChange(cat === selectedCategory ? "" : cat)}
+              onClick={onSettings}
+              className="p-2 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Settings"
+            >
+              <Settings2 className="w-4 h-4" />
+            </button>
+            <Button size="sm" onClick={onNew} className="h-9 rounded-xl gap-1.5 text-xs px-3">
+              <Plus className="w-3.5 h-3.5" /> New QR Code
+            </Button>
+          </div>
+        </div>
+
+        {/* Category filter pills */}
+        {usedCategories.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            <button
+              onClick={() => onCategoryChange("")}
               className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                selectedCategory === cat ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
+                !selectedCategory ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
               }`}
             >
-              {cat}
+              All
             </button>
-          ))}
-        </div>
-      )}
-
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-16 gap-3 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-            <QrCode className="w-6 h-6 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium">
-            {qrCodes.length === 0 ? "No QR codes yet" : "No codes in this category"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {qrCodes.length === 0 ? "Create your first QR code to get started" : "Try clearing the category filter"}
-          </p>
-          {qrCodes.length === 0 && (
-            <Button size="sm" onClick={onNew} className="mt-2 rounded-xl gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Create First QR Code
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <AnimatePresence mode="popLayout">
-            {filtered.map((item, i) => (
-              <QRCard
-                key={item.id}
-                item={item}
-                index={i}
-                onEdit={() => onEdit(item)}
-                onDelete={() => item.id && onDelete(item.id)}
-                onPrint={() => onPrint(item)}
-                onLabel={() => onLabel(item)}
-              />
+            {usedCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => onCategoryChange(cat === selectedCategory ? "" : cat)}
+                className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                  selectedCategory === cat ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
+                }`}
+              >
+                {cat}
+              </button>
             ))}
-          </AnimatePresence>
+          </div>
+        )}
+
+        {/* QR Grid */}
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center py-12 gap-3 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+              <QrCode className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium">
+              {qrCodes.length === 0 ? "No QR codes yet" : "No codes in this category"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {qrCodes.length === 0 ? "Create your first QR code to get started" : "Try clearing the category filter"}
+            </p>
+            {qrCodes.length === 0 && (
+              <Button size="sm" onClick={onNew} className="mt-2 rounded-xl gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Create First QR Code
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((item, i) => (
+                <QRCard
+                  key={item.id}
+                  item={item}
+                  index={i}
+                  onEdit={() => onEdit(item)}
+                  onDelete={() => item.id && onDelete(item.id)}
+                  onPrint={() => onPrint(item)}
+                  onLabel={() => onLabel(item)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+
+      {/* ── Labels section ── */}
+      <div className="space-y-4 border-t border-border/40 pt-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-muted-foreground" />
+            <p className="text-sm font-semibold">Labels</p>
+            <span className="text-xs text-muted-foreground">({labelItems.length})</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={onNewLabel} className="h-9 rounded-xl gap-1.5 text-xs px-3 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-700 hover:bg-violet-50 dark:hover:bg-violet-900/20">
+            <Plus className="w-3.5 h-3.5" /> New Label
+          </Button>
         </div>
-      )}
+
+        {labelItems.length === 0 ? (
+          <div className="flex flex-col items-center py-10 gap-3 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+              <Tag className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium">No labels yet</p>
+            <p className="text-xs text-muted-foreground">
+              Create a new label or open a QR code and tap "Label" to design one
+            </p>
+            <Button size="sm" variant="outline" onClick={onNewLabel} className="mt-1 rounded-xl gap-1.5 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-700">
+              <Plus className="w-3.5 h-3.5" /> Create First Label
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <AnimatePresence mode="popLayout">
+              {labelItems.map((item) => (
+                <LabelCard
+                  key={item.id}
+                  item={item}
+                  allItems={qrCodes}
+                  onEdit={() => onLabel(item)}
+                  onDelete={() => item.id && onDeleteLabel(item.id)}
+                  onPrint={() => onPrint(item)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -815,7 +1003,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const QRCodes = () => {
-  const { qrCodes, loading, addQRCode, updateQRCode, deleteQRCode } = useQRCodes();
+  const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign } = useQRCodes();
   const { settings } = useQRCodeSettings();
   const navigate = useNavigate();
 
@@ -825,6 +1013,7 @@ const QRCodes = () => {
   const [printOpen, setPrintOpen] = useState(false);
   const [labelItem, setLabelItem] = useState<QRCodeItem | null>(null);
   const [labelOpen, setLabelOpen] = useState(false);
+  const [newLabelOpen, setNewLabelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
 
@@ -848,6 +1037,37 @@ const QRCodes = () => {
     if (!labelItem?.id) return;
     await updateQRCode(labelItem.id, { labelDesign: design });
     setLabelOpen(false);
+  };
+
+  // "New Label" dialog → create QR item then open designer
+  const handleNewLabelCreate = async (
+    name: string,
+    contentType: QRCodeItem["contentType"],
+    content: string
+  ) => {
+    const newId = await addQRCodeAndGetId({
+      name,
+      contentType,
+      content,
+      fgColor: settings.fgColor,
+      bgColor: settings.bgColor,
+      showName: true,
+      sendLocation: false,
+    });
+    setNewLabelOpen(false);
+    if (newId) {
+      // Wait for Firestore snapshot to populate qrCodes, then open designer
+      // Use a small timeout to let the listener update
+      setTimeout(() => {
+        const newItem = qrCodes.find((q) => q.id === newId) ?? {
+          id: newId, name, contentType, content,
+          fgColor: settings.fgColor, bgColor: settings.bgColor,
+          showName: true, sendLocation: false,
+        } as QRCodeItem;
+        setLabelItem(newItem);
+        setLabelOpen(true);
+      }, 400);
+    }
   };
 
   return (
@@ -881,6 +1101,8 @@ const QRCodes = () => {
               onDelete={deleteQRCode}
               onPrint={(item) => { setPrintItem(item); setPrintOpen(true); }}
               onLabel={(item) => { setLabelItem(item); setLabelOpen(true); }}
+              onDeleteLabel={(id) => removeLabelDesign(id)}
+              onNewLabel={() => setNewLabelOpen(true)}
               onSettings={() => setView("settings")}
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
@@ -916,6 +1138,12 @@ const QRCodes = () => {
           onSave={handleSaveLabel}
         />
       )}
+
+      <NewLabelDialog
+        open={newLabelOpen}
+        onClose={() => setNewLabelOpen(false)}
+        onConfirm={handleNewLabelCreate}
+      />
     </FeaturePageShell>
   );
 };

@@ -184,6 +184,55 @@ function ElContent({ el, item, allItems, pxPerCm }: ElContentProps) {
   return null;
 }
 
+// ─── Label preview canvas (exported for use in library) ───────────────────────
+
+export function LabelPreviewCanvas({
+  design,
+  item,
+  allItems,
+  widthPx,
+}: {
+  design: LabelDesign;
+  item: QRCodeItem;
+  allItems: QRCodeItem[];
+  widthPx: number;
+}) {
+  const pxPerCm = widthPx / design.widthCm;
+  const heightPx = design.heightCm * pxPerCm;
+  return (
+    <div
+      style={{
+        width: widthPx,
+        height: heightPx,
+        backgroundColor: design.bgColor,
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 6,
+        flexShrink: 0,
+      }}
+    >
+      {[...design.elements]
+        .sort((a, b) => a.zIndex - b.zIndex)
+        .map((el) => (
+          <div
+            key={el.id}
+            style={{
+              position: "absolute",
+              left: el.xCm * pxPerCm,
+              top: el.yCm * pxPerCm,
+              width: el.wCm * pxPerCm,
+              height: el.hCm * pxPerCm,
+              zIndex: el.zIndex,
+              opacity: el.opacity ?? 1,
+            }}
+          >
+            <ElContent el={el} item={item} allItems={allItems} pxPerCm={pxPerCm} />
+          </div>
+        ))}
+    </div>
+  );
+}
+
 // ─── Properties panel ─────────────────────────────────────────────────────────
 
 function PosSizeFields({

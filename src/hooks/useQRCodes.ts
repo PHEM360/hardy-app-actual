@@ -10,6 +10,7 @@ import {
   doc,
   setDoc,
   serverTimestamp,
+  deleteField,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { QRCodeItem, QRCodeSettings, DEFAULT_QR_SETTINGS } from "@/types/app";
@@ -56,7 +57,25 @@ export function useQRCodes() {
     await deleteDoc(doc(db, "qrcodes", uid, "items", id));
   }, [uid]);
 
-  return { qrCodes, loading, addQRCode, updateQRCode, deleteQRCode };
+  const removeLabelDesign = useCallback(async (id: string) => {
+    if (!uid) return;
+    await updateDoc(doc(db, "qrcodes", uid, "items", id), {
+      labelDesign: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+  }, [uid]);
+
+  const addQRCodeAndGetId = useCallback(async (item: Omit<QRCodeItem, "id" | "createdAt" | "updatedAt">): Promise<string | null> => {
+    if (!uid) return null;
+    const ref = await addDoc(collection(db, "qrcodes", uid, "items"), {
+      ...item,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return ref.id;
+  }, [uid]);
+
+  return { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign };
 }
 
 // ─── QR Code settings ──────────────────────────────────────────────────────────
