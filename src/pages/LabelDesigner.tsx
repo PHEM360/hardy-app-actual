@@ -55,7 +55,8 @@ export function makeDefaultDesign(item: QRCodeItem): LabelDesign {
         type: "text",
         xCm: 0.5, yCm: 4.0, wCm: 9, hCm: 0.8,
         zIndex: 2,
-        html: `<p style="text-align:center;font-size:18px;font-weight:bold">${item.name}</p>`,
+        fontSizePt: 14,
+        html: `<p style="text-align:center;font-weight:bold">${item.name}</p>`,
       },
     ],
   };
@@ -103,7 +104,13 @@ function ElContent({ el, item, allItems, pxPerCm }: ElContentProps) {
     return (
       <div
         className="qr-label-rich"
-        style={{ width: "100%", height: "100%", overflow: "hidden", userSelect: "none" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          userSelect: "none",
+          fontSize: el.fontSizePt ? `${el.fontSizePt}pt` : undefined,
+        }}
         dangerouslySetInnerHTML={{ __html: el.html || "" }}
       />
     );
@@ -364,15 +371,38 @@ function PropertiesPanel({
 
       {/* Text properties */}
       {el.type === "text" && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-muted-foreground">Content</p>
-          <RichTextEditor
-            key={el.id}
-            value={el.html || ""}
-            onChange={(html) => onUpdateEl(el.id, { html })}
-            placeholder="Enter text…"
-            minHeight={44}
-          />
+        <div className="space-y-2.5">
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Font Size (pt)</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="6"
+                max="72"
+                value={el.fontSizePt || 14}
+                onChange={(e) => onUpdateEl(el.id, { fontSizePt: Number(e.target.value) })}
+                className="flex-1 accent-primary"
+              />
+              <Input
+                type="number"
+                min="6"
+                max="200"
+                value={el.fontSizePt || 14}
+                onChange={(e) => onUpdateEl(el.id, { fontSizePt: Number(e.target.value) || 14 })}
+                className="h-7 w-14 rounded-lg text-xs px-2"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Content</p>
+            <RichTextEditor
+              key={el.id}
+              value={el.html || ""}
+              onChange={(html) => onUpdateEl(el.id, { html })}
+              placeholder="Enter text…"
+              minHeight={44}
+            />
+          </div>
         </div>
       )}
 
@@ -601,6 +631,7 @@ export default function LabelDesigner({ item, allItems, onClose, onSave }: Label
         id: genId(), type, zIndex: maxZ,
         xCm: 0.5, yCm: cy - 0.4, wCm: design.widthCm - 1, hCm: 0.8,
         html: "<p>New text — click to edit in the panel</p>",
+        fontSizePt: 14,
       };
     } else if (type === "image") {
       el = {

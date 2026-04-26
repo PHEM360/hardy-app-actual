@@ -433,6 +433,7 @@ export interface LabelElement {
   qrBgColor?: string;
   // Text
   html?: string;
+  fontSizePt?: number;
   // Image
   src?: string;
   objectFit?: "contain" | "cover" | "fill";
