@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, Fragment } from "react";
+import { useState, useCallback, useMemo, useRef, Fragment, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import QRCodeSVG from "react-qr-code";
@@ -204,11 +204,12 @@ function PrintDialog({ item, open, onClose }: {
           {/* Extra text */}
           <div className="space-y-1.5">
             <Label>Extra Text <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Input
+            <Textarea
               value={extraText}
               onChange={(e) => setExtraText(e.target.value)}
               placeholder="e.g. Scan to visit our website"
-              className="h-9 rounded-xl text-sm"
+              className="rounded-xl text-sm resize-none"
+              rows={2}
             />
           </div>
 
@@ -260,6 +261,8 @@ interface LabelConfig {
   nameBold:      boolean;
   nameItalic:    boolean;
   nameColor:     string;
+  // name override (multi-line custom text replacing item.name)
+  nameOverride?: string;
   // extra text
   extraOn:       boolean;
   extraText:     string;
@@ -276,6 +279,7 @@ const DEFAULT_LABEL: LabelConfig = {
   borderOn: true, borderWidth: 2, borderColor: "#000000", borderRadius: 8,
   qrPosition: "centre", qrSizePct: 70,
   nameOn: true, namePos: "below", nameSizePt: 11, nameBold: true, nameItalic: false, nameColor: "#000000",
+  nameOverride: "",
   extraOn: false, extraText: "", extraPos: "below", extraSizePt: 9, extraBold: false, extraItalic: false, extraColor: "#555555",
 };
 
@@ -299,8 +303,8 @@ function LabelPreview({ item, cfg, scale = 1 }: { item: QRCodeItem; cfg: LabelCo
       color: cfg.nameColor,
       textAlign: "center",
       lineHeight: 1.3,
-      whiteSpace: "nowrap",
-    }}>{item.name}</p>
+      whiteSpace: "pre-wrap",
+    }}>{cfg.nameOverride?.trim() ? cfg.nameOverride : item.name}</p>
   ) : null;
 
   const ExtraEl = (cfg.extraOn && cfg.extraText.trim()) ? (
@@ -415,9 +419,14 @@ function LabelDesignerDialog({ item, open, onClose }: {
   open: boolean;
   onClose: () => void;
 }) {
-  const [cfg, setCfg] = useState<LabelConfig>(DEFAULT_LABEL);
+  const [cfg, setCfg] = useState<LabelConfig>({ ...DEFAULT_LABEL, nameOverride: item?.name ?? "" });
   const previewRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+
+  // Reset cfg (including nameOverride) when item changes
+  useEffect(() => {
+    setCfg({ ...DEFAULT_LABEL, nameOverride: item?.name ?? "" });
+  }, [item]);
 
   const set = <K extends keyof LabelConfig>(k: K, v: LabelConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
@@ -591,6 +600,13 @@ function LabelDesignerDialog({ item, open, onClose }: {
             </div>
             {cfg.nameOn && (
               <div className="space-y-2">
+                <Textarea
+                  value={cfg.nameOverride ?? item.name}
+                  onChange={(e) => set("nameOverride", e.target.value)}
+                  placeholder={item.name}
+                  className="rounded-xl text-sm resize-none"
+                  rows={2}
+                />
                 <Row label="Position">
                   <Pills options={textPosPills} value={cfg.namePos} onChange={(v) => set("namePos", v)} />
                 </Row>
@@ -630,11 +646,12 @@ function LabelDesignerDialog({ item, open, onClose }: {
             </div>
             {cfg.extraOn && (
               <div className="space-y-2">
-                <Input
+                <Textarea
                   value={cfg.extraText}
                   onChange={(e) => set("extraText", e.target.value)}
                   placeholder="e.g. Scan to visit our website"
-                  className="h-9 rounded-xl text-sm"
+                  className="rounded-xl text-sm resize-none"
+                  rows={2}
                 />
                 <Row label="Position">
                   <Pills options={textPosPills} value={cfg.extraPos} onChange={(v) => set("extraPos", v)} />
