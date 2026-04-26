@@ -8,6 +8,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Rich-text label content: reset Tiptap <p> margins so text is compact */
+.qr-label-rich p { margin: 0; line-height: inherit; }
+.qr-label-rich strong { font-weight: bold; }
+.qr-label-rich em { font-style: italic; }
+.qr-label-rich u { text-decoration: underline; }
+
+/* Tiptap editor focus ring */
+.ProseMirror:focus { outline: none; }
+
 @layer base {
   :root {
     --background: 209 40% 96%;

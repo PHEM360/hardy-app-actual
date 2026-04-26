@@ -3,6 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { TextStyle as TiptapTextStyle } from "@tiptap/extension-text-style";
+import { Color as TiptapColor } from "@tiptap/extension-color";
+import TiptapUnderline from "@tiptap/extension-underline";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
@@ -43,6 +48,83 @@ const TEXT_SIZES = [
   { value: "lg",  label: "L",  px: 20 },
   { value: "xl",  label: "XL", px: 26 },
 ];
+
+// ─── Rich text helpers ────────────────────────────────────────────────────────
+
+/** Returns true if the HTML string contains visible text content */
+function hasRichContent(html: string): boolean {
+  if (!html) return false;
+  return html.replace(/<[^>]*>/g, "").trim().length > 0;
+}
+
+/** Mini rich-text editor with Bold / Italic / Underline / Colour toolbar */
+function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  resetKey,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+  resetKey?: string | number;
+}) {
+  const [toolbarColor, setToolbarColor] = useState("#000000");
+  const colorRef = useRef<HTMLInputElement>(null);
+
+  const editor = useEditor({
+    extensions: [StarterKit, TiptapTextStyle, TiptapColor, TiptapUnderline],
+    content: value || "",
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    editorProps: {
+      attributes: {
+        class: "min-h-[52px] px-2.5 py-2 text-sm outline-none",
+      },
+    },
+  }, [resetKey]);
+
+  if (!editor) return null;
+
+  const applyColor = (color: string) => {
+    setToolbarColor(color);
+    editor.chain().focus().setColor(color).run();
+  };
+
+  const btn = (active: boolean) =>
+    `px-2 py-0.5 rounded-md text-xs transition-colors ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60"}`;
+
+  return (
+    <div className="rounded-xl border border-input bg-background overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50 bg-muted/20 flex-wrap">
+        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()}
+          className={btn(editor.isActive("bold")) + " font-bold"}>B</button>
+        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()}
+          className={btn(editor.isActive("italic")) + " italic"}>I</button>
+        <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className={btn(editor.isActive("underline")) + " underline"}>U</button>
+        <div className="w-px h-3.5 bg-border/60 mx-1" />
+        {/* Colour picker */}
+        <button type="button" className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-muted/60 transition-colors"
+          onClick={() => colorRef.current?.click()}>
+          <span className="text-[10px] text-muted-foreground">A</span>
+          <div className="w-3.5 h-1.5 rounded-sm border border-border/60" style={{ backgroundColor: toolbarColor }} />
+        </button>
+        <input ref={colorRef} type="color" value={toolbarColor}
+          onChange={(e) => applyColor(e.target.value)} className="sr-only" />
+        <div className="w-px h-3.5 bg-border/60 mx-1" />
+        <button type="button" onClick={() => editor.chain().focus().unsetAllMarks().run()}
+          className="px-2 py-0.5 rounded-md text-[10px] text-muted-foreground hover:bg-muted/60 transition-colors">
+          Clear
+        </button>
+      </div>
+      <EditorContent editor={editor} />
+      {!hasRichContent(editor.getHTML()) && placeholder && (
+        <p className="absolute top-[42px] left-3 text-sm text-muted-foreground/50 pointer-events-none select-none">{placeholder}</p>
+      )}
+    </div>
+  );
+}
 
 // ─── Print Dialog ─────────────────────────────────────────────────────────────
 
@@ -135,12 +217,11 @@ function PrintDialog({ item, open, onClose }: {
                 </p>
               )}
               {extraText.trim() && (
-                <p
-                  className="qr-print-text text-center mt-1 leading-tight"
+                <div
+                  className="qr-label-rich qr-print-text text-center mt-1 leading-tight"
                   style={{ color: item.fgColor, fontSize: textPx }}
-                >
-                  {extraText}
-                </p>
+                  dangerouslySetInnerHTML={{ __html: extraText }}
+                />
               )}
             </div>
           </div>
@@ -180,7 +261,7 @@ function PrintDialog({ item, open, onClose }: {
           </div>
 
           {/* Text size — only shown when name is visible */}
-          {(showName || extraText.trim()) && (
+          {(showName || hasRichContent(extraText)) && (
             <div className="space-y-1.5">
               <Label>Text Size</Label>
               <div className="flex gap-1.5">
@@ -204,13 +285,13 @@ function PrintDialog({ item, open, onClose }: {
           {/* Extra text */}
           <div className="space-y-1.5">
             <Label>Extra Text <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Textarea
-              value={extraText}
-              onChange={(e) => setExtraText(e.target.value)}
-              placeholder="e.g. Scan to visit our website"
-              className="rounded-xl text-sm resize-none"
-              rows={2}
-            />
+            <div className="relative">
+              <RichTextEditor
+                value={extraText}
+                onChange={setExtraText}
+                placeholder="e.g. Scan to visit our website"
+              />
+            </div>
           </div>
 
           {/* Actions */}
@@ -293,30 +374,30 @@ function LabelPreview({ item, cfg, scale = 1 }: { item: QRCodeItem; cfg: LabelCo
 
   // Which text positions are beside the QR (row layout)?
   const nameBeside  = cfg.nameOn  && (cfg.namePos  === "left" || cfg.namePos  === "right");
-  const extraBeside = cfg.extraOn && cfg.extraText.trim() && (cfg.extraPos === "left" || cfg.extraPos === "right");
+  const extraBeside = cfg.extraOn && hasRichContent(cfg.extraText) && (cfg.extraPos === "left" || cfg.extraPos === "right");
 
   const NameEl = cfg.nameOn ? (
-    <p style={{
+    <div className="qr-label-rich" style={{
       fontSize: cfg.nameSizePt,
       fontWeight: cfg.nameBold    ? "bold"   : "normal",
       fontStyle:  cfg.nameItalic  ? "italic" : "normal",
       color: cfg.nameColor,
       textAlign: "center",
       lineHeight: 1.3,
-      whiteSpace: "pre-wrap",
-    }}>{cfg.nameOverride?.trim() ? cfg.nameOverride : item.name}</p>
+    }} dangerouslySetInnerHTML={{
+      __html: (cfg.nameOverride?.trim() ? cfg.nameOverride : `<p>${item.name}</p>`)
+    }} />
   ) : null;
 
-  const ExtraEl = (cfg.extraOn && cfg.extraText.trim()) ? (
-    <p style={{
+  const ExtraEl = (cfg.extraOn && hasRichContent(cfg.extraText)) ? (
+    <div className="qr-label-rich" style={{
       fontSize: cfg.extraSizePt,
       fontWeight: cfg.extraBold   ? "bold"   : "normal",
       fontStyle:  cfg.extraItalic ? "italic" : "normal",
       color: cfg.extraColor,
       textAlign: "center",
       lineHeight: 1.3,
-      whiteSpace: "pre-wrap",
-    }}>{cfg.extraText}</p>
+    }} dangerouslySetInnerHTML={{ __html: cfg.extraText }} />
   ) : null;
 
   const QREl = (
@@ -336,15 +417,15 @@ function LabelPreview({ item, cfg, scale = 1 }: { item: QRCodeItem; cfg: LabelCo
     const rightOfQR: React.ReactNode[] = [];
     if (cfg.nameOn  && cfg.namePos  === "left")  leftOfQR.push(<Fragment key="name">{NameEl}</Fragment>);
     if (cfg.nameOn  && cfg.namePos  === "right") rightOfQR.push(<Fragment key="name">{NameEl}</Fragment>);
-    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "left")  leftOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
-    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "right") rightOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.extraOn && hasRichContent(cfg.extraText) && cfg.extraPos === "left")  leftOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.extraOn && hasRichContent(cfg.extraText) && cfg.extraPos === "right") rightOfQR.push(<Fragment key="extra">{ExtraEl}</Fragment>);
 
     const topItems: React.ReactNode[] = [];
     const bottomItems: React.ReactNode[] = [];
     if (cfg.nameOn  && cfg.namePos  === "above") topItems.push(<Fragment key="name">{NameEl}</Fragment>);
-    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "above") topItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.extraOn && hasRichContent(cfg.extraText) && cfg.extraPos === "above") topItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
     if (cfg.nameOn  && cfg.namePos  === "below") bottomItems.push(<Fragment key="name">{NameEl}</Fragment>);
-    if (cfg.extraOn && cfg.extraText.trim() && cfg.extraPos === "below") bottomItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
+    if (cfg.extraOn && hasRichContent(cfg.extraText) && cfg.extraPos === "below") bottomItems.push(<Fragment key="extra">{ExtraEl}</Fragment>);
 
     const qrAlign = cfg.qrPosition === "left" ? "flex-start" : cfg.qrPosition === "right" ? "flex-end" : "center";
 
@@ -600,12 +681,11 @@ function LabelDesignerDialog({ item, open, onClose }: {
             </div>
             {cfg.nameOn && (
               <div className="space-y-2">
-                <Textarea
-                  value={cfg.nameOverride ?? item.name}
-                  onChange={(e) => set("nameOverride", e.target.value)}
+                <RichTextEditor
+                  value={cfg.nameOverride ?? `<p>${item.name}</p>`}
+                  onChange={(html) => set("nameOverride", html)}
                   placeholder={item.name}
-                  className="rounded-xl text-sm resize-none"
-                  rows={2}
+                  resetKey={item.id}
                 />
                 <Row label="Position">
                   <Pills options={textPosPills} value={cfg.namePos} onChange={(v) => set("namePos", v)} />
@@ -646,12 +726,11 @@ function LabelDesignerDialog({ item, open, onClose }: {
             </div>
             {cfg.extraOn && (
               <div className="space-y-2">
-                <Textarea
+                <RichTextEditor
                   value={cfg.extraText}
-                  onChange={(e) => set("extraText", e.target.value)}
+                  onChange={(html) => set("extraText", html)}
                   placeholder="e.g. Scan to visit our website"
-                  className="rounded-xl text-sm resize-none"
-                  rows={2}
+                  resetKey={item?.id}
                 />
                 <Row label="Position">
                   <Pills options={textPosPills} value={cfg.extraPos} onChange={(v) => set("extraPos", v)} />
