@@ -67,7 +67,7 @@ export function useQRCodeSettings() {
 
   useEffect(() => {
     if (!uid) return;
-    const unsub = onSnapshot(doc(db, "qrcodes", uid, "settings"), (snap) => {
+    const unsub = onSnapshot(doc(db, "qrcodes", uid, "settings", "default"), (snap) => {
       if (snap.exists()) {
         setSettings({ ...DEFAULT_QR_SETTINGS, ...snap.data() } as QRCodeSettings);
       }
@@ -78,7 +78,7 @@ export function useQRCodeSettings() {
   const saveSettings = useCallback(async (updates: Partial<QRCodeSettings>) => {
     if (!uid) return;
     await setDoc(
-      doc(db, "qrcodes", uid, "settings"),
+      doc(db, "qrcodes", uid, "settings", "default"),
       { ...updates, updatedAt: serverTimestamp() },
       { merge: true }
     );
