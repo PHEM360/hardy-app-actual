@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, Globe, Hash, MapPin,
-  CheckCircle2, XCircle, ChevronRight,
+  CheckCircle2, XCircle, ChevronRight, QrCode,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -188,7 +188,9 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
   );
 }
 
-function CompanyTile({ co, children, index, onEdit, onDelete, onNavigate, onNavigateChild }: {
+// ─── Company Row ──────────────────────────────────────────────────────────────
+
+function CompanyRow({ co, children, index, onEdit, onDelete, onNavigate, onNavigateChild }: {
   co: Company; children: Company[]; index: number;
   onEdit: () => void; onDelete: () => void; onNavigate: () => void; onNavigateChild: (id: string) => void;
 }) {
@@ -196,85 +198,118 @@ function CompanyTile({ co, children, index, onEdit, onDelete, onNavigate, onNavi
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
-      className="rounded-2xl border border-border/50 bg-card shadow-soft overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
-      onClick={onNavigate}
+      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.03 }}
     >
-      <div className="h-1.5 w-full" style={{ backgroundColor: co.color }} />
-      <div className="p-3.5">
-        <div className="flex items-start justify-between gap-1 mb-2">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: `${co.color}20` }}>
-            {co.emoji || "🏢"}
+      {/* Main company row */}
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 rounded-2xl border border-border/50 bg-card hover:bg-muted/20 cursor-pointer transition-colors active:scale-[0.99]"
+        onClick={onNavigate}
+        style={{ borderLeftColor: co.color, borderLeftWidth: 3 }}
+      >
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0" style={{ backgroundColor: `${co.color}20` }}>
+          {co.emoji || "🏢"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-card-foreground leading-tight">{co.name}</span>
+            {typeLabel && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground leading-none flex-shrink-0">
+                {typeLabel}
+              </span>
+            )}
+            {co.isRegistered && (
+              <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+            )}
           </div>
-          <div className="flex gap-0.5">
-            <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-              <Edit2 className="w-3 h-3" />
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors">
-              <Trash2 className="w-3 h-3" />
-            </button>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {co.contact.companyNumber && (
+              <span className="text-[11px] text-muted-foreground font-mono flex items-center gap-0.5">
+                <Hash className="w-2.5 h-2.5" />{co.contact.companyNumber}
+              </span>
+            )}
+            {co.contact.website && (
+              <span className="text-[11px] text-muted-foreground truncate flex items-center gap-0.5 max-w-[140px]">
+                <Globe className="w-2.5 h-2.5 flex-shrink-0" />
+                {co.contact.website.replace(/^https?:\/\//, "")}
+              </span>
+            )}
+            {!co.contact.companyNumber && !co.contact.website && co.description && (
+              <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">{co.description}</span>
+            )}
           </div>
         </div>
-
-        <p className="text-sm font-bold text-card-foreground leading-tight">{co.name}</p>
-        {typeLabel && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground mt-0.5 inline-block">{typeLabel}</span>
-        )}
-        {co.description && <p className="text-[11px] text-muted-foreground line-clamp-1 mt-1">{co.description}</p>}
-
-        <div className="space-y-1.5 mt-2.5">
-          <div className="flex items-center gap-1.5">
-            {co.isRegistered
-              ? <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
-              : <XCircle className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />}
-            <span className={`text-[11px] font-medium ${co.isRegistered ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
-              {co.isRegistered ? "Registered" : "Not registered"}
-            </span>
-          </div>
-          {co.contact.companyNumber && (
-            <div className="flex items-center gap-1.5">
-              <Hash className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              <span className="text-[11px] text-muted-foreground font-mono">{co.contact.companyNumber}</span>
-            </div>
-          )}
-          {co.contact.website && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              <span className="text-[11px] text-muted-foreground truncate">{co.contact.website.replace(/^https?:\/\//, "")}</span>
-            </div>
-          )}
-          {co.contact.address && (
-            <div className="flex items-start gap-1.5 min-w-0">
-              <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <span className="text-[11px] text-muted-foreground line-clamp-2 leading-tight">{co.contact.address}</span>
-            </div>
-          )}
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+          <ChevronRight className="w-4 h-4 text-muted-foreground/40 ml-0.5" />
         </div>
-
-        {/* Trading names sub-tiles */}
-        {children.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-border/30">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">Trades as</p>
-            <div className="flex flex-col gap-1">
-              {children.map((child) => (
-                <button
-                  key={child.id}
-                  onClick={(e) => { e.stopPropagation(); onNavigateChild(child.id!); }}
-                  className="flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-lg border border-border/50 bg-muted/30 hover:bg-muted/60 transition-colors w-full text-left"
-                  style={{ borderLeftColor: child.color, borderLeftWidth: 2 }}
-                >
-                  <span className="text-sm">{child.emoji || "🏢"}</span>
-                  <span className="font-medium flex-1">{child.name}</span>
-                  <ChevronRight className="w-2.5 h-2.5 text-muted-foreground flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Trading name children — indented */}
+      {children.length > 0 && (
+        <div className="ml-5 mt-1.5 space-y-1 border-l-2 border-border/30 pl-3">
+          {children.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => onNavigateChild(child.id!)}
+              className="flex items-center gap-2 w-full px-2.5 py-2 rounded-xl border border-border/40 bg-muted/30 hover:bg-muted/60 transition-colors text-left"
+              style={{ borderLeftColor: child.color, borderLeftWidth: 2 }}
+            >
+              <span className="text-sm flex-shrink-0">{child.emoji || "🏢"}</span>
+              <span className="text-[12px] font-semibold flex-1 truncate">{child.name}</span>
+              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full flex-shrink-0">Trading Name</span>
+              <ChevronRight className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
+
+// ─── Action Panel ─────────────────────────────────────────────────────────────
+
+function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany: () => void; onQRCodes: () => void }) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card shadow-soft p-4 space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Actions</p>
+      <div className="space-y-2">
+        <button
+          onClick={onAddCompany}
+          className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary transition-colors text-left"
+        >
+          <Plus className="w-4 h-4 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold leading-tight">Add Company</p>
+            <p className="text-[11px] opacity-70 leading-tight mt-0.5">Register a new business</p>
+          </div>
+        </button>
+        <button
+          onClick={onQRCodes}
+          className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 text-violet-600 dark:text-violet-400 transition-colors text-left"
+        >
+          <QrCode className="w-4 h-4 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold leading-tight">QR Codes</p>
+            <p className="text-[11px] opacity-70 leading-tight mt-0.5">Generate & manage QR codes</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Companies = () => {
   const { companies, loading, addCompany, updateCompany, deleteCompany } = useCompanies();
@@ -300,8 +335,10 @@ const Companies = () => {
   const others = useMemo(() => topLevel.filter((c) => !c.companyType || c.companyType === "other"), [topLevel]);
   const getChildren = (id: string) => tradingNames.filter((c) => c.parentCompanyId === id);
 
-  const renderTile = (co: Company, i: number) => (
-    <CompanyTile
+  const openAdd = () => { setEditCompany(null); setDialogOpen(true); };
+
+  const renderRow = (co: Company, i: number) => (
+    <CompanyRow
       key={co.id}
       co={co}
       children={getChildren(co.id!)}
@@ -329,51 +366,81 @@ const Companies = () => {
       subtitle="Business management"
       icon={<Building2 className="w-5 h-5" />}
       action={
-        <button onClick={() => { setEditCompany(null); setDialogOpen(true); }} className="flex items-center gap-1 text-xs text-primary font-semibold">
+        <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-semibold">
           <Plus className="w-4 h-4" /> Add
         </button>
       }
     >
-      <AnimatePresence mode="popLayout">
-        {companies.length === 0 ? (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-16 gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center text-2xl">🏢</div>
-            <div className="text-center">
-              <p className="text-sm font-medium">No companies yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Add your first company to get started</p>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="space-y-0">
-            {registered.length > 0 && (
-              <div>
-                <SectionHeader title="Registered Companies" count={registered.length} />
-                <div className="grid grid-cols-2 gap-3">
-                  {registered.map((co, i) => renderTile(co, i))}
+      {/* Mobile quick actions — shown above list on small screens */}
+      <div className="flex gap-2 mb-4 md:hidden">
+        <button
+          onClick={openAdd}
+          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
+        >
+          <Plus className="w-4 h-4 text-primary" /> Add Company
+        </button>
+        <button
+          onClick={() => navigate("/qr-codes")}
+          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
+        >
+          <QrCode className="w-4 h-4 text-violet-500" /> QR Codes
+        </button>
+      </div>
+
+      {/* Desktop: two-column layout */}
+      <div className="md:grid md:grid-cols-[1fr_220px] md:gap-4 md:items-start">
+        {/* Left — company list */}
+        <div>
+          <AnimatePresence mode="popLayout">
+            {companies.length === 0 ? (
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-16 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center text-2xl">🏢</div>
+                <div className="text-center">
+                  <p className="text-sm font-medium">No companies yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Add your first company to get started</p>
                 </div>
-              </div>
-            )}
-            {soleTraders.length > 0 && (
-              <div>
-                <SectionHeader title="Sole Traders" count={soleTraders.length} />
-                <div className="grid grid-cols-2 gap-3">
-                  {soleTraders.map((co, i) => renderTile(co, registered.length + i))}
-                </div>
-              </div>
-            )}
-            {others.length > 0 && (
-              <div>
-                {(registered.length > 0 || soleTraders.length > 0) && (
-                  <SectionHeader title="Other" count={others.length} />
+                <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5">
+                  <Plus className="w-3.5 h-3.5" /> Add First Company
+                </Button>
+              </motion.div>
+            ) : (
+              <div className="space-y-1">
+                {registered.length > 0 && (
+                  <div>
+                    <SectionHeader title="Registered Companies" count={registered.length} />
+                    <div className="space-y-2">
+                      {registered.map((co, i) => renderRow(co, i))}
+                    </div>
+                  </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                  {others.map((co, i) => renderTile(co, registered.length + soleTraders.length + i))}
-                </div>
+                {soleTraders.length > 0 && (
+                  <div>
+                    <SectionHeader title="Sole Traders" count={soleTraders.length} />
+                    <div className="space-y-2">
+                      {soleTraders.map((co, i) => renderRow(co, registered.length + i))}
+                    </div>
+                  </div>
+                )}
+                {others.length > 0 && (
+                  <div>
+                    {(registered.length > 0 || soleTraders.length > 0) && (
+                      <SectionHeader title="Other" count={others.length} />
+                    )}
+                    <div className="space-y-2">
+                      {others.map((co, i) => renderRow(co, registered.length + soleTraders.length + i))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
+
+        {/* Right — action panel (desktop only) */}
+        <div className="hidden md:block sticky top-4">
+          <ActionPanel onAddCompany={openAdd} onQRCodes={() => navigate("/qr-codes")} />
+        </div>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditCompany(null); }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">

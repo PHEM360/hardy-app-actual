@@ -22,6 +22,7 @@ import More from "@/pages/More";
 import Settings from "@/pages/Settings";
 import Themes from "@/pages/Themes";
 import LogInDetails from "@/pages/LogInDetails";
+import QRCodes from "@/pages/QRCodes";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
+            <Route path="/qr-codes" element={<QRCodes />} />
           </Route>
           <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />

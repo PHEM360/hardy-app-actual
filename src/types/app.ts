@@ -398,3 +398,30 @@ export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = {
     "Phone Contract", "TV / Broadband", "Pet Insurance", "Other"
   ],
 };
+
+// ─── QR Codes ─────────────────────────────────────────────────────────────────
+
+export interface QRCodeItem {
+  id?: string;
+  name: string;
+  category?: string;
+  contentType: "url" | "text" | "image";
+  content: string;
+  fgColor: string;
+  bgColor: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface QRCodeSettings {
+  fgColor: string;
+  bgColor: string;
+  categories: string[];
+  updatedAt?: any;
+}
+
+export const DEFAULT_QR_SETTINGS: QRCodeSettings = {
+  fgColor: "#000000",
+  bgColor: "#ffffff",
+  categories: ["Marketing", "Business Card", "Website", "Social Media", "Product", "Event", "Other"],
+};

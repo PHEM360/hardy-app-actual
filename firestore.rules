@@ -187,6 +187,16 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // QR codes library - per user
+    match /qrcodes/{userId}/items/{qrId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // QR code settings - per user
+    match /qrcodes/{userId}/settings/{doc} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;
