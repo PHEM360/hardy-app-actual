@@ -23,6 +23,7 @@ import Settings from "@/pages/Settings";
 import Themes from "@/pages/Themes";
 import LogInDetails from "@/pages/LogInDetails";
 import QRCodes from "@/pages/QRCodes";
+import Locate from "@/pages/Locate";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -37,6 +38,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/locate" element={<Locate />} />
           <Route
             element={
               <RequireAuth>

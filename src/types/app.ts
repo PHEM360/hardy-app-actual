@@ -405,11 +405,12 @@ export interface QRCodeItem {
   id?: string;
   name: string;
   category?: string;
-  contentType: "url" | "text" | "image";
+  contentType: "url" | "text" | "image" | "phone";
   content: string;
   fgColor: string;
   bgColor: string;
   showName?: boolean;
+  sendLocation?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }

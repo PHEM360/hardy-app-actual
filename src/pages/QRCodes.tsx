@@ -11,7 +11,7 @@ import TiptapUnderline from "@tiptap/extension-underline";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
-  Globe, FileText, Image, X, Check, Download, Tag,
+  Globe, FileText, Image, X, Check, Download, Tag, Phone, MapPin,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,10 @@ type View = "library" | "generator" | "settings";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CONTENT_TYPES = [
-  { value: "url"  as const, label: "Website URL",  icon: Globe,     placeholder: "https://example.com" },
-  { value: "text" as const, label: "Plain Text",    icon: FileText,  placeholder: "Enter text to encode…" },
-  { value: "image"as const, label: "Image URL",     icon: Image,     placeholder: "https://example.com/image.jpg" },
+  { value: "url"   as const, label: "Website URL",  icon: Globe,     placeholder: "https://example.com" },
+  { value: "text"  as const, label: "Plain Text",   icon: FileText,  placeholder: "Enter text to encode…" },
+  { value: "image" as const, label: "Image URL",    icon: Image,     placeholder: "https://example.com/image.jpg" },
+  { value: "phone" as const, label: "Phone Number", icon: Phone,     placeholder: "+44 7700 900000" },
 ];
 
 const PRINT_SIZES = [
@@ -871,16 +872,34 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
   saving: boolean;
 }) {
   const [form, setForm] = useState({
-    name:        editItem?.name        ?? "",
-    category:    editItem?.category    ?? "",
-    contentType: editItem?.contentType ?? ("url" as QRCodeItem["contentType"]),
-    content:     editItem?.content     ?? "",
-    fgColor:     editItem?.fgColor     ?? settings.fgColor,
-    bgColor:     editItem?.bgColor     ?? settings.bgColor,
-    showName:    editItem?.showName    ?? true,
+    name:         editItem?.name         ?? "",
+    category:     editItem?.category     ?? "",
+    contentType:  editItem?.contentType  ?? ("url" as QRCodeItem["contentType"]),
+    content:      editItem?.content      ?? "",
+    fgColor:      editItem?.fgColor      ?? settings.fgColor,
+    bgColor:      editItem?.bgColor      ?? settings.bgColor,
+    showName:     editItem?.showName     ?? true,
+    sendLocation: editItem?.sendLocation ?? false,
   });
   const setF = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
-  const isValid = form.name.trim().length > 0 && form.content.trim().length > 0;
+
+  // Derive the QR value: phone uses tel:, sendLocation overrides with the locate URL
+  const APP_URL = "https://hardyhub-7b30d.web.app";
+  const qrValue = (() => {
+    if (form.sendLocation) {
+      const params = new URLSearchParams({ n: form.name || "QR Code" });
+      return `${APP_URL}/locate?${params.toString()}`;
+    }
+    if (form.contentType === "phone") {
+      const digits = form.content.replace(/\s/g, "");
+      return digits ? `tel:${digits}` : "tel:";
+    }
+    return form.content.trim() || "https://example.com";
+  })();
+
+  const isValid = form.name.trim().length > 0 && (
+    form.sendLocation || form.content.trim().length > 0
+  );
   const ctInfo = CONTENT_TYPES.find((t) => t.value === form.contentType)!;
 
   return (
@@ -903,7 +922,7 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
           style={{ backgroundColor: form.bgColor }}
         >
           <QRCodeSVG
-            value={form.content.trim() || "https://example.com"}
+            value={qrValue}
             fgColor={form.fgColor}
             bgColor={form.bgColor}
             size={160}
@@ -941,50 +960,76 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
         {/* Content type selector */}
         <div className="space-y-1.5">
           <Label>Type</Label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {CONTENT_TYPES.map((t) => {
               const Icon = t.icon;
               return (
                 <button
                   key={t.value}
-                  onClick={() => setF("contentType", t.value)}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors ${
+                  onClick={() => { setF("contentType", t.value); if (t.value !== "url") setF("sendLocation", false); }}
+                  className={`flex items-center gap-2 p-3 rounded-xl border transition-colors ${
                     form.contentType === t.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-[11px] font-medium leading-tight text-center">{t.label}</span>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-[11px] font-medium leading-tight text-left">{t.label}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="space-y-1.5">
-          <Label>
-            {form.contentType === "url" ? "URL" : form.contentType === "image" ? "Image URL" : "Text"} *
-          </Label>
-          {form.contentType === "text" ? (
-            <Textarea
-              value={form.content}
-              onChange={(e) => setF("content", e.target.value)}
-              placeholder={ctInfo.placeholder}
-              className="rounded-xl resize-none"
-              rows={4}
-            />
-          ) : (
-            <Input
-              value={form.content}
-              onChange={(e) => setF("content", e.target.value)}
-              placeholder={ctInfo.placeholder}
-              className="h-10 rounded-xl"
-              type="url"
-            />
-          )}
-        </div>
+        {/* Send location toggle — URL type only */}
+        {form.contentType === "url" && (
+          <div className="flex items-center justify-between py-0.5 px-3.5 rounded-xl border border-border bg-muted/20">
+            <div className="py-2.5">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-primary" />
+                <p className="text-sm font-medium leading-tight">Send location when scanned</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5 ml-5.5">
+                Scanning opens a page that emails GPS coordinates to contact@bgm-medical.com
+              </p>
+            </div>
+            <Switch checked={!!form.sendLocation} onCheckedChange={(v) => setF("sendLocation", v)} />
+          </div>
+        )}
+
+        {/* Content — hidden when sendLocation is on */}
+        {!form.sendLocation && (
+          <div className="space-y-1.5">
+            <Label>
+              {form.contentType === "url" ? "URL" : form.contentType === "image" ? "Image URL" : form.contentType === "phone" ? "Phone Number" : "Text"} *
+            </Label>
+            {form.contentType === "text" ? (
+              <Textarea
+                value={form.content}
+                onChange={(e) => setF("content", e.target.value)}
+                placeholder={ctInfo.placeholder}
+                className="rounded-xl resize-none"
+                rows={4}
+              />
+            ) : form.contentType === "phone" ? (
+              <Input
+                value={form.content}
+                onChange={(e) => setF("content", e.target.value)}
+                placeholder={ctInfo.placeholder}
+                className="h-10 rounded-xl"
+                type="tel"
+              />
+            ) : (
+              <Input
+                value={form.content}
+                onChange={(e) => setF("content", e.target.value)}
+                placeholder={ctInfo.placeholder}
+                className="h-10 rounded-xl"
+                type="url"
+              />
+            )}
+          </div>
+        )}
 
         {/* Colours */}
         <div className="space-y-1.5">
@@ -1070,7 +1115,17 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
             Cancel
           </Button>
           <Button
-            onClick={() => onSave(form)}
+            onClick={() => {
+              const payload = { ...form };
+              if (form.sendLocation) {
+                const params = new URLSearchParams({ n: form.name.trim() || "QR Code" });
+                payload.content = `${APP_URL}/locate?${params.toString()}`;
+                payload.contentType = "url";
+              } else if (form.contentType === "phone") {
+                payload.content = `tel:${form.content.replace(/\s/g, "")}`;
+              }
+              onSave(payload);
+            }}
             disabled={!isValid || saving}
             className="flex-1 h-11 rounded-xl"
           >
