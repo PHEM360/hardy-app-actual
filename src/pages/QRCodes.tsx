@@ -1,11 +1,12 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import QRCodeSVG from "react-qr-code";
+import { toPng } from "html-to-image";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
-  Globe, FileText, Image, X, Check,
+  Globe, FileText, Image, X, Check, Download,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,15 @@ const PRINT_SIZES = [
   { value: "medium", label: "Medium", dim: "10×10 cm", cm: 10, px: 240 },
   { value: "large",  label: "Large",  dim: "15×15 cm", cm: 15, px: 340 },
   { value: "xl",     label: "XL",     dim: "20×20 cm", cm: 20, px: 440 },
+  { value: "custom", label: "Custom", dim: "—",         cm: 0,  px: 0   },
+];
+
+const TEXT_SIZES = [
+  { value: "xs",  label: "XS", px: 10 },
+  { value: "sm",  label: "S",  px: 13 },
+  { value: "md",  label: "M",  px: 16 },
+  { value: "lg",  label: "L",  px: 20 },
+  { value: "xl",  label: "XL", px: 26 },
 ];
 
 // ─── Print Dialog ─────────────────────────────────────────────────────────────
@@ -42,78 +52,103 @@ function PrintDialog({ item, open, onClose }: {
   onClose: () => void;
 }) {
   const [size, setSize] = useState("medium");
+  const [customCm, setCustomCm] = useState("12");
+  const [textSize, setTextSize] = useState("sm");
+  const [extraText, setExtraText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // Resolved cm / screen-px for the QR graphic
+  const resolvedCm   = size === "custom" ? (parseFloat(customCm) || 10) : (PRINT_SIZES.find((s) => s.value === size)?.cm  || 10);
+  const previewPx    = size === "custom" ? Math.round((parseFloat(customCm) || 10) * 37.8) : (PRINT_SIZES.find((s) => s.value === size)?.px || 240);
+  const textPx       = TEXT_SIZES.find((t) => t.value === textSize)?.px || 13;
+  const showName     = item?.showName ?? true;
 
   const handlePrint = useCallback(() => {
-    const sizeData = PRINT_SIZES.find((s) => s.value === size) || PRINT_SIZES[1];
     const styleId = "qr-print-inject";
     let style = document.getElementById(styleId) as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement("style");
-      style.id = styleId;
-      document.head.appendChild(style);
-    }
+    if (!style) { style = document.createElement("style"); style.id = styleId; document.head.appendChild(style); }
     style.textContent = `
       @media print {
         * { visibility: hidden !important; box-sizing: border-box; }
         #qr-print-target, #qr-print-target * { visibility: visible !important; }
         #qr-print-target {
           position: fixed !important;
-          top: 50% !important;
-          left: 50% !important;
+          top: 50% !important; left: 50% !important;
           transform: translate(-50%, -50%) !important;
           text-align: center;
-          background: white;
           padding: 24px;
           border-radius: 12px;
         }
-        #qr-print-target svg {
-          width: ${sizeData.cm}cm !important;
-          height: ${sizeData.cm}cm !important;
-          display: block !important;
-        }
-        #qr-print-name {
-          font-family: sans-serif;
-          font-size: 12px;
-          color: #555;
-          margin-top: 10px;
-        }
+        #qr-print-target svg { width: ${resolvedCm}cm !important; height: ${resolvedCm}cm !important; display: block !important; }
+        .qr-print-text { font-family: sans-serif; font-size: ${textPx}px; margin-top: 8px; }
       }
     `;
     window.print();
     setTimeout(() => style?.remove(), 2000);
-  }, [size]);
+  }, [resolvedCm, textPx]);
+
+  const handleSaveImage = useCallback(async () => {
+    if (!previewRef.current || !item) return;
+    setSaving(true);
+    try {
+      const dataUrl = await toPng(previewRef.current, { cacheBust: true, pixelRatio: 3 });
+      const link = document.createElement("a");
+      link.download = `${item.name.replace(/\s+/g, "-").toLowerCase()}-qr.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      setSaving(false);
+    }
+  }, [item]);
 
   if (!item) return null;
-  const previewPx = PRINT_SIZES.find((s) => s.value === size)?.px || 240;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+      <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Print — {item.name}</DialogTitle>
+          <DialogTitle>Export — {item.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-1">
-          {/* Live preview (also acts as print target) */}
-          <div
-            id="qr-print-target"
-            className="flex flex-col items-center gap-3 p-5 rounded-2xl mx-auto"
-            style={{ backgroundColor: item.bgColor, width: "fit-content" }}
-          >
-            <QRCodeSVG
-              value={item.content || " "}
-              fgColor={item.fgColor}
-              bgColor={item.bgColor}
-              size={previewPx}
-            />
-            {item.showName && (
-              <p id="qr-print-name" className="text-xs font-medium text-center" style={{ color: item.fgColor }}>
-                {item.name}
-              </p>
-            )}
+
+          {/* Live preview (print target) */}
+          <div className="flex justify-center">
+            <div
+              id="qr-print-target"
+              ref={previewRef}
+              className="flex flex-col items-center p-5 rounded-2xl"
+              style={{ backgroundColor: item.bgColor }}
+            >
+              <QRCodeSVG
+                value={item.content || " "}
+                fgColor={item.fgColor}
+                bgColor={item.bgColor}
+                size={Math.min(previewPx, 220)}
+              />
+              {showName && (
+                <p
+                  className="qr-print-text font-medium text-center mt-2 leading-tight"
+                  style={{ color: item.fgColor, fontSize: textPx }}
+                >
+                  {item.name}
+                </p>
+              )}
+              {extraText.trim() && (
+                <p
+                  className="qr-print-text text-center mt-1 leading-tight"
+                  style={{ color: item.fgColor, fontSize: textPx }}
+                >
+                  {extraText}
+                </p>
+              )}
+            </div>
           </div>
+
+          {/* Size picker */}
           <div className="space-y-1.5">
-            <Label>Print Size</Label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <Label>Size</Label>
+            <div className="grid grid-cols-5 gap-1.5">
               {PRINT_SIZES.map((s) => (
                 <button
                   key={s.value}
@@ -124,19 +159,75 @@ function PrintDialog({ item, open, onClose }: {
                       : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
                   }`}
                 >
-                  <span className="text-xs font-semibold">{s.label}</span>
-                  <span className="text-[10px] mt-0.5 leading-tight">{s.dim}</span>
+                  <span className="text-[11px] font-semibold">{s.label}</span>
+                  {s.value !== "custom" && <span className="text-[9px] mt-0.5 leading-tight opacity-70">{s.dim}</span>}
                 </button>
               ))}
             </div>
+            {size === "custom" && (
+              <div className="flex items-center gap-2 mt-2">
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={customCm}
+                  onChange={(e) => setCustomCm(e.target.value)}
+                  className="h-9 rounded-xl w-24 text-sm"
+                />
+                <span className="text-sm text-muted-foreground">cm × cm</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} className="flex-1 h-10 rounded-xl">
+          {/* Text size — only shown when name is visible */}
+          {(showName || extraText.trim()) && (
+            <div className="space-y-1.5">
+              <Label>Text Size</Label>
+              <div className="flex gap-1.5">
+                {TEXT_SIZES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => setTextSize(t.value)}
+                    className={`flex-1 py-2 rounded-xl border text-center transition-colors ${
+                      textSize === t.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Extra text */}
+          <div className="space-y-1.5">
+            <Label>Extra Text <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input
+              value={extraText}
+              onChange={(e) => setExtraText(e.target.value)}
+              placeholder="e.g. Scan to visit our website"
+              className="h-9 rounded-xl text-sm"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="outline" onClick={onClose} className="h-10 rounded-xl text-xs px-2">
               Cancel
             </Button>
-            <Button onClick={handlePrint} className="flex-1 h-10 rounded-xl gap-1.5">
-              <Printer className="w-4 h-4" /> Print
+            <Button
+              variant="outline"
+              onClick={handleSaveImage}
+              disabled={saving}
+              className="h-10 rounded-xl gap-1 text-xs px-2"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {saving ? "Saving…" : "Save PNG"}
+            </Button>
+            <Button onClick={handlePrint} className="h-10 rounded-xl gap-1 text-xs px-2">
+              <Printer className="w-3.5 h-3.5" /> Print
             </Button>
           </div>
         </div>
