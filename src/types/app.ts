@@ -411,8 +411,45 @@ export interface QRCodeItem {
   bgColor: string;
   showName?: boolean;
   sendLocation?: boolean;
+  labelDesign?: LabelDesign;
   createdAt?: any;
   updatedAt?: any;
+}
+
+// ─── Label Designer types ─────────────────────────────────────────────────────
+
+export interface LabelElement {
+  id: string;
+  type: "qr" | "text" | "image" | "shape";
+  xCm: number;
+  yCm: number;
+  wCm: number;
+  hCm: number;
+  zIndex: number;
+  opacity?: number;
+  // QR
+  qrItemId?: string;     // "self" or item.id
+  qrFgColor?: string;
+  qrBgColor?: string;
+  // Text
+  html?: string;
+  // Image
+  src?: string;
+  objectFit?: "contain" | "cover" | "fill";
+  imgRadius?: number;
+  // Shape
+  shape?: "rect" | "ellipse";
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  shapeRadius?: number;
+}
+
+export interface LabelDesign {
+  widthCm: number;
+  heightCm: number;
+  bgColor: string;
+  elements: LabelElement[];
 }
 
 export interface QRCodeSettings {
