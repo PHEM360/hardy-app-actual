@@ -571,11 +571,6 @@ const Pets = () => {
                   </button>
                 );
               })}
-              {/* Treatment notes — single line */}
-              <div className="flex items-center gap-1.5 px-1">
-                <StickyNote className="w-3 h-3 text-accent flex-shrink-0" />
-                <p className="text-[10px] text-foreground font-medium truncate">{pet.treatmentNotes || "No notes"}</p>
-              </div>
             </div>
           ))}
         </div>
