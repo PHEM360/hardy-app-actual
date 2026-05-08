@@ -126,6 +126,7 @@ const Pets = () => {
   const [treatmentType, setTreatmentType] = useState<"flea" | "worming" | "vaccination">("flea");
   const [treatmentDate, setTreatmentDate] = useState(new Date().toISOString().split("T")[0]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [settingsPetId, setSettingsPetId] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPetId, setHistoryPetId] = useState("");
@@ -579,8 +580,27 @@ const Pets = () => {
           ))}
         </div>
 
-        {/* Product coverage table */}
-        <div className="mt-4 rounded-xl border border-border/40 overflow-hidden w-1/2 mx-auto">
+        {/* Full-width treatment notes (only for pets that have notes) */}
+        {pets.some((p) => p.treatmentNotes) && (
+          <div className="mt-3 flex items-start gap-1.5 px-1">
+            <StickyNote className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
+            <p className="text-[10px] text-foreground font-medium leading-relaxed">
+              {pets.filter((p) => p.treatmentNotes).map((p) => p.treatmentNotes).join(" · ")}
+            </p>
+          </div>
+        )}
+
+        {/* Product coverage table — collapsible */}
+        <div className="mt-4">
+          <button
+            onClick={() => setCoverageOpen((o) => !o)}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium mb-2 hover:text-foreground transition-colors"
+          >
+            {coverageOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            Product coverage guide
+          </button>
+          {coverageOpen && (
+        <div className="rounded-xl border border-border/40 overflow-hidden w-1/2 mx-auto">
           <table className="w-full text-[10px]">
             <thead>
               <tr className="bg-muted/50">
@@ -614,6 +634,8 @@ const Pets = () => {
               ))}
             </tbody>
           </table>
+        </div>
+          )}
         </div>
       </div>
 
