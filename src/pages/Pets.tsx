@@ -534,7 +534,7 @@ const Pets = () => {
           <button onClick={() => setAddTreatmentOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Record</button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {pets.map((pet) => (
             <div key={pet.id} className="space-y-2">
               <p className="text-xs font-semibold text-card-foreground px-1">{pet.name}</p>
@@ -570,15 +570,50 @@ const Pets = () => {
                   </button>
                 );
               })}
-              {/* Treatment notes */}
-              <div className="p-2.5 rounded-xl bg-accent/8 border border-accent/15">
-                <div className="flex items-start gap-2">
-                  <StickyNote className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">{pet.treatmentNotes || "No notes — edit in Dog Settings"}</p>
-                </div>
+              {/* Treatment notes — single line */}
+              <div className="flex items-center gap-1.5 px-1">
+                <StickyNote className="w-3 h-3 text-accent flex-shrink-0" />
+                <p className="text-[10px] text-foreground font-medium truncate">{pet.treatmentNotes || "No notes"}</p>
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Product coverage table */}
+        <div className="mt-4 rounded-xl border border-border/40 overflow-hidden">
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="bg-muted/50">
+                <th className="text-left px-2.5 py-2 font-semibold text-muted-foreground">Product</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Fleas</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Ticks</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Round-worms</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Tape-worms</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Lung-worm</th>
+                <th className="text-center px-1.5 py-2 font-semibold text-muted-foreground">Mites</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                { name: "Bravecto",        fleas: true,  ticks: true,  round: false, tape: false, lung: false, mites: true  },
+                { name: "Advocate",        fleas: true,  ticks: false, round: true,  tape: false, lung: true,  mites: true  },
+                { name: "Anthelmin Plus",  fleas: false, ticks: false, round: true,  tape: true,  lung: false, mites: false },
+                { name: "Droncit",         fleas: false, ticks: false, round: false, tape: true,  lung: false, mites: false },
+              ] as const).map((row, i) => (
+                <tr key={row.name} className={i % 2 === 0 ? "bg-card" : "bg-muted/20"}>
+                  <td className="px-2.5 py-2 font-semibold text-card-foreground">{row.name}</td>
+                  {([row.fleas, row.ticks, row.round, row.tape, row.lung, row.mites] as boolean[]).map((v, j) => (
+                    <td key={j} className="text-center px-1.5 py-2">
+                      {v
+                        ? <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-success/20 text-success text-[9px] font-bold">✓</span>
+                        : <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-destructive/15 text-destructive text-[9px] font-bold">✗</span>
+                      }
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
