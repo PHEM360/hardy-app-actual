@@ -580,7 +580,7 @@ const Pets = () => {
         </div>
 
         {/* Product coverage table */}
-        <div className="mt-4 rounded-xl border border-border/40 overflow-hidden">
+        <div className="mt-4 rounded-xl border border-border/40 overflow-hidden w-1/2 mx-auto">
           <table className="w-full text-[10px]">
             <thead>
               <tr className="bg-muted/50">
