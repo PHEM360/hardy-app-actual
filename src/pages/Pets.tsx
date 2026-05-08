@@ -580,13 +580,17 @@ const Pets = () => {
           ))}
         </div>
 
-        {/* Full-width treatment notes (only for pets that have notes) */}
+        {/* Full-width treatment notes — one line per pet that has notes */}
         {pets.some((p) => p.treatmentNotes) && (
-          <div className="mt-3 flex items-start gap-1.5 px-1">
-            <StickyNote className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
-            <p className="text-[10px] text-foreground font-medium leading-relaxed">
-              {pets.filter((p) => p.treatmentNotes).map((p) => p.treatmentNotes).join(" · ")}
-            </p>
+          <div className="mt-3 space-y-1 px-1">
+            {pets.filter((p) => p.treatmentNotes).map((p) => (
+              <div key={p.id} className="flex items-start gap-1.5">
+                <StickyNote className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-foreground font-medium leading-relaxed">
+                  <span className="text-muted-foreground">{p.name}: </span>{p.treatmentNotes}
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
