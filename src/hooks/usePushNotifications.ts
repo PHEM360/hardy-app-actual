@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { HouseholdItem, HouseholdReminder } from "@/types/app";
+import type { Pet } from "@/hooks/usePets";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,40 @@ export function usePushNotifications() {
     }
   };
 
+  /** Schedule in-session notifications for pet flea/wormer treatments. */
+  const schedulePetReminders = (pets: Pet[]) => {
+    for (const pet of pets) {
+      for (const treatmentType of ["flea", "worming"] as const) {
+        const notifications =
+          treatmentType === "flea" ? pet.fleaNotifications : pet.wormNotifications;
+        if (!notifications?.length) continue;
+
+        const latestRecord = [...pet.treatmentHistory]
+          .filter((t) => t.type === treatmentType)
+          .sort((a, b) => b.dateDue.localeCompare(a.dateDue))[0];
+        if (!latestRecord?.dateDue) continue;
+
+        const dueDate = new Date(latestRecord.dateDue);
+
+        for (const n of notifications) {
+          const notifyAt = new Date(
+            dueDate.getTime() - n.daysBeforeDue * 24 * 60 * 60 * 1000
+          );
+          const delay = notifyAt.getTime() - Date.now();
+          if (delay <= 0) continue;
+
+          const id = setTimeout(() => {
+            showNotification(
+              `${pet.name} — ${treatmentType === "flea" ? "Flea treatment" : "Wormer"} due soon`,
+              `${treatmentType === "flea" ? "Flea treatment" : "Wormer"} for ${pet.name} is due in ${n.daysBeforeDue} day${n.daysBeforeDue !== 1 ? "s" : ""} (${latestRecord.dateDue}).`
+            );
+          }, delay);
+          timers.current.push(id);
+        }
+      }
+    }
+  };
+
   /** Call on mount with all household items to re-schedule any pending reminders. */
   const checkAndScheduleAll = (items: HouseholdItem[]) => {
     clearReminders();
@@ -82,6 +117,7 @@ export function usePushNotifications() {
     requestPermission,
     scheduleReminder,
     checkAndScheduleAll,
+    schedulePetReminders,
     calcNotifyAt,
   };
 }

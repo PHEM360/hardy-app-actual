@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePets } from "@/hooks/usePets";
 import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting } from "@/hooks/usePets";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import DogLoader from "@/components/DogLoader";
 import { useAuth } from "@/auth/AuthContext";
 import { collection, getDocs, query, where } from "firebase/firestore";
@@ -113,6 +114,7 @@ const DogEntrance = () => {
 
 const Pets = () => {
   const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet } = usePets();
+  const { schedulePetReminders } = usePushNotifications();
   const { user } = useAuth();
   const [visiblePets, setVisiblePets] = useState<Set<string>>(new Set());
   const [insuranceExpanded, setInsuranceExpanded] = useState<string | null>(null);
@@ -160,6 +162,11 @@ const Pets = () => {
     if (pets.length > 0 && visiblePets.size === 0) {
       setVisiblePets(new Set(pets.map((p) => p.id)));
     }
+  }, [pets]);
+
+  // Schedule in-session push reminders for pet treatments
+  useEffect(() => {
+    if (pets.length > 0) schedulePetReminders(pets);
   }, [pets]);
 
   const dates = [...new Set(pets.flatMap((p) => p.weightHistory.map((w) => w.date)))].sort();
@@ -527,7 +534,7 @@ const Pets = () => {
           <button onClick={() => setAddTreatmentOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Record</button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4">
           {pets.map((pet) => (
             <div key={pet.id} className="space-y-2">
               <p className="text-xs font-semibold text-card-foreground px-1">{pet.name}</p>
