@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AvatarType } from "@/types/app";
 import { useAuth } from "@/auth/AuthContext";
-import { signOut, updateProfile } from "firebase/auth";
+import { signOut, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -49,10 +49,6 @@ interface NotificationType {
   key: string; label: string; group: string; enabled: boolean; reminders: ReminderSetting[];
 }
 const INITIAL_NOTIFICATION_TYPES: NotificationType[] = [
-  { key: "billy_flea", label: "Billy Flea Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r1", value: 3, unit: "days" }] },
-  { key: "milo_flea", label: "Milo Flea Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r2", value: 3, unit: "days" }] },
-  { key: "billy_worm", label: "Billy Worming Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r3", value: 7, unit: "days" }] },
-  { key: "milo_worm", label: "Milo Worming Treatment Due", group: "Flea & Worming", enabled: true, reminders: [{ id: "r4", value: 7, unit: "days" }] },
   { key: "household_item", label: "Household Item Due", group: "Household", enabled: true, reminders: [{ id: "r5", value: 14, unit: "days" }] },
 ];
 
@@ -101,6 +97,15 @@ const Settings = () => {
   const [saveProfileLoading, setSaveProfileLoading] = useState(false);
   const [saveProfileError, setSaveProfileError] = useState<string | null>(null);
   const [saveProfileSuccess, setSaveProfileSuccess] = useState(false);
+
+  // Change password
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
 
   // Populate from Firestore profile once loaded
   useEffect(() => {
@@ -152,6 +157,35 @@ const Settings = () => {
     await saveProfile({ navItems });
     setNavSaveSuccess(true);
     setTimeout(() => setNavSaveSuccess(false), 2000);
+  };
+
+  const changePasswordHandler = async () => {
+    if (!user || !user.email) return;
+    setChangePasswordError(null);
+    setChangePasswordSuccess(false);
+    if (!currentPassword) { setChangePasswordError("Please enter your current password."); return; }
+    if (newPassword.length < 6) { setChangePasswordError("New password must be at least 6 characters."); return; }
+    if (newPassword !== confirmPassword) { setChangePasswordError("New passwords do not match."); return; }
+    setChangePasswordLoading(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+      setChangePasswordSuccess(true);
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      setTimeout(() => { setChangePasswordSuccess(false); setShowChangePassword(false); }, 3000);
+    } catch (err: any) {
+      const code = err?.code ?? "";
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setChangePasswordError("Current password is incorrect.");
+      } else if (code === "auth/too-many-requests") {
+        setChangePasswordError("Too many attempts. Please try again later.");
+      } else {
+        setChangePasswordError(err?.message ?? "Failed to change password.");
+      }
+    } finally {
+      setChangePasswordLoading(false);
+    }
   };
 
   const toggleNavItem = (path: string) => {
@@ -425,9 +459,37 @@ const Settings = () => {
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Security</h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
-          <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2">
-            <Lock className="w-4 h-4" /> Change Password
-          </Button>
+          {!showChangePassword ? (
+            <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2" onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(false); }}>
+              <Lock className="w-4 h-4" /> Change Password
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-card-foreground">Change Password</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Current Password</Label>
+                <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="Enter current password" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">New Password</Label>
+                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="At least 6 characters" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Confirm New Password</Label>
+                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && changePasswordHandler()} className="h-10 rounded-xl text-sm" placeholder="Repeat new password" />
+              </div>
+              {changePasswordError && <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{changePasswordError}</p>}
+              {changePasswordSuccess && <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Password changed successfully</p>}
+              <div className="flex gap-2">
+                <Button onClick={changePasswordHandler} disabled={changePasswordLoading} className="flex-1 h-10 rounded-xl bg-gradient-primary text-sm">
+                  {changePasswordLoading ? "Saving…" : "Update Password"}
+                </Button>
+                <Button variant="outline" onClick={() => { setShowChangePassword(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setChangePasswordError(null); }} className="h-10 rounded-xl px-4 text-sm">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
           <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive"
             onClick={async () => { await signOut(auth); navigate("/", { replace: true }); }}>
             <LogOut className="w-4 h-4" /> Sign Out
