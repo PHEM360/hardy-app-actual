@@ -302,17 +302,17 @@ const CalendarPage = () => {
     <FeaturePageShell title="Calendar" icon={<CalendarDays className="w-5 h-5" />}>
 
       {/* ── Top navigation bar ── */}
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
         <div className="flex items-center gap-1">
           <button
             onClick={prev}
             className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           <button
             onClick={() => setCurrentDate(new Date())}
-            className="text-sm font-semibold text-card-foreground min-w-[130px] text-center hover:text-primary transition-colors"
+            className="text-sm sm:text-base font-semibold text-card-foreground min-w-[130px] sm:min-w-[180px] text-center hover:text-primary transition-colors"
           >
             {headerLabel}
           </button>
@@ -320,18 +320,18 @@ const CalendarPage = () => {
             onClick={next}
             className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         <div className="flex items-center gap-1.5">
           {/* Month / Week toggle */}
-          <div className="flex rounded-lg border border-border/50 overflow-hidden text-[11px] font-semibold">
+          <div className="flex rounded-lg border border-border/50 overflow-hidden text-[11px] sm:text-xs font-semibold">
             {(["month", "week"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-2.5 py-1.5 capitalize transition-colors ${
+                className={`px-2.5 sm:px-3 py-1.5 capitalize transition-colors ${
                   view === v
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted/50"
@@ -345,7 +345,7 @@ const CalendarPage = () => {
           {/* Today shortcut */}
           <button
             onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
-            className="text-[11px] font-medium text-primary px-2 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/10 transition-colors"
+            className="text-[11px] sm:text-xs font-medium text-primary px-2 sm:px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/10 transition-colors"
           >
             Today
           </button>
@@ -356,14 +356,14 @@ const CalendarPage = () => {
               onClick={() => setSettingsOpen(true)}
               className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           )}
 
           {/* Add event */}
           <button
             onClick={() => openAdd()}
-            className="flex items-center gap-1 text-[11px] font-semibold text-primary-foreground bg-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add
@@ -377,7 +377,7 @@ const CalendarPage = () => {
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-border/40 bg-muted/30">
             {WEEK_DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-2">
+              <div key={d} className="text-center text-[10px] sm:text-xs font-semibold text-muted-foreground py-2 sm:py-3">
                 {d}
               </div>
             ))}
@@ -395,12 +395,12 @@ const CalendarPage = () => {
                 <button
                   key={day.toISOString()}
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`min-h-[62px] p-1 text-left flex flex-col transition-colors ${
+                  className={`min-h-[72px] sm:min-h-[90px] md:min-h-[110px] lg:min-h-[130px] p-1 sm:p-1.5 text-left flex flex-col transition-colors ${
                     !inMonth ? "bg-muted/10" : selected ? "bg-primary/5" : "bg-card hover:bg-muted/20"
                   }`}
                 >
                   <span
-                    className={`text-[11px] font-semibold w-6 h-6 rounded-full flex items-center justify-center mb-0.5 ${
+                    className={`text-[11px] sm:text-xs font-semibold w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center mb-0.5 ${
                       today
                         ? "bg-primary text-primary-foreground"
                         : selected
@@ -417,7 +417,7 @@ const CalendarPage = () => {
                     <div
                       key={e.id}
                       onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
-                      className="w-full text-[9px] font-medium px-1 py-0.5 rounded mb-0.5 truncate text-white leading-tight"
+                      className="w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate text-white leading-tight"
                       style={{ backgroundColor: CAT[e.category]?.color }}
                     >
                       {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
@@ -425,7 +425,7 @@ const CalendarPage = () => {
                     </div>
                   ))}
                   {dayEvts.length > 3 && (
-                    <span className="text-[8px] text-muted-foreground px-1">
+                    <span className="text-[8px] sm:text-[9px] text-muted-foreground px-1">
                       +{dayEvts.length - 3} more
                     </span>
                   )}
@@ -446,19 +446,19 @@ const CalendarPage = () => {
               const selected = selectedDay && isSameDay(day, selectedDay);
 
               return (
-                <div key={day.toISOString()} className="min-h-[180px] flex flex-col">
+                <div key={day.toISOString()} className="min-h-[200px] sm:min-h-[280px] md:min-h-[380px] flex flex-col">
                   {/* Day header */}
                   <button
                     onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                    className={`w-full py-2 flex flex-col items-center border-b border-border/30 transition-colors ${
+                    className={`w-full py-2 sm:py-3 flex flex-col items-center border-b border-border/30 transition-colors ${
                       today ? "bg-primary/10" : selected ? "bg-primary/5" : "hover:bg-muted/30"
                     }`}
                   >
-                    <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                       {format(day, "EEE")}
                     </span>
                     <span
-                      className={`text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center ${
+                      className={`text-sm sm:text-base font-bold w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                         today
                           ? "bg-primary text-primary-foreground"
                           : selected
@@ -471,12 +471,12 @@ const CalendarPage = () => {
                   </button>
 
                   {/* Events */}
-                  <div className="flex-1 p-1 space-y-0.5 overflow-hidden">
+                  <div className="flex-1 p-1 sm:p-1.5 space-y-0.5 overflow-hidden">
                     {dayEvts.map((e) => (
                       <button
                         key={e.id}
                         onClick={() => openEdit(e)}
-                        className="w-full text-[9px] font-medium px-1.5 py-1 rounded text-white text-left truncate block"
+                        className="w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-white text-left truncate block"
                         style={{ backgroundColor: CAT[e.category]?.color }}
                       >
                         {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
@@ -485,9 +485,9 @@ const CalendarPage = () => {
                     ))}
                     <button
                       onClick={() => openAdd(day)}
-                      className="w-full text-[9px] text-muted-foreground/50 hover:text-muted-foreground py-0.5 flex items-center justify-center hover:bg-muted/30 rounded transition-colors"
+                      className="w-full text-[9px] sm:text-[10px] text-muted-foreground/50 hover:text-muted-foreground py-0.5 flex items-center justify-center hover:bg-muted/30 rounded transition-colors"
                     >
-                      <Plus className="w-2.5 h-2.5" />
+                      <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                     </button>
                   </div>
                 </div>
