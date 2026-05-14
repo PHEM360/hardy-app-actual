@@ -292,6 +292,16 @@ function TaskDetailSheet({
                       >
                         <Sun className="w-3 h-3" />
                       </button>
+                      <button
+                        onClick={() => {
+                          if (!task.id) return;
+                          updateTask(task.id, { subtasks: task.subtasks!.filter((s) => s.id !== sub.id) });
+                        }}
+                        className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                        title="Delete subtask"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
                 ))}
