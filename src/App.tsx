@@ -24,6 +24,7 @@ import Themes from "@/pages/Themes";
 import LogInDetails from "@/pages/LogInDetails";
 import QRCodes from "@/pages/QRCodes";
 import Locate from "@/pages/Locate";
+import CalendarPage from "@/pages/Calendar";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
             <Route path="/qr-codes" element={<QRCodes />} />
+            <Route path="/calendar" element={<CalendarPage />} />
           </Route>
           <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />

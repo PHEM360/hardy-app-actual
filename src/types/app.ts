@@ -12,6 +12,7 @@ export type FeatureKey =
   | "tattersalls"
   | "tasks"
   | "companies"
+  | "calendar"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -137,6 +138,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "shield",
     route: "/admin",
     color: "destructive",
+  },
+  {
+    key: "calendar",
+    label: "Calendar",
+    description: "Events, reminders & household scheduling",
+    icon: "calendar",
+    route: "/calendar",
+    color: "info",
   },
 ];
 
@@ -466,3 +475,42 @@ export const DEFAULT_QR_SETTINGS: QRCodeSettings = {
   bgColor: "#ffffff",
   categories: ["Marketing", "Business Card", "Website", "Social Media", "Product", "Event", "Other"],
 };
+
+// ─── Calendar ─────────────────────────────────────────────────────────────────
+
+export type CalendarEventCategory =
+  | "personal"
+  | "family"
+  | "work"
+  | "health"
+  | "social"
+  | "other";
+
+export interface CalendarNotificationPref {
+  id: string;
+  via: "push" | "email" | "sms";
+  amount: number;
+  unit: "minutes" | "hours" | "days";
+}
+
+export interface CalendarEvent {
+  id?: string;
+  title: string;
+  description?: string;
+  location?: string;
+  category: CalendarEventCategory;
+  startDate: string;   // ISO datetime string
+  endDate: string;     // ISO datetime string
+  allDay?: boolean;
+  invitees?: string[]; // household member names
+  createdBy?: string;  // user UID
+  notifications?: CalendarNotificationPref[];
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface CalendarSettings {
+  defaultView: "month" | "week";
+  canManage?: string[]; // user UIDs allowed to manage settings (empty = admins only)
+  updatedAt?: any;
+}

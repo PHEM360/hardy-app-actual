@@ -197,6 +197,16 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Calendar events - per user
+    match /calendar/{userId}/events/{eventId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Calendar meta/settings - per user
+    match /calendar/{userId}/meta/{doc} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
-  CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2,
+  CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { signOut } from "firebase/auth";
@@ -24,9 +24,10 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,60%,50%),hsl(20,55%,44%))" },
   "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,55%,40%),hsl(150,50%,35%))" },
   "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,50%,45%),hsl(205,45%,40%))" },
+  "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: "hsl(220,60%,55%)",  gradient: "linear-gradient(135deg,hsl(220,60%,55%),hsl(230,55%,48%))" },
 };
 
-const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
+const DEFAULT_NAV = ["/dashboard", "/calendar", "/pets", "/admin", "/more"];
 
 const BottomNav = () => {
   const location = useLocation();
