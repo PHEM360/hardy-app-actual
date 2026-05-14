@@ -20,6 +20,12 @@ export interface TreatmentOption {
   frequencyDays: number;
 }
 
+export interface VaccinationOption {
+  id: string;
+  name: string;           // e.g. "Annual Booster", "Kennel Cough"
+  frequencyMonths: number; // e.g. 12
+}
+
 export interface TreatmentRecord {
   id: string;
   type: "flea" | "worming" | "vaccination";
@@ -52,6 +58,7 @@ export interface Pet {
   sharedWith: string[];
   fleaOptions: TreatmentOption[];
   wormOptions: TreatmentOption[];
+  vaccinationOptions: VaccinationOption[];
   selectedFlea: string;
   selectedWorm: string;
   treatmentNotes: string;
@@ -99,6 +106,7 @@ export function usePets() {
       sharedWith: d.data().sharedWith ?? [],
       fleaOptions: d.data().fleaOptions ?? [],
       wormOptions: d.data().wormOptions ?? [],
+      vaccinationOptions: d.data().vaccinationOptions ?? [],
       selectedFlea: d.data().selectedFlea ?? "",
       selectedWorm: d.data().selectedWorm ?? "",
       treatmentNotes: d.data().treatmentNotes ?? "",

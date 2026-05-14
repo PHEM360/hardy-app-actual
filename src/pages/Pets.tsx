@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePets } from "@/hooks/usePets";
-import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting } from "@/hooks/usePets";
+import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting, VaccinationOption } from "@/hooks/usePets";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import DogLoader from "@/components/DogLoader";
 import { useAuth } from "@/auth/AuthContext";
@@ -62,6 +62,17 @@ function getTreatmentStatus(pet: Pet, type: "flea" | "worming") {
   if (d < 0) return { text, bg: "bg-destructive/15", border: "border-destructive/40", product: productName, nextDue: latest.dateDue };
   if (d <= 3) return { text, bg: "bg-warning/15", border: "border-warning/40", product: productName, nextDue: latest.dateDue };
   return { text, bg: "bg-success/20", border: "border-success/35", product: productName, nextDue: latest.dateDue };
+}
+
+function getVaccinationStatus(pet: Pet, option: VaccinationOption) {
+  const history = pet.treatmentHistory.filter(t => t.type === "vaccination" && t.name === option.name);
+  const latest = history.sort((a, b) => b.dateDue.localeCompare(a.dateDue))[0];
+  if (!latest) return { text: "Never recorded", bg: "bg-muted", border: "border-muted/50", nextDue: "" };
+  const d = daysUntil(latest.dateDue);
+  const text = formatDueText(d);
+  if (d < 0) return { text, bg: "bg-destructive/15", border: "border-destructive/40", nextDue: latest.dateDue };
+  if (d <= 30) return { text, bg: "bg-warning/15", border: "border-warning/40", nextDue: latest.dateDue };
+  return { text, bg: "bg-success/20", border: "border-success/35", nextDue: latest.dateDue };
 }
 
 const WEIGHT_COLORS = ["hsl(25, 62%, 67%)", "hsl(188, 33%, 38%)"];
@@ -125,6 +136,7 @@ const Pets = () => {
   const [treatmentPetId, setTreatmentPetId] = useState("");
   const [treatmentType, setTreatmentType] = useState<"flea" | "worming" | "vaccination">("flea");
   const [treatmentDate, setTreatmentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedVaccineId, setSelectedVaccineId] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [settingsPetId, setSettingsPetId] = useState("");
@@ -203,26 +215,36 @@ const Pets = () => {
     const pid = treatmentPetId || firstPetId;
     const pet = pets.find((p) => p.id === pid);
     if (!pet) return;
-    const productName =
-      treatmentType === "flea"
-        ? pet.selectedFlea
-        : treatmentType === "worming"
-        ? pet.selectedWorm
-        : "";
-    if (!productName) {
-      setTreatmentError(
-        `No active ${treatmentType === "flea" ? "flea" : "wormer"} product set for ${pet.name}. Open Pet Settings and add a product first.`
+
+    let productName = "";
+    let nextDue = "";
+
+    if (treatmentType === "vaccination") {
+      const vacOpt = pet.vaccinationOptions.find((v) => v.id === selectedVaccineId);
+      if (!vacOpt) {
+        setTreatmentError("Please select a vaccination. Add vaccination types in Pet Settings first.");
+        return;
+      }
+      productName = vacOpt.name;
+      const givenDate = new Date(treatmentDate);
+      givenDate.setMonth(givenDate.getMonth() + vacOpt.frequencyMonths);
+      nextDue = givenDate.toISOString().split("T")[0];
+    } else {
+      productName = treatmentType === "flea" ? pet.selectedFlea : pet.selectedWorm;
+      if (!productName) {
+        setTreatmentError(
+          `No active ${treatmentType === "flea" ? "flea" : "wormer"} product set for ${pet.name}. Open Pet Settings and add a product first.`
+        );
+        return;
+      }
+      const option = (treatmentType === "flea" ? pet.fleaOptions : pet.wormOptions).find(
+        (o) => o.product === productName
       );
-      return;
+      const freq = option?.frequencyDays || 30;
+      const givenDate = new Date(treatmentDate);
+      nextDue = new Date(givenDate.getTime() + freq * 86400000).toISOString().split("T")[0];
     }
-    const option = (treatmentType === "flea" ? pet.fleaOptions : pet.wormOptions).find(
-      (o) => o.product === productName
-    );
-    const freq = option?.frequencyDays || 30;
-    const givenDate = new Date(treatmentDate);
-    const nextDue = new Date(givenDate.getTime() + freq * 86400000)
-      .toISOString()
-      .split("T")[0];
+
     setTreatmentError(null);
     setTreatmentLoading(true);
     try {
@@ -235,6 +257,7 @@ const Pets = () => {
       });
       setAddTreatmentOpen(false);
       setTreatmentDate(new Date().toISOString().split("T")[0]);
+      setSelectedVaccineId("");
     } catch (err: any) {
       setTreatmentError(err?.message ?? "Failed to save. Try again.");
     } finally {
@@ -254,6 +277,7 @@ const Pets = () => {
         avatar: newPetAvatar,
         fleaOptions: [],
         wormOptions: [],
+        vaccinationOptions: [],
         selectedFlea: "",
         selectedWorm: "",
         treatmentNotes: "",
@@ -571,6 +595,36 @@ const Pets = () => {
                   </button>
                 );
               })}
+              {/* Vaccination status cards */}
+              {pet.vaccinationOptions.map((vacOpt) => {
+                const status = getVaccinationStatus(pet, vacOpt);
+                return (
+                  <div
+                    key={vacOpt.id}
+                    className={`w-full p-3 rounded-xl ${status.bg} border ${status.border} shadow-soft`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary/10 text-primary">
+                        <span className="text-base">🩺</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-card-foreground">{vacOpt.name}</p>
+                        {status.nextDue && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Next: {format(new Date(status.nextDue), "d MMM yyyy")}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${
+                        status.bg.includes("destructive") ? "bg-destructive/20 text-destructive" :
+                        status.bg.includes("warning") ? "bg-warning/20 text-warning" :
+                        status.bg.includes("success") ? "bg-success/25 text-success" :
+                        "bg-muted text-muted-foreground"
+                      }`}>{status.text}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -734,16 +788,40 @@ const Pets = () => {
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={treatmentType} onValueChange={(v) => setTreatmentType(v as "flea" | "worming")}>
+              <Select value={treatmentType} onValueChange={(v) => { setTreatmentType(v as "flea" | "worming" | "vaccination"); setSelectedVaccineId(""); }}>
                 <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="flea">🛡️ Flea</SelectItem>
                   <SelectItem value="worming">💉 Worming</SelectItem>
+                  <SelectItem value="vaccination">🩺 Vaccination</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {(() => {
               const activePet = pets.find(p => p.id === (treatmentPetId || firstPetId));
+              if (treatmentType === "vaccination") {
+                const vacOpts = activePet?.vaccinationOptions ?? [];
+                return vacOpts.length === 0 ? (
+                  <p className="text-xs text-warning font-medium bg-warning/10 rounded-lg px-3 py-2">
+                    ⚠️ No vaccination types set for {activePet?.name}. Open Pet Settings → Vaccinations to add them first.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Vaccination</Label>
+                    <Select value={selectedVaccineId} onValueChange={setSelectedVaccineId}>
+                      <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select vaccine…" /></SelectTrigger>
+                      <SelectContent>
+                        {vacOpts.map((v) => <SelectItem key={v.id} value={v.id}>{v.name} (every {v.frequencyMonths}mo)</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {selectedVaccineId && (
+                      <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                        Next due will be auto-calculated based on the {vacOpts.find(v => v.id === selectedVaccineId)?.frequencyMonths}‑month interval.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
               const product = treatmentType === "flea" ? activePet?.selectedFlea : activePet?.selectedWorm;
               const options = treatmentType === "flea" ? activePet?.fleaOptions : activePet?.wormOptions;
               return (
@@ -771,7 +849,11 @@ const Pets = () => {
             {treatmentError && <p className="text-xs text-destructive">{treatmentError}</p>}
             <Button
               onClick={handleAddTreatment}
-              disabled={treatmentLoading || !(() => { const p = pets.find(x => x.id === (treatmentPetId || firstPetId)); return treatmentType === "flea" ? p?.selectedFlea : p?.selectedWorm; })()}
+              disabled={treatmentLoading || (() => {
+                const p = pets.find(x => x.id === (treatmentPetId || firstPetId));
+                if (treatmentType === "vaccination") return !selectedVaccineId;
+                return treatmentType === "flea" ? !p?.selectedFlea : !p?.selectedWorm;
+              })()}
               className="w-full h-11 rounded-xl bg-gradient-primary"
             >
               {treatmentLoading ? "Saving…" : "Save"}
@@ -987,7 +1069,49 @@ const Pets = () => {
                   </div>
                 </div>
 
-                {/* Notification Settings */}
+                {/* Vaccination Options */}
+                <div>
+                  <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Vaccinations</p>
+                  <p className="text-[10px] text-muted-foreground mb-2">Define the vaccines {pet.name} receives. Use "Record Treatment → Vaccination" to log when each is given.</p>
+                  <div className="space-y-2">
+                    {pet.vaccinationOptions.map((opt, i) => (
+                      <div key={opt.id} className="flex gap-2 items-center">
+                        <Input
+                          value={opt.name}
+                          placeholder="e.g. Annual Booster"
+                          onChange={(e) => {
+                            const updated = pet.vaccinationOptions.map((o, j) => j === i ? { ...o, name: e.target.value } : o);
+                            patchLocal(pet.id, { vaccinationOptions: updated });
+                          }}
+                          className="h-9 rounded-lg flex-1 text-xs"
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          value={opt.frequencyMonths}
+                          onChange={(e) => {
+                            const val = Math.max(1, Number(e.target.value));
+                            const updated = pet.vaccinationOptions.map((o, j) => j === i ? { ...o, frequencyMonths: val } : o);
+                            patchLocal(pet.id, { vaccinationOptions: updated });
+                          }}
+                          className="h-9 rounded-lg w-16 text-xs"
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">mo</span>
+                        <button
+                          onClick={() => patchLocal(pet.id, { vaccinationOptions: pet.vaccinationOptions.filter((_, j) => j !== i) })}
+                          className="text-destructive/60 hover:text-destructive shrink-0 p-1 rounded-md hover:bg-destructive/10 transition-colors"
+                          title="Remove"
+                        >✕</button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => patchLocal(pet.id, { vaccinationOptions: [...pet.vaccinationOptions, { id: `vac${Date.now()}`, name: "", frequencyMonths: 12 }] })}
+                      className="text-[10px] text-primary font-medium flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Add vaccination
+                    </button>
+                  </div>
+                </div>
                 <div>
                   <p className="text-xs font-semibold text-accent uppercase tracking-wider mb-2">Notifications</p>
                   <div className="space-y-3">
