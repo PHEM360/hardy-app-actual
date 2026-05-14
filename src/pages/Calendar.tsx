@@ -3,12 +3,14 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
+  AlertTriangle, Palette,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths,
   subMonths, addWeeks, subWeeks, parseISO, isAfter, isBefore, startOfDay, endOfDay,
+  addDays,
 } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -21,14 +23,21 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCalendar } from "@/hooks/useCalendar";
-import { useHouseholdSettings } from "@/hooks/useHousehold";
+import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
 import { useUserRole } from "@/auth/useUserRole";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePets } from "@/hooks/usePets";
 import type { CalendarEvent, CalendarEventCategory, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const MEMBER_COLOR_PRESETS = [
+  "#ec4899", "#3b82f6", "#f97316", "#10b981",
+  "#8b5cf6", "#f59e0b", "#ef4444", "#6366f1",
+  "#14b8a6", "#a855f7", "#0ea5e9", "#84cc16",
+];
 
 const CAT: Record<CalendarEventCategory, { color: string; bg: string; label: string }> = {
   personal: { color: "#6366f1", bg: "bg-[#6366f1]", label: "Personal" },
@@ -65,6 +74,8 @@ interface EventForm {
   description: string;
   location: string;
   category: CalendarEventCategory;
+  memberId: string;           // HouseholdMember.id | "all"
+  priority: "normal" | "urgent";
   startDate: string;
   startTime: string;
   endDate: string;
@@ -81,6 +92,8 @@ function defaultForm(prefillDate?: Date): EventForm {
     description: "",
     location: "",
     category: "personal",
+    memberId: "all",
+    priority: "normal",
     startDate: d,
     startTime: "09:00",
     endDate: d,
@@ -96,6 +109,8 @@ function defaultForm(prefillDate?: Date): EventForm {
 const CalendarPage = () => {
   const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar();
   const { settings: hSettings } = useHouseholdSettings();
+  const { items: householdItems } = useHouseholdItems();
+  const { pets } = usePets();
   const { role } = useUserRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
 
@@ -152,13 +167,18 @@ const CalendarPage = () => {
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   const eventsForDay = (day: Date) =>
-    events
+    allDisplayEvents
       .filter((e) => {
         const start = startOfDay(parseISO(e.startDate));
         const end = endOfDay(parseISO(e.endDate));
         return !isAfter(start, endOfDay(day)) && !isBefore(end, startOfDay(day));
       })
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+      .sort((a, b) => {
+        // Urgent events first
+        if (a.priority === "urgent" && b.priority !== "urgent") return -1;
+        if (b.priority === "urgent" && a.priority !== "urgent") return 1;
+        return a.startDate.localeCompare(b.startDate);
+      });
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
@@ -182,6 +202,8 @@ const CalendarPage = () => {
   };
 
   const openEdit = (event: CalendarEvent) => {
+    // Virtual events (auto-imported) are read-only
+    if (event.id?.startsWith("__")) return;
     const { date: sd, time: st } = splitISO(event.startDate);
     const { date: ed, time: et } = splitISO(event.endDate);
     setForm({
@@ -189,6 +211,8 @@ const CalendarPage = () => {
       description: event.description ?? "",
       location: event.location ?? "",
       category: event.category,
+      memberId: event.memberId ?? "all",
+      priority: event.priority ?? "normal",
       startDate: sd,
       startTime: st,
       endDate: ed,
@@ -224,6 +248,8 @@ const CalendarPage = () => {
       description: form.description.trim() || undefined,
       location: form.location.trim() || undefined,
       category: form.category,
+      memberId: form.memberId,
+      priority: form.priority,
       startDate: startISO,
       endDate: endISO,
       allDay: form.allDay,
@@ -261,6 +287,82 @@ const CalendarPage = () => {
     const end = endOfWeek(currentDate, { weekStartsOn: 1 });
     return eachDayOfInterval({ start, end });
   }, [currentDate]);
+
+  // ─── Member colour helper ────────────────────────────────────────────────────
+
+  const getEventColor = (e: CalendarEvent): string => {
+    const mid = e.memberId ?? "all";
+    const mc = settings.memberColors?.[mid];
+    if (mc) return mc;
+    return CAT[e.category]?.color ?? "#6366f1";
+  };
+
+  // ─── Auto-imported virtual events (pets + household) ────────────────────────
+
+  const virtualEvents = useMemo<CalendarEvent[]>(() => {
+    const vEvents: CalendarEvent[] = [];
+    const cutoff = addDays(new Date(), -14);
+    const now = new Date();
+
+    // Pet flea & worming next-due dates
+    if (settings.autoImport?.pets !== false) {
+      pets.forEach((pet) => {
+        const computeNext = (
+          type: "flea" | "worming",
+          options: typeof pet.fleaOptions,
+          selectedId: string,
+          label: string,
+          emoji: string
+        ) => {
+          const history = pet.treatmentHistory
+            .filter((t) => t.type === type && t.dateGiven)
+            .sort((a, b) => b.dateGiven.localeCompare(a.dateGiven));
+          if (!history.length) return;
+          const last = history[0];
+          const opt = options.find((o) => o.id === selectedId);
+          if (!opt) return;
+          const nextDue = addDays(parseISO(last.dateGiven), opt.frequencyDays);
+          if (nextDue < cutoff) return;
+          vEvents.push({
+            id: `__pet_${pet.id}_${type}`,
+            title: `${emoji} ${pet.name} — ${label} due`,
+            category: "health",
+            startDate: nextDue.toISOString(),
+            endDate: nextDue.toISOString(),
+            allDay: true,
+            priority: nextDue < now ? "urgent" : "normal",
+          });
+        };
+        computeNext("flea", pet.fleaOptions, pet.selectedFlea, "Flea Treatment", "🐾");
+        computeNext("worming", pet.wormOptions, pet.selectedWorm, "Worming Treatment", "🪱");
+      });
+    }
+
+    // Household item renewal dates
+    if (settings.autoImport?.household !== false) {
+      householdItems.forEach((item) => {
+        if (!item.endDate) return;
+        const due = parseISO(item.endDate);
+        if (due < cutoff) return;
+        vEvents.push({
+          id: `__hs_${item.id}`,
+          title: `🏠 ${item.provider ? item.provider + " — " : ""}${item.type} renewal`,
+          category: "other",
+          startDate: due.toISOString(),
+          endDate: due.toISOString(),
+          allDay: true,
+          priority: due < now ? "urgent" : "normal",
+        });
+      });
+    }
+
+    return vEvents;
+  }, [pets, householdItems, settings.autoImport]);
+
+  const allDisplayEvents = useMemo(
+    () => [...events, ...virtualEvents],
+    [events, virtualEvents]
+  );
 
   // ─── Notification row helpers ────────────────────────────────────────────────
 
@@ -417,9 +519,12 @@ const CalendarPage = () => {
                     <div
                       key={e.id}
                       onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
-                      className="w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate text-white leading-tight"
-                      style={{ backgroundColor: CAT[e.category]?.color }}
+                      className={`w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate text-white leading-tight flex items-center gap-0.5 ${
+                        e.id?.startsWith("__") ? "opacity-80 italic" : ""
+                      }`}
+                      style={{ backgroundColor: getEventColor(e) }}
                     >
+                      {e.priority === "urgent" && <AlertTriangle className="w-2 h-2 flex-shrink-0" />}
                       {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
                       {e.title}
                     </div>
@@ -476,9 +581,12 @@ const CalendarPage = () => {
                       <button
                         key={e.id}
                         onClick={() => openEdit(e)}
-                        className="w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-white text-left truncate block"
-                        style={{ backgroundColor: CAT[e.category]?.color }}
+                        className={`w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-white text-left truncate block flex items-center gap-0.5 ${
+                          e.id?.startsWith("__") ? "opacity-80 italic" : ""
+                        }`}
+                        style={{ backgroundColor: getEventColor(e) }}
                       >
+                        {e.priority === "urgent" && <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0 inline-block mr-0.5" />}
                         {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
                         {e.title}
                       </button>
@@ -545,15 +653,27 @@ const CalendarPage = () => {
                   <button
                     key={e.id}
                     onClick={() => openEdit(e)}
-                    className="w-full text-left flex items-stretch gap-3 p-3 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors group"
+                    className={`w-full text-left flex items-stretch gap-3 p-3 rounded-xl transition-colors group ${
+                      e.priority === "urgent"
+                        ? "bg-red-500/10 hover:bg-red-500/20 border border-red-500/30"
+                        : "bg-muted/20 hover:bg-muted/40"
+                    } ${e.id?.startsWith("__") ? "cursor-default" : ""}`}
                   >
-                    {/* Category colour bar */}
+                    {/* Member/category colour bar */}
                     <div
                       className="w-1 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: CAT[e.category]?.color }}
+                      style={{ backgroundColor: getEventColor(e) }}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-card-foreground">{e.title}</p>
+                      <div className="flex items-center gap-1.5">
+                        {e.priority === "urgent" && (
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                        )}
+                        <p className="text-sm font-semibold text-card-foreground">{e.title}</p>
+                        {e.id?.startsWith("__") && (
+                          <span className="text-[9px] text-muted-foreground border border-border/40 px-1 py-0.5 rounded">auto</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         {e.allDay ? (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
@@ -580,11 +700,14 @@ const CalendarPage = () => {
                         <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{e.description}</p>
                       )}
                     </div>
+                    {/* Member colour badge */}
                     <span
                       className="text-[9px] font-bold px-2 py-1 rounded-full text-white self-start flex-shrink-0"
-                      style={{ backgroundColor: CAT[e.category]?.color }}
+                      style={{ backgroundColor: getEventColor(e) }}
                     >
-                      {CAT[e.category]?.label}
+                      {e.memberId && e.memberId !== "all"
+                        ? hSettings.members.find((m) => m.id === e.memberId)?.name ?? e.memberId
+                        : CAT[e.category]?.label ?? "Event"}
                     </span>
                   </button>
                 ))}
@@ -691,6 +814,49 @@ const CalendarPage = () => {
                   )
                 )}
               </div>
+            </div>
+
+            {/* Who is this for? (member colour picker) */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Palette className="w-3.5 h-3.5" /> Who is this for?
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {/* Everyone / shared option */}
+                <button
+                  onClick={() => setForm((f) => ({ ...f, memberId: "all" }))}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-all ${
+                    form.memberId === "all" ? "ring-2 ring-offset-2 ring-offset-background scale-105" : "opacity-70"
+                  }`}
+                  style={{ backgroundColor: settings.memberColors?.["all"] ?? "#f59e0b" }}
+                >
+                  👨‍👩‍👧 Everyone
+                </button>
+                {hSettings.members.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setForm((f) => ({ ...f, memberId: m.id }))}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-all ${
+                      form.memberId === m.id ? "ring-2 ring-offset-2 ring-offset-background scale-105" : "opacity-70"
+                    }`}
+                    style={{ backgroundColor: settings.memberColors?.[m.id] ?? "#6366f1" }}
+                  >
+                    {m.emoji && m.emoji + " "}{m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Priority */}
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border/30 bg-muted/20">
+              <div>
+                <p className="text-sm font-medium">Mark as urgent</p>
+                <p className="text-[11px] text-muted-foreground">Highlighted with red border on calendar</p>
+              </div>
+              <Switch
+                checked={form.priority === "urgent"}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, priority: v ? "urgent" : "normal" }))}
+              />
             </div>
 
             {/* Location */}
@@ -869,21 +1035,23 @@ const CalendarPage = () => {
 
       {/* ── Settings dialog ── */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-4 h-4" /> Calendar Settings
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-1">
+          <div className="space-y-5 pt-1">
+
+            {/* Default view */}
             <div className="space-y-1.5">
               <Label>Default view</Label>
               <div className="flex gap-2">
                 {(["month", "week"] as const).map((v) => (
                   <button
                     key={v}
-                    onClick={() => saveSettings({ defaultView: v })}
+                    onClick={() => saveSettings({ ...settings, defaultView: v })}
                     className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors capitalize ${
                       settings.defaultView === v
                         ? "bg-primary text-primary-foreground border-primary"
@@ -896,11 +1064,137 @@ const CalendarPage = () => {
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-muted/30 border border-border/30">
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Calendar events are stored per user. Household sharing and additional
-                category management can be added in a future update.
+            {/* Member colours */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Palette className="w-3.5 h-3.5" /> Member colours
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Each member gets a colour for their calendar events.
               </p>
+
+              {/* Everyone / shared */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-5 h-5 rounded-full border-2 border-white shadow"
+                    style={{ backgroundColor: settings.memberColors?.["all"] ?? "#f59e0b" }}
+                  />
+                  <span className="text-sm font-medium">👨‍👩‍👧 Everyone (shared)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex gap-1 flex-wrap max-w-[140px]">
+                    {MEMBER_COLOR_PRESETS.slice(0, 6).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => saveSettings({
+                          ...settings,
+                          memberColors: { ...(settings.memberColors ?? {}), all: c },
+                        })}
+                        className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                          (settings.memberColors?.["all"] ?? "#f59e0b") === c
+                            ? "border-foreground scale-110"
+                            : "border-transparent hover:scale-110"
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    type="color"
+                    value={settings.memberColors?.["all"] ?? "#f59e0b"}
+                    onChange={(e) => saveSettings({
+                      ...settings,
+                      memberColors: { ...(settings.memberColors ?? {}), all: e.target.value },
+                    })}
+                    className="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
+                    title="Custom colour"
+                  />
+                </div>
+              </div>
+
+              {hSettings.members.map((m, idx) => (
+                <div key={m.id} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-5 h-5 rounded-full border-2 border-white shadow"
+                      style={{ backgroundColor: settings.memberColors?.[m.id] ?? MEMBER_COLOR_PRESETS[idx % MEMBER_COLOR_PRESETS.length] }}
+                    />
+                    <span className="text-sm font-medium">{m.emoji && m.emoji + " "}{m.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex gap-1 flex-wrap max-w-[140px]">
+                      {MEMBER_COLOR_PRESETS.slice(0, 6).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => saveSettings({
+                            ...settings,
+                            memberColors: { ...(settings.memberColors ?? {}), [m.id]: c },
+                          })}
+                          className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                            (settings.memberColors?.[m.id] ?? MEMBER_COLOR_PRESETS[idx % MEMBER_COLOR_PRESETS.length]) === c
+                              ? "border-foreground scale-110"
+                              : "border-transparent hover:scale-110"
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                    <input
+                      type="color"
+                      value={settings.memberColors?.[m.id] ?? MEMBER_COLOR_PRESETS[idx % MEMBER_COLOR_PRESETS.length]}
+                      onChange={(e) => saveSettings({
+                        ...settings,
+                        memberColors: { ...(settings.memberColors ?? {}), [m.id]: e.target.value },
+                      })}
+                      className="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
+                      title="Custom colour"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {hSettings.members.length === 0 && (
+                <p className="text-[11px] text-muted-foreground italic">
+                  Add household members in Households settings to assign individual colours.
+                </p>
+              )}
+            </div>
+
+            {/* Auto-import */}
+            <div className="space-y-2">
+              <Label>Auto-import events</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Show dates from other areas of the app on your calendar.
+              </p>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">🐾 Pet treatments</p>
+                  <p className="text-[11px] text-muted-foreground">Flea &amp; worming due dates</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.pets !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), pets: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">🏠 Household renewals</p>
+                  <p className="text-[11px] text-muted-foreground">Insurance &amp; utility renewal dates</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.household !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), household: v },
+                  })}
+                />
+              </div>
             </div>
 
             <Button className="w-full" onClick={() => setSettingsOpen(false)}>

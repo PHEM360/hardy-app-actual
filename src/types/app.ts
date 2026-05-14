@@ -167,6 +167,7 @@ export interface TaskSubtask {
   id: string;
   title: string;
   done: boolean;
+  isToday?: boolean;  // individual subtask added to Today
 }
 
 export interface Task {
@@ -499,11 +500,13 @@ export interface CalendarEvent {
   description?: string;
   location?: string;
   category: CalendarEventCategory;
-  startDate: string;   // ISO datetime string
-  endDate: string;     // ISO datetime string
+  memberId?: string;           // HouseholdMember.id | "all" — drives colour on calendar
+  priority?: "normal" | "urgent"; // urgent events are highlighted
+  startDate: string;           // ISO datetime string
+  endDate: string;             // ISO datetime string
   allDay?: boolean;
-  invitees?: string[]; // household member names
-  createdBy?: string;  // user UID
+  invitees?: string[];         // household member names
+  createdBy?: string;          // user UID
   notifications?: CalendarNotificationPref[];
   createdAt?: any;
   updatedAt?: any;
@@ -511,6 +514,11 @@ export interface CalendarEvent {
 
 export interface CalendarSettings {
   defaultView: "month" | "week";
-  canManage?: string[]; // user UIDs allowed to manage settings (empty = admins only)
+  canManage?: string[];        // user UIDs allowed to manage settings (empty = admins only)
+  memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
+  autoImport?: {
+    pets?: boolean;            // show pet flea/worming due dates
+    household?: boolean;       // show household item renewal dates
+  };
   updatedAt?: any;
 }

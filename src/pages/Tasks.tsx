@@ -6,6 +6,7 @@ import {
   Clock, Settings2, X, Flag,
   LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
+  ChevronUp, ChevronDown, Building2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,7 @@ function TaskDetailSheet({
   onToggleToday,
   onStatusChange,
   settings,
+  updateTask,
 }: {
   task: Task | null;
   open: boolean;
@@ -150,7 +152,11 @@ function TaskDetailSheet({
   onToggleToday: () => void;
   onStatusChange: (s: TaskStatus) => void;
   settings: TaskSettings;
+  updateTask: (id: string, data: Partial<Task>) => Promise<void>;
 }) {
+  const [quickAddInput, setQuickAddInput] = useState("");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+
   if (!task) return null;
 
   const priority = PRIORITIES.find((p) => p.value === task.priority)!;
@@ -231,15 +237,117 @@ function TaskDetailSheet({
                 />
               </div>
               <div className="space-y-1.5">
-                {task.subtasks!.map((sub) => (
-                  <div key={sub.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 ${sub.done ? "bg-muted/30" : "bg-muted/50"}`}>
-                    <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border"}`}>
+                {task.subtasks!.map((sub, idx) => (
+                  <div key={sub.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 group/sub ${sub.done ? "bg-muted/30" : "bg-muted/50"}`}>
+                    <button
+                      onClick={() => {
+                        if (!task.id) return;
+                        const subs = task.subtasks!.map((s) => s.id === sub.id ? { ...s, done: !s.done } : s);
+                        updateTask(task.id, { subtasks: subs });
+                      }}
+                      className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border hover:border-green-400"}`}
+                    >
                       {sub.done && <CheckCircle2 className="w-3 h-3" />}
+                    </button>
+                    <span className={`text-sm flex-1 min-w-0 ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
+                    {sub.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                    {/* Reorder + today + delete — visible on hover */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          if (!task.id) return;
+                          const subs = [...task.subtasks!];
+                          if (idx === 0) return;
+                          [subs[idx], subs[idx - 1]] = [subs[idx - 1], subs[idx]];
+                          updateTask(task.id, { subtasks: subs });
+                        }}
+                        disabled={idx === 0}
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!task.id) return;
+                          const subs = [...task.subtasks!];
+                          if (idx === subs.length - 1) return;
+                          [subs[idx], subs[idx + 1]] = [subs[idx + 1], subs[idx]];
+                          updateTask(task.id, { subtasks: subs });
+                        }}
+                        disabled={idx === task.subtasks!.length - 1}
+                        className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!task.id) return;
+                          const subs = task.subtasks!.map((s) => s.id === sub.id ? { ...s, isToday: !s.isToday } : s);
+                          updateTask(task.id, { subtasks: subs });
+                        }}
+                        className={`p-0.5 rounded transition-colors ${sub.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}
+                        title={sub.isToday ? "Remove from Today" : "Add to Today"}
+                      >
+                        <Sun className="w-3 h-3" />
+                      </button>
                     </div>
-                    <span className={`text-sm flex-1 ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Quick-add subtask (always visible) */}
+          {task.id && (
+            <div>
+              {!showQuickAdd && subtaskCount === 0 && (
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Subtasks</p>
+              )}
+              {showQuickAdd ? (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    value={quickAddInput}
+                    onChange={(e) => setQuickAddInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const title = quickAddInput.trim();
+                        if (!title) return;
+                        const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false };
+                        updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
+                        setQuickAddInput("");
+                        setShowQuickAdd(false);
+                      }
+                      if (e.key === "Escape") { setShowQuickAdd(false); setQuickAddInput(""); }
+                    }}
+                    placeholder="New subtask title…"
+                    className="h-8 rounded-xl flex-1 text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const title = quickAddInput.trim();
+                      if (!title) return;
+                      const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false };
+                      updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
+                      setQuickAddInput("");
+                      setShowQuickAdd(false);
+                    }}
+                    className="h-8 rounded-xl px-3 text-xs"
+                  >Add</Button>
+                  <Button variant="ghost" onClick={() => { setShowQuickAdd(false); setQuickAddInput(""); }} className="h-8 w-8 rounded-xl px-0"><X className="w-3 h-3" /></Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowQuickAdd(true)}
+                  className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add subtask
+                </button>
+              )}
             </div>
           )}
 
@@ -907,7 +1015,7 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
 
 // ─── View Types ───────────────────────────────────────────────────────────────
 
-type TaskView = "list" | "tile" | "kanban";
+type TaskView = "list" | "tile" | "kanban" | "company";
 
 // ─── Task Card (List view) ────────────────────────────────────────────────────
 
@@ -1336,6 +1444,238 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   );
 }
 
+// ─── CompanyGroupView ─────────────────────────────────────────────────────────
+
+function CompanyGroupView({
+  tasks,
+  settings,
+  colourBy,
+  onEdit,
+  onDelete,
+  onToggleTaskToday,
+  onStatusChange,
+  updateTask,
+}: {
+  tasks: Task[];
+  settings: TaskSettings;
+  colourBy: ColourBy;
+  onEdit: (t: Task) => void;
+  onDelete: (t: Task) => void;
+  onToggleTaskToday: (t: Task) => void;
+  onStatusChange: (t: Task, s: TaskStatus) => void;
+  updateTask: (id: string, data: Partial<Task>) => Promise<void>;
+}) {
+  const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(() => new Set());
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(() => new Set());
+  const [quickAddTaskId, setQuickAddTaskId] = useState<string | null>(null);
+  const [quickAddInput, setQuickAddInput] = useState("");
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of tasks) {
+      const key = t.company || "__none__";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === "__none__") return 1;
+      if (b === "__none__") return -1;
+      return a.localeCompare(b);
+    });
+  }, [tasks]);
+
+  const toggleCompany = (key: string) =>
+    setExpandedCompanies((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+
+  const toggleTask = (id: string) =>
+    setExpandedTasks((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+
+  const updateSubs = (task: Task, subs: TaskSubtask[]) =>
+    task.id && updateTask(task.id, { subtasks: subs });
+
+  const quickAddSubtask = (task: Task) => {
+    const title = quickAddInput.trim();
+    if (!title || !task.id) return;
+    const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false };
+    updateTask(task.id, { subtasks: [...(task.subtasks ?? []), newSub] });
+    setQuickAddInput("");
+    setQuickAddTaskId(null);
+  };
+
+  if (groups.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-10">No tasks match this filter.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map(([companyKey, companyTasks]) => {
+        const label = companyKey === "__none__" ? "No Company" : companyKey;
+        const isExpanded = expandedCompanies.has(companyKey);
+        const colour = settings.companyColors?.[companyKey] ?? "";
+        const doneCount = companyTasks.filter((t) => t.status === "done").length;
+
+        return (
+          <div key={companyKey} className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
+            {/* Company header */}
+            <button
+              onClick={() => toggleCompany(companyKey)}
+              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors"
+              style={colour ? { borderLeftColor: colour, borderLeftWidth: 3 } : undefined}
+            >
+              {colour ? (
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colour }} />
+              ) : (
+                <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              )}
+              <span className="flex-1 text-sm font-bold text-left">{label}</span>
+              <span className="text-[11px] font-semibold text-muted-foreground mr-1">
+                {doneCount}/{companyTasks.length}
+              </span>
+              <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
+            </button>
+
+            {/* Task list */}
+            <AnimatePresence initial={false}>
+              {isExpanded && (
+                <motion.div
+                  key="tasks"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden"
+                >
+                  <div className="border-t border-border/30 divide-y divide-border/20">
+                    {companyTasks.map((task) => {
+                      const isTaskExpanded = expandedTasks.has(task.id!);
+                      const subs = task.subtasks ?? [];
+                      const subDone = subs.filter((s) => s.done).length;
+                      const isDone = task.status === "done";
+                      const pData = PRIORITIES.find((p) => p.value === task.priority)!;
+                      const isQuickAdding = quickAddTaskId === task.id;
+
+                      return (
+                        <div key={task.id} className={isDone ? "opacity-60" : ""}>
+                          {/* Task row */}
+                          <div
+                            className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-muted/20 transition-colors group/task cursor-pointer"
+                            onClick={() => toggleTask(task.id!)}
+                          >
+                            {/* Done checkbox */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onStatusChange(task, isDone ? "todo" : "done"); }}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isDone ? "bg-green-500 border-green-500 text-white" : "border-border hover:border-green-400"}`}
+                            >
+                              {isDone && <CheckCircle2 className="w-2.5 h-2.5" />}
+                            </button>
+
+                            {/* Title + meta */}
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${pData.hex}22`, color: pData.hex }}>{pData.label}</span>
+                                {subs.length > 0 && <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground"><ListChecks className="w-2.5 h-2.5" />{subDone}/{subs.length}</span>}
+                                {task.dueDate && <span className="text-[10px] text-muted-foreground">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+                              </div>
+                            </div>
+
+                            {/* Hover actions */}
+                            <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/task:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => onToggleTaskToday(task)} className={`p-1 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Add task to Today"><Sun className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => onEdit(task)} className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors" title="Edit task"><Settings2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => onDelete(task)} className="p-1 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                            <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${isTaskExpanded ? "rotate-90" : ""}`} />
+                          </div>
+
+                          {/* Subtask progress bar */}
+                          {subs.length > 0 && (
+                            <div className="h-0.5 bg-muted mx-4 rounded-full overflow-hidden">
+                              <div className="h-full bg-green-400 transition-all" style={{ width: `${(subDone / subs.length) * 100}%` }} />
+                            </div>
+                          )}
+
+                          {/* Inline subtask list */}
+                          <AnimatePresence initial={false}>
+                            {isTaskExpanded && (
+                              <motion.div
+                                key="subs"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="px-4 py-2.5 space-y-1.5 bg-muted/10">
+                                  {subs.length === 0 ? (
+                                    <p className="text-[11px] text-muted-foreground text-center py-2">No subtasks yet — add one below</p>
+                                  ) : (
+                                    subs.map((sub, idx) => (
+                                      <div key={sub.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl group/sub ${sub.done ? "bg-muted/20 opacity-60" : "bg-card border border-border/30"}`}>
+                                        {/* Done toggle */}
+                                        <button
+                                          onClick={() => updateSubs(task, subs.map((s) => s.id === sub.id ? { ...s, done: !s.done } : s))}
+                                          className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border hover:border-green-400"}`}
+                                        >
+                                          {sub.done && <CheckCircle2 className="w-2.5 h-2.5" />}
+                                        </button>
+                                        {/* Title */}
+                                        <span className={`flex-1 text-sm min-w-0 truncate ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
+                                        {/* Today badge */}
+                                        {sub.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                                        {/* Controls — visible on hover */}
+                                        <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity flex-shrink-0">
+                                          <button onClick={() => { const s2 = [...subs]; if (idx === 0) return; [s2[idx], s2[idx-1]] = [s2[idx-1], s2[idx]]; updateSubs(task, s2); }} disabled={idx === 0} className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20" title="Move up"><ChevronUp className="w-3 h-3" /></button>
+                                          <button onClick={() => { const s2 = [...subs]; if (idx === subs.length - 1) return; [s2[idx], s2[idx+1]] = [s2[idx+1], s2[idx]]; updateSubs(task, s2); }} disabled={idx === subs.length - 1} className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20" title="Move down"><ChevronDown className="w-3 h-3" /></button>
+                                          <button onClick={() => updateSubs(task, subs.map((s) => s.id === sub.id ? { ...s, isToday: !s.isToday } : s))} className={`p-0.5 rounded transition-colors ${sub.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title={sub.isToday ? "Remove from Today" : "Add subtask to Today"}><Sun className="w-3 h-3" /></button>
+                                          <button onClick={() => updateSubs(task, subs.filter((s) => s.id !== sub.id))} className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors" title="Remove subtask"><X className="w-3 h-3" /></button>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                  {/* Quick-add subtask */}
+                                  {isQuickAdding ? (
+                                    <div className="flex gap-2 mt-2">
+                                      <Input
+                                        autoFocus
+                                        value={quickAddInput}
+                                        onChange={(e) => setQuickAddInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") { e.preventDefault(); quickAddSubtask(task); }
+                                          if (e.key === "Escape") { setQuickAddTaskId(null); setQuickAddInput(""); }
+                                        }}
+                                        placeholder="New subtask title…"
+                                        className="h-8 rounded-xl flex-1 text-sm"
+                                      />
+                                      <Button variant="outline" onClick={() => quickAddSubtask(task)} className="h-8 rounded-xl px-3 text-xs">Add</Button>
+                                      <Button variant="ghost" onClick={() => { setQuickAddTaskId(null); setQuickAddInput(""); }} className="h-8 w-8 rounded-xl px-0"><X className="w-3 h-3" /></Button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setQuickAddTaskId(task.id!); setQuickAddInput(""); }}
+                                      className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors"
+                                    >
+                                      <Plus className="w-3 h-3" /> Add subtask
+                                    </button>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Tasks = () => {
@@ -1374,7 +1714,7 @@ const Tasks = () => {
     let list = [...tasks];
     // Hide completed unless user has toggled them on
     if (!showCompleted && !settings.showCompleted) list = list.filter((t) => t.status !== "done");
-    if (activeTab === "Today") list = list.filter((t) => t.isToday);
+    if (activeTab === "Today") list = list.filter((t) => t.isToday || t.subtasks?.some((s) => s.isToday && !s.done));
     if (activeTab === "Priority" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.priority));
     if (activeTab === "Status" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.status));
     if (activeTab === "Category" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.category));
@@ -1458,7 +1798,7 @@ const Tasks = () => {
       <div className="flex items-center justify-between gap-2 mb-4">
         {/* Left: view toggles */}
         <div className="flex items-center gap-0.5 bg-muted/70 rounded-full p-0.5">
-          {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tile"], ["kanban", Columns2, "Kanban"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
+          {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tile"], ["kanban", Columns2, "Kanban"], ["company", Building2, "Companies"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
             <button key={mode} onClick={() => setViewMode(mode)} aria-label={label}
               className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-all duration-150 ${viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -1538,7 +1878,18 @@ const Tasks = () => {
       )}
 
       {/* Views */}
-      {viewMode === "kanban" ? (
+      {viewMode === "company" ? (
+        <CompanyGroupView
+          tasks={filtered}
+          settings={settings}
+          colourBy={colourBy}
+          onEdit={openEdit}
+          onDelete={(t) => t.id && deleteTask(t.id)}
+          onToggleTaskToday={(t) => t.id && toggleToday(t.id, t.isToday)}
+          onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
+          updateTask={updateTask}
+        />
+      ) : viewMode === "kanban" ? (
         <KanbanView tasks={filtered} settings={settings} colourBy={colourBy}
           onOpen={openDetail} onDelete={(t) => t.id && deleteTask(t.id)}
           onToggleToday={(t) => t.id && toggleToday(t.id, t.isToday)}
@@ -1605,6 +1956,7 @@ const Tasks = () => {
         }}
         onToggleToday={() => liveDetailTask?.id && toggleToday(liveDetailTask.id, liveDetailTask.isToday)}
         onStatusChange={(s) => liveDetailTask?.id && setStatus(liveDetailTask.id, s)}
+        updateTask={updateTask}
         settings={settings}
       />
 
