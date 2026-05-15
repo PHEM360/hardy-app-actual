@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
+import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -41,6 +42,7 @@ const Tattersalls = () => {
 
   // Upload document dialog
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [scannerFile, setScannerFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +89,15 @@ const Tattersalls = () => {
     e.target.value = "";
     setUploadOpen(false);
     await uploadDocument(file);
+  };
+
+  const handleCameraSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploadOpen(false);
+    // Route all camera images through the document scanner
+    setScannerFile(file);
   };
 
   if (loading) {
@@ -324,10 +335,20 @@ const Tattersalls = () => {
       {/* Hidden file inputs */}
       {/* Generic file picker */}
       <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleFileSelected} />
-      {/* Camera — front-facing, photo only */}
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleFileSelected} />
-      {/* Scan — rear camera, document mode where supported */}
-      <input ref={scanInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelected} />
+      {/* Camera — front-facing, photo only — goes through scanner */}
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleCameraSelected} />
+      {/* Scan — rear camera — goes through scanner */}
+      <input ref={scanInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCameraSelected} />
+
+      {/* Document scanner */}
+      <DocumentScannerSheet
+        imageFile={scannerFile}
+        onConfirm={async (scannedFile) => {
+          setScannerFile(null);
+          await uploadDocument(scannedFile);
+        }}
+        onCancel={() => setScannerFile(null)}
+      />
     </FeaturePageShell>
   );
 };

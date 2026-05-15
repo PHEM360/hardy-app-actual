@@ -6,6 +6,7 @@ import {
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight,
 } from "lucide-react";
+import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend,
@@ -243,6 +244,8 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const [saving, setSaving] = useState(false);
   const newFileRef = useRef<HTMLInputElement>(null);
   const [newFiles, setNewFiles] = useState<File[]>([]);
+  // Scanner state: which existing expense receipt we're adding to
+  const [scannerCtx, setScannerCtx] = useState<{ expId: string; receipts: string[]; file: File } | null>(null);
 
   const totalThisYear = useMemo(() => {
     const now = new Date();
@@ -324,7 +327,16 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                     <label className="w-10 h-10 rounded-lg bg-muted border border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors">
                       <Upload className="w-3.5 h-3.5 text-muted-foreground" />
                       <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploadingReceipt}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f && exp.id) uploadReceipt(exp.id, f, exp.receipts || []); e.target.value = ""; }} />
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!f || !exp.id) return;
+                          if (f.type.startsWith("image/")) {
+                            setScannerCtx({ expId: exp.id, receipts: exp.receipts || [], file: f });
+                          } else {
+                            uploadReceipt(exp.id, f, exp.receipts || []);
+                          }
+                        }} />
                     </label>
                   </div>
                 )}
@@ -332,7 +344,16 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                   <label className="mt-2 inline-flex items-center gap-1 text-[10px] text-primary cursor-pointer">
                     <Upload className="w-3 h-3" /> Add receipt
                     <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploadingReceipt}
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f && exp.id) uploadReceipt(exp.id, f, []); e.target.value = ""; }} />
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!f || !exp.id) return;
+                        if (f.type.startsWith("image/")) {
+                          setScannerCtx({ expId: exp.id, receipts: [], file: f });
+                        } else {
+                          uploadReceipt(exp.id, f, []);
+                        }
+                      }} />
                   </label>
                 )}
               </div>
@@ -378,6 +399,18 @@ function ExpensesTab({ companyId }: { companyId: string }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Document scanner for receipt images */}
+      <DocumentScannerSheet
+        imageFile={scannerCtx?.file ?? null}
+        onConfirm={(scannedFile) => {
+          if (scannerCtx) {
+            uploadReceipt(scannerCtx.expId, scannedFile, scannerCtx.receipts);
+          }
+          setScannerCtx(null);
+        }}
+        onCancel={() => setScannerCtx(null)}
+      />
     </div>
   );
 }

@@ -1,0 +1,558 @@
+/**
+ * DocumentScannerSheet
+ * ---------------------
+ * Full-screen document scanner modal. Shows a captured camera image,
+ * auto-detects document edges, lets the user drag 4 corner handles to
+ * refine the crop, then applies a perspective warp and returns the result
+ * as a JPEG File — similar to Dropbox / Google Drive scanning.
+ *
+ * Usage:
+ *   <DocumentScannerSheet
+ *     imageFile={capturedFile}
+ *     onConfirm={(croppedFile) => uploadDocument(croppedFile)}
+ *     onCancel={() => setScannerFile(null)}
+ *   />
+ */
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { X, RotateCcw, Loader2, CheckCheck } from "lucide-react";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Pt = { x: number; y: number };
+// Corners in order: TL, TR, BR, BL
+type Quad = [Pt, Pt, Pt, Pt];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * Downsample a canvas to a maximum side length (preserves aspect ratio).
+ * Returns a new canvas.
+ */
+function resizeCanvas(src: HTMLCanvasElement, maxSide: number): HTMLCanvasElement {
+  const scale = Math.min(1, maxSide / Math.max(src.width, src.height));
+  const w = Math.round(src.width * scale);
+  const h = Math.round(src.height * scale);
+  const dst = document.createElement("canvas");
+  dst.width = w;
+  dst.height = h;
+  dst.getContext("2d")!.drawImage(src, 0, 0, w, h);
+  return dst;
+}
+
+/**
+ * Auto-detect the document bounding quad using Sobel edge detection +
+ * row/column projection. Returns corners in image coordinates.
+ * Falls back to a ~10 % inset rectangle if detection is unreliable.
+ */
+function autoDetectQuad(srcCanvas: HTMLCanvasElement): Quad {
+  const W = srcCanvas.width;
+  const H = srcCanvas.height;
+
+  // Work on a small downsampled copy for speed
+  const THUMB = 400;
+  const scale = Math.min(W, H) / THUMB;
+  const sw = Math.round(W / scale);
+  const sh = Math.round(H / scale);
+
+  const tmp = document.createElement("canvas");
+  tmp.width = sw;
+  tmp.height = sh;
+  const tCtx = tmp.getContext("2d", { willReadFrequently: true })!;
+  tCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+  const d = tCtx.getImageData(0, 0, sw, sh).data;
+
+  // Grayscale
+  const gray = new Uint8Array(sw * sh);
+  for (let i = 0; i < sw * sh; i++) {
+    gray[i] = Math.round(d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114);
+  }
+
+  // Sobel edge magnitude
+  const edge = new Float32Array(sw * sh);
+  let maxE = 0;
+  for (let y = 1; y < sh - 1; y++) {
+    for (let x = 1; x < sw - 1; x++) {
+      const gx =
+        -gray[(y - 1) * sw + (x - 1)] - 2 * gray[y * sw + (x - 1)] - gray[(y + 1) * sw + (x - 1)] +
+        gray[(y - 1) * sw + (x + 1)] + 2 * gray[y * sw + (x + 1)] + gray[(y + 1) * sw + (x + 1)];
+      const gy =
+        -gray[(y - 1) * sw + (x - 1)] - 2 * gray[(y - 1) * sw + x] - gray[(y - 1) * sw + (x + 1)] +
+        gray[(y + 1) * sw + (x - 1)] + 2 * gray[(y + 1) * sw + x] + gray[(y + 1) * sw + (x + 1)];
+      const e = Math.sqrt(gx * gx + gy * gy);
+      edge[y * sw + x] = e;
+      if (e > maxE) maxE = e;
+    }
+  }
+
+  const fallback: Quad = [
+    { x: W * 0.08, y: H * 0.08 },
+    { x: W * 0.92, y: H * 0.08 },
+    { x: W * 0.92, y: H * 0.92 },
+    { x: W * 0.08, y: H * 0.92 },
+  ];
+
+  if (maxE < 10) return fallback;
+
+  // Row / column projections
+  const hProj = new Float32Array(sh);
+  const vProj = new Float32Array(sw);
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      hProj[y] += edge[y * sw + x];
+      vProj[x] += edge[y * sw + x];
+    }
+  }
+  const maxH = Math.max(...hProj);
+  const maxV = Math.max(...vProj);
+  const rT = maxH * 0.12;
+  const cT = maxV * 0.12;
+
+  let top = sh * 0.08, bottom = sh * 0.92, left = sw * 0.08, right = sw * 0.92;
+  for (let y = 0; y < sh; y++) { if (hProj[y] > rT) { top = y; break; } }
+  for (let y = sh - 1; y >= 0; y--) { if (hProj[y] > rT) { bottom = y; break; } }
+  for (let x = 0; x < sw; x++) { if (vProj[x] > cT) { left = x; break; } }
+  for (let x = sw - 1; x >= 0; x--) { if (vProj[x] > cT) { right = x; break; } }
+
+  // Sanity check: quad must be at least 30% of image
+  const qW = right - left, qH = bottom - top;
+  if (qW < sw * 0.3 || qH < sh * 0.3) return fallback;
+
+  // A small outward nudge to include the border itself
+  const pad = Math.round(Math.min(sw, sh) * 0.01);
+  top    = Math.max(0,    top    - pad);
+  bottom = Math.min(sh - 1, bottom + pad);
+  left   = Math.max(0,    left   - pad);
+  right  = Math.min(sw - 1, right  + pad);
+
+  return [
+    { x: left * scale,  y: top    * scale },
+    { x: right * scale, y: top    * scale },
+    { x: right * scale, y: bottom * scale },
+    { x: left  * scale, y: bottom * scale },
+  ];
+}
+
+/**
+ * Perspective warp: maps the source quad to an output rectangle.
+ * Uses bilinear scanline interpolation (fast, no extra deps).
+ *
+ * NOTE: for very large images this runs in ~100–300 ms on modern phones.
+ * We pre-downscale the source to ≤ 2 000 px max side to keep it fast.
+ */
+function warpPerspective(srcCanvas: HTMLCanvasElement, quad: Quad, outW: number, outH: number): HTMLCanvasElement {
+  // Work on a reasonably-sized copy
+  const MAX = 2000;
+  const src =
+    Math.max(srcCanvas.width, srcCanvas.height) > MAX
+      ? resizeCanvas(srcCanvas, MAX)
+      : srcCanvas;
+
+  const sw = src.width;
+  const sh = src.height;
+  // Scale the corners to match the (possibly downsampled) canvas
+  const sx = sw / srcCanvas.width;
+  const sy = sh / srcCanvas.height;
+  const [tl, tr, br, bl] = quad.map((p) => ({ x: p.x * sx, y: p.y * sy })) as Quad;
+
+  const srcCtx = src.getContext("2d", { willReadFrequently: true })!;
+  const srcImg = srcCtx.getImageData(0, 0, sw, sh);
+
+  const out = document.createElement("canvas");
+  out.width = outW;
+  out.height = outH;
+  const outCtx = out.getContext("2d")!;
+  const outImg = outCtx.createImageData(outW, outH);
+
+  const sample = (x: number, y: number) => {
+    // Nearest-neighbour (fast, good enough for scanning)
+    const px = clamp(Math.round(x), 0, sw - 1);
+    const py = clamp(Math.round(y), 0, sh - 1);
+    const i = (py * sw + px) * 4;
+    return [srcImg.data[i], srcImg.data[i + 1], srcImg.data[i + 2], srcImg.data[i + 3]] as const;
+  };
+
+  for (let dy = 0; dy < outH; dy++) {
+    const t = outH > 1 ? dy / (outH - 1) : 0;
+    // Left edge (TL → BL) and right edge (TR → BR)
+    const lx = tl.x + t * (bl.x - tl.x);
+    const ly = tl.y + t * (bl.y - tl.y);
+    const rx = tr.x + t * (br.x - tr.x);
+    const ry = tr.y + t * (br.y - tr.y);
+
+    for (let dx = 0; dx < outW; dx++) {
+      const s = outW > 1 ? dx / (outW - 1) : 0;
+      const [r, g, b, a] = sample(lx + s * (rx - lx), ly + s * (ry - ly));
+      const i = (dy * outW + dx) * 4;
+      outImg.data[i] = r;
+      outImg.data[i + 1] = g;
+      outImg.data[i + 2] = b;
+      outImg.data[i + 3] = a;
+    }
+  }
+
+  outCtx.putImageData(outImg, 0, 0);
+  return out;
+}
+
+// ─── Corner labels ────────────────────────────────────────────────────────────
+
+const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
+const CORNER_COLORS = ["#3b82f6", "#22c55e", "#f97316", "#a855f7"] as const;
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function DocumentScannerSheet({
+  imageFile,
+  onConfirm,
+  onCancel,
+}: {
+  imageFile: File | null;
+  onConfirm: (file: File) => void;
+  onCancel: () => void;
+}) {
+  // ── Image loading ────────────────────────────────────────────────────────────
+  const offscreenRef = useRef<HTMLCanvasElement | null>(null); // full-res canvas for warp
+  const [imgSrc, setImgSrc] = useState<string>(""); // object URL for display
+  const [naturalW, setNaturalW] = useState(1);
+  const [naturalH, setNaturalH] = useState(1);
+  const [imgReady, setImgReady] = useState(false);
+
+  // ── Quad state ───────────────────────────────────────────────────────────────
+  const [quad, setQuad] = useState<Quad | null>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
+
+  // ── Warp result state ────────────────────────────────────────────────────────
+  type Stage = "edit" | "warping" | "preview";
+  const [stage, setStage] = useState<Stage>("edit");
+  const [previewSrc, setPreviewSrc] = useState<string>("");
+  const warpedBlobRef = useRef<Blob | null>(null);
+
+  // ── SVG ref for coordinate transforms ────────────────────────────────────────
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // ── Load image ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!imageFile) return;
+    setImgReady(false);
+    setQuad(null);
+    setStage("edit");
+    setPreviewSrc("");
+    warpedBlobRef.current = null;
+
+    const url = URL.createObjectURL(imageFile);
+    setImgSrc(url);
+
+    const img = new Image();
+    img.onload = () => {
+      // Draw onto offscreen canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      offscreenRef.current = canvas;
+      setNaturalW(img.naturalWidth);
+      setNaturalH(img.naturalHeight);
+      // Auto-detect
+      const detected = autoDetectQuad(canvas);
+      setQuad(detected);
+      setImgReady(true);
+    };
+    img.src = url;
+
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  // ── Drag: map screen → SVG/image coordinates ─────────────────────────────────
+  const getSVGPt = useCallback(
+    (clientX: number, clientY: number): Pt | null => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const inv = svg.getScreenCTM()?.inverse();
+      if (!inv) return null;
+      const sp = pt.matrixTransform(inv);
+      return { x: clamp(sp.x, 0, naturalW), y: clamp(sp.y, 0, naturalH) };
+    },
+    [naturalW, naturalH]
+  );
+
+  const onPointerDown = (idx: number) => (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    setDragging(idx);
+  };
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (dragging === null || !quad) return;
+      const pt = getSVGPt(e.clientX, e.clientY);
+      if (!pt) return;
+      setQuad((prev) => {
+        if (!prev) return prev;
+        const next = [...prev] as Quad;
+        next[dragging] = pt;
+        return next;
+      });
+    },
+    [dragging, quad, getSVGPt]
+  );
+
+  const onPointerUp = useCallback(() => setDragging(null), []);
+
+  // ── Reset to auto-detected corners ───────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    if (!offscreenRef.current) return;
+    setQuad(autoDetectQuad(offscreenRef.current));
+    setStage("edit");
+    setPreviewSrc("");
+  }, []);
+
+  // ── Apply perspective warp ────────────────────────────────────────────────────
+  const handleWarp = useCallback(async () => {
+    if (!quad || !offscreenRef.current) return;
+    setStage("warping");
+
+    // Yield to let React update the UI first
+    await new Promise((r) => setTimeout(r, 80));
+
+    try {
+      const [tl, tr, br, bl] = quad;
+      const topW  = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+      const botW  = Math.hypot(br.x - bl.x, br.y - bl.y);
+      const leftH = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+      const rightH = Math.hypot(br.x - tr.x, br.y - tr.y);
+      const outW = Math.max(1, Math.round(Math.max(topW, botW)));
+      const outH = Math.max(1, Math.round(Math.max(leftH, rightH)));
+
+      const warped = warpPerspective(offscreenRef.current, quad, outW, outH);
+
+      // Convert to blob
+      await new Promise<void>((resolve) => {
+        warped.toBlob(
+          (blob) => {
+            warpedBlobRef.current = blob;
+            setPreviewSrc(blob ? URL.createObjectURL(blob) : "");
+            resolve();
+          },
+          "image/jpeg",
+          0.93
+        );
+      });
+
+      setStage("preview");
+    } catch {
+      setStage("edit");
+    }
+  }, [quad]);
+
+  // ── Confirm ───────────────────────────────────────────────────────────────────
+  const handleConfirm = useCallback(() => {
+    const blob = warpedBlobRef.current;
+    if (!blob) return;
+    const baseName = (imageFile?.name ?? "scan").replace(/\.[^.]+$/, "");
+    const file = new File([blob], `${baseName}_scanned.jpg`, { type: "image/jpeg" });
+    onConfirm(file);
+  }, [imageFile, onConfirm]);
+
+  // ── Cleanup preview URL ───────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (previewSrc) URL.revokeObjectURL(previewSrc);
+    };
+  }, [previewSrc]);
+
+  if (!imageFile) return null;
+
+  // ── Handle radius: scale with image to stay consistent on screen ──────────────
+  // We use SVG user units (= image px), so r should be ~2% of shorter side
+  const handleR = Math.round(Math.min(naturalW, naturalH) * 0.03);
+  const strokeW = Math.round(handleR * 0.25);
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black flex flex-col">
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
+        <button
+          onClick={onCancel}
+          className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="text-center">
+          {stage === "edit" && (
+            <>
+              <p className="text-white text-sm font-semibold">Adjust edges</p>
+              <p className="text-white/50 text-[10px]">Drag the coloured corners to fit the document</p>
+            </>
+          )}
+          {stage === "warping" && <p className="text-white text-sm font-semibold">Scanning…</p>}
+          {stage === "preview" && (
+            <>
+              <p className="text-white text-sm font-semibold">Preview</p>
+              <p className="text-white/50 text-[10px]">Happy with the scan?</p>
+            </>
+          )}
+        </div>
+
+        {stage === "edit" ? (
+          <button
+            onClick={handleReset}
+            className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+            title="Reset corners"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        ) : (
+          <div className="w-9" />
+        )}
+      </div>
+
+      {/* ── Image area ── */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden px-2 py-2">
+        {stage === "edit" && imgReady && quad ? (
+          /* SVG overlay for handles */
+          <div className="relative max-w-full max-h-full" style={{ aspectRatio: `${naturalW}/${naturalH}`, maxHeight: "100%", maxWidth: "100%" }}>
+            <img
+              src={imgSrc}
+              alt="Document"
+              className="block w-full h-full object-contain select-none pointer-events-none"
+              draggable={false}
+            />
+            <svg
+              ref={svgRef}
+              viewBox={`0 0 ${naturalW} ${naturalH}`}
+              className="absolute inset-0 w-full h-full"
+              style={{ touchAction: "none" }}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
+            >
+              {/* Semi-transparent mask outside the quad */}
+              <defs>
+                <mask id="docmask">
+                  <rect width={naturalW} height={naturalH} fill="white" />
+                  <polygon
+                    points={quad.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="black"
+                  />
+                </mask>
+              </defs>
+              <rect
+                width={naturalW}
+                height={naturalH}
+                fill="rgba(0,0,0,0.45)"
+                mask="url(#docmask)"
+              />
+
+              {/* Quad outline */}
+              <polygon
+                points={quad.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="none"
+                stroke="white"
+                strokeWidth={strokeW}
+                strokeDasharray={`${handleR * 2} ${handleR}`}
+                strokeLinejoin="round"
+              />
+
+              {/* Corner handles */}
+              {quad.map((pt, idx) => (
+                <g key={idx}>
+                  {/* Large invisible hit area */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={handleR * 2.2}
+                    fill="transparent"
+                    style={{ cursor: "grab", touchAction: "none" }}
+                    onPointerDown={onPointerDown(idx)}
+                  />
+                  {/* Outer ring */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={handleR}
+                    fill={CORNER_COLORS[idx]}
+                    stroke="white"
+                    strokeWidth={strokeW}
+                    style={{ pointerEvents: "none" }}
+                  />
+                  {/* Inner dot */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={handleR * 0.35}
+                    fill="white"
+                    style={{ pointerEvents: "none" }}
+                  />
+                </g>
+              ))}
+            </svg>
+          </div>
+        ) : stage === "warping" ? (
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-10 h-10 text-white animate-spin" />
+            <p className="text-white/70 text-sm">Applying perspective correction…</p>
+          </div>
+        ) : stage === "preview" && previewSrc ? (
+          <img
+            src={previewSrc}
+            alt="Scanned document"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
+            <p className="text-white/50 text-sm">Loading image…</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom action bar ── */}
+      <div className="flex-shrink-0 px-4 pb-8 pt-3 bg-black/80 backdrop-blur-sm space-y-2">
+        {stage === "edit" && imgReady && (
+          <Button
+            onClick={handleWarp}
+            disabled={!quad}
+            className="w-full h-12 rounded-2xl text-sm font-semibold bg-blue-500 hover:bg-blue-600 text-white"
+          >
+            Scan Document
+          </Button>
+        )}
+
+        {stage === "preview" && (
+          <>
+            <Button
+              onClick={handleConfirm}
+              className="w-full h-12 rounded-2xl text-sm font-semibold bg-green-500 hover:bg-green-600 text-white gap-2"
+            >
+              <CheckCheck className="w-4 h-4" />
+              Use this Scan
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setStage("edit")}
+              className="w-full h-10 rounded-2xl text-sm text-white/70 hover:text-white hover:bg-white/10"
+            >
+              Re-adjust corners
+            </Button>
+          </>
+        )}
+
+        {stage === "edit" && !imgReady && (
+          <div className="h-12 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-white animate-spin" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

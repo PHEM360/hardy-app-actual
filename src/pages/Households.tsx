@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
+import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -606,6 +607,7 @@ function AddEditDialog({
 }) {
   const [form, setForm] = useState<Omit<HouseholdItem, "id" | "createdAt">>(getBlankForm());
   const [uploading, setUploading] = useState(false);
+  const [scannerFile, setScannerFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -975,14 +977,19 @@ function AddEditDialog({
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files)}
               />
-              {/* Camera capture */}
+              {/* Camera capture — rear camera, routed through document scanner */}
               <input
                 ref={cameraInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => handleFileUpload(e.target.files)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = "";
+                  setScannerFile(file);
+                }}
               />
               <Button
                 type="button"
@@ -1007,6 +1014,22 @@ function AddEditDialog({
                 Take Photo
               </Button>
             </div>
+
+            {/* Document scanner — shown when a camera image is captured */}
+            <DocumentScannerSheet
+              imageFile={scannerFile}
+              onConfirm={async (scannedFile) => {
+                setScannerFile(null);
+                await handleFileUpload(
+                  (() => {
+                    const dt = new DataTransfer();
+                    dt.items.add(scannedFile);
+                    return dt.files;
+                  })()
+                );
+              }}
+              onCancel={() => setScannerFile(null)}
+            />
 
             {/* Existing documents */}
             {(form.documents ?? []).length > 0 && (
