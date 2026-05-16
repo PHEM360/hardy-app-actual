@@ -156,6 +156,11 @@ function TaskDetailSheet({
 }) {
   const [quickAddInput, setQuickAddInput] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  // Which subtask is expanded (shows notes textarea + due date input)
+  const [expandedSubId, setExpandedSubId] = useState<string | null>(null);
+  // Which subtask title is being edited inline
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
+  const [editingSubTitle, setEditingSubTitle] = useState("");
 
   if (!task) return null;
 
@@ -164,6 +169,34 @@ function TaskDetailSheet({
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const isDone = task.status === "done";
+
+  const patchSub = (subId: string, patch: Partial<TaskSubtask>) => {
+    if (!task.id) return;
+    updateTask(task.id, {
+      subtasks: task.subtasks!.map((s) => s.id === subId ? { ...s, ...patch } : s),
+    });
+  };
+
+  const deleteSub = (subId: string) => {
+    if (!task.id) return;
+    updateTask(task.id, { subtasks: task.subtasks!.filter((s) => s.id !== subId) });
+  };
+
+  const moveSub = (idx: number, dir: -1 | 1) => {
+    if (!task.id) return;
+    const subs = [...task.subtasks!];
+    const next = idx + dir;
+    if (next < 0 || next >= subs.length) return;
+    [subs[idx], subs[next]] = [subs[next], subs[idx]];
+    updateTask(task.id, { subtasks: subs });
+  };
+
+  const commitSubTitle = (subId: string) => {
+    const t = editingSubTitle.trim();
+    if (t) patchSub(subId, { title: t });
+    setEditingSubId(null);
+    setEditingSubTitle("");
+  };
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -220,146 +253,279 @@ function TaskDetailSheet({
             </div>
           )}
 
-          {/* Subtasks */}
-          {subtaskCount > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Subtasks
-                </p>
+          {/* ── Subtasks ─────────────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Subtasks
+              </p>
+              {subtaskCount > 0 && (
                 <span className="text-xs text-muted-foreground">{subtaskDone}/{subtaskCount}</span>
-              </div>
-              {/* Progress bar */}
+              )}
+            </div>
+
+            {/* Progress bar */}
+            {subtaskCount > 0 && (
               <div className="h-1 bg-muted rounded-full overflow-hidden mb-3">
                 <div
-                  className="h-full bg-green-400 rounded-full transition-all"
-                  style={{ width: `${subtaskCount > 0 ? (subtaskDone / subtaskCount) * 100 : 0}%` }}
+                  className="h-full bg-green-400 rounded-full transition-all duration-300"
+                  style={{ width: `${(subtaskDone / subtaskCount) * 100}%` }}
                 />
               </div>
-              <div className="space-y-1.5">
-                {task.subtasks!.map((sub, idx) => (
-                  <div key={sub.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 group/sub ${sub.done ? "bg-muted/30" : "bg-muted/50"}`}>
-                    <button
-                      onClick={() => {
-                        if (!task.id) return;
-                        const subs = task.subtasks!.map((s) => s.id === sub.id ? { ...s, done: !s.done } : s);
-                        updateTask(task.id, { subtasks: subs });
-                      }}
-                      className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border hover:border-green-400"}`}
-                    >
-                      {sub.done && <CheckCircle2 className="w-3 h-3" />}
-                    </button>
-                    <span className={`text-sm flex-1 min-w-0 ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
-                    {sub.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-                    {/* Reorder + today + delete — visible on hover */}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover/sub:opacity-100 transition-opacity flex-shrink-0">
+            )}
+
+            {/* Subtask cards */}
+            <div className="space-y-2">
+              {(task.subtasks ?? []).map((sub, idx) => {
+                const subStatus = sub.status ?? (sub.done ? "done" : "todo");
+                const subPriority = PRIORITIES.find((p) => p.value === (sub.priority ?? "medium"))!;
+                const subStatusMeta = STATUSES.find((s) => s.value === subStatus)!;
+                const isExpanded = expandedSubId === sub.id;
+                const isEditingTitle = editingSubId === sub.id;
+
+                return (
+                  <div
+                    key={sub.id}
+                    className={`rounded-xl border transition-all ${
+                      sub.done
+                        ? "bg-muted/20 border-border/30"
+                        : isExpanded
+                        ? "bg-card border-border shadow-sm"
+                        : "bg-muted/40 border-border/40 hover:border-border/70"
+                    }`}
+                  >
+                    {/* ── Top row ── */}
+                    <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+                      {/* Done checkbox */}
                       <button
                         onClick={() => {
-                          if (!task.id) return;
-                          const subs = [...task.subtasks!];
-                          if (idx === 0) return;
-                          [subs[idx], subs[idx - 1]] = [subs[idx - 1], subs[idx]];
-                          updateTask(task.id, { subtasks: subs });
+                          const newDone = !sub.done;
+                          patchSub(sub.id, {
+                            done: newDone,
+                            status: newDone ? "done" : "todo",
+                          });
                         }}
-                        disabled={idx === 0}
-                        className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20"
-                        title="Move up"
+                        className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                          sub.done
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-muted-foreground/40 hover:border-green-400"
+                        }`}
+                        title={sub.done ? "Mark incomplete" : "Mark done"}
                       >
-                        <ChevronUp className="w-3 h-3" />
+                        {sub.done && <CheckCircle2 className="w-2.5 h-2.5" />}
                       </button>
+
+                      {/* Title — click to edit inline */}
+                      <div className="flex-1 min-w-0">
+                        {isEditingTitle ? (
+                          <input
+                            autoFocus
+                            value={editingSubTitle}
+                            onChange={(e) => setEditingSubTitle(e.target.value)}
+                            onBlur={() => commitSubTitle(sub.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); commitSubTitle(sub.id); }
+                              if (e.key === "Escape") { setEditingSubId(null); setEditingSubTitle(""); }
+                            }}
+                            className="w-full bg-transparent border-b border-primary outline-none text-sm py-0.5"
+                          />
+                        ) : (
+                          <button
+                            className={`text-sm text-left w-full truncate ${
+                              sub.done ? "line-through text-muted-foreground" : "text-card-foreground"
+                            }`}
+                            onClick={() => {
+                              setEditingSubId(sub.id);
+                              setEditingSubTitle(sub.title);
+                            }}
+                            title="Click to edit title"
+                          >
+                            {sub.title}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Status pill — click to cycle */}
                       <button
                         onClick={() => {
-                          if (!task.id) return;
-                          const subs = [...task.subtasks!];
-                          if (idx === subs.length - 1) return;
-                          [subs[idx], subs[idx + 1]] = [subs[idx + 1], subs[idx]];
-                          updateTask(task.id, { subtasks: subs });
+                          const idx2 = STATUSES.findIndex((s) => s.value === subStatus);
+                          const next = STATUSES[(idx2 + 1) % STATUSES.length];
+                          patchSub(sub.id, { status: next.value, done: next.value === "done" });
                         }}
-                        disabled={idx === task.subtasks!.length - 1}
-                        className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-20"
-                        title="Move down"
+                        title="Cycle status"
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}
                       >
-                        <ChevronDown className="w-3 h-3" />
+                        {subStatusMeta.label}
                       </button>
+
+                      {/* Priority badge — click to cycle */}
                       <button
                         onClick={() => {
-                          if (!task.id) return;
-                          const subs = task.subtasks!.map((s) => s.id === sub.id ? { ...s, isToday: !s.isToday } : s);
-                          updateTask(task.id, { subtasks: subs });
+                          const i = PRIORITIES.findIndex((p) => p.value === (sub.priority ?? "medium"));
+                          const next = PRIORITIES[(i + 1) % PRIORITIES.length];
+                          patchSub(sub.id, { priority: next.value });
                         }}
-                        className={`p-0.5 rounded transition-colors ${sub.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}
+                        title="Cycle priority"
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}
+                      >
+                        {subPriority.label}
+                      </button>
+
+                      {/* Expand toggle (notes/date) */}
+                      <button
+                        onClick={() => setExpandedSubId(isExpanded ? null : sub.id)}
+                        title={isExpanded ? "Collapse" : "Notes & date"}
+                        className={`p-0.5 rounded flex-shrink-0 transition-colors ${
+                          isExpanded || sub.notes || sub.dueDate
+                            ? "text-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <StickyNote className="w-3 h-3" />
+                      </button>
+
+                      {/* Today toggle */}
+                      <button
+                        onClick={() => patchSub(sub.id, { isToday: !sub.isToday })}
                         title={sub.isToday ? "Remove from Today" : "Add to Today"}
+                        className={`p-0.5 rounded flex-shrink-0 transition-colors ${
+                          sub.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"
+                        }`}
                       >
                         <Sun className="w-3 h-3" />
                       </button>
+
+                      {/* Reorder */}
+                      <div className="flex flex-col flex-shrink-0">
+                        <button
+                          onClick={() => moveSub(idx, -1)}
+                          disabled={idx === 0}
+                          className="p-0 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                          title="Move up"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => moveSub(idx, 1)}
+                          disabled={idx === (task.subtasks?.length ?? 0) - 1}
+                          className="p-0 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                          title="Move down"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Delete */}
                       <button
-                        onClick={() => {
-                          if (!task.id) return;
-                          updateTask(task.id, { subtasks: task.subtasks!.filter((s) => s.id !== sub.id) });
-                        }}
-                        className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={() => deleteSub(sub.id)}
+                        className="p-0.5 rounded flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                         title="Delete subtask"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Quick-add subtask (always visible) */}
-          {task.id && (
-            <div>
-              {!showQuickAdd && subtaskCount === 0 && (
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Subtasks</p>
-              )}
-              {showQuickAdd ? (
-                <div className="flex gap-2">
-                  <Input
-                    autoFocus
-                    value={quickAddInput}
-                    onChange={(e) => setQuickAddInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
+                    {/* ── Expanded section: notes + due date ── */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
+                        {/* Notes textarea */}
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                          <textarea
+                            value={sub.notes ?? ""}
+                            onChange={(e) => patchSub(sub.id, { notes: e.target.value })}
+                            placeholder="Add notes…"
+                            rows={3}
+                            className="w-full text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-2 resize-none outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/60 leading-relaxed"
+                          />
+                        </div>
+                        {/* Due date */}
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Due Date</p>
+                          <input
+                            type="date"
+                            value={sub.dueDate ?? ""}
+                            onChange={(e) => patchSub(sub.id, { dueDate: e.target.value || undefined })}
+                            className="text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 text-foreground"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Collapsed summary line (notes/due date preview) ── */}
+                    {!isExpanded && (sub.notes || sub.dueDate) && (
+                      <div className="px-9 pb-2 flex flex-wrap gap-2">
+                        {sub.dueDate && (
+                          <span className="text-[10px] text-muted-foreground">
+                            📅 {new Date(sub.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          </span>
+                        )}
+                        {sub.notes && (
+                          <span className="text-[10px] text-muted-foreground italic truncate max-w-[200px]">
+                            {sub.notes}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Quick-add subtask ── */}
+            {task.id && (
+              <div className="mt-2">
+                {showQuickAdd ? (
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={quickAddInput}
+                      onChange={(e) => setQuickAddInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const title = quickAddInput.trim();
+                          if (!title) return;
+                          const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
+                          updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
+                          setExpandedSubId(newSub.id);
+                          setQuickAddInput("");
+                          setShowQuickAdd(false);
+                        }
+                        if (e.key === "Escape") { setShowQuickAdd(false); setQuickAddInput(""); }
+                      }}
+                      placeholder="Subtask title… (Enter to add)"
+                      className="h-8 rounded-xl flex-1 text-sm bg-muted/40 border border-border/50 px-3 outline-none focus:border-primary/60"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
                         const title = quickAddInput.trim();
                         if (!title) return;
-                        const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false };
+                        const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
                         updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
+                        setExpandedSubId(newSub.id);
                         setQuickAddInput("");
                         setShowQuickAdd(false);
-                      }
-                      if (e.key === "Escape") { setShowQuickAdd(false); setQuickAddInput(""); }
-                    }}
-                    placeholder="New subtask title…"
-                    className="h-8 rounded-xl flex-1 text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const title = quickAddInput.trim();
-                      if (!title) return;
-                      const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false };
-                      updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
-                      setQuickAddInput("");
-                      setShowQuickAdd(false);
-                    }}
-                    className="h-8 rounded-xl px-3 text-xs"
-                  >Add</Button>
-                  <Button variant="ghost" onClick={() => { setShowQuickAdd(false); setQuickAddInput(""); }} className="h-8 w-8 rounded-xl px-0"><X className="w-3 h-3" /></Button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowQuickAdd(true)}
-                  className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors"
-                >
-                  <Plus className="w-3 h-3" /> Add subtask
-                </button>
-              )}
-            </div>
-          )}
+                      }}
+                      className="h-8 rounded-xl px-3 text-xs"
+                    >Add</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setShowQuickAdd(false); setQuickAddInput(""); }} className="h-8 w-8 rounded-xl px-0">
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowQuickAdd(true)}
+                    className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Add subtask
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Notes */}
           {task.notes?.trim() && (

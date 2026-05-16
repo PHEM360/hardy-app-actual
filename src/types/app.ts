@@ -167,7 +167,11 @@ export interface TaskSubtask {
   id: string;
   title: string;
   done: boolean;
-  isToday?: boolean;  // individual subtask added to Today
+  isToday?: boolean;    // individual subtask added to Today
+  status?: TaskStatus;  // mirrors parent task statuses
+  priority?: TaskPriority;
+  notes?: string;
+  dueDate?: string;     // ISO date string
 }
 
 export interface Task {
