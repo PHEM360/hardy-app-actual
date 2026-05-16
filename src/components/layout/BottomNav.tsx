@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
-  CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays,
+  CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays, Sun,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { signOut } from "firebase/auth";
@@ -25,9 +25,10 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,55%,40%),hsl(150,50%,35%))" },
   "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,50%,45%),hsl(205,45%,40%))" },
   "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: "hsl(220,60%,55%)",  gradient: "linear-gradient(135deg,hsl(220,60%,55%),hsl(230,55%,48%))" },
+  "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,92%,50%),hsl(25,85%,45%))" },
 };
 
-const DEFAULT_NAV = ["/dashboard", "/calendar", "/pets", "/admin", "/more"];
+const DEFAULT_NAV = ["/dashboard", "/tasks", "/today", "/calendar", "/more"];
 
 const BottomNav = () => {
   const location = useLocation();
@@ -52,6 +53,7 @@ const BottomNav = () => {
       if (path === "/admin") return !loading && isAdmin;
       if (path === "/pets") return !loading && memberHasFeature("pets");
       if (path === "/finance") return !loading && memberHasFeature("finance");
+      if (path === "/today") return true;
       return true;
     })
     .map((path) => ({ path, ...ALL_NAV_ITEMS[path] }))
