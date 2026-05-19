@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, Plus, Pill, Activity, Sparkles, X, Trash2 } from "lucide-react";
+import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,10 +10,11 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import HealthMetrics from "@/components/health/HealthMetrics";
 import HealthMeds from "@/components/health/HealthMeds";
 import HealthCustomTab from "@/components/health/HealthCustomTab";
-import AiHealthAssessment from "@/components/health/AiHealthAssessment";
 import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { useMeds } from "@/hooks/useMeds";
-import { useHealthTabs, type HealthTab, type FieldType } from "@/hooks/useHealthTabs";
+import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
+import { useHealthProfile } from "@/hooks/useHealthProfile";
+import { format, parseISO } from "date-fns";
 
 const EMOJIS = ["🧘", "🍷", "💊", "🚭", "🍕", "😴", "🏃", "❤️", "🧠", "⚡", "🌿", "🌊", "🎯", "💪", "✨"];
 const COLORS  = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
@@ -24,6 +25,7 @@ export default function Health() {
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker();
   const { medications } = useMeds();
   const { tabs, addTab, deleteTab } = useHealthTabs();
+  const { profile, saveProfile } = useHealthProfile();
 
   const [activeTab, setActiveTab] = useState<CoreTab | string>("overview");
   const [newTabOpen, setNewTabOpen] = useState(false);
@@ -55,12 +57,37 @@ export default function Health() {
   };
 
   const CORE_TABS = [
-    { id: "overview", label: "Overview",      icon: <HeartPulse className="w-3.5 h-3.5" /> },
-    { id: "metrics",  label: "Weight & Stats", icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: "meds",     label: "Medications",    icon: <Pill className="w-3.5 h-3.5" /> },
+    { id: "overview", label: "Overview",       icon: <HeartPulse className="w-4 h-4" /> },
+    { id: "metrics",  label: "Weight & Stats",  icon: <Activity className="w-4 h-4" /> },
+    { id: "meds",     label: "Medications",     icon: <Pill className="w-4 h-4" /> },
   ];
 
   const activeCustomTab = tabs.find((t) => t.id === activeTab);
+
+  // Derived overview data
+  const latestWeight   = entries[entries.length - 1];
+  const prevWeight     = entries[entries.length - 2];
+  const latestHeight   = heightEntries[heightEntries.length - 1];
+  const latestBP       = bpEntries[bpEntries.length - 1];
+  const prevBP         = bpEntries[bpEntries.length - 2];
+  const latestMeas     = measurements[measurements.length - 1];
+  const prevMeas       = measurements[measurements.length - 2];
+  const activeMeds     = medications.filter((m) => m.active);
+
+  const weightDiff = latestWeight && prevWeight ? latestWeight.weight - prevWeight.weight : null;
+  const bpDiff     = latestBP && prevBP ? latestBP.systolic - prevBP.systolic : null;
+  const waistDiff  = latestMeas?.waistCm && prevMeas?.waistCm ? latestMeas.waistCm - prevMeas.waistCm : null;
+  const bmi        = latestWeight && latestHeight ? latestWeight.weight / Math.pow(latestHeight.height / 100, 2) : null;
+
+  function DeltaBadge({ val, unit = "" }: { val: number | null; unit?: string }) {
+    if (val === null || val === 0) return null;
+    const pos = val > 0;
+    return (
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pos ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"}`}>
+        {pos ? "+" : ""}{val.toFixed(1)}{unit}
+      </span>
+    );
+  }
 
   return (
     <FeaturePageShell
@@ -69,18 +96,18 @@ export default function Health() {
       icon={<HeartPulse className="w-5 h-5" />}
     >
       {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-5 scrollbar-none -mx-1 px-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none -mx-1 px-1">
         {CORE_TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id as CoreTab)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-all border ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap flex-shrink-0 transition-all border ${
               activeTab === t.id
-                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                ? "bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]"
                 : "bg-card text-muted-foreground border-border/50 hover:border-border hover:text-foreground"
             }`}
           >
-            {t.icon}{t.label}
+            {t.icon}<span>{t.label}</span>
           </button>
         ))}
 
@@ -89,9 +116,9 @@ export default function Health() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-all border ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap flex-shrink-0 transition-all border ${
               activeTab === tab.id
-                ? "text-white border-transparent shadow-sm"
+                ? "text-white border-transparent shadow-md scale-[1.02]"
                 : "bg-card text-muted-foreground border-border/50 hover:border-border hover:text-foreground"
             }`}
             style={activeTab === tab.id ? { backgroundColor: tab.color, borderColor: tab.color } : {}}
@@ -103,9 +130,9 @@ export default function Health() {
         {/* Add tab */}
         <button
           onClick={() => setNewTabOpen(true)}
-          className="flex items-center gap-1 px-3 py-2 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 text-muted-foreground border border-dashed border-border/60 hover:border-border hover:text-foreground transition-all"
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap flex-shrink-0 text-muted-foreground border border-dashed border-border/60 hover:border-border hover:text-foreground transition-all"
         >
-          <Plus className="w-3 h-3" /> Add tab
+          <Plus className="w-4 h-4" /> Add
         </button>
       </div>
 
@@ -120,70 +147,128 @@ export default function Health() {
         >
           {activeTab === "overview" && (
             <div>
-              {/* Quick stats row */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
-                <div className="p-3.5 rounded-2xl bg-card border border-border/50 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Weight</p>
-                  <p className="text-xl font-black font-display text-card-foreground">
-                    {entries[entries.length - 1]?.weight ?? "—"}
-                    {entries[entries.length - 1] && <span className="text-xs font-normal text-muted-foreground ml-0.5">kg</span>}
-                  </p>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-card border border-border/50 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">BMI</p>
-                  <p className="text-xl font-black font-display text-card-foreground">
-                    {(() => {
-                      const w = entries[entries.length - 1];
-                      const h = heightEntries[heightEntries.length - 1];
-                      return w && h ? (w.weight / Math.pow(h.height / 100, 2)).toFixed(1) : "—";
-                    })()}
-                  </p>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-card border border-border/50 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">BP</p>
-                  <p className="text-xl font-black font-display text-card-foreground">
-                    {bpEntries[bpEntries.length - 1]
-                      ? `${bpEntries[bpEntries.length - 1].systolic}/${bpEntries[bpEntries.length - 1].diastolic}`
-                      : "—"}
-                  </p>
-                </div>
+              {/* ── Visibility toggles ── */}
+              <div className="flex items-center gap-2 flex-wrap mb-4">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mr-1">Show:</span>
+                {(
+                  [
+                    { key: "showWeightOnOverview", label: "Weight" },
+                    { key: "showBpOnOverview",      label: "Blood Pressure" },
+                    { key: "showWaistOnOverview",   label: "Waist" },
+                    { key: "showMedsOnOverview",    label: "Medications" },
+                  ] as { key: keyof typeof profile; label: string }[]
+                ).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => saveProfile({ [key]: !profile[key] })}
+                    className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                      profile[key]
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-muted/40 border-border/40 text-muted-foreground"
+                    }`}
+                  >
+                    {profile[key] ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              {/* AI Assessment */}
-              <AiHealthAssessment
-                entries={entries}
-                heightEntries={heightEntries}
-                bpEntries={bpEntries}
-                measurements={measurements}
-                medications={medications}
-              />
+              {/* ── Stat cards ── */}
+              <div className="space-y-3 mb-5">
+                {profile.showWeightOnOverview && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-2xl bg-gradient-primary">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[11px] text-primary-foreground/70 uppercase tracking-wider font-semibold mb-1">Weight</p>
+                        <p className="text-3xl font-black font-display text-primary-foreground">
+                          {latestWeight ? `${latestWeight.weight} kg` : "—"}
+                        </p>
+                        {prevWeight && (
+                          <p className="text-xs text-primary-foreground/70 mt-0.5">
+                            Previous: {prevWeight.weight} kg · {prevWeight.date ? format(parseISO(prevWeight.date), "d MMM") : ""}
+                          </p>
+                        )}
+                        {bmi && <p className="text-xs text-primary-foreground/80 mt-0.5">BMI {bmi.toFixed(1)}</p>}
+                      </div>
+                      <DeltaBadge val={weightDiff} unit=" kg" />
+                    </div>
+                  </motion.div>
+                )}
 
-              {/* Quick nav cards */}
+                {profile.showBpOnOverview && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}
+                    className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Blood Pressure</p>
+                        <p className="text-3xl font-black font-display text-card-foreground">
+                          {latestBP ? `${latestBP.systolic}/${latestBP.diastolic}` : "—"}
+                          {latestBP && <span className="text-sm font-normal text-muted-foreground ml-1">mmHg</span>}
+                        </p>
+                        {latestBP?.heartRate && <p className="text-xs text-muted-foreground mt-0.5">HR {latestBP.heartRate} bpm</p>}
+                        {prevBP && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Previous: {prevBP.systolic}/{prevBP.diastolic} · {prevBP.date ? format(parseISO(prevBP.date), "d MMM") : ""}
+                          </p>
+                        )}
+                      </div>
+                      <DeltaBadge val={bpDiff} unit=" sys" />
+                    </div>
+                  </motion.div>
+                )}
+
+                {profile.showWaistOnOverview && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+                    className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Waist</p>
+                        <p className="text-3xl font-black font-display text-card-foreground">
+                          {latestMeas?.waistCm ? `${latestMeas.waistCm} cm` : "—"}
+                        </p>
+                        {prevMeas?.waistCm && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Previous: {prevMeas.waistCm} cm · {prevMeas.date ? format(parseISO(prevMeas.date), "d MMM") : ""}
+                          </p>
+                        )}
+                      </div>
+                      <DeltaBadge val={waistDiff} unit=" cm" />
+                    </div>
+                  </motion.div>
+                )}
+
+                {profile.showMedsOnOverview && activeMeds.length > 0 && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+                    className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Active Medications</p>
+                    <div className="flex flex-wrap gap-2">
+                      {activeMeds.map((m) => (
+                        <span key={m.id} className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border"
+                          style={{ borderColor: m.color + "60", backgroundColor: m.color + "18", color: m.color }}>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                          {m.name} {m.dose}{m.unit}
+                        </span>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* ── Quick nav ── */}
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setActiveTab("metrics")}
-                  className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors group"
-                >
+                <button onClick={() => setActiveTab("metrics")} className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors">
                   <Activity className="w-5 h-5 text-green-500 mb-2" />
                   <p className="text-sm font-bold text-card-foreground">Weight &amp; Stats</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Charts, BP, measurements</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Charts, BP, AI analysis</p>
                 </button>
-                <button
-                  onClick={() => setActiveTab("meds")}
-                  className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors group"
-                >
+                <button onClick={() => setActiveTab("meds")} className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors">
                   <Pill className="w-5 h-5 text-blue-500 mb-2" />
                   <p className="text-sm font-bold text-card-foreground">Medications</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {medications.filter((m) => m.active).length} active med{medications.filter((m) => m.active).length !== 1 ? "s" : ""}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{activeMeds.length} active med{activeMeds.length !== 1 ? "s" : ""}</p>
                 </button>
                 {tabs.slice(0, 2).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors"
-                  >
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="p-4 rounded-2xl bg-card border border-border/50 text-left hover:border-border transition-colors">
                     <span className="text-xl mb-2 block">{tab.emoji}</span>
                     <p className="text-sm font-bold text-card-foreground">{tab.name}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Custom tracker</p>

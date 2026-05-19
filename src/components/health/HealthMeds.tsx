@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Pill, Check, X, Bell, BellOff, Edit2, Trash2, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Pill, Check, X, Bell, BellOff, Edit2, Trash2, Clock, ChevronDown, ChevronUp, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useMeds, MED_COLORS, type Medication, type MedUnit } from "@/hooks/useMeds";
+import { useHealthProfile } from "@/hooks/useHealthProfile";
 import { format } from "date-fns";
 
 const UNITS: MedUnit[] = ["mg", "ml", "tablet", "capsule", "drop", "puff", "patch", "g", "other"];
@@ -107,19 +108,29 @@ function MedPill({ med, today, onLog, onSkip, onEdit, onDelete, isLogged, getLog
 
 export default function HealthMeds() {
   const { medications, loading, addMedication, updateMedication, deleteMedication, logDose, scheduleTodayNotifications, isLogged, getLogForDose } = useMeds();
+  const { profile, saveProfile } = useHealthProfile();
   const today = new Date().toISOString().split("T")[0];
 
-  const [addOpen, setAddOpen]       = useState(false);
-  const [editTarget, setEditTarget] = useState<Medication | null>(null);
-  const [name, setName]             = useState("");
-  const [dose, setDose]             = useState("");
-  const [unit, setUnit]             = useState<MedUnit>("mg");
-  const [times, setTimes]           = useState<string[]>(["08:00"]);
-  const [color, setColor]           = useState(MED_COLORS[5]);
-  const [notes, setNotes]           = useState("");
-  const [saving, setSaving]         = useState(false);
+  const [addOpen, setAddOpen]           = useState(false);
+  const [editTarget, setEditTarget]     = useState<Medication | null>(null);
+  const [name, setName]                 = useState("");
+  const [dose, setDose]                 = useState("");
+  const [unit, setUnit]                 = useState<MedUnit>("mg");
+  const [times, setTimes]               = useState<string[]>(["08:00"]);
+  const [color, setColor]               = useState(MED_COLORS[5]);
+  const [notes, setNotes]               = useState("");
+  const [saving, setSaving]             = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+
+  // Medical history state
+  const [histOpen, setHistOpen]     = useState(false);
+  const [hConditions, setHCond]     = useState("");
+  const [hFamily, setHFamily]       = useState("");
+  const [hAllergies, setHAllerg]    = useState("");
+  const [hSurgeries, setHSurg]      = useState("");
+  const [hNotes, setHNotes]         = useState("");
+  const [histSaving, setHistSaving] = useState(false);
 
   // Request notification permission + schedule
   useEffect(() => {
@@ -144,6 +155,30 @@ export default function HealthMeds() {
     setName(""); setDose(""); setUnit("mg");
     setTimes(["08:00"]); setColor(MED_COLORS[5]); setNotes("");
     setAddOpen(true);
+  };
+
+  const openHistory = () => {
+    setHCond(profile.pastConditions.join(", "));
+    setHFamily(profile.familyHistory.join("; "));
+    setHAllerg(profile.allergies.join(", "));
+    setHSurg(profile.surgeries.join(", "));
+    setHNotes(profile.otherNotes ?? "");
+    setHistOpen(true);
+  };
+
+  const saveHistory = async () => {
+    setHistSaving(true);
+    try {
+      const splitTrim = (s: string) => s.split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
+      await saveProfile({
+        pastConditions: splitTrim(hConditions),
+        familyHistory:  splitTrim(hFamily),
+        allergies:      splitTrim(hAllergies),
+        surgeries:      splitTrim(hSurgeries),
+        otherNotes:     hNotes.trim() || undefined,
+      });
+      setHistOpen(false);
+    } finally { setHistSaving(false); }
   };
 
   const openEdit = (med: Medication) => {
@@ -289,6 +324,108 @@ export default function HealthMeds() {
           </AnimatePresence>
         </div>
       )}
+
+      {/* ── Past Medical History ── */}
+      <div className="mt-6 p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-3.5 h-3.5 text-muted-foreground" />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Past Medical History</h3>
+          </div>
+          <button onClick={openHistory} className="text-xs text-primary font-medium">
+            {(profile.pastConditions.length || profile.familyHistory.length || profile.allergies.length || profile.surgeries.length) ? "Edit" : "Add"}
+          </button>
+        </div>
+        {!profile.pastConditions.length && !profile.familyHistory.length && !profile.allergies.length && !profile.surgeries.length ? (
+          <p className="text-xs text-muted-foreground text-center py-4">No medical history recorded. Tap Add to include conditions, family history, allergies and surgeries — used by the AI analysis.</p>
+        ) : (
+          <div className="space-y-3 text-xs">
+            {profile.pastConditions.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Conditions</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.pastConditions.map((c, i) => (
+                    <span key={i} className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-medium">{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {profile.familyHistory.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Family History</p>
+                <ul className="space-y-0.5">
+                  {profile.familyHistory.map((f, i) => (
+                    <li key={i} className="text-[11px] text-card-foreground">• {f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {profile.allergies.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Allergies</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.allergies.map((a, i) => (
+                    <span key={i} className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 text-[11px] font-medium">{a}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {profile.surgeries.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Surgeries / Procedures</p>
+                <ul className="space-y-0.5">
+                  {profile.surgeries.map((s, i) => (
+                    <li key={i} className="text-[11px] text-card-foreground">• {s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {profile.otherNotes && (
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Notes</p>
+                <p className="text-[11px] text-card-foreground italic">{profile.otherNotes}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Medical History dialog */}
+      <Dialog open={histOpen} onOpenChange={setHistOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Past Medical History</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Past / current conditions</Label>
+              <Textarea value={hConditions} onChange={(e) => setHCond(e.target.value)}
+                placeholder="e.g. Hypertension, Type 2 Diabetes (separate with commas)" className="rounded-xl text-xs min-h-[72px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Family history</Label>
+              <Textarea value={hFamily} onChange={(e) => setHFamily(e.target.value)}
+                placeholder="e.g. Father: heart attack at 58; Mother: Type 2 Diabetes (separate with semicolons)" className="rounded-xl text-xs min-h-[72px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Allergies</Label>
+              <Textarea value={hAllergies} onChange={(e) => setHAllerg(e.target.value)}
+                placeholder="e.g. Penicillin, Ibuprofen (separate with commas)" className="rounded-xl text-xs min-h-[60px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Surgeries / procedures</Label>
+              <Textarea value={hSurgeries} onChange={(e) => setHSurg(e.target.value)}
+                placeholder="e.g. Appendectomy 2010, Knee replacement 2019 (separate with commas)" className="rounded-xl text-xs min-h-[60px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Other notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea value={hNotes} onChange={(e) => setHNotes(e.target.value)}
+                placeholder="Any other relevant health information" className="rounded-xl text-xs min-h-[60px]" />
+            </div>
+            <Button onClick={saveHistory} disabled={histSaving} className="w-full h-11 rounded-xl bg-gradient-primary">
+              {histSaving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

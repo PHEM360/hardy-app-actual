@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   HeartPulse, Plus, TrendingDown, TrendingUp, Ruler, Syringe,
-  Table2, LineChart as LineChartIcon, Activity,
+  Table2, LineChart as LineChartIcon, Activity, User,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,8 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { format, subMonths, subYears, parseISO, differenceInDays } from "date-fns";
 import { useWeightTracker, type BPEntry, type MeasurementEntry } from "@/hooks/useWeightTracker";
+import { useHealthProfile, idealWeightRange, ACTIVITY_LABELS, type ActivityLevel, type SmokingStatus } from "@/hooks/useHealthProfile";
+import AiHealthAssessment from "@/components/health/AiHealthAssessment";
+import { useMeds } from "@/hooks/useMeds";
 import DogLoader from "@/components/DogLoader";
 
 type Period = "1m" | "3m" | "6m" | "1y" | "all";
@@ -106,8 +111,19 @@ export default function HealthMetrics() {
     entries, heightEntries, botoxRecords, bpEntries, measurements, loading,
     addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry,
   } = useWeightTracker();
+  const { medications } = useMeds();
+  const { profile, saveProfile } = useHealthProfile();
 
   const [unit, setUnit] = useState<"cm" | "in">("cm");
+  const [demoOpen, setDemoOpen] = useState(false);
+
+  // Demographics form state
+  const [dAge, setDAge]       = useState("");
+  const [dSex, setDSex]       = useState<"male" | "female" | "">(""); 
+  const [dAct, setDAct]       = useState<ActivityLevel | "">("");
+  const [dSmoke, setDSmoke]   = useState<SmokingStatus | "">("");
+  const [dAlc, setDAlc]       = useState("");
+  const [dDia, setDDia]       = useState(false);
 
   // Weight
   const [weightOpen, setWeightOpen]       = useState(false);
@@ -206,6 +222,31 @@ export default function HealthMetrics() {
     setNewWeight(""); setNewWeightDate(new Date().toISOString().split("T")[0]); setWeightOpen(false);
   };
 
+  const openDemo = () => {
+    setDAge(profile.age ? String(profile.age) : "");
+    setDSex(profile.sex ?? "");
+    setDAct(profile.activityLevel ?? "");
+    setDSmoke(profile.smokingStatus ?? "");
+    setDAlc(profile.alcoholUnitsPerWeek !== undefined ? String(profile.alcoholUnitsPerWeek) : "");
+    setDDia(profile.diabetic ?? false);
+    setDemoOpen(true);
+  };
+
+  const saveDemographics = async () => {
+    await saveProfile({
+      age:                  dAge ? Number(dAge) : undefined,
+      sex:                  dSex || undefined,
+      activityLevel:        dAct || undefined,
+      smokingStatus:        dSmoke || undefined,
+      alcoholUnitsPerWeek:  dAlc !== "" ? Number(dAlc) : undefined,
+      diabetic:             dDia,
+    });
+    setDemoOpen(false);
+  };
+
+  // Target weight
+  const targetRange = latestHeight ? idealWeightRange(latestHeight.height) : null;
+
   const handleAddHeight = async () => {
     const h = parseFloat(newHeight);
     if (isNaN(h)) return;
@@ -283,6 +324,22 @@ export default function HealthMetrics() {
             {bmi && (
               <div><p className="text-[9px] text-primary-foreground/60 uppercase tracking-wider">BMI</p>
                 <p className="text-sm font-bold font-display text-primary-foreground">{bmi}</p></div>
+            )}
+            {targetRange && (
+              <div className="col-span-2">
+                <p className="text-[9px] text-primary-foreground/60 uppercase tracking-wider">Healthy Range (BMI 18.5–25)</p>
+                <p className="text-sm font-bold font-display text-primary-foreground">{targetRange.min}–{targetRange.max} kg
+                  {latestWeight && (
+                    <span className="text-[10px] font-normal ml-1.5">
+                      {latestWeight.weight < targetRange.min
+                        ? `(${(targetRange.min - latestWeight.weight).toFixed(1)} kg to gain)`
+                        : latestWeight.weight > targetRange.max
+                        ? `(${(latestWeight.weight - targetRange.max).toFixed(1)} kg to lose)`
+                        : "✓ In range"}
+                    </span>
+                  )}
+                </p>
+              </div>
             )}
           </div>
         </motion.div>
@@ -521,6 +578,38 @@ export default function HealthMetrics() {
         )}
       </div>
 
+      {/* ── Demographics ── */}
+      <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <User className="w-3.5 h-3.5 text-muted-foreground" />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Demographics</h3>
+          </div>
+          <button onClick={openDemo} className="text-xs text-primary font-medium">{profile.age ? "Edit" : "Add"}</button>
+        </div>
+        {!profile.age && !profile.sex ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Add your demographics for target weight calculation and better AI analysis.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {profile.age && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Age</p><p className="font-bold">{profile.age}</p></div>}
+            {profile.sex && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Sex</p><p className="font-bold capitalize">{profile.sex}</p></div>}
+            {profile.activityLevel && <div className="p-2 rounded-xl bg-muted/30 col-span-2"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Activity</p><p className="font-semibold leading-tight">{ACTIVITY_LABELS[profile.activityLevel]}</p></div>}
+            {profile.smokingStatus && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoking</p><p className="font-bold capitalize">{profile.smokingStatus === "ex" ? "Ex-smoker" : profile.smokingStatus === "current" ? "Current smoker" : "Never"}</p></div>}
+            {profile.alcoholUnitsPerWeek !== undefined && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Alcohol</p><p className="font-bold">{profile.alcoholUnitsPerWeek} units/wk</p></div>}
+          </div>
+        )}
+      </div>
+
+      {/* ── AI Health Assessment ── */}
+      <AiHealthAssessment
+        entries={entries}
+        heightEntries={heightEntries}
+        bpEntries={bpEntries}
+        measurements={measurements}
+        medications={medications}
+        profile={profile}
+      />
+
       {/* ── Dialogs ── */}
       <Dialog open={weightOpen} onOpenChange={setWeightOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
@@ -588,6 +677,68 @@ export default function HealthMetrics() {
             <div className="space-y-2"><Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label><Textarea value={botoxNotes} onChange={(e) => setBotoxNotes(e.target.value)} className="rounded-xl text-xs min-h-[80px]" /></div>
             {botoxError && <p className="text-xs text-destructive">{botoxError}</p>}
             <Button onClick={handleAddBotox} disabled={botoxLoading || !botoxDate || !botoxRight || !botoxLeft} className="w-full h-11 rounded-xl bg-gradient-primary">{botoxLoading ? "Saving…" : "Save Record"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Demographics dialog */}
+      <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><User className="w-4 h-4" /> Your Demographics</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Age</Label>
+                <Input type="number" min="1" max="120" placeholder="e.g. 35" value={dAge} onChange={(e) => setDAge(e.target.value)} className="h-11 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sex</Label>
+                <Select value={dSex} onValueChange={(v) => setDSex(v as "male" | "female")}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Activity level</Label>
+              <Select value={dAct} onValueChange={(v) => setDAct(v as ActivityLevel)}>
+                <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select…" /></SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(ACTIVITY_LABELS) as [ActivityLevel, string][]).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Smoking status</Label>
+              <Select value={dSmoke} onValueChange={(v) => setDSmoke(v as SmokingStatus)}>
+                <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="never">Never smoked</SelectItem>
+                  <SelectItem value="ex">Ex-smoker</SelectItem>
+                  <SelectItem value="current">Current smoker</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Alcohol (units/week) <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input type="number" min="0" max="200" placeholder="e.g. 14" value={dAlc} onChange={(e) => setDAlc(e.target.value)} className="h-11 rounded-xl" />
+              <p className="text-[10px] text-muted-foreground">1 unit = 1 small wine / half pint beer / single spirit</p>
+            </div>
+
+            <div className="flex items-center justify-between py-1">
+              <div><Label>Diabetic</Label><p className="text-[11px] text-muted-foreground">Type 1 or 2</p></div>
+              <Switch checked={dDia} onCheckedChange={setDDia} />
+            </div>
+
+            <Button onClick={saveDemographics} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
           </div>
         </DialogContent>
       </Dialog>

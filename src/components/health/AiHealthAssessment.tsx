@@ -1,10 +1,12 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, Loader2, AlertCircle, ChevronDown, ChevronUp, Sparkles, Heart, Activity, Scale, Ruler } from "lucide-react";
+import { Brain, Loader2, AlertCircle, ChevronDown, ChevronUp, Sparkles, Activity, Scale, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAiConfig } from "@/hooks/useAiConfig";
 import type { WeightEntry, HeightEntry, BPEntry, MeasurementEntry } from "@/hooks/useWeightTracker";
 import type { Medication } from "@/hooks/useMeds";
+import type { HealthProfile } from "@/hooks/useHealthProfile";
+import { ACTIVITY_LABELS } from "@/hooks/useHealthProfile";
 
 interface Props {
   entries: WeightEntry[];
@@ -12,6 +14,7 @@ interface Props {
   bpEntries: BPEntry[];
   measurements: MeasurementEntry[];
   medications: Medication[];
+  profile?: HealthProfile;
 }
 
 function bmiLabel(bmi: number): string {
@@ -29,7 +32,7 @@ function bpRiskLabel(sys: number, dia: number): string {
   return "High Stage 2 — medical attention advised";
 }
 
-export default function AiHealthAssessment({ entries, heightEntries, bpEntries, measurements, medications }: Props) {
+export default function AiHealthAssessment({ entries, heightEntries, bpEntries, measurements, medications, profile }: Props) {
   const { callGemini, loading: keyLoading, apiKey } = useAiConfig();
   const [assessment, setAssessment] = useState<string>("");
   const [running, setRunning] = useState(false);
@@ -47,6 +50,8 @@ export default function AiHealthAssessment({ entries, heightEntries, bpEntries, 
 
   const buildPrompt = useCallback((): string => {
     const lines: string[] = [];
+
+    // --- Biometrics ---
     if (latestWeight)  lines.push(`Weight: ${latestWeight.weight} kg`);
     if (latestHeight)  lines.push(`Height: ${latestHeight.height} cm`);
     if (bmi)           lines.push(`BMI: ${bmi.toFixed(1)} (${bmiLabel(bmi)})`);
@@ -63,27 +68,56 @@ export default function AiHealthAssessment({ entries, heightEntries, bpEntries, 
       if (latestMeas.waistCm && latestMeas.hipCm)
         lines.push(`Waist-to-Hip ratio: ${(latestMeas.waistCm / latestMeas.hipCm).toFixed(2)}`);
     }
-    if (medications.filter(m => m.active).length > 0) {
-      lines.push(`Active medications: ${medications.filter(m => m.active).map(m => `${m.name} ${m.dose}${m.unit}`).join(", ")}`);
-    }
 
-    // Include BP trend if enough data
+    // --- Trends ---
     if (bpEntries.length >= 3) {
       const recent = bpEntries.slice(-5);
       const avgSys = Math.round(recent.reduce((s, e) => s + e.systolic, 0) / recent.length);
       const avgDia = Math.round(recent.reduce((s, e) => s + e.diastolic, 0) / recent.length);
       lines.push(`Average BP over last ${recent.length} readings: ${avgSys}/${avgDia} mmHg`);
     }
-
     if (entries.length >= 2) {
-      const first = entries[0];
-      const last  = entries[entries.length - 1];
-      const diff  = last.weight - first.weight;
+      const diff = entries[entries.length - 1].weight - entries[0].weight;
       lines.push(`Weight change since first record: ${diff > 0 ? "+" : ""}${diff.toFixed(1)} kg`);
+    }
+    if (entries.length >= 4) {
+      const recent3 = entries.slice(-3);
+      const trend = recent3[recent3.length - 1].weight - recent3[0].weight;
+      lines.push(`Recent weight trend (last 3 entries): ${trend > 0 ? "+" : ""}${trend.toFixed(1)} kg`);
+    }
+
+    // --- Demographics ---
+    if (profile) {
+      if (profile.age)           lines.push(`Age: ${profile.age}`);
+      if (profile.sex)           lines.push(`Sex: ${profile.sex}`);
+      if (profile.activityLevel) lines.push(`Activity level: ${ACTIVITY_LABELS[profile.activityLevel]}`);
+      if (profile.smokingStatus) lines.push(`Smoking status: ${profile.smokingStatus === "never" ? "Never smoked" : profile.smokingStatus === "ex" ? "Ex-smoker" : "Current smoker"}`);
+      if (profile.alcoholUnitsPerWeek !== undefined)
+        lines.push(`Alcohol: ${profile.alcoholUnitsPerWeek} units/week`);
+      if (profile.diabetic) lines.push(`Diabetic: Yes`);
+    }
+
+    // --- Medications ---
+    const activeMeds = medications.filter(m => m.active);
+    if (activeMeds.length > 0) {
+      lines.push(`Active medications: ${activeMeds.map(m => `${m.name} ${m.dose}${m.unit}`).join(", ")}`);
+    }
+    const inactiveMeds = medications.filter(m => !m.active);
+    if (inactiveMeds.length > 0) {
+      lines.push(`Past medications: ${inactiveMeds.map(m => m.name).join(", ")}`);
+    }
+
+    // --- Medical history ---
+    if (profile) {
+      if (profile.pastConditions.length)  lines.push(`Past/current conditions: ${profile.pastConditions.join(", ")}`);
+      if (profile.familyHistory.length)   lines.push(`Family history: ${profile.familyHistory.join("; ")}`);
+      if (profile.allergies.length)       lines.push(`Allergies: ${profile.allergies.join(", ")}`);
+      if (profile.surgeries.length)       lines.push(`Surgeries/procedures: ${profile.surgeries.join(", ")}`);
+      if (profile.otherNotes)             lines.push(`Other notes: ${profile.otherNotes}`);
     }
 
     return lines.join("\n");
-  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries]);
+  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries, profile]);
 
   const run = async () => {
     setRunning(true);
@@ -92,18 +126,43 @@ export default function AiHealthAssessment({ entries, heightEntries, bpEntries, 
       const data = buildPrompt();
       if (!data.trim()) { setError("No health data recorded yet — add some measurements first."); return; }
 
-      const systemPrompt = `You are a knowledgeable health advisor. Based on the user's biometric data, provide a comprehensive, clear, personalised health assessment. Use plain language. Structure your response with clear sections:
+      const systemPrompt = `You are a highly knowledgeable health advisor with expertise in preventive medicine, cardiovascular health, and metabolic health. Based on the user's comprehensive health data, provide a detailed, personalised health assessment. Use plain UK English. Be honest but compassionate. Structure your response with these clearly labelled sections using bold markdown headers:
 
-1. **Overall Health Summary** — brief snapshot
-2. **Weight & Body Composition** — BMI, weight risk, body composition insights from measurements
-3. **Cardiovascular Assessment** — BP analysis, heart rate, estimated cardiovascular risk level
-4. **10-Year Risk Estimate** — rough estimate of heart attack and stroke risk based on available data (be clear this is a general estimate, not medical diagnosis). Use established risk factor frameworks.
-5. **Key Risk Factors** — list any concerning markers with brief explanations
-6. **Medication Interactions** — if medications listed, note any relevant cardiovascular/metabolic considerations
-7. **Positive Indicators** — what is going well
-8. **Recommended Actions** — specific, actionable steps (lifestyle, monitoring frequency, when to see a GP urgently)
+**1. Overall Health Summary**
+A concise 2–3 sentence snapshot of the person's overall health status.
 
-Be honest but compassionate. Flag anything that genuinely warrants prompt medical attention. Always end with: "This assessment is for informational purposes only and does not replace professional medical advice."`;
+**2. Weight & Body Composition**
+BMI interpretation, weight risk, body composition insights (waist-to-height, waist-to-hip ratios if available), target weight context.
+
+**3. Cardiovascular Assessment**
+Detailed BP analysis, trends, heart rate, estimated cardiovascular fitness level.
+
+**4. 10-Year Heart Attack Risk Estimate**
+Using a Framingham-style framework incorporating age, sex, BP, cholesterol (note if unknown), smoking, diabetes, BMI. Give a percentage range with brief explanation. Clearly state this is a general estimate, not a clinical diagnosis.
+
+**5. 10-Year Stroke Risk Estimate**
+Estimate using available risk factors. Flag atrial fibrillation risk if heart rate is irregular. Note limitations.
+
+**6. Estimated Life Expectancy Impact**
+Based on the modifiable risk factors present, estimate whether current lifestyle/health markers suggest reduced or increased life expectancy vs average. Be specific about which factors are impacting this.
+
+**7. Key Risk Factors Ranked**
+Number each risk factor, ranked from most to least serious. Brief explanation for each.
+
+**8. Medication Analysis**
+Review current medications in context of health data. Note any relevant cardiovascular/metabolic considerations or potential interactions. If no medications, say so.
+
+**9. Positive Indicators**
+What is already good — celebrate wins, note protective factors.
+
+**10. Priority Improvement Areas**
+Top 3–5 specific, actionable steps the person can take. Be concrete (e.g. "Reduce sodium intake to under 2g/day" not just "eat better").
+
+**11. When to Seek Medical Attention**
+Any findings that warrant prompt GP review or urgent attention. Be specific.
+
+---
+*This assessment is for informational purposes only and does not replace professional medical advice. Always consult your GP or healthcare provider for diagnosis and treatment.*`;
 
       const result = await callGemini(systemPrompt, `Here is my current health data:\n${data}\n\nPlease give me a full health assessment.`);
       setAssessment(result);
