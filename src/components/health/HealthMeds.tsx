@@ -1,0 +1,376 @@
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Pill, Check, X, Bell, BellOff, Edit2, Trash2, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { useMeds, MED_COLORS, type Medication, type MedUnit } from "@/hooks/useMeds";
+import { format } from "date-fns";
+
+const UNITS: MedUnit[] = ["mg", "ml", "tablet", "capsule", "drop", "puff", "patch", "g", "other"];
+
+function timeLabel(t: string): string {
+  const [h] = t.split(":").map(Number);
+  if (h < 12) return "Morning";
+  if (h < 17) return "Afternoon";
+  if (h < 21) return "Evening";
+  return "Night";
+}
+
+function MedPill({ med, today, onLog, onSkip, onEdit, onDelete, isLogged, getLogForDose }: {
+  med: Medication;
+  today: string;
+  onLog: (medId: string, time: string, date: string) => void;
+  onSkip: (medId: string, time: string, date: string) => void;
+  onEdit: (med: Medication) => void;
+  onDelete: (id: string) => void;
+  isLogged: (medId: string, time: string, date: string) => boolean;
+  getLogForDose: (medId: string, time: string, date: string) => import("@/hooks/useMeds").MedLog | null;
+}) {
+
+  return (
+    <div className="p-3.5 rounded-2xl bg-card border border-border/50 shadow-soft">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: med.color }} />
+          <div>
+            <p className="text-sm font-bold text-card-foreground">{med.name}</p>
+            <p className="text-xs text-muted-foreground">{med.dose} {med.unit}</p>
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <button onClick={() => onEdit(med)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            <Edit2 className="w-3 h-3" />
+          </button>
+          <button onClick={() => onDelete(med.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
+      {med.notes && <p className="text-[11px] text-muted-foreground italic mb-2.5">{med.notes}</p>}
+
+      <div className="space-y-2">
+        {med.times.map((t) => {
+          const logged = isLogged(med.id, t, today);
+          const logEntry = getLogForDose(med.id, t, today);
+          return (
+            <div key={t} className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
+              logEntry?.skipped ? "bg-muted/30 border-border/30 opacity-60" :
+              logged ? "bg-green-50 border-green-200" : "bg-muted/30 border-border/30"
+            }`}>
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs font-semibold text-card-foreground">{t}</p>
+                  <p className="text-[10px] text-muted-foreground">{timeLabel(t)}</p>
+                </div>
+              </div>
+              {logged ? (
+                <div className="flex items-center gap-1.5">
+                  {logEntry?.skipped ? (
+                    <span className="text-[10px] text-muted-foreground font-medium">Skipped</span>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-green-600" />
+                      <span className="text-[10px] text-green-700 font-semibold">Taken {logEntry?.takenAt}</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => onLog(med.id, t, today)}
+                    className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
+                  >
+                    <Check className="w-3 h-3" /> Taken
+                  </button>
+                  <button
+                    onClick={() => onSkip(med.id, t, today)}
+                    className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function HealthMeds() {
+  const { medications, loading, addMedication, updateMedication, deleteMedication, logDose, scheduleTodayNotifications, isLogged, getLogForDose } = useMeds();
+  const today = new Date().toISOString().split("T")[0];
+
+  const [addOpen, setAddOpen]       = useState(false);
+  const [editTarget, setEditTarget] = useState<Medication | null>(null);
+  const [name, setName]             = useState("");
+  const [dose, setDose]             = useState("");
+  const [unit, setUnit]             = useState<MedUnit>("mg");
+  const [times, setTimes]           = useState<string[]>(["08:00"]);
+  const [color, setColor]           = useState(MED_COLORS[5]);
+  const [notes, setNotes]           = useState("");
+  const [saving, setSaving]         = useState(false);
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+
+  // Request notification permission + schedule
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setNotifEnabled(Notification.permission === "granted");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (medications.length > 0 && notifEnabled) {
+      scheduleTodayNotifications(medications);
+    }
+  }, [medications, notifEnabled, scheduleTodayNotifications]);
+
+  const requestNotif = async () => {
+    const perm = await Notification.requestPermission();
+    setNotifEnabled(perm === "granted");
+  };
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setName(""); setDose(""); setUnit("mg");
+    setTimes(["08:00"]); setColor(MED_COLORS[5]); setNotes("");
+    setAddOpen(true);
+  };
+
+  const openEdit = (med: Medication) => {
+    setEditTarget(med);
+    setName(med.name); setDose(med.dose); setUnit(med.unit);
+    setTimes([...med.times]); setColor(med.color); setNotes(med.notes ?? "");
+    setAddOpen(true);
+  };
+
+  const save = async () => {
+    if (!name.trim() || !dose.trim() || times.length === 0) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: name.trim(), dose: dose.trim(), unit, times: times.sort(),
+        color, notes: notes.trim(), active: true,
+        startDate: today,
+      };
+      if (editTarget) {
+        await updateMedication(editTarget.id, payload);
+      } else {
+        await addMedication(payload);
+      }
+      setAddOpen(false);
+    } finally { setSaving(false); }
+  };
+
+  const addTime = () => setTimes((t) => [...t, "12:00"]);
+  const updateTime = (i: number, v: string) => setTimes((t) => t.map((x, j) => j === i ? v : x));
+  const removeTime = (i: number) => setTimes((t) => t.filter((_, j) => j !== i));
+
+  const activeMeds   = medications.filter((m) => m.active);
+  const inactiveMeds = medications.filter((m) => !m.active);
+
+  const takenCount = activeMeds.reduce((acc, med) => {
+    return acc + med.times.filter((t) => isLogged(med.id, t, today)).length;
+  }, 0);
+  const totalCount = activeMeds.reduce((acc, m) => acc + m.times.length, 0);
+
+  if (loading) return <div className="py-20 text-center text-muted-foreground text-sm">Loading meds…</div>;
+
+  return (
+    <div>
+      {/* Header bar */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-bold text-card-foreground">Today's Medications</h3>
+          <p className="text-xs text-muted-foreground">{format(new Date(), "EEEE, d MMMM")}</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={notifEnabled ? undefined : requestNotif}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+              notifEnabled ? "bg-green-50 border-green-200 text-green-700" : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            {notifEnabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
+            <span>{notifEnabled ? "Alerts on" : "Enable alerts"}</span>
+          </button>
+          <Button onClick={openAdd} size="sm" className="rounded-xl text-xs bg-gradient-primary h-8 gap-1">
+            <Plus className="w-3.5 h-3.5" /> Add
+          </Button>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <div className="mb-4 p-3.5 rounded-2xl bg-card border border-border/50">
+          <div className="flex justify-between text-xs mb-2">
+            <span className="font-semibold text-card-foreground">Today's progress</span>
+            <span className="text-muted-foreground">{takenCount}/{totalCount} doses</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all duration-500"
+              style={{ width: totalCount > 0 ? `${(takenCount / totalCount) * 100}%` : "0%" }}
+            />
+          </div>
+          {takenCount === totalCount && totalCount > 0 && (
+            <p className="text-xs text-green-700 font-semibold text-center mt-2">✅ All done for today!</p>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {activeMeds.length === 0 && (
+        <div className="py-14 text-center">
+          <div className="inline-flex p-4 rounded-full bg-muted/40 mb-3">
+            <Pill className="w-7 h-7 text-muted-foreground/40" />
+          </div>
+          <p className="text-sm font-semibold text-muted-foreground">No medications added</p>
+          <p className="text-xs text-muted-foreground/70 mt-1 mb-4">Add your medications to track daily doses.</p>
+          <Button onClick={openAdd} size="sm" className="rounded-xl bg-gradient-primary text-xs">
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add Medication
+          </Button>
+        </div>
+      )}
+
+      {/* Meds list */}
+      <div className="space-y-3">
+        {activeMeds.map((med, i) => (
+          <motion.div key={med.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+            <MedPill
+              med={med}
+              today={today}
+              onLog={(id, t, d) => logDose(id, t, d, false)}
+              onSkip={(id, t, d) => logDose(id, t, d, true)}
+              onEdit={openEdit}
+              onDelete={(id) => updateMedication(id, { active: false })}
+              isLogged={isLogged}
+              getLogForDose={getLogForDose}
+            />
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Inactive meds */}
+      {inactiveMeds.length > 0 && (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowInactive((x) => !x)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium mb-2"
+          >
+            {showInactive ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {inactiveMeds.length} inactive medication{inactiveMeds.length > 1 ? "s" : ""}
+          </button>
+          <AnimatePresence>
+            {showInactive && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
+                {inactiveMeds.map((med) => (
+                  <div key={med.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/30 opacity-60">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: med.color }} />
+                      <span className="text-xs text-muted-foreground">{med.name} {med.dose}{med.unit}</span>
+                    </div>
+                    <button onClick={() => updateMedication(med.id, { active: true })} className="text-[10px] text-primary font-medium">
+                      Re-activate
+                    </button>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Add/Edit dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">{editTarget ? "Edit Medication" : "Add Medication"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lisinopril" className="h-11 rounded-xl" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Dose</Label>
+                <Input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="e.g. 10" className="h-11 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit</Label>
+                <Select value={unit} onValueChange={(v) => setUnit(v as MedUnit)}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Colour */}
+            <div className="space-y-1.5">
+              <Label>Colour</Label>
+              <div className="flex gap-2 flex-wrap">
+                {MED_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setColor(c)}
+                    className={`w-7 h-7 rounded-full border-2 transition-transform ${color === c ? "scale-125 border-foreground" : "border-transparent"}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Times */}
+            <div className="space-y-1.5">
+              <Label>Dose times</Label>
+              <div className="space-y-2">
+                {times.map((t, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <Input
+                      type="time"
+                      value={t}
+                      onChange={(e) => updateTime(i, e.target.value)}
+                      className="flex-1 h-10 rounded-xl"
+                    />
+                    <span className="text-xs text-muted-foreground w-20">{timeLabel(t)}</span>
+                    {times.length > 1 && (
+                      <button onClick={() => removeTime(i)} className="text-muted-foreground hover:text-destructive">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addTime} className="text-xs text-primary font-medium flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add time
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Take with food" className="rounded-xl text-xs min-h-[60px]" />
+            </div>
+
+            <Button
+              onClick={save}
+              disabled={saving || !name.trim() || !dose.trim() || times.length === 0}
+              className="w-full h-11 rounded-xl bg-gradient-primary"
+            >
+              {saving ? "Saving…" : editTarget ? "Save Changes" : "Add Medication"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

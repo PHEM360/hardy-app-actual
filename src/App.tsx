@@ -13,6 +13,7 @@ import HouseholdFinance from "@/pages/HouseholdFinance";
 import Inheritance from "@/pages/Inheritance";
 import Households from "@/pages/Households";
 import WeightTracker from "@/pages/WeightTracker";
+import Health from "@/pages/Health";
 import Tattersalls from "@/pages/Tattersalls";
 import Tasks from "@/pages/Tasks";
 import Today from "@/pages/Today";
@@ -62,7 +63,7 @@ const App = () => (
             <Route path="/household-finance" element={<HouseholdFinance />} />
             <Route path="/inheritance" element={<Inheritance />} />
             <Route path="/households" element={<Households />} />
-            <Route path="/weight" element={<WeightTracker />} />
+            <Route path="/weight" element={<Health />} />
             <Route path="/tattersalls" element={<Tattersalls />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/today" element={<Today />} />
