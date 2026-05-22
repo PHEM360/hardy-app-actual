@@ -64,6 +64,7 @@ const App = () => (
             <Route path="/inheritance" element={<Inheritance />} />
             <Route path="/households" element={<Households />} />
             <Route path="/weight" element={<Health />} />
+            <Route path="/health" element={<Health />} />
             <Route path="/tattersalls" element={<Tattersalls />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/today" element={<Today />} />

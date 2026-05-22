@@ -21,6 +21,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/companies":         { icon: Briefcase,     label: "Companies",  color: "hsl(210,50%,50%)",  gradient: "linear-gradient(135deg,hsl(210,50%,50%),hsl(220,45%,44%))" },
   "/login-details":     { icon: Key,           label: "Log Ins",    color: "hsl(265,55%,55%)",  gradient: "linear-gradient(135deg,hsl(265,55%,55%),hsl(275,50%,48%))" },
   "/weight":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,55%,40%),hsl(160,50%,35%))" },
+  "/health":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,55%,40%),hsl(160,50%,35%))" },
   "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,60%,50%),hsl(20,55%,44%))" },
   "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,55%,40%),hsl(150,50%,35%))" },
   "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,50%,45%),hsl(205,45%,40%))" },
@@ -28,7 +29,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,92%,50%),hsl(25,85%,45%))" },
 };
 
-const DEFAULT_NAV = ["/dashboard", "/tasks", "/today", "/calendar", "/more"];
+const DEFAULT_NAV = ["/dashboard", "/tasks", "/today", "/health", "/more"];
 
 const BottomNav = () => {
   const location = useLocation();
@@ -65,7 +66,8 @@ const BottomNav = () => {
       <div className="flex items-center justify-around h-16 px-2 max-w-screen-xl mx-auto w-full">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path ||
-            (item.path !== "/" && location.pathname.startsWith(item.path));
+            (item.path !== "/" && location.pathname.startsWith(item.path)) ||
+            (item.path === "/health" && location.pathname === "/weight");
           const Icon = item.icon;
 
           return (
