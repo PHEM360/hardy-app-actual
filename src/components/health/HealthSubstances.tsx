@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSubstances, type SubstanceLog } from "@/hooks/useSubstances";
 import { useAuth } from "@/auth/AuthContext";
 import { format, parseISO } from "date-fns";
+import QRCode from "react-qr-code";
 
 const COMMON_UNITS = ["mg", "g", "ml", "μg", "tablet", "capsule", "dose", "line", "joint", "other"];
 
@@ -116,8 +117,6 @@ function TotpSetup({ email, onComplete }: { email: string; onComplete: () => voi
     onComplete();
   };
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(uri)}`;
-
   return (
     <div className="py-4 space-y-5">
       {step === "generate" && (
@@ -144,8 +143,8 @@ function TotpSetup({ email, onComplete }: { email: string; onComplete: () => voi
             <p className="text-xs text-muted-foreground">Open Google Authenticator or Authy, tap + and scan this QR code</p>
           </div>
 
-          <div className="p-2 bg-white rounded-2xl border border-border/50 shadow-sm">
-            <img src={qrUrl} alt="TOTP QR Code" width={180} height={180} className="rounded-xl" />
+          <div className="p-3 bg-white rounded-2xl border border-border/50 shadow-sm">
+            <QRCode value={uri} size={180} />
           </div>
 
           <button
