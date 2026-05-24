@@ -38,10 +38,12 @@ export function QuickLinksWidget() {
   };
 
   const links = [
-    { icon: CheckSquare2, label: "Today's Tasks", sub: "View focus list", color: "text-amber-500 bg-amber-50", action: () => navigate("/today") },
-    { icon: Receipt,      label: "Add Expense",   sub: "Quick log",       color: "text-red-500 bg-red-50",    action: () => setExpenseOpen(true) },
-    { icon: KeyRound,     label: "Log Ins",        sub: "Saved creds",     color: "text-violet-500 bg-violet-50", action: () => navigate("/login-details") },
-    { icon: CalendarPlus, label: "New Event",      sub: "Calendar",        color: "text-blue-500 bg-blue-50",  action: () => navigate("/calendar") },
+    { icon: CheckSquare2, label: "Today",       sub: "Focus list",    color: "text-amber-500 bg-amber-50 dark:bg-amber-950/40",   action: () => navigate("/today") },
+    { icon: Receipt,      label: "Expense",     sub: "Quick log",     color: "text-red-500 bg-red-50 dark:bg-red-950/40",         action: () => setExpenseOpen(true) },
+    { icon: KeyRound,     label: "Log Ins",     sub: "Credentials",   color: "text-violet-500 bg-violet-50 dark:bg-violet-950/40", action: () => navigate("/login-details") },
+    { icon: CalendarPlus, label: "New Event",   sub: "Calendar",      color: "text-blue-500 bg-blue-50 dark:bg-blue-950/40",      action: () => navigate("/calendar") },
+    { icon: Plus,         label: "Add Task",    sub: "Tasks",         color: "text-green-500 bg-green-50 dark:bg-green-950/40",   action: () => navigate("/tasks") },
+    { icon: Plus,         label: "Finance",     sub: "Household",     color: "text-teal-500 bg-teal-50 dark:bg-teal-950/40",      action: () => navigate("/household-finance") },
   ];
 
   return (
@@ -50,20 +52,17 @@ export function QuickLinksWidget() {
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Links</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 flex-1">
+      <div className="grid grid-cols-3 gap-1.5 flex-1">
         {links.map(({ icon: Icon, label, sub, color, action }) => (
           <button
             key={label}
             onClick={action}
-            className="flex flex-col items-start gap-1.5 p-2.5 rounded-xl bg-card border border-border/50 hover:shadow-sm transition-all active:scale-[0.97] text-left"
+            className="flex flex-col items-center gap-1 p-2 rounded-xl bg-card border border-border/50 hover:shadow-sm transition-all active:scale-[0.97] text-center"
           >
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color}`}>
               <Icon className="w-3.5 h-3.5" />
             </div>
-            <div>
-              <p className="text-[11px] font-semibold text-card-foreground leading-tight">{label}</p>
-              <p className="text-[9px] text-muted-foreground">{sub}</p>
-            </div>
+            <p className="text-[10px] font-semibold text-card-foreground leading-tight">{label}</p>
           </button>
         ))}
       </div>

@@ -45,24 +45,40 @@ export function WeightWidget() {
             {new Date(latest.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
           </p>
 
-          {/* Sparkline */}
+          {/* Line sparkline */}
           {recent.length > 1 && (
-            <div className="flex-1 flex items-end gap-px min-h-0">
+            <div className="flex-1 min-h-0" style={{ minHeight: 40 }}>
               {(() => {
                 const min = Math.min(...recent.map((e) => e.weight));
                 const max = Math.max(...recent.map((e) => e.weight));
                 const range = max - min || 1;
-                return recent.map((e, i) => {
-                  const pct = ((e.weight - min) / range) * 100;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col justify-end" style={{ height: "40px" }}>
-                      <div
-                        className="w-full rounded-sm bg-emerald-400/70"
-                        style={{ height: `${Math.max(10, pct)}%` }}
-                      />
-                    </div>
-                  );
+                const W = 200, H = 40, pad = 2;
+                const pts = recent.map((e, i) => {
+                  const x = pad + (i / (recent.length - 1)) * (W - pad * 2);
+                  const y = H - pad - ((e.weight - min) / range) * (H - pad * 2);
+                  return `${x},${y}`;
                 });
+                const polyline = pts.join(" ");
+                const lastPt = pts[pts.length - 1].split(",");
+                return (
+                  <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {/* Fill area */}
+                    <polygon
+                      points={`${pts[0].split(",")[0]},${H} ${polyline} ${lastPt[0]},${H}`}
+                      fill="url(#wg)"
+                    />
+                    {/* Line */}
+                    <polyline points={polyline} fill="none" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    {/* Last dot */}
+                    <circle cx={lastPt[0]} cy={lastPt[1]} r="2.5" fill="#34d399" />
+                  </svg>
+                );
               })()}
             </div>
           )}

@@ -1,6 +1,19 @@
 import { useNavigate } from "react-router-dom";
-import { Heart } from "lucide-react";
+import { Heart, Bug, Pill } from "lucide-react";
 import { usePets } from "@/hooks/usePets";
+
+function daysUntil(dateStr: string): number {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr); d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+}
+
+function daysLabel(days: number): string {
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `${days}d`;
+}
 
 export function PetsWidget() {
   const navigate = useNavigate();
@@ -8,16 +21,23 @@ export function PetsWidget() {
 
   const now = new Date();
 
-  // Find the next due treatment across all pets
-  const upcoming: { petName: string; treatmentName: string; dateDue: string }[] = [];
+  // Find next wormer + next flea treatment across all pets (soonest)
+  type NextItem = { petName: string; type: "worming" | "flea"; dateDue: string; days: number };
+  const nextByType: Record<string, NextItem> = {};
+
   for (const pet of pets) {
     for (const tr of (pet.treatmentHistory ?? [])) {
-      if (tr.dateDue && new Date(tr.dateDue) >= now) {
-        upcoming.push({ petName: pet.name, treatmentName: tr.name, dateDue: tr.dateDue });
+      if ((tr.type === "worming" || tr.type === "flea") && tr.dateDue) {
+        const days = daysUntil(tr.dateDue);
+        const key = tr.type;
+        if (!nextByType[key] || days < nextByType[key].days) {
+          nextByType[key] = { petName: pet.name, type: tr.type, dateDue: tr.dateDue, days };
+        }
       }
     }
   }
-  upcoming.sort((a, b) => new Date(a.dateDue).getTime() - new Date(b.dateDue).getTime());
+
+  const highlights = Object.values(nextByType).sort((a, b) => a.days - b.days);
 
   return (
     <button
@@ -46,18 +66,27 @@ export function PetsWidget() {
             ))}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden space-y-1">
-            {upcoming.slice(0, 3).map((u, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                <span className="text-[10px] text-foreground truncate flex-1">{u.petName} — {u.treatmentName}</span>
-                <span className="text-[9px] text-muted-foreground flex-shrink-0">
-                  {new Date(u.dateDue).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                </span>
-              </div>
-            ))}
-            {upcoming.length === 0 && (
-              <p className="text-[11px] text-muted-foreground">No upcoming treatments 🎉</p>
+          <div className="flex-1 min-h-0 overflow-hidden space-y-1.5">
+            {highlights.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">No treatments due 🎉</p>
+            ) : (
+              highlights.map((h) => {
+                const overdue = h.days < 0;
+                const soon = h.days <= 3 && !overdue;
+                const Icon = h.type === "flea" ? Bug : Pill;
+                return (
+                  <div key={h.type} className={`flex items-center gap-1.5 p-1.5 rounded-lg ${overdue ? "bg-red-50 dark:bg-red-950/30" : soon ? "bg-amber-50 dark:bg-amber-950/30" : "bg-muted/40"}`}>
+                    <Icon className={`w-3 h-3 flex-shrink-0 ${overdue ? "text-red-500" : soon ? "text-amber-500" : "text-muted-foreground"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-semibold text-foreground capitalize">{h.type === "flea" ? "Flea" : "Wormer"}</p>
+                      <p className="text-[9px] text-muted-foreground truncate">{h.petName}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold flex-shrink-0 ${overdue ? "text-red-500" : soon ? "text-amber-500" : "text-muted-foreground"}`}>
+                      {daysLabel(h.days)}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </>
