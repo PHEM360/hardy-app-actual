@@ -190,9 +190,11 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
 
 // ─── Company Tile ─────────────────────────────────────────────────────────────
 
-function CompanyTile({ co, index, onEdit, onDelete, onNavigate }: {
+function CompanyTile({ co, index, children: tradingNameChildren, onEdit, onDelete, onNavigate, onEditChild, onDeleteChild, onNavigateChild }: {
   co: Company; index: number;
+  children?: Company[];
   onEdit: () => void; onDelete: () => void; onNavigate: () => void;
+  onEditChild?: (c: Company) => void; onDeleteChild?: (c: Company) => void; onNavigateChild?: (c: Company) => void;
 }) {
   const typeLabel = co.companyType ? COMPANY_TYPE_LABELS[co.companyType] : null;
   return (
@@ -203,7 +205,6 @@ function CompanyTile({ co, index, onEdit, onDelete, onNavigate }: {
       style={{ borderTopWidth: 3, borderTopColor: co.color }}
       onClick={onNavigate}
     >
-      {/* Top accent bar already from borderTopColor */}
       <div className="p-3.5">
         {/* Icon + name row */}
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -254,6 +255,40 @@ function CompanyTile({ co, index, onEdit, onDelete, onNavigate }: {
               ? co.contact.website.replace(/^https?:\/\//, "")
               : co.description}
           </p>
+        )}
+
+        {/* Trading name sub-tiles */}
+        {tradingNameChildren && tradingNameChildren.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-border/40 space-y-1.5">
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Trading As
+            </p>
+            {tradingNameChildren.map((child) => (
+              <div
+                key={child.id}
+                onClick={(e) => { e.stopPropagation(); onNavigateChild?.(child); }}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                style={{ borderLeftWidth: 2, borderLeftColor: child.color || co.color }}
+              >
+                <span className="text-sm leading-none">{child.emoji || "🏷️"}</span>
+                <span className="text-[11px] font-semibold text-card-foreground truncate flex-1">{child.name}</span>
+                <div className="flex gap-0.5 flex-shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onEditChild?.(child); }}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Edit2 className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteChild?.(child); }}
+                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </motion.div>
@@ -325,9 +360,13 @@ const Companies = () => {
       key={co.id}
       co={co}
       index={i}
+      children={getChildren(co.id!)}
       onEdit={() => { setEditCompany(co); setDialogOpen(true); }}
       onDelete={() => co.id && deleteCompany(co.id)}
       onNavigate={() => navigate(`/companies/${co.id}`)}
+      onEditChild={(child) => { setEditCompany(child); setDialogOpen(true); }}
+      onDeleteChild={(child) => child.id && deleteCompany(child.id)}
+      onNavigateChild={(child) => navigate(`/companies/${child.id}`)}
     />
   );
 
