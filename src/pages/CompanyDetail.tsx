@@ -1865,20 +1865,21 @@ const CompanyDetail = () => {
       </motion.div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 overflow-x-auto pb-1 mb-5 no-scrollbar">
+      <div className="flex gap-2 overflow-x-auto pb-1.5 mb-5 no-scrollbar">
         {TABS.map((tab) => {
           const Icon = tab.icon;
+          const active = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors ${
-                activeTab === tab.id ? "text-white shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"
+              className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${
+                active ? "text-white shadow-md" : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
-              style={activeTab === tab.id ? { backgroundColor: company.color } : undefined}
+              style={active ? { backgroundColor: company.color } : undefined}
             >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
+              <Icon className="w-4 h-4" />
+              <span className="text-[10px] font-semibold">{tab.label}</span>
             </button>
           );
         })}

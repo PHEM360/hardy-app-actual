@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote, Share2, UserPlus } from "lucide-react";
+import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote, Share2, UserPlus, FolderOpen, Upload, Camera, Trash2, FileText, ImageIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, differenceInYears, differenceInMonths } from "date-fns";
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePets } from "@/hooks/usePets";
 import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting, VaccinationOption } from "@/hooks/usePets";
+import { usePetDocuments } from "@/hooks/usePetDocuments";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import DogLoader from "@/components/DogLoader";
 import { useAuth } from "@/auth/AuthContext";
@@ -125,8 +126,10 @@ const DogEntrance = () => {
 
 const Pets = () => {
   const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet } = usePets();
+  const { documents, uploadDocument, deleteDocument } = usePetDocuments();
   const { schedulePetReminders } = usePushNotifications();
   const { user } = useAuth();
+  const docFileRef = useRef<HTMLInputElement>(null);
   const [visiblePets, setVisiblePets] = useState<Set<string>>(new Set());
   const [insuranceExpanded, setInsuranceExpanded] = useState<string | null>(null);
   const [addWeightOpen, setAddWeightOpen] = useState(false);
@@ -163,6 +166,13 @@ const Pets = () => {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState(false);
+
+  // Document upload state
+  const [docUploadOpen, setDocUploadOpen] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docTitle, setDocTitle] = useState("");
+  const [docPetIds, setDocPetIds] = useState<string[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
 
   // Merge Firestore data with any unsaved local edits for the settings dialog
   const mergedPets = pets.map((p) => ({ ...p, ...(localEdits[p.id] ?? {}) }));
@@ -768,6 +778,141 @@ const Pets = () => {
           })}
         </div>
       </div>
+
+      {/* Documents */}
+      <div className="space-y-3 mb-5">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <FolderOpen className="w-3.5 h-3.5" /> Documents
+          </h3>
+          <button
+            onClick={() => { setDocFile(null); setDocTitle(""); setDocPetIds([]); setDocUploadOpen(true); }}
+            className="flex items-center gap-1 text-xs text-primary font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" /> Upload
+          </button>
+        </div>
+
+        {documents.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center py-8 rounded-2xl border-2 border-dashed border-border/50 gap-2 cursor-pointer hover:bg-muted/20 transition-colors"
+            onClick={() => { setDocFile(null); setDocTitle(""); setDocPetIds([]); setDocUploadOpen(true); }}
+          >
+            <FolderOpen className="w-7 h-7 text-muted-foreground/50" />
+            <p className="text-xs text-muted-foreground">No documents yet — tap to upload</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {documents.map((d) => {
+              const isImage = d.fileType?.startsWith("image/");
+              const petNames = d.petIds.length === 0 ? "All pets" : d.petIds.map(pid => pets.find(p => p.id === pid)?.name ?? pid).join(", ");
+              return (
+                <div key={d.id} className="relative rounded-xl border border-border/40 bg-card overflow-hidden shadow-soft">
+                  {isImage ? (
+                    <a href={d.url} target="_blank" rel="noopener noreferrer">
+                      <img src={d.url} alt={d.title} className="w-full h-24 object-cover" />
+                    </a>
+                  ) : (
+                    <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center h-24 bg-muted/30">
+                      <FileText className="w-10 h-10 text-muted-foreground/50" />
+                    </a>
+                  )}
+                  <div className="p-2">
+                    <p className="text-[11px] font-semibold text-foreground truncate">{d.title}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{petNames}</p>
+                  </div>
+                  <button
+                    onClick={() => deleteDocument(d)}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-background/80 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Upload document dialog */}
+      <input
+        ref={docFileRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) { setDocFile(f); setDocTitle(f.name.replace(/\.[^.]+$/, "")); }
+        }}
+      />
+      <Dialog open={docUploadOpen} onOpenChange={(o) => { setDocUploadOpen(o); if (!o) setDocFile(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+          <DialogHeader><DialogTitle className="font-display flex items-center gap-2"><FolderOpen className="w-4 h-4" /> Upload Document</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            {!docFile ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => docFileRef.current?.click()}
+                  className="flex-1 flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-border hover:bg-muted/30 transition-colors"
+                >
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Upload file / PDF</span>
+                </button>
+                <button
+                  onClick={() => { if (docFileRef.current) { docFileRef.current.setAttribute("capture", "environment"); docFileRef.current.click(); } }}
+                  className="flex-1 flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-border hover:bg-muted/30 transition-colors"
+                >
+                  <Camera className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Take photo</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 border border-border">
+                {docFile.type.startsWith("image/") ? <ImageIcon className="w-4 h-4 text-blue-500 flex-shrink-0" /> : <FileText className="w-4 h-4 text-red-500 flex-shrink-0" />}
+                <span className="text-xs text-foreground flex-1 truncate">{docFile.name}</span>
+                <button onClick={() => setDocFile(null)}><X className="w-3.5 h-3.5 text-muted-foreground" /></button>
+              </div>
+            )}
+            {docFile && (<>
+              <div className="space-y-1.5">
+                <Label>Document title</Label>
+                <Input value={docTitle} onChange={(e) => setDocTitle(e.target.value)} placeholder="e.g. Vaccination Certificate" className="h-11 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Assign to pet <span className="text-muted-foreground font-normal">(optional — leave blank for all pets)</span></Label>
+                <div className="flex flex-wrap gap-2">
+                  {pets.map((p) => {
+                    const selected = docPetIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setDocPetIds(prev => selected ? prev.filter(id => id !== p.id) : [...prev, p.id])}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${selected ? "bg-primary text-primary-foreground border-primary" : "border-border bg-muted/30"}`}
+                      >
+                        {p.avatar} {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Button
+                onClick={async () => {
+                  if (!docFile) return;
+                  setDocUploading(true);
+                  try {
+                    await uploadDocument(docFile, docTitle || docFile.name, docPetIds);
+                    setDocUploadOpen(false); setDocFile(null); setDocTitle(""); setDocPetIds([]);
+                  } finally { setDocUploading(false); }
+                }}
+                disabled={docUploading}
+                className="w-full h-11 rounded-xl bg-gradient-primary"
+              >
+                {docUploading ? "Uploading…" : "Save Document"}
+              </Button>
+            </>)}
+          </div>
+        </DialogContent>
+      </Dialog>
       </>)}
 
       {/* Record Treatment Dialog */}

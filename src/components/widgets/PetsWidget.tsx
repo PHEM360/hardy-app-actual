@@ -21,18 +21,22 @@ export function PetsWidget() {
 
   const now = new Date();
 
-  // Find next wormer + next flea treatment across all pets (soonest)
+  // Mirror getTreatmentStatus from Pets.tsx: use selectedFlea/selectedWorm + latest dateDue
   type NextItem = { petName: string; type: "worming" | "flea"; dateDue: string; days: number };
   const nextByType: Record<string, NextItem> = {};
 
   for (const pet of pets) {
-    for (const tr of (pet.treatmentHistory ?? [])) {
-      if ((tr.type === "worming" || tr.type === "flea") && tr.dateDue) {
-        const days = daysUntil(tr.dateDue);
-        const key = tr.type;
-        if (!nextByType[key] || days < nextByType[key].days) {
-          nextByType[key] = { petName: pet.name, type: tr.type, dateDue: tr.dateDue, days };
-        }
+    for (const type of ["flea", "worming"] as const) {
+      const productName = type === "flea" ? pet.selectedFlea : pet.selectedWorm;
+      if (!productName) continue;
+      const records = (pet.treatmentHistory ?? [])
+        .filter(t => t.type === type && t.name === productName)
+        .sort((a, b) => b.dateDue.localeCompare(a.dateDue));
+      const latest = records[0];
+      if (!latest) continue;
+      const days = daysUntil(latest.dateDue);
+      if (!nextByType[type] || days < nextByType[type].days) {
+        nextByType[type] = { petName: pet.name, type, dateDue: latest.dateDue, days };
       }
     }
   }

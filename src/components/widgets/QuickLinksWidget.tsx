@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare2, Receipt, KeyRound, CalendarPlus, Plus } from "lucide-react";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { CheckSquare2, Receipt, KeyRound, CalendarPlus, Plus, Camera, Paperclip, X } from "lucide-react";
+import { addDoc, collection, serverTimestamp, updateDoc, doc } from "firebase/firestore";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { useCompanies } from "@/hooks/useCompanies";
 import { DEFAULT_COMPANY_SETTINGS } from "@/types/app";
@@ -16,23 +17,32 @@ export function QuickLinksWidget() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { companies } = useCompanies();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [expForm, setExpForm] = useState({
     companyId: "", description: "", amount: "",
     date: new Date().toISOString().split("T")[0], category: "Other",
   });
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const saveExpense = async () => {
     if (!expForm.companyId || !expForm.description || !expForm.amount || !user) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, "companies", user.uid, "items", expForm.companyId, "expenses"), {
+      const docRef = await addDoc(collection(db, "companies", user.uid, "items", expForm.companyId, "expenses"), {
         description: expForm.description, amount: parseFloat(expForm.amount) || 0,
         date: expForm.date, category: expForm.category, receipts: [], createdAt: serverTimestamp(),
       });
+      if (receiptFile) {
+        const sRef = storageRef(storage, `companies/${user.uid}/${expForm.companyId}/receipts/${Date.now()}_${receiptFile.name}`);
+        await uploadBytes(sRef, receiptFile);
+        const url = await getDownloadURL(sRef);
+        await updateDoc(doc(db, "companies", user.uid, "items", expForm.companyId, "expenses", docRef.id), { receipts: [url] });
+      }
       setExpenseOpen(false);
+      setReceiptFile(null);
       setExpForm({ companyId: "", description: "", amount: "", date: new Date().toISOString().split("T")[0], category: "Other" });
     } finally { setSaving(false); }
   };
@@ -52,8 +62,8 @@ export function QuickLinksWidget() {
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Links</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 flex-1">
-        {links.map(({ icon: Icon, label, sub, color, action }) => (
+      <div className="grid grid-cols-3 gap-1.5">
+        {links.map(({ icon: Icon, label, color, action }) => (
           <button
             key={label}
             onClick={action}
@@ -103,6 +113,33 @@ export function QuickLinksWidget() {
                   {DEFAULT_COMPANY_SETTINGS.expenseCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Receipt <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+              />
+              {receiptFile ? (
+                <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
+                  <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-[11px] text-foreground flex-1 truncate">{receiptFile.name}</span>
+                  <button onClick={() => setReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => { if (fileInputRef.current) { fileInputRef.current.removeAttribute("capture"); fileInputRef.current.click(); } }} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Paperclip className="w-3.5 h-3.5" /> Upload file
+                  </button>
+                  <button onClick={() => { if (fileInputRef.current) { fileInputRef.current.setAttribute("capture", "environment"); fileInputRef.current.click(); } }} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Camera className="w-3.5 h-3.5" /> Take photo
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex gap-2 pt-1">
               <Button variant="outline" onClick={() => setExpenseOpen(false)} className="flex-1 h-9 rounded-xl">Cancel</Button>
