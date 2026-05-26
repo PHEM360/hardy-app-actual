@@ -32,7 +32,7 @@ export interface WidgetLayoutItem {
 
 export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { id: "greeting",      type: "greeting",      xFrac: 0,   wFrac: 1.0, y: 0,    h: 100,  visible: true  },
-  { id: "quick_links",   type: "quick_links",   xFrac: 0,   wFrac: 1.0, y: 108,  h: 144,  visible: true  },
+  { id: "quick_links",   type: "quick_links",   xFrac: 0,   wFrac: 1.0, y: 108,  h: 172,  visible: true  },
   { id: "today",         type: "today",         xFrac: 0,   wFrac: 0.5, y: 260,  h: 204,  visible: true  },
   { id: "tasks",         type: "tasks",         xFrac: 0.5, wFrac: 0.5, y: 260,  h: 204,  visible: true  },
   { id: "calendar_mini", type: "calendar_mini", xFrac: 0,   wFrac: 1.0, y: 472,  h: 264,  visible: true  },
@@ -71,6 +71,40 @@ export const WIDGET_ICONS: Record<WidgetType, string> = {
   companies:     "🏢",
   weight:        "⚖️",
 };
+
+// ─── Overlap resolution ───────────────────────────────────────────────────────
+
+const OVERLAP_GAP = 8;
+
+function resolveOverlaps(items: WidgetLayoutItem[]): WidgetLayoutItem[] {
+  // Only operate on visible items; sort by y so higher widgets take precedence
+  const sorted = [...items].sort((a, b) => a.y - b.y);
+  const placed: WidgetLayoutItem[] = [];
+
+  for (const item of sorted) {
+    let y = item.y;
+    // Keep pushing down until no collision with any already-placed widget
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const p of placed) {
+        // Check x-axis overlap using fractional coords
+        const iL = item.xFrac, iR = item.xFrac + item.wFrac;
+        const pL = p.xFrac,   pR = p.xFrac   + p.wFrac;
+        if (iL >= pR || iR <= pL) continue; // no x overlap
+        // Check y-axis overlap
+        if (y < p.y + p.h && y + item.h > p.y) {
+          y = p.y + p.h + OVERLAP_GAP;
+          changed = true;
+        }
+      }
+    }
+    placed.push({ ...item, y });
+  }
+
+  // Map back preserving original order
+  return items.map((orig) => placed.find((p) => p.id === orig.id) ?? orig);
+}
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -111,7 +145,8 @@ export function useDashboardLayout() {
 
   const updateWidget = useCallback((id: string, patch: Partial<WidgetLayoutItem>) => {
     setLayout((prev) => {
-      const next = prev.map((w) => w.id === id ? { ...w, ...patch } : w);
+      const patched = prev.map((w) => w.id === id ? { ...w, ...patch } : w);
+      const next = resolveOverlaps(patched);
       // Fire-and-forget save
       if (user) {
         setDoc(doc(db, "dashboardLayouts", user.uid), { layout: next }, { merge: true }).catch(() => {});

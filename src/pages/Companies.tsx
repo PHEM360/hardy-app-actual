@@ -259,35 +259,41 @@ function CompanyTile({ co, index, children: tradingNameChildren, onEdit, onDelet
 
         {/* Trading name sub-tiles */}
         {tradingNameChildren && tradingNameChildren.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-border/40 space-y-1.5">
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Trading As
+          <div className="mt-3 pt-2.5 border-t border-border/40">
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1">
+              <span style={{ color: co.color }}>◆</span> Trading As
             </p>
-            {tradingNameChildren.map((child) => (
-              <div
-                key={child.id}
-                onClick={(e) => { e.stopPropagation(); onNavigateChild?.(child); }}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                style={{ borderLeftWidth: 2, borderLeftColor: child.color || co.color }}
-              >
-                <span className="text-sm leading-none">{child.emoji || "🏷️"}</span>
-                <span className="text-[11px] font-semibold text-card-foreground truncate flex-1">{child.name}</span>
-                <div className="flex gap-0.5 flex-shrink-0">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onEditChild?.(child); }}
-                    className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+            <div className="space-y-1.5">
+              {tradingNameChildren.map((child) => (
+                <div
+                  key={child.id}
+                  onClick={(e) => { e.stopPropagation(); onNavigateChild?.(child); }}
+                  className="group flex items-center gap-2.5 px-2.5 py-2 rounded-xl border border-border/30 bg-muted/40 hover:bg-muted/70 hover:border-border/60 transition-all cursor-pointer"
+                >
+                  <div
+                    className="w-6 h-6 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                    style={{ backgroundColor: `${child.color || co.color}25` }}
                   >
-                    <Edit2 className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDeleteChild?.(child); }}
-                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="w-2.5 h-2.5" />
-                  </button>
+                    {child.emoji || "🏷️"}
+                  </div>
+                  <span className="text-[11px] font-semibold text-foreground truncate flex-1 leading-tight">{child.name}</span>
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEditChild?.(child); }}
+                      className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-background/60 transition-colors"
+                    >
+                      <Edit2 className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteChild?.(child); }}
+                      className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-background/60 transition-colors"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -428,7 +434,7 @@ const Companies = () => {
                 {registered.length > 0 && (
                   <div>
                     <SectionHeader title="Registered Companies" count={registered.length} />
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
                       {registered.map((co, i) => renderTile(co, i))}
                     </div>
                   </div>
@@ -436,7 +442,7 @@ const Companies = () => {
                 {soleTraders.length > 0 && (
                   <div>
                     <SectionHeader title="Sole Traders" count={soleTraders.length} />
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
                       {soleTraders.map((co, i) => renderTile(co, registered.length + i))}
                     </div>
                   </div>
@@ -446,7 +452,7 @@ const Companies = () => {
                     {(registered.length > 0 || soleTraders.length > 0) && (
                       <SectionHeader title="Other" count={others.length} />
                     )}
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
                       {others.map((co, i) => renderTile(co, registered.length + soleTraders.length + i))}
                     </div>
                   </div>

@@ -522,7 +522,10 @@ export interface CalendarSettings {
   memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
   autoImport?: {
     pets?: boolean;            // show pet flea/worming due dates
+    petInsurance?: boolean;    // show pet insurance renewal dates
     household?: boolean;       // show household item renewal dates
+    tasks?: boolean;           // show task due dates
+    companies?: boolean;       // show company insurance/tax renewal dates
   };
   updatedAt?: any;
 }

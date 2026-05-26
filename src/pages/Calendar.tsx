@@ -27,6 +27,8 @@ import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
 import { useUserRole } from "@/auth/useUserRole";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePets } from "@/hooks/usePets";
+import { useTasks } from "@/hooks/useTasks";
+import { useCompanies } from "@/hooks/useCompanies";
 import type { CalendarEvent, CalendarEventCategory, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -111,6 +113,8 @@ const CalendarPage = () => {
   const { settings: hSettings } = useHouseholdSettings();
   const { items: householdItems } = useHouseholdItems();
   const { pets } = usePets();
+  const { tasks } = useTasks();
+  const { companies } = useCompanies();
   const { role } = useUserRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
 
@@ -356,8 +360,70 @@ const CalendarPage = () => {
       });
     }
 
+    // Pet insurance renewals
+    if (settings.autoImport?.petInsurance !== false) {
+      pets.forEach((pet) => {
+        if (!pet.insurance?.renewalDate) return;
+        const due = parseISO(pet.insurance.renewalDate);
+        if (due < cutoff) return;
+        vEvents.push({
+          id: `__pet_ins_${pet.id}`,
+          title: `🐾 ${pet.name} — insurance renewal`,
+          category: "health",
+          startDate: due.toISOString(),
+          endDate: due.toISOString(),
+          allDay: true,
+          priority: due < now ? "urgent" : "normal",
+        });
+      });
+    }
+
+    // Task due dates
+    if (settings.autoImport?.tasks !== false) {
+      tasks.forEach((task) => {
+        if (!task.dueDate || task.status === "done") return;
+        const due = parseISO(task.dueDate);
+        if (due < cutoff) return;
+        vEvents.push({
+          id: `__task_${task.id}`,
+          title: `✅ ${task.title}`,
+          category: "work" as CalendarEventCategory,
+          startDate: due.toISOString(),
+          endDate: due.toISOString(),
+          allDay: true,
+          priority: (task.priority === "high" || due < now) ? "urgent" : "normal",
+        });
+      });
+    }
+
+    // Company insurance & tax filing dates
+    if (settings.autoImport?.companies !== false) {
+      companies.forEach((co) => {
+        // Company tax year start as a reminder (annual)
+        if (co.taxYearStart) {
+          try {
+            const base = parseISO(co.taxYearStart);
+            // Show the upcoming tax year start
+            const thisYear = new Date(now.getFullYear(), base.getMonth(), base.getDate());
+            const nextOccurrence = thisYear < cutoff
+              ? new Date(now.getFullYear() + 1, base.getMonth(), base.getDate())
+              : thisYear;
+            vEvents.push({
+              id: `__co_tax_${co.id}`,
+              title: `🏢 ${co.name} — tax year start`,
+              category: "work" as CalendarEventCategory,
+              startDate: nextOccurrence.toISOString(),
+              endDate: nextOccurrence.toISOString(),
+              allDay: true,
+              priority: "normal",
+            });
+          } catch { /* ignore invalid date */ }
+        }
+      });
+    }
+
     return vEvents;
-  }, [pets, householdItems, settings.autoImport]);
+  }, [pets, householdItems, tasks, companies, settings.autoImport]);
 
   const allDisplayEvents = useMemo(
     () => [...events, ...virtualEvents],
@@ -1192,6 +1258,48 @@ const CalendarPage = () => {
                   onCheckedChange={(v) => saveSettings({
                     ...settings,
                     autoImport: { ...(settings.autoImport ?? {}), household: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">🐶 Pet insurance</p>
+                  <p className="text-[11px] text-muted-foreground">Pet insurance renewal dates</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.petInsurance !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), petInsurance: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">✅ Task due dates</p>
+                  <p className="text-[11px] text-muted-foreground">Tasks with a due date set</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.tasks !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), tasks: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">🏢 Company dates</p>
+                  <p className="text-[11px] text-muted-foreground">Tax year starts for each company</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.companies !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), companies: v },
                   })}
                 />
               </div>
