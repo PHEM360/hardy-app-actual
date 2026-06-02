@@ -628,15 +628,25 @@ function formatDaysLeft(days: number): string {
   return parts.join(" ");
 }
 
-function RenewalBadge({ days }: { days: number | null }) {
-  if (days === null) return null;
+function RenewalBadge({ days, endDate }: { days: number | null; endDate?: string }) {
+  if (days === null || !endDate) return null;
+  // Format as "3 Jun 2026"
+  const dateLabel = new Date(endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   if (days < 0)
-    return <span className="text-sm font-semibold text-red-500">Expired</span>;
+    return <span className="text-sm font-semibold text-red-500">Expired {dateLabel}</span>;
   if (days <= 7)
-    return <span className="text-sm font-bold text-red-500">{formatDaysLeft(days)} left</span>;
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-red-500 px-1.5 py-0.5 rounded-md">
+        ⚠ {dateLabel}
+      </span>
+    );
   if (days <= 30)
-    return <span className="text-sm font-semibold text-amber-500">{formatDaysLeft(days)} left</span>;
-  return <span className="text-sm text-muted-foreground">{formatDaysLeft(days)} left</span>;
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-amber-500 px-1.5 py-0.5 rounded-md">
+        ⚠ {dateLabel}
+      </span>
+    );
+  return <span className="text-sm text-muted-foreground">{dateLabel}</span>;
 }
 
 // ─── Cost helpers ──────────────────────────────────────────────────────────────
@@ -849,7 +859,7 @@ function ItemTile({
           {costStr && (
             <div className={`text-sm font-bold ${isDark ? "text-white" : ""}`}>{costStr}</div>
           )}
-          <RenewalBadge days={days} />
+          <RenewalBadge days={days} endDate={item.endDate} />
         </div>
 
         {/* Floating micro-indicators */}
@@ -1900,8 +1910,26 @@ export default function Households() {
   const [activeTab, setActiveTab] = useState<"items" | "cameras">("items");
 
   useEffect(() => {
-    if (!loading) checkAndScheduleAll(items);
-  }, [loading, items]);
+    if (!loading) {
+      checkAndScheduleAll(items);
+      // Fire an immediate browser notification for anything expiring within 30 days
+      if (permission === "granted") {
+        const expiring = items.filter((i) => {
+          const d = daysUntil(i.endDate);
+          return d !== null && d >= 0 && d <= 30;
+        });
+        for (const i of expiring) {
+          const d = daysUntil(i.endDate)!;
+          const dateLabel = new Date(i.endDate!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+          new Notification(`${i.type} renews ${d === 0 ? "today" : `in ${d} day${d === 1 ? "" : "s"}`}`, {
+            body: `${i.provider ? `${i.provider} — ` : ""}Renewal date: ${dateLabel}`,
+            icon: "/favicon.ico",
+            tag: `renewal-${i.id}`, // prevents duplicate popups on re-render
+          });
+        }
+      }
+    }
+  }, [loading]);
 
   const openAdd = () => { setEditId(null); setEditItem(null); setAddOpen(true); };
 
@@ -2018,6 +2046,44 @@ export default function Households() {
       {/* Items tab */}
       {activeTab === "items" && (
       <div className="space-y-8">
+
+        {/* ── Expiry alert banner ── */}
+        {(() => {
+          const expiring = items.filter((i) => {
+            const d = daysUntil(i.endDate);
+            return d !== null && d <= 30;
+          }).sort((a, b) => (daysUntil(a.endDate) ?? 0) - (daysUntil(b.endDate) ?? 0));
+          if (expiring.length === 0) return null;
+          return (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-sm">
+                <span>⚠</span>
+                <span>{expiring.length === 1 ? "1 item" : `${expiring.length} items`} expiring within 30 days</span>
+              </div>
+              <div className="space-y-1.5">
+                {expiring.map((i) => {
+                  const d = daysUntil(i.endDate)!;
+                  const dateLabel = new Date(i.endDate!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                  return (
+                    <button
+                      key={i.id}
+                      onClick={() => setDetailItem(i)}
+                      className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl bg-white/60 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-amber-900 dark:text-amber-200 truncate">
+                        {i.type}{i.provider ? ` · ${i.provider}` : ""}
+                      </span>
+                      <span className={`text-xs font-bold ml-2 shrink-0 px-2 py-0.5 rounded-full ${d <= 7 ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
+                        {d < 0 ? "Expired" : d === 0 ? "Today" : `${d}d`} · {dateLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <section className="space-y-3">
           {items.length === 0 ? (
             <EmptyState label="Add your first household item" onAdd={openAdd} />
