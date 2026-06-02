@@ -1,6 +1,6 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Rnd } from "react-rnd";
-import { GripHorizontal, Eye, EyeOff } from "lucide-react";
+import { GripHorizontal, Eye, EyeOff, Palette, X } from "lucide-react";
 import type { WidgetLayoutItem } from "@/hooks/useDashboardLayout";
 
 interface WidgetShellProps {
@@ -20,6 +20,17 @@ export function WidgetShell({ item, containerWidth, editMode, onUpdate, children
   const colW = containerWidth / SNAP_COLS;
   const x = item.xFrac * containerWidth;
   const w = item.wFrac * containerWidth;
+  const [showPalette, setShowPalette] = useState(false);
+
+  const TINT_PRESETS = [
+    { label: "Sky",    value: "#e0f2fe" },
+    { label: "Lemon",  value: "#fef9c3" },
+    { label: "Mint",   value: "#dcfce7" },
+    { label: "Lilac",  value: "#f3e8ff" },
+    { label: "Rose",   value: "#ffe4e6" },
+    { label: "Peach",  value: "#ffedd5" },
+    { label: "Slate",  value: "#f1f5f9" },
+  ];
 
   return (
     <Rnd
@@ -69,30 +80,69 @@ export function WidgetShell({ item, containerWidth, editMode, onUpdate, children
     >
       {/* Inner card */}
       <div
-        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col bg-card border shadow-soft transition-shadow ${
+        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col border shadow-soft transition-shadow ${
           editMode ? "border-primary/40 ring-2 ring-primary/20 shadow-md cursor-default" : "border-border/50"
-        }`}
-        style={{ padding: 0 }}
+        } ${!item.tintColor ? "bg-card" : ""}`}
+        style={{ padding: 0, ...(item.tintColor ? { backgroundColor: item.tintColor } : {}) }}
       >
         {/* Edit mode header bar */}
         {editMode && (
           <div className="widget-drag-handle flex items-center justify-between px-3 py-1.5 bg-primary/5 border-b border-primary/10 cursor-grab active:cursor-grabbing select-none flex-shrink-0">
             <GripHorizontal className="w-4 h-4 text-primary/50" />
-            <button
-              className="p-1 rounded-md hover:bg-primary/10 transition-colors"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onUpdate(item.id, { visible: !item.visible });
-              }}
-              title={item.visible ? "Hide widget" : "Show widget"}
-            >
-              {item.visible ? (
-                <Eye className="w-3.5 h-3.5 text-primary/60" />
-              ) : (
-                <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
-              )}
-            </button>
+            <div className="flex items-center gap-1">
+              {/* Colour palette picker */}
+              <div className="relative">
+                <button
+                  className="p-1 rounded-md hover:bg-primary/10 transition-colors"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setShowPalette((v) => !v); }}
+                  title="Tile colour"
+                >
+                  <Palette className="w-3.5 h-3.5 text-primary/60" />
+                </button>
+                {showPalette && (
+                  <div
+                    className="absolute top-7 right-0 z-50 bg-popover border border-border rounded-xl shadow-lg p-2 flex flex-col gap-1.5"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex gap-1.5 flex-wrap w-[132px]">
+                      {TINT_PRESETS.map((p) => (
+                        <button
+                          key={p.value}
+                          title={p.label}
+                          onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { tintColor: p.value }); setShowPalette(false); }}
+                          className="w-8 h-8 rounded-lg border-2 transition-transform hover:scale-110 active:scale-95"
+                          style={{ backgroundColor: p.value, borderColor: item.tintColor === p.value ? "#6366f1" : "transparent" }}
+                        />
+                      ))}
+                      {/* Clear colour */}
+                      <button
+                        title="Default"
+                        onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { tintColor: undefined }); setShowPalette(false); }}
+                        className="w-8 h-8 rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center hover:bg-muted/40 transition-colors"
+                      >
+                        <X className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                className="p-1 rounded-md hover:bg-primary/10 transition-colors"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdate(item.id, { visible: !item.visible });
+                }}
+                title={item.visible ? "Hide widget" : "Show widget"}
+              >
+                {item.visible ? (
+                  <Eye className="w-3.5 h-3.5 text-primary/60" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+              </button>
+            </div>
           </div>
         )}
 

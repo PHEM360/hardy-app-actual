@@ -62,12 +62,12 @@ export function QuickLinksWidget() {
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Links</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 flex-1 content-start">
+      <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-0">
         {links.map(({ icon: Icon, label, color, action }) => (
           <button
             key={label}
             onClick={action}
-            className="flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-card border border-border/50 hover:shadow-sm transition-all active:scale-[0.97] text-center min-h-[58px]"
+            className="flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-card border border-border/50 hover:shadow-sm transition-all active:scale-[0.97] text-center"
           >
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
               <Icon className="w-3.5 h-3.5" />

@@ -26,13 +26,14 @@ export interface WidgetLayoutItem {
   y: number;        // absolute pixels from top
   h: number;        // absolute pixels height
   visible: boolean;
+  tintColor?: string; // optional background tint colour (hex)
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { id: "greeting",      type: "greeting",      xFrac: 0,   wFrac: 1.0, y: 0,    h: 100,  visible: true  },
-  { id: "quick_links",   type: "quick_links",   xFrac: 0,   wFrac: 1.0, y: 108,  h: 172,  visible: true  },
+  { id: "quick_links",   type: "quick_links",   xFrac: 0,   wFrac: 1.0, y: 108,  h: 190,  visible: true  },
   { id: "today",         type: "today",         xFrac: 0,   wFrac: 0.5, y: 260,  h: 204,  visible: true  },
   { id: "tasks",         type: "tasks",         xFrac: 0.5, wFrac: 0.5, y: 260,  h: 204,  visible: true  },
   { id: "calendar_mini", type: "calendar_mini", xFrac: 0,   wFrac: 1.0, y: 472,  h: 264,  visible: true  },

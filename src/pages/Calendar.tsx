@@ -543,16 +543,16 @@ const CalendarPage = () => {
       {view === "month" && (
         <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-border/40 bg-muted/30">
+          <div className="grid grid-cols-7 border-b border-border/50 bg-muted/50">
             {WEEK_DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] sm:text-xs font-semibold text-muted-foreground py-2 sm:py-3">
+              <div key={d} className="text-center text-[10px] sm:text-[11px] font-bold text-foreground/60 py-2.5 sm:py-3 uppercase tracking-wide">
                 {d}
               </div>
             ))}
           </div>
 
           {/* Day cells */}
-          <div className="grid grid-cols-7 divide-x divide-y divide-border/30">
+          <div className="grid grid-cols-7">
             {monthDays.map((day) => {
               const dayEvts = eventsForDay(day);
               const inMonth = isSameMonth(day, currentDate);
@@ -563,8 +563,8 @@ const CalendarPage = () => {
                 <button
                   key={day.toISOString()}
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`min-h-[72px] sm:min-h-[90px] md:min-h-[110px] lg:min-h-[130px] p-1 sm:p-1.5 text-left flex flex-col transition-colors ${
-                    !inMonth ? "bg-muted/10" : selected ? "bg-primary/5" : "bg-card hover:bg-muted/20"
+                  className={`min-h-[72px] sm:min-h-[90px] md:min-h-[110px] lg:min-h-[130px] p-1 sm:p-1.5 text-left flex flex-col transition-colors border border-border/20 ${
+                    !inMonth ? "bg-muted/15" : selected ? "bg-primary/5" : today ? "bg-primary/3" : "bg-card hover:bg-muted/20"
                   }`}
                 >
                   <span

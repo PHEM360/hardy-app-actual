@@ -207,6 +207,19 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Substances config - TOTP setup per user
+    match /substancesConfig/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Substance logs - per user
+    match /substanceLogs/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      match /logs/{logId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;
