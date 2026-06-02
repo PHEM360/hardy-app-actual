@@ -813,7 +813,7 @@ function ItemTile({
   const iconColor = isDark ? "text-white" : "";
 
   // Decorative background graphic: manual bg catalogue → auto-theme → null
-  const DecorIcon = bg?.decorIcon ?? null;
+  const DecorIcon = bg?.decorIcon ?? getAutoTheme(item)?.decorIcon ?? null;
 
   return (
     <div className="relative group h-full">
