@@ -298,6 +298,288 @@ function getCategoryMeta(type: string) {
   );
 }
 
+// ─── Auto-theme: keyword → background ─────────────────────────────────────────
+// Maps keywords found in item.type (case-insensitive) to a TileBgDef.
+// Priority is top-to-bottom — first match wins.
+const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
+  // ── Utilities ──────────────────────────────────────────────────────────────
+  {
+    keywords: ["water"],
+    bg: {
+      label: "Water",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#0c4a6e 0%,#0369a1 35%,#0ea5e9 65%,#38bdf8 100%)",
+    },
+  },
+  {
+    keywords: ["gas", "boiler", "heating"],
+    bg: {
+      label: "Gas",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#78350f 0%,#b45309 35%,#f59e0b 70%,#fcd34d 100%)",
+    },
+  },
+  {
+    keywords: ["electric", "electricity", "power", "energy", "solar"],
+    bg: {
+      label: "Electric",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e1b4b 0%,#3730a3 40%,#6366f1 70%,#a5b4fc 100%)",
+    },
+  },
+  {
+    keywords: ["broadband", "internet", "fibre", "fiber", "wifi", "wi-fi"],
+    bg: {
+      label: "Broadband",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#134e4a 0%,#0d9488 40%,#2dd4bf 70%,#99f6e4 100%)",
+    },
+  },
+  {
+    keywords: ["mobile", "sim", "sim only"],
+    bg: {
+      label: "Mobile",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#4a044e 0%,#7e22ce 40%,#a855f7 70%,#d8b4fe 100%)",
+    },
+  },
+  {
+    keywords: ["phone contract", "landline"],
+    bg: {
+      label: "Phone",
+      dark: false,
+      gradient:
+        "linear-gradient(135deg,#f0f9ff 0%,#bae6fd 50%,#7dd3fc 100%)",
+    },
+  },
+  // ── Insurance / protection ─────────────────────────────────────────────────
+  {
+    keywords: ["home insurance", "building insurance", "contents insurance", "buildings"],
+    bg: {
+      label: "Home Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e3a8a 0%,#2563eb 40%,#60a5fa 70%,#93c5fd 100%)",
+    },
+  },
+  {
+    keywords: ["car insurance", "vehicle insurance", "motor"],
+    bg: {
+      label: "Car Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e293b 0%,#475569 40%,#94a3b8 70%,#cbd5e1 100%)",
+    },
+  },
+  {
+    keywords: ["life insurance", "life cover"],
+    bg: {
+      label: "Life Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#9f1239 0%,#e11d48 40%,#fb7185 70%,#fecdd3 100%)",
+    },
+  },
+  {
+    keywords: ["pet insurance", "pet cover"],
+    bg: {
+      label: "Pet Insurance",
+      dark: false,
+      gradient:
+        "linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 70%,#fcd34d 100%)",
+    },
+  },
+  {
+    keywords: ["health insurance", "medical insurance", "dental", "vision"],
+    bg: {
+      label: "Health Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#052e16 0%,#166534 40%,#16a34a 70%,#4ade80 100%)",
+    },
+  },
+  {
+    keywords: ["travel insurance"],
+    bg: {
+      label: "Travel Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#082f49 0%,#0c4a6e 40%,#0369a1 70%,#38bdf8 100%)",
+    },
+  },
+  {
+    keywords: ["insurance", "cover", "policy"],
+    bg: {
+      label: "Insurance",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#172554 0%,#1e3a8a 40%,#2563eb 70%,#93c5fd 100%)",
+    },
+  },
+  // ── Finance / home ──────────────────────────────────────────────────────────
+  {
+    keywords: ["mortgage", "remortgage"],
+    bg: {
+      label: "Mortgage",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#052e16 0%,#14532d 40%,#16a34a 70%,#86efac 100%)",
+    },
+  },
+  {
+    keywords: ["council tax", "rates"],
+    bg: {
+      label: "Council Tax",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#2e1065 0%,#5b21b6 40%,#8b5cf6 70%,#c4b5fd 100%)",
+    },
+  },
+  {
+    keywords: ["rent", "rental"],
+    bg: {
+      label: "Rent",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#78350f 0%,#b45309 40%,#d97706 70%,#fcd34d 100%)",
+    },
+  },
+  // ── Entertainment / subscriptions ──────────────────────────────────────────
+  {
+    keywords: ["netflix"],
+    bg: {
+      label: "Netflix",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1a0000 0%,#7f1d1d 40%,#b91c1c 70%,#ef4444 100%)",
+    },
+  },
+  {
+    keywords: ["disney", "disney+"],
+    bg: {
+      label: "Disney+",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e1b4b 0%,#1d4ed8 40%,#3b82f6 70%,#93c5fd 100%)",
+    },
+  },
+  {
+    keywords: ["spotify", "music", "apple music", "tidal"],
+    bg: {
+      label: "Music",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#064e3b 0%,#065f46 40%,#059669 70%,#6ee7b7 100%)",
+    },
+  },
+  {
+    keywords: ["amazon prime", "amazon"],
+    bg: {
+      label: "Amazon Prime",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#082f49 0%,#0c4a6e 40%,#1d4ed8 70%,#60a5fa 100%)",
+    },
+  },
+  {
+    keywords: ["tv", "television", "sky", "now tv", "freeview", "cable"],
+    bg: {
+      label: "TV",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#0f172a 0%,#1e293b 40%,#334155 70%,#64748b 100%)",
+    },
+  },
+  {
+    keywords: ["streaming", "hulu", "apple tv", "peacock"],
+    bg: {
+      label: "Streaming",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e1b4b 0%,#312e81 40%,#4c1d95 70%,#7c3aed 100%)",
+    },
+  },
+  {
+    keywords: ["gym", "fitness", "sport", "swimming", "yoga", "pilates"],
+    bg: {
+      label: "Fitness",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#0f4c81 0%,#1e6091 40%,#2e86c1 70%,#85c1e9 100%)",
+    },
+  },
+  {
+    keywords: ["gaming", "game", "playstation", "xbox", "nintendo"],
+    bg: {
+      label: "Gaming",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1a0533 0%,#6d28d9 50%,#8b5cf6 100%)",
+    },
+  },
+  // ── Pets ───────────────────────────────────────────────────────────────────
+  {
+    keywords: ["pets", "dog", "cat", "vet", "kennel", "grooming"],
+    bg: {
+      label: "Pets",
+      dark: false,
+      gradient:
+        "linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 70%,#fcd34d 100%)",
+    },
+  },
+  // ── Transport ──────────────────────────────────────────────────────────────
+  {
+    keywords: ["car", "vehicle", "parking", "breakdown", "roadside"],
+    bg: {
+      label: "Car",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1e293b 0%,#334155 40%,#64748b 70%,#94a3b8 100%)",
+    },
+  },
+  {
+    keywords: ["train", "rail", "railcard", "bus pass", "tram", "transit"],
+    bg: {
+      label: "Transit",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#1d4ed8 0%,#2563eb 40%,#3b82f6 70%,#93c5fd 100%)",
+    },
+  },
+  {
+    keywords: ["flight", "airline", "plane", "travel", "holiday"],
+    bg: {
+      label: "Travel",
+      dark: true,
+      gradient:
+        "linear-gradient(160deg,#0284c7 0%,#0ea5e9 40%,#38bdf8 70%,#bae6fd 100%)",
+    },
+  },
+  // ── Home ───────────────────────────────────────────────────────────────────
+  {
+    keywords: ["home", "house", "household", "property"],
+    bg: {
+      label: "Home",
+      dark: false,
+      gradient:
+        "linear-gradient(135deg,#fffbf7 0%,#fed7aa 50%,#fb923c 100%)",
+    },
+  },
+];
+
+function getAutoTheme(item: HouseholdItem): TileBgDef | null {
+  const haystack = `${item.type} ${item.provider ?? ""}`.toLowerCase();
+  for (const rule of AUTO_THEME_RULES) {
+    if (rule.keywords.some((kw) => haystack.includes(kw))) return rule.bg;
+  }
+  return null;
+}
+
 function daysUntil(dateStr?: string) {
   if (!dateStr) return null;
   const diff = new Date(dateStr).getTime() - Date.now();
@@ -490,7 +772,7 @@ function ItemTile({
   const costStr = formatCost(item.costAmount, item.costPeriod, item.costPeriodCustom)
     ?? (item.monthlyPremium != null ? `£${item.monthlyPremium}/mo` : null);
 
-  const bg = item.tileBg ? TILE_BACKGROUNDS[item.tileBg] : null;
+  const bg = item.tileBg ? TILE_BACKGROUNDS[item.tileBg] : getAutoTheme(item);
   const isDark = bg?.dark ?? false;
 
   // Resolve the icon: custom selection → category default
