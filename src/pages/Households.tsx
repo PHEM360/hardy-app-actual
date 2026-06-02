@@ -631,12 +631,12 @@ function formatDaysLeft(days: number): string {
 function RenewalBadge({ days }: { days: number | null }) {
   if (days === null) return null;
   if (days < 0)
-    return <span className="text-xs font-medium text-red-500">Expired</span>;
+    return <span className="text-sm font-semibold text-red-500">Expired</span>;
   if (days <= 7)
-    return <span className="text-xs font-semibold text-red-500">{formatDaysLeft(days)} left</span>;
+    return <span className="text-sm font-bold text-red-500">{formatDaysLeft(days)} left</span>;
   if (days <= 30)
-    return <span className="text-xs font-medium text-amber-500">{formatDaysLeft(days)} left</span>;
-  return <span className="text-xs text-muted-foreground">{formatDaysLeft(days)} left</span>;
+    return <span className="text-sm font-semibold text-amber-500">{formatDaysLeft(days)} left</span>;
+  return <span className="text-sm text-muted-foreground">{formatDaysLeft(days)} left</span>;
 }
 
 // ─── Cost helpers ──────────────────────────────────────────────────────────────
@@ -836,10 +836,10 @@ function ItemTile({
 
         {/* Main content — grows to fill available space */}
         <div className="flex-1 flex flex-col gap-0.5 mt-2 min-w-0 relative z-10">
-          <div className={`font-medium text-sm leading-snug line-clamp-2 ${isDark ? "text-white" : ""}`}>
+          <div className={`font-semibold text-base leading-snug line-clamp-2 ${isDark ? "text-white" : ""}`}>
             {item.type}
           </div>
-          <div className={`text-xs truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>
+          <div className={`text-sm truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>
             {item.provider}
           </div>
         </div>
@@ -847,7 +847,7 @@ function ItemTile({
         {/* Footer — always at bottom */}
         <div className="flex flex-col gap-1 mt-2 shrink-0 relative z-10">
           {costStr && (
-            <div className={`text-xs font-semibold ${isDark ? "text-white/90" : ""}`}>{costStr}</div>
+            <div className={`text-sm font-bold ${isDark ? "text-white" : ""}`}>{costStr}</div>
           )}
           <RenewalBadge days={days} />
         </div>
