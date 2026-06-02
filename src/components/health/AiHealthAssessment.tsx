@@ -7,7 +7,7 @@ import { differenceInDays, startOfDay, parseISO } from "date-fns";
 import type { WeightEntry, HeightEntry, BPEntry, MeasurementEntry } from "@/hooks/useWeightTracker";
 import type { Medication } from "@/hooks/useMeds";
 import type { HealthProfile } from "@/hooks/useHealthProfile";
-import { ACTIVITY_LABELS } from "@/hooks/useHealthProfile";
+import { ACTIVITY_LABELS, resolvedAge } from "@/hooks/useHealthProfile";
 import type { SubstanceLog } from "@/hooks/useSubstances";
 
 interface Props {
@@ -91,7 +91,8 @@ export default function AiHealthAssessment({ entries, heightEntries, bpEntries, 
 
     // --- Demographics ---
     if (profile) {
-      if (profile.age)           lines.push(`Age: ${profile.age}`);
+      const age = resolvedAge(profile);
+      if (age !== undefined) lines.push(`Age: ${age}`);
       if (profile.sex)           lines.push(`Sex: ${profile.sex}`);
       if (profile.activityLevel) lines.push(`Activity level: ${ACTIVITY_LABELS[profile.activityLevel]}`);
       if (profile.smokingStatus) lines.push(`Smoking status: ${profile.smokingStatus === "never" ? "Never smoked" : profile.smokingStatus === "ex" ? "Ex-smoker" : "Current smoker"}`);

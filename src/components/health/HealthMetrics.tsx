@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { format, subMonths, subYears, parseISO, differenceInDays } from "date-fns";
 import { useWeightTracker, type BPEntry, type MeasurementEntry } from "@/hooks/useWeightTracker";
-import { useHealthProfile, idealWeightRange, ACTIVITY_LABELS, type ActivityLevel, type SmokingStatus } from "@/hooks/useHealthProfile";
+import { useHealthProfile, idealWeightRange, ACTIVITY_LABELS, resolvedAge, ageFromDob, type ActivityLevel, type SmokingStatus } from "@/hooks/useHealthProfile";
 import AiHealthAssessment from "@/components/health/AiHealthAssessment";
 import { useMeds } from "@/hooks/useMeds";
 import DogLoader from "@/components/DogLoader";
@@ -119,7 +119,7 @@ export default function HealthMetrics() {
   const [demoOpen, setDemoOpen] = useState(false);
 
   // Demographics form state
-  const [dAge, setDAge]       = useState("");
+  const [dDob, setDDob]       = useState("");
   const [dSex, setDSex]       = useState<"male" | "female" | "">(""); 
   const [dAct, setDAct]       = useState<ActivityLevel | "">("");
   const [dSmoke, setDSmoke]   = useState<SmokingStatus | "">("");
@@ -228,7 +228,7 @@ export default function HealthMetrics() {
   };
 
   const openDemo = () => {
-    setDAge(profile.age ? String(profile.age) : "");
+    setDDob(profile.dob ?? "");
     setDSex(profile.sex ?? "");
     setDAct(profile.activityLevel ?? "");
     setDSmoke(profile.smokingStatus ?? "");
@@ -239,7 +239,7 @@ export default function HealthMetrics() {
 
   const saveDemographics = async () => {
     await saveProfile({
-      age:                  dAge ? Number(dAge) : undefined,
+      dob:                  dDob || undefined,
       sex:                  dSex || undefined,
       activityLevel:        dAct || undefined,
       smokingStatus:        dSmoke || undefined,
@@ -631,13 +631,18 @@ export default function HealthMetrics() {
             <User className="w-3.5 h-3.5 text-muted-foreground" />
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Demographics</h3>
           </div>
-          <button onClick={openDemo} className="text-xs text-primary font-medium">{profile.age ? "Edit" : "Add"}</button>
+          <button onClick={openDemo} className="text-xs text-primary font-medium">{profile.dob || profile.age ? "Edit" : "Add"}</button>
         </div>
-        {!profile.age && !profile.sex ? (
+        {!profile.dob && !profile.age && !profile.sex ? (
           <p className="text-xs text-muted-foreground text-center py-4">Add your demographics for target weight calculation and better AI analysis.</p>
         ) : (
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {profile.age && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Age</p><p className="font-bold">{profile.age}</p></div>}
+            {resolvedAge(profile) !== undefined && (
+              <div className="p-2 rounded-xl bg-muted/30">
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Age</p>
+                <p className="font-bold">{resolvedAge(profile)}{profile.dob && <span className="text-[10px] font-normal text-muted-foreground ml-1">({format(parseISO(profile.dob), "d MMM yyyy")})</span>}</p>
+              </div>
+            )}
             {profile.sex && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Sex</p><p className="font-bold capitalize">{profile.sex}</p></div>}
             {profile.activityLevel && <div className="p-2 rounded-xl bg-muted/30 col-span-2"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Activity</p><p className="font-semibold leading-tight">{ACTIVITY_LABELS[profile.activityLevel]}</p></div>}
             {profile.smokingStatus && <div className="p-2 rounded-xl bg-muted/30"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Smoking</p><p className="font-bold capitalize">{profile.smokingStatus === "ex" ? "Ex-smoker" : profile.smokingStatus === "current" ? "Current smoker" : "Never"}</p></div>}
@@ -734,8 +739,11 @@ export default function HealthMetrics() {
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Age</Label>
-                <Input type="number" min="1" max="120" placeholder="e.g. 35" value={dAge} onChange={(e) => setDAge(e.target.value)} className="h-11 rounded-xl" />
+                <Label>Date of Birth</Label>
+                <Input type="date" max={new Date().toISOString().split("T")[0]} value={dDob} onChange={(e) => setDDob(e.target.value)} className="h-11 rounded-xl" />
+                {dDob && (
+                  <p className="text-[11px] text-muted-foreground">Age: {ageFromDob(dDob)} years old</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Sex</Label>

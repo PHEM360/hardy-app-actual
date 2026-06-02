@@ -223,6 +223,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Health profile - demographics & medical history per user
+    match /healthProfile/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Substance logs - per user
     match /substanceLogs/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();

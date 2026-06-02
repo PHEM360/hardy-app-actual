@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { differenceInYears, parseISO } from "date-fns";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -18,7 +19,8 @@ export const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
 
 export interface HealthProfile {
   // Demographics
-  age?: number;
+  dob?: string;          // ISO date string e.g. "1990-05-15" — age calculated from this
+  age?: number;          // kept for backwards compat, ignored when dob present
   sex?: Sex;
   activityLevel?: ActivityLevel;
   smokingStatus?: SmokingStatus;
@@ -88,4 +90,15 @@ export function estimatedTargetWeight(heightCm: number, goal: WeightGoal): numbe
   const h = heightCm / 100;
   const midBMI = goal === "lose" ? 22 : goal === "gain" ? 23 : 22;
   return +(midBMI * h * h).toFixed(1);
+}
+
+/** Calculate current age in years from an ISO date-of-birth string */
+export function ageFromDob(dob: string): number {
+  return differenceInYears(new Date(), parseISO(dob));
+}
+
+/** Get the resolved age: from dob if present, else from legacy age field */
+export function resolvedAge(profile: HealthProfile): number | undefined {
+  if (profile.dob) return ageFromDob(profile.dob);
+  return profile.age;
 }
