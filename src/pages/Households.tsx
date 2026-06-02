@@ -819,15 +819,13 @@ function ItemTile({
     <div className="relative group h-full">
       <button
         onClick={onOpen}
-        className="w-full h-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[10rem]"
+        className="relative w-full h-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[10rem]"
         style={bg?.gradient ? { background: bg.gradient } : undefined}
       >
-        {/* Large faint decorative icon */}
+        {/* Large faint decorative icon — clipped nicely by overflow-hidden */}
         {DecorIcon && (
           <DecorIcon
-            className={`absolute -bottom-3 -right-3 w-24 h-24 pointer-events-none select-none ${
-              isDark ? "text-white/[0.12]" : "text-black/[0.07]"
-            }`}
+            style={{ width: "6rem", height: "6rem", position: "absolute", bottom: "-0.75rem", right: "-0.75rem", opacity: isDark ? 0.15 : 0.09, pointerEvents: "none", color: isDark ? "#ffffff" : "#000000" }}
           />
         )}
 
