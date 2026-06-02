@@ -343,7 +343,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
           <div className="flex-1">
             <h2 className="text-base font-bold text-card-foreground">AI Health Assessment</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Powered by Gemini 2.0 Flash · 14-section analysis · UK clinical standards
+              Powered by GPT-4o Mini · 14-section analysis · UK clinical standards
             </p>
           </div>
         </div>
@@ -406,7 +406,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
         {!apiKey && (
           <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mb-3 text-xs text-amber-700">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Gemini API key not set. Go to <strong>Settings → AI Configuration</strong> to add your free key from <strong>aistudio.google.com</strong>.</span>
+            <span>OpenAI API key not set. Go to <strong>Settings → AI Configuration</strong> to add your key from <strong>platform.openai.com</strong>.</span>
           </div>
         )}
         {!hasData && (
@@ -588,7 +588,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
               <div className="py-12 text-center space-y-3">
                 <Loader2 className="w-8 h-8 text-violet-500 animate-spin mx-auto" />
                 <p className="text-sm font-semibold text-card-foreground">Analysing your health data…</p>
-                <p className="text-xs text-muted-foreground">Generating 14-section assessment with Gemini 2.0 Flash</p>
+                    <p className="text-[11px] text-muted-foreground">Generating 14-section assessment with GPT-4o Mini</p>
               </div>
             ) : (
               <>
@@ -598,7 +598,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-card-foreground">Your Health Assessment</h3>
-                    <p className="text-[11px] text-muted-foreground">Gemini 2.0 Flash · For informational purposes only</p>
+                    <p className="text-[11px] text-muted-foreground">GPT-4o Mini · For informational purposes only</p>
                   </div>
                 </div>
                 <AssessmentRenderer text={assessment} />

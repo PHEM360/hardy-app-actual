@@ -2,9 +2,9 @@ import { useEffect, useState, useCallback } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-// Stores Gemini API key in Firestore appConfig/ai
+// Stores OpenAI API key in Firestore appConfig/ai
 // Readable by any authenticated user (private family app).
-// Key is used client-side to call the Gemini REST API directly.
+// Key is used client-side to call the OpenAI REST API directly.
 
 export function useAiConfig() {
   const [apiKey, setApiKey] = useState<string>("");
@@ -12,17 +12,17 @@ export function useAiConfig() {
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "appConfig", "ai"), (snap) => {
-      setApiKey(snap.data()?.geminiKey ?? "");
+      setApiKey(snap.data()?.openaiKey ?? "");
       setLoading(false);
     });
     return unsub;
   }, []);
 
   const saveApiKey = useCallback(async (key: string) => {
-    await setDoc(doc(db, "appConfig", "ai"), { geminiKey: key.trim() }, { merge: true });
+    await setDoc(doc(db, "appConfig", "ai"), { openaiKey: key.trim() }, { merge: true });
   }, []);
 
-  // Call Gemini 1.5 Flash REST API directly from the browser.
+  // Call OpenAI Chat Completions API (gpt-4o-mini) directly from the browser.
   // Returns the text reply or throws on error.
   const callGemini = useCallback(async (
     systemPrompt: string,
@@ -31,28 +31,30 @@ export function useAiConfig() {
   ): Promise<string> => {
     if (!apiKey) throw new Error("NO_KEY");
 
-    const contents = [
-      // Include chat history as alternating user/model turns
+    const messages = [
+      { role: "system", content: systemPrompt },
       ...history.map((h) => ({
-        role: h.role,
-        parts: [{ text: h.text }],
+        role: h.role === "model" ? "assistant" : "user",
+        content: h.text,
       })),
-      { role: "user", parts: [{ text: userMessage }] },
+      { role: "user", content: userMessage },
     ];
 
     const body = {
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 512,
-      },
+      model: "gpt-4o-mini",
+      messages,
+      temperature: 0.7,
+      max_tokens: 4096,
     };
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-    );
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -60,7 +62,7 @@ export function useAiConfig() {
     }
 
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return data?.choices?.[0]?.message?.content ?? "";
   }, [apiKey]);
 
   return { apiKey, loading, saveApiKey, callGemini };

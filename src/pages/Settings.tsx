@@ -473,10 +473,10 @@ const Settings = () => {
               <Brain className="w-4 h-4 text-violet-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-card-foreground">Gemini API Key</p>
+              <p className="text-sm font-semibold text-card-foreground">OpenAI API Key</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Powers AI Health Assessment. Get a free key at{" "}
-                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">aistudio.google.com</a>
+                Powers AI Health Assessment using GPT-4o Mini. Get a key at{" "}
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">platform.openai.com</a>
               </p>
             </div>
           </div>
@@ -486,7 +486,7 @@ const Settings = () => {
                 type={showGeminiKey ? "text" : "password"}
                 value={geminiKeyInput}
                 onChange={(e) => { setGeminiKeyInput(e.target.value); setGeminiSaved(false); }}
-                placeholder="AIza…"
+                placeholder="sk-…"
                 className="h-11 rounded-xl pr-10 text-sm font-mono"
               />
               <button
