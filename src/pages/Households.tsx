@@ -628,25 +628,32 @@ function formatDaysLeft(days: number): string {
   return parts.join(" ");
 }
 
-function RenewalBadge({ days, endDate }: { days: number | null; endDate?: string }) {
+function RenewalBadge({ days, endDate, isDark }: { days: number | null; endDate?: string; isDark?: boolean }) {
   if (days === null || !endDate) return null;
-  // Format as "3 Jun 2026"
   const dateLabel = new Date(endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const label = `Renewal date: ${dateLabel}`;
   if (days < 0)
-    return <span className="text-sm font-semibold text-red-500">Expired {dateLabel}</span>;
+    return <span className="text-xs font-semibold text-red-400">Expired {dateLabel}</span>;
   if (days <= 7)
     return (
       <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-red-500 px-1.5 py-0.5 rounded-md">
-        ⚠ {dateLabel}
+        ⚠ {label}
       </span>
     );
   if (days <= 30)
     return (
       <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-amber-500 px-1.5 py-0.5 rounded-md">
-        ⚠ {dateLabel}
+        ⚠ {label}
       </span>
     );
-  return <span className="text-sm text-muted-foreground">{dateLabel}</span>;
+  return (
+    <span
+      className="text-xs font-medium"
+      style={{ color: isDark ? "rgba(255,255,255,0.75)" : undefined }}
+    >
+      {label}
+    </span>
+  );
 }
 
 // ─── Cost helpers ──────────────────────────────────────────────────────────────
@@ -825,6 +832,17 @@ function ItemTile({
   // Decorative background graphic: manual bg catalogue → auto-theme → null
   const DecorIcon = bg?.decorIcon ?? getAutoTheme(item)?.decorIcon ?? null;
 
+  // Always-readable text colours — white with shadow on dark, near-black on light
+  const titleStyle: React.CSSProperties = isDark
+    ? { color: "#ffffff", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }
+    : { color: "#111827" };
+  const subtitleStyle: React.CSSProperties = isDark
+    ? { color: "rgba(255,255,255,0.75)", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }
+    : { color: "#6b7280" };
+  const priceStyle: React.CSSProperties = isDark
+    ? { color: "#ffffff", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }
+    : { color: "#111827" };
+
   return (
     <div className="relative group h-full">
       <button
@@ -846,10 +864,10 @@ function ItemTile({
 
         {/* Main content — grows to fill available space */}
         <div className="flex-1 flex flex-col gap-0.5 mt-2 min-w-0 relative z-10">
-          <div className={`font-semibold text-base leading-snug line-clamp-2 ${isDark ? "text-white" : ""}`}>
+          <div className="font-semibold text-base leading-snug line-clamp-2" style={titleStyle}>
             {item.type}
           </div>
-          <div className={`text-sm truncate ${isDark ? "text-white/70" : "text-muted-foreground"}`}>
+          <div className="text-sm truncate" style={subtitleStyle}>
             {item.provider}
           </div>
         </div>
@@ -857,9 +875,9 @@ function ItemTile({
         {/* Footer — always at bottom */}
         <div className="flex flex-col gap-1 mt-2 shrink-0 relative z-10">
           {costStr && (
-            <div className={`text-sm font-bold ${isDark ? "text-white" : ""}`}>{costStr}</div>
+            <div className="text-sm font-bold" style={priceStyle}>{costStr}</div>
           )}
-          <RenewalBadge days={days} endDate={item.endDate} />
+          <RenewalBadge days={days} endDate={item.endDate} isDark={isDark} />
         </div>
 
         {/* Floating micro-indicators */}
