@@ -228,6 +228,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // App-wide config (e.g. Gemini API key) - readable/writable by any authenticated user
+    match /appConfig/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
     // Substance logs - per user
     match /substanceLogs/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
