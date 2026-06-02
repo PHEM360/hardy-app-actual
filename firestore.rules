@@ -123,6 +123,17 @@ service cloud.firestore {
     match /weightTracker/{userId}/bloodPressure/{entryId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
+    match /weightTracker/{userId}/measurements/{entryId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Medications - per user
+    match /medications/{userId}/meds/{medId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+    match /medications/{userId}/logs/{logId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
 
     // Notifications - per user
     match /notifications/{userId}/items/{notifId} {

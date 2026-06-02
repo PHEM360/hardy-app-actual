@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   HeartPulse, Plus, TrendingDown, TrendingUp, Ruler, Syringe,
-  Table2, LineChart as LineChartIcon, Activity, User,
+  Table2, LineChart as LineChartIcon, Activity, User, Trash2, Edit2, Check, X,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -110,6 +110,7 @@ export default function HealthMetrics() {
   const {
     entries, heightEntries, botoxRecords, bpEntries, measurements, loading,
     addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry,
+    deleteEntry, updateEntry,
   } = useWeightTracker();
   const { medications } = useMeds();
   const { profile, saveProfile } = useHealthProfile();
@@ -130,7 +131,11 @@ export default function HealthMetrics() {
   const [newWeight, setNewWeight]         = useState("");
   const [newWeightDate, setNewWeightDate] = useState(new Date().toISOString().split("T")[0]);
   const [weightPeriod, setWeightPeriod]   = useState<Period>("3m");
-  const [weightView, setWeightView]       = useState<"chart" | "table">("chart");
+  const [weightView, setWeightView]       = useState<"chart" | "table">("table");
+  // Weight edit/delete
+  const [editWeightId, setEditWeightId]   = useState<string | null>(null);
+  const [editWeightVal, setEditWeightVal] = useState("");
+  const [editWeightDate, setEditWeightDate] = useState("");
 
   // Height
   const [heightOpen, setHeightOpen] = useState(false);
@@ -462,18 +467,59 @@ export default function HealthMetrics() {
                 <th className="text-left px-3 py-2 text-muted-foreground font-medium">Date</th>
                 <th className="text-right px-3 py-2 text-muted-foreground font-medium">Weight</th>
                 <th className="text-right px-3 py-2 text-muted-foreground font-medium">Change</th>
+                <th className="px-2 py-2"></th>
               </tr></thead>
               <tbody className="divide-y divide-border/30">
                 {[...filteredWeight].reverse().map((e, i, arr) => {
                   const prev = arr[i + 1];
                   const diff = prev ? e.weight - prev.weight : null;
+                  const isEditing = editWeightId === e.id;
                   return (
                     <tr key={e.id} className="hover:bg-muted/20">
-                      <td className="px-3 py-2 text-muted-foreground">{format(parseISO(e.date), "d MMM yyyy")}</td>
-                      <td className="px-3 py-2 text-right font-bold font-display">{e.weight} kg</td>
-                      <td className={`px-3 py-2 text-right font-semibold ${diff === null ? "" : diff < 0 ? "text-green-600" : diff > 0 ? "text-red-500" : "text-muted-foreground"}`}>
-                        {diff === null ? "—" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} kg`}
-                      </td>
+                      {isEditing ? (
+                        <>
+                          <td className="px-2 py-1.5">
+                            <input type="date" value={editWeightDate} onChange={(ev) => setEditWeightDate(ev.target.value)}
+                              className="w-full text-xs h-8 px-2 rounded-lg border border-border bg-background" />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input type="number" step="0.1" value={editWeightVal} onChange={(ev) => setEditWeightVal(ev.target.value)}
+                              className="w-full text-xs h-8 px-2 rounded-lg border border-border bg-background text-right" />
+                          </td>
+                          <td className="px-2 py-1.5" />
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button onClick={async () => { await updateEntry(e.id, parseFloat(editWeightVal), editWeightDate); setEditWeightId(null); }}
+                                className="p-1 rounded-md bg-green-500 text-white hover:bg-green-600">
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => setEditWeightId(null)} className="p-1 rounded-md bg-muted text-muted-foreground hover:bg-muted/80">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2 text-muted-foreground">{format(parseISO(e.date), "d MMM yyyy")}</td>
+                          <td className="px-3 py-2 text-right font-bold font-display">{e.weight} kg</td>
+                          <td className={`px-3 py-2 text-right font-semibold ${diff === null ? "" : diff < 0 ? "text-green-600" : diff > 0 ? "text-red-500" : "text-muted-foreground"}`}>
+                            {diff === null ? "—" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} kg`}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button onClick={() => { setEditWeightId(e.id); setEditWeightVal(String(e.weight)); setEditWeightDate(e.date); }}
+                                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted">
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => deleteEntry(e.id)}
+                                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}

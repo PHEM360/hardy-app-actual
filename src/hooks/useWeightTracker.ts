@@ -6,6 +6,9 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  deleteDoc,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -177,5 +180,21 @@ export function useWeightTracker() {
     [user]
   );
 
-  return { entries, heightEntries, botoxRecords, bpEntries, measurements, loading, addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry };
+  const deleteEntry = useCallback(
+    async (id: string) => {
+      if (!user) return;
+      await deleteDoc(doc(db, "weightTracker", user.uid, "entries", id));
+    },
+    [user]
+  );
+
+  const updateEntry = useCallback(
+    async (id: string, weight: number, date: string) => {
+      if (!user) return;
+      await updateDoc(doc(db, "weightTracker", user.uid, "entries", id), { weight, date });
+    },
+    [user]
+  );
+
+  return { entries, heightEntries, botoxRecords, bpEntries, measurements, loading, addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry, deleteEntry, updateEntry };
 }
