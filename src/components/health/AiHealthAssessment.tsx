@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Loader2, AlertCircle, ChevronDown, ChevronUp, Sparkles, Activity, Scale, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAiConfig } from "@/hooks/useAiConfig";
+import { differenceInDays, startOfDay, parseISO } from "date-fns";
 import type { WeightEntry, HeightEntry, BPEntry, MeasurementEntry } from "@/hooks/useWeightTracker";
 import type { Medication } from "@/hooks/useMeds";
 import type { HealthProfile } from "@/hooks/useHealthProfile";
 import { ACTIVITY_LABELS } from "@/hooks/useHealthProfile";
+import type { SubstanceLog } from "@/hooks/useSubstances";
 
 interface Props {
   entries: WeightEntry[];
@@ -15,6 +17,7 @@ interface Props {
   measurements: MeasurementEntry[];
   medications: Medication[];
   profile?: HealthProfile;
+  substanceLogs?: SubstanceLog[];
 }
 
 function bmiLabel(bmi: number): string {
@@ -32,7 +35,7 @@ function bpRiskLabel(sys: number, dia: number): string {
   return "High Stage 2 — medical attention advised";
 }
 
-export default function AiHealthAssessment({ entries, heightEntries, bpEntries, measurements, medications, profile }: Props) {
+export default function AiHealthAssessment({ entries, heightEntries, bpEntries, measurements, medications, profile, substanceLogs }: Props) {
   const { callGemini, loading: keyLoading, apiKey } = useAiConfig();
   const [assessment, setAssessment] = useState<string>("");
   const [running, setRunning] = useState(false);
@@ -116,8 +119,25 @@ export default function AiHealthAssessment({ entries, heightEntries, bpEntries, 
       if (profile.otherNotes)             lines.push(`Other notes: ${profile.otherNotes}`);
     }
 
+    // --- Substances ---
+    if (substanceLogs && substanceLogs.length > 0) {
+      const now = startOfDay(new Date());
+      const bySubstance = new Map<string, SubstanceLog[]>();
+      substanceLogs.forEach((l) => {
+        if (!bySubstance.has(l.name)) bySubstance.set(l.name, []);
+        bySubstance.get(l.name)!.push(l);
+      });
+      const substanceLines: string[] = [];
+      bySubstance.forEach((subLogs, name) => {
+        const sorted = [...subLogs].sort((a, b) => b.date.localeCompare(a.date));
+        const daysSince = differenceInDays(now, startOfDay(parseISO(sorted[0].date)));
+        substanceLines.push(`${name}: last used ${daysSince} day(s) ago (${sorted[0].dose} ${sorted[0].unit}), ${sorted.length} total recorded dose(s)`);
+      });
+      lines.push(`Tracked substance use: ${substanceLines.join("; ")}`);
+    }
+
     return lines.join("\n");
-  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries, profile]);
+  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries, profile, substanceLogs]);
 
   const run = async () => {
     setRunning(true);
@@ -149,8 +169,8 @@ Based on the modifiable risk factors present, estimate whether current lifestyle
 **7. Key Risk Factors Ranked**
 Number each risk factor, ranked from most to least serious. Brief explanation for each.
 
-**8. Medication Analysis**
-Review current medications in context of health data. Note any relevant cardiovascular/metabolic considerations or potential interactions. If no medications, say so.
+**8. Medication & Substance Analysis**
+Review current medications in context of health data. If substance use data is provided, include relevant health considerations (e.g. cardiovascular impact, interaction with medications, frequency patterns). Note any concerns. If no medications or substances, say so.
 
 **9. Positive Indicators**
 What is already good — celebrate wins, note protective factors.

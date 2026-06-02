@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  collection, doc, onSnapshot, addDoc, getDocs,
-  setDoc, getDoc, serverTimestamp, query, orderBy, deleteDoc,
+  collection, doc, onSnapshot, addDoc,
+  setDoc, serverTimestamp, query, orderBy, deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -19,8 +19,9 @@ export interface SubstanceLog {
 }
 
 interface SubstanceConfig {
-  totpSecret?: string;       // base32 secret for TOTP
+  totpSecret?: string;
   totpSetupComplete?: boolean;
+  substanceNames?: string[];   // list of tracked substance names
 }
 
 export function useSubstances() {
@@ -43,7 +44,7 @@ export function useSubstances() {
     return unsub;
   }, [user?.uid]);
 
-  // Subscribe to config (TOTP secret)
+  // Subscribe to config (TOTP secret + substance names)
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, "substancesConfig", user.uid), (snap) => {
@@ -65,7 +66,7 @@ export function useSubstances() {
       secret: new OTPAuth.Secret({ size: 20 }),
     });
     const secret = totp.secret.base32;
-    const uri = totp.toString();   // otpauth:// URI
+    const uri = totp.toString();
     await setDoc(doc(db, "substancesConfig", user.uid), {
       totpSecret: secret,
       totpSetupComplete: false,
@@ -98,6 +99,25 @@ export function useSubstances() {
     await deleteDoc(doc(db, "substancesConfig", user.uid));
   }, [user]);
 
+  /** Add a substance name to the tracked list */
+  const addSubstanceName = useCallback(async (name: string) => {
+    if (!user) return;
+    const current = config.substanceNames ?? [];
+    if (current.includes(name)) return;
+    await setDoc(doc(db, "substancesConfig", user.uid), {
+      substanceNames: [...current, name],
+    }, { merge: true });
+  }, [user, config.substanceNames]);
+
+  /** Remove a substance name from the tracked list */
+  const removeSubstanceName = useCallback(async (name: string) => {
+    if (!user) return;
+    const current = config.substanceNames ?? [];
+    await setDoc(doc(db, "substancesConfig", user.uid), {
+      substanceNames: current.filter((n) => n !== name),
+    }, { merge: true });
+  }, [user, config.substanceNames]);
+
   /** Log a substance use */
   const addLog = useCallback(async (entry: Omit<SubstanceLog, "id" | "createdAt">) => {
     if (!user) return;
@@ -115,9 +135,14 @@ export function useSubstances() {
 
   const isTotpConfigured = Boolean(config.totpSecret && config.totpSetupComplete);
   const latestLog = logs[0] ?? null;
+  const substanceNames: string[] = config.substanceNames ?? [];
 
   return {
-    logs, loading, config, isTotpConfigured, latestLog,
-    setupTotp, confirmTotpSetup, verifyTotp, resetTotp, addLog, deleteLog,
+    logs, loading, config, isTotpConfigured, latestLog, substanceNames,
+    setupTotp, confirmTotpSetup, verifyTotp, resetTotp,
+    addLog, deleteLog, addSubstanceName, removeSubstanceName,
   };
 }
+
+
+
