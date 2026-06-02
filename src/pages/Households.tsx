@@ -133,6 +133,7 @@ interface TileBgDef {
   label: string;
   gradient: string;   // CSS background value
   dark?: boolean;     // true → white text on tile
+  decorIcon?: React.ComponentType<{ className?: string }>; // large faint bg graphic
 }
 
 const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
@@ -310,6 +311,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#0c4a6e 0%,#0369a1 35%,#0ea5e9 65%,#38bdf8 100%)",
+      decorIcon: Droplets,
     },
   },
   {
@@ -319,6 +321,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#78350f 0%,#b45309 35%,#f59e0b 70%,#fcd34d 100%)",
+      decorIcon: Flame,
     },
   },
   {
@@ -328,6 +331,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e1b4b 0%,#3730a3 40%,#6366f1 70%,#a5b4fc 100%)",
+      decorIcon: Zap,
     },
   },
   {
@@ -337,6 +341,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#134e4a 0%,#0d9488 40%,#2dd4bf 70%,#99f6e4 100%)",
+      decorIcon: Wifi,
     },
   },
   {
@@ -346,6 +351,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#4a044e 0%,#7e22ce 40%,#a855f7 70%,#d8b4fe 100%)",
+      decorIcon: Smartphone,
     },
   },
   {
@@ -355,6 +361,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: false,
       gradient:
         "linear-gradient(135deg,#f0f9ff 0%,#bae6fd 50%,#7dd3fc 100%)",
+      decorIcon: Phone,
     },
   },
   // ── Insurance / protection ─────────────────────────────────────────────────
@@ -365,6 +372,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e3a8a 0%,#2563eb 40%,#60a5fa 70%,#93c5fd 100%)",
+      decorIcon: ShieldCheck,
     },
   },
   {
@@ -374,6 +382,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e293b 0%,#475569 40%,#94a3b8 70%,#cbd5e1 100%)",
+      decorIcon: Car,
     },
   },
   {
@@ -383,6 +392,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#9f1239 0%,#e11d48 40%,#fb7185 70%,#fecdd3 100%)",
+      decorIcon: Heart,
     },
   },
   {
@@ -392,6 +402,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: false,
       gradient:
         "linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 70%,#fcd34d 100%)",
+      decorIcon: PawPrint,
     },
   },
   {
@@ -401,6 +412,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#052e16 0%,#166534 40%,#16a34a 70%,#4ade80 100%)",
+      decorIcon: Stethoscope,
     },
   },
   {
@@ -410,6 +422,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#082f49 0%,#0c4a6e 40%,#0369a1 70%,#38bdf8 100%)",
+      decorIcon: Umbrella,
     },
   },
   {
@@ -419,6 +432,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#172554 0%,#1e3a8a 40%,#2563eb 70%,#93c5fd 100%)",
+      decorIcon: Shield,
     },
   },
   // ── Finance / home ──────────────────────────────────────────────────────────
@@ -429,6 +443,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#052e16 0%,#14532d 40%,#16a34a 70%,#86efac 100%)",
+      decorIcon: Landmark,
     },
   },
   {
@@ -438,6 +453,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#2e1065 0%,#5b21b6 40%,#8b5cf6 70%,#c4b5fd 100%)",
+      decorIcon: Building2,
     },
   },
   {
@@ -447,6 +463,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#78350f 0%,#b45309 40%,#d97706 70%,#fcd34d 100%)",
+      decorIcon: Key,
     },
   },
   // ── Entertainment / subscriptions ──────────────────────────────────────────
@@ -457,6 +474,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1a0000 0%,#7f1d1d 40%,#b91c1c 70%,#ef4444 100%)",
+      decorIcon: Film,
     },
   },
   {
@@ -466,6 +484,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e1b4b 0%,#1d4ed8 40%,#3b82f6 70%,#93c5fd 100%)",
+      decorIcon: Film,
     },
   },
   {
@@ -475,6 +494,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#064e3b 0%,#065f46 40%,#059669 70%,#6ee7b7 100%)",
+      decorIcon: Music,
     },
   },
   {
@@ -484,6 +504,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#082f49 0%,#0c4a6e 40%,#1d4ed8 70%,#60a5fa 100%)",
+      decorIcon: ShoppingCart,
     },
   },
   {
@@ -493,6 +514,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#0f172a 0%,#1e293b 40%,#334155 70%,#64748b 100%)",
+      decorIcon: Tv,
     },
   },
   {
@@ -502,6 +524,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e1b4b 0%,#312e81 40%,#4c1d95 70%,#7c3aed 100%)",
+      decorIcon: Tv,
     },
   },
   {
@@ -511,6 +534,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#0f4c81 0%,#1e6091 40%,#2e86c1 70%,#85c1e9 100%)",
+      decorIcon: Dumbbell,
     },
   },
   {
@@ -520,6 +544,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1a0533 0%,#6d28d9 50%,#8b5cf6 100%)",
+      decorIcon: Gamepad2,
     },
   },
   // ── Pets ───────────────────────────────────────────────────────────────────
@@ -530,6 +555,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: false,
       gradient:
         "linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 70%,#fcd34d 100%)",
+      decorIcon: PawPrint,
     },
   },
   // ── Transport ──────────────────────────────────────────────────────────────
@@ -540,6 +566,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1e293b 0%,#334155 40%,#64748b 70%,#94a3b8 100%)",
+      decorIcon: Car,
     },
   },
   {
@@ -549,6 +576,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#1d4ed8 0%,#2563eb 40%,#3b82f6 70%,#93c5fd 100%)",
+      decorIcon: Train,
     },
   },
   {
@@ -558,6 +586,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: true,
       gradient:
         "linear-gradient(160deg,#0284c7 0%,#0ea5e9 40%,#38bdf8 70%,#bae6fd 100%)",
+      decorIcon: Plane,
     },
   },
   // ── Home ───────────────────────────────────────────────────────────────────
@@ -568,6 +597,7 @@ const AUTO_THEME_RULES: Array<{ keywords: string[]; bg: TileBgDef }> = [
       dark: false,
       gradient:
         "linear-gradient(135deg,#fffbf7 0%,#fed7aa 50%,#fb923c 100%)",
+      decorIcon: Home,
     },
   },
 ];
@@ -782,6 +812,9 @@ function ItemTile({
   const iconBg = isDark ? "bg-white/15" : color;
   const iconColor = isDark ? "text-white" : "";
 
+  // Decorative background graphic: manual bg catalogue → auto-theme → null
+  const DecorIcon = bg?.decorIcon ?? null;
+
   return (
     <div className="relative group h-full">
       <button
@@ -789,13 +822,22 @@ function ItemTile({
         className="w-full h-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[10rem]"
         style={bg?.gradient ? { background: bg.gradient } : undefined}
       >
+        {/* Large faint decorative icon */}
+        {DecorIcon && (
+          <DecorIcon
+            className={`absolute -bottom-3 -right-3 w-24 h-24 pointer-events-none select-none ${
+              isDark ? "text-white/[0.12]" : "text-black/[0.07]"
+            }`}
+          />
+        )}
+
         {/* Icon badge — always same size */}
-        <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${iconBg}`}>
+        <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${iconBg} relative z-10`}>
           <TileIcon className={`w-5 h-5 ${iconColor}`} />
         </div>
 
         {/* Main content — grows to fill available space */}
-        <div className="flex-1 flex flex-col gap-0.5 mt-2 min-w-0">
+        <div className="flex-1 flex flex-col gap-0.5 mt-2 min-w-0 relative z-10">
           <div className={`font-medium text-sm leading-snug line-clamp-2 ${isDark ? "text-white" : ""}`}>
             {item.type}
           </div>
@@ -805,7 +847,7 @@ function ItemTile({
         </div>
 
         {/* Footer — always at bottom */}
-        <div className="flex flex-col gap-1 mt-2 shrink-0">
+        <div className="flex flex-col gap-1 mt-2 shrink-0 relative z-10">
           {costStr && (
             <div className={`text-xs font-semibold ${isDark ? "text-white/90" : ""}`}>{costStr}</div>
           )}
