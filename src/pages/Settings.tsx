@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut, GripVertical, X } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
+import { useAiConfig } from "@/hooks/useAiConfig";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -106,6 +107,14 @@ const Settings = () => {
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
   const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
+
+  // AI Configuration
+  const { apiKey: savedApiKey, saveApiKey } = useAiConfig();
+  const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiSaving, setGeminiSaving] = useState(false);
+  const [geminiSaved, setGeminiSaved] = useState(false);
+  useEffect(() => { if (savedApiKey) setGeminiKeyInput(savedApiKey); }, [savedApiKey]);
 
   // Populate from Firestore profile once loaded
   useEffect(() => {
@@ -452,6 +461,63 @@ const Settings = () => {
             </div>
             <Switch checked={darkMode} onCheckedChange={setDarkMode} />
           </div>
+        </div>
+      </div>
+
+      {/* AI Configuration */}
+      <div className="mb-5">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">AI Configuration</h3>
+        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-violet-500/15 flex-shrink-0">
+              <Brain className="w-4 h-4 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Gemini API Key</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Powers AI Health Assessment. Get a free key at{" "}
+                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">aistudio.google.com</a>
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="relative">
+              <Input
+                type={showGeminiKey ? "text" : "password"}
+                value={geminiKeyInput}
+                onChange={(e) => { setGeminiKeyInput(e.target.value); setGeminiSaved(false); }}
+                placeholder="AIza…"
+                className="h-11 rounded-xl pr-10 text-sm font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGeminiKey((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Button
+              onClick={async () => {
+                setGeminiSaving(true);
+                await saveApiKey(geminiKeyInput.trim());
+                setGeminiSaving(false);
+                setGeminiSaved(true);
+                setTimeout(() => setGeminiSaved(false), 3000);
+              }}
+              disabled={geminiSaving || !geminiKeyInput.trim()}
+              className="w-full h-10 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm gap-2"
+            >
+              {geminiSaved
+                ? <><CheckCircle2 className="w-4 h-4" />Key saved</>
+                : geminiSaving ? "Saving…" : "Save API Key"}
+            </Button>
+          </div>
+          {savedApiKey && (
+            <p className="text-[11px] text-green-600 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3" /> API key is configured · AI Health Assessment is enabled
+            </p>
+          )}
         </div>
       </div>
 

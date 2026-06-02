@@ -212,7 +212,7 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
   const [dose, setDose]   = useState("");
   const [unit, setUnit]   = useState("mg");
   const [date, setDate]   = useState(new Date().toISOString().split("T")[0]);
-  const [time, setTime]   = useState(new Date().toTimeString().slice(0, 5));
+  const [time, setTime]   = useState("morning");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -228,7 +228,7 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
     setLogSubstance(substanceName ?? (allSubstanceNames[0] ?? ""));
     setDose(""); setUnit("mg");
     setDate(new Date().toISOString().split("T")[0]);
-    setTime(new Date().toTimeString().slice(0, 5));
+    setTime("morning");
     setNotes("");
     setLogOpen(true);
   };
@@ -506,8 +506,16 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label>Time</Label>
-                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11 rounded-xl" />
+                <Label>Time of day</Label>
+                <Select value={time} onValueChange={setTime}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="morning">Morning</SelectItem>
+                    <SelectItem value="midday">Midday</SelectItem>
+                    <SelectItem value="evening">Evening</SelectItem>
+                    <SelectItem value="night">Night</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-1.5">
