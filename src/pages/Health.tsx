@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock } from "lucide-react";
+import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import HealthMetrics from "@/components/health/HealthMetrics";
 import HealthMeds from "@/components/health/HealthMeds";
 import HealthSubstances from "@/components/health/HealthSubstances";
 import HealthCustomTab from "@/components/health/HealthCustomTab";
+import AiHealthAssessment from "@/components/health/AiHealthAssessment";
 import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { useMeds } from "@/hooks/useMeds";
 import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
@@ -20,7 +21,7 @@ import { format, parseISO } from "date-fns";
 const EMOJIS = ["🧘", "🍷", "💊", "🚭", "🍕", "😴", "🏃", "❤️", "🧠", "⚡", "🌿", "🌊", "🎯", "💪", "✨"];
 const COLORS  = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
 
-type CoreTab = "overview" | "metrics" | "meds" | "substances";
+type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai";
 
 export default function Health() {
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker();
@@ -62,6 +63,7 @@ export default function Health() {
     { id: "metrics",     label: "Weight & Stats",  icon: <Activity className="w-4 h-4" /> },
     { id: "meds",        label: "Medications",     icon: <Pill className="w-4 h-4" /> },
     { id: "substances",  label: "Substances",      icon: <FlaskConical className="w-4 h-4" /> },
+    { id: "ai",          label: "AI Analysis",     icon: <Brain className="w-4 h-4" /> },
   ];
 
   const activeCustomTab = tabs.find((t) => t.id === activeTab);
@@ -283,6 +285,16 @@ export default function Health() {
           {activeTab === "metrics" && <HealthMetrics />}
           {activeTab === "meds"    && <HealthMeds />}
           {activeTab === "substances" && <HealthSubstances />}
+          {activeTab === "ai" && (
+            <AiHealthAssessment
+              entries={entries}
+              heightEntries={heightEntries}
+              bpEntries={bpEntries}
+              measurements={measurements}
+              medications={medications}
+              profile={profile}
+            />
+          )}
 
           {activeCustomTab && (
             <div>

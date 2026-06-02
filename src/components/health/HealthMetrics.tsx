@@ -18,7 +18,6 @@ import { Switch } from "@/components/ui/switch";
 import { format, subMonths, subYears, parseISO, differenceInDays } from "date-fns";
 import { useWeightTracker, type BPEntry, type MeasurementEntry } from "@/hooks/useWeightTracker";
 import { useHealthProfile, idealWeightRange, ACTIVITY_LABELS, resolvedAge, ageFromDob, type ActivityLevel, type SmokingStatus } from "@/hooks/useHealthProfile";
-import AiHealthAssessment from "@/components/health/AiHealthAssessment";
 import { useMeds } from "@/hooks/useMeds";
 import DogLoader from "@/components/DogLoader";
 
@@ -650,16 +649,6 @@ export default function HealthMetrics() {
           </div>
         )}
       </div>
-
-      {/* ── AI Health Assessment ── */}
-      <AiHealthAssessment
-        entries={entries}
-        heightEntries={heightEntries}
-        bpEntries={bpEntries}
-        measurements={measurements}
-        medications={medications}
-        profile={profile}
-      />
 
       {/* ── Dialogs ── */}
       <Dialog open={weightOpen} onOpenChange={setWeightOpen}>
