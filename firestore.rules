@@ -241,6 +241,14 @@ service cloud.firestore {
       }
     }
 
+    // Cameras - per user
+    match /cameras/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      match /list/{camId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

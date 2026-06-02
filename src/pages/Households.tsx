@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
+import CamerasSection from "@/components/household/CamerasSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +108,7 @@ import {
   Sun,
   Cloud,
   Dumbbell,
+  Video,
 } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -1573,6 +1575,7 @@ export default function Households() {
   const [editItem, setEditItem] = useState<Omit<HouseholdItem, "id" | "createdAt"> | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HouseholdItem | null>(null);
+  const [activeTab, setActiveTab] = useState<"items" | "cameras">("items");
 
   useEffect(() => {
     if (!loading) checkAndScheduleAll(items);
@@ -1652,17 +1655,46 @@ export default function Households() {
   return (
     <FeaturePageShell title={profile?.householdIds?.[0] || profile?.householdId || "Household"} subtitle="Manage household items, policies & renewals">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <Button size="sm" className="rounded-full" onClick={openAdd}>
-          <Plus className="w-4 h-4 mr-1" /> Add Item
-        </Button>
+      <div className="flex items-center justify-between mb-4">
+        {activeTab === "items" ? (
+          <Button size="sm" className="rounded-full" onClick={openAdd}>
+            <Plus className="w-4 h-4 mr-1" /> Add Item
+          </Button>
+        ) : (
+          <div />
+        )}
         <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setSettingsOpen(true)}>
           <Settings className="w-4 h-4" />
           <span className="hidden sm:inline">Settings</span>
         </Button>
       </div>
 
-      {/* Items */}
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 p-1 bg-muted/40 rounded-2xl">
+        <button
+          onClick={() => setActiveTab("items")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "items"
+              ? "bg-background text-foreground shadow-soft"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Home className="w-4 h-4" /> Items
+        </button>
+        <button
+          onClick={() => setActiveTab("cameras")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "cameras"
+              ? "bg-background text-foreground shadow-soft"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Video className="w-4 h-4" /> Cameras
+        </button>
+      </div>
+
+      {/* Items tab */}
+      {activeTab === "items" && (
       <div className="space-y-8">
         <section className="space-y-3">
           {items.length === 0 ? (
@@ -1696,6 +1728,10 @@ export default function Households() {
 
         {items.length > 0 && <SummaryCard items={items} members={effectiveMembers} />}
       </div>
+      )}
+
+      {/* Cameras tab */}
+      {activeTab === "cameras" && <CamerasSection />}
 
       {/* Settings sheet */}
       <SettingsSheet
