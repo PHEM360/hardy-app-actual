@@ -1320,6 +1320,32 @@ function AddEditDialog({
           {/* Documents */}
           <div className="space-y-2">
             <Label>Documents / Photos</Label>
+
+            {/* Existing documents */}
+            {(form.documents ?? []).length > 0 && (
+              <div className="space-y-1.5">
+                {(form.documents ?? []).map((url, i) => {
+                  const isImg = /\.(jpg|jpeg|png|gif|webp|heic)/i.test(url) || url.includes("image%2F");
+                  const name = decodeURIComponent(url.split("/").pop()?.split("?")[0] ?? `File ${i + 1}`).replace(/^\d+_/, "");
+                  return (
+                    <div key={url} className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2 text-sm">
+                      {isImg
+                        ? <img src={url} alt={name} className="w-8 h-8 rounded-lg object-cover shrink-0 border" />
+                        : <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                      }
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary underline-offset-2 hover:underline">
+                        {name}
+                      </a>
+                      <button onClick={() => removeDocument(url)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Upload buttons — always visible so more files can be added */}
             <div className="flex gap-2">
               {/* File picker */}
               <input
@@ -1330,7 +1356,7 @@ function AddEditDialog({
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files)}
               />
-              {/* Camera capture — rear camera, routed through document scanner */}
+              {/* Camera capture */}
               <input
                 ref={cameraInputRef}
                 type="file"
@@ -1349,22 +1375,22 @@ function AddEditDialog({
                 variant="outline"
                 size="sm"
                 className="rounded-xl flex-1 gap-1.5"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => { if (fileInputRef.current) { fileInputRef.current.value = ""; fileInputRef.current.click(); } }}
                 disabled={uploading}
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-                Attach File
+                {(form.documents ?? []).length > 0 ? "Add another file" : "Attach file"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="rounded-xl flex-1 gap-1.5"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => { if (cameraInputRef.current) { cameraInputRef.current.value = ""; cameraInputRef.current.click(); } }}
                 disabled={uploading}
               >
                 <Camera className="w-4 h-4" />
-                Take Photo
+                {(form.documents ?? []).length > 0 ? "Add another photo" : "Take photo"}
               </Button>
             </div>
 
@@ -1383,27 +1409,6 @@ function AddEditDialog({
               }}
               onCancel={() => setScannerFile(null)}
             />
-
-            {/* Existing documents */}
-            {(form.documents ?? []).length > 0 && (
-              <div className="space-y-1.5">
-                {(form.documents ?? []).map((url, i) => {
-                  const isPdf = url.toLowerCase().includes(".pdf") || url.toLowerCase().includes("application%2Fpdf");
-                  const name = decodeURIComponent(url.split("/").pop()?.split("?")[0] ?? `File ${i + 1}`).replace(/^\d+_/, "");
-                  return (
-                    <div key={url} className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2 text-sm">
-                      <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary underline-offset-2 hover:underline">
-                        {name}
-                      </a>
-                      <button onClick={() => removeDocument(url)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {/* Reminders */}
