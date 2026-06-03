@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import CamerasSection from "@/components/household/CamerasSection";
+import DocumentsSection from "@/components/household/DocumentsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1925,7 +1926,7 @@ export default function Households() {
   const [editItem, setEditItem] = useState<Omit<HouseholdItem, "id" | "createdAt"> | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HouseholdItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"items" | "cameras">("items");
+  const [activeTab, setActiveTab] = useState<"items" | "cameras" | "documents">("items");
 
   useEffect(() => {
     if (!loading) {
@@ -2059,6 +2060,16 @@ export default function Households() {
         >
           <Video className="w-4 h-4" /> Cameras
         </button>
+        <button
+          onClick={() => setActiveTab("documents")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "documents"
+              ? "bg-background text-foreground shadow-soft"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <FileText className="w-4 h-4" /> Docs
+        </button>
       </div>
 
       {/* Items tab */}
@@ -2138,6 +2149,9 @@ export default function Households() {
 
       {/* Cameras tab */}
       {activeTab === "cameras" && <CamerasSection />}
+
+      {/* Documents tab */}
+      {activeTab === "documents" && <DocumentsSection />}
 
       {/* Settings sheet */}
       <SettingsSheet

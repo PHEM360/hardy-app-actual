@@ -16,6 +16,7 @@ import {
   HouseholdItem,
   HouseholdSettings,
   DEFAULT_HOUSEHOLD_SETTINGS,
+  HouseholdDocument,
 } from "@/types/app";
 
 // ─── Items ────────────────────────────────────────────────────────────────────
@@ -112,4 +113,56 @@ export function useHouseholdSettings() {
   );
 
   return { settings, loading, saveSettings };
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
+export function useHouseholdDocuments() {
+  const [documents, setDocuments] = useState<HouseholdDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    const col = collection(db, "household", uid, "documents");
+    const unsub = onSnapshot(col, (snap) => {
+      setDocuments(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as HouseholdDocument) }))
+      );
+      setLoading(false);
+    });
+    return unsub;
+  }, [uid]);
+
+  const addDocument = useCallback(async (doc_: Omit<HouseholdDocument, "id">) => {
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
+    await addDoc(collection(db, "household", currentUid, "documents"), {
+      ...doc_,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }, []);
+
+  const updateDocument = useCallback(async (id: string, data: Partial<HouseholdDocument>) => {
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
+    await updateDoc(doc(db, "household", currentUid, "documents", id), {
+      ...data,
+      updatedAt: serverTimestamp(),
+    } as Record<string, unknown>);
+  }, []);
+
+  const deleteDocument = useCallback(async (id: string) => {
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
+    await deleteDoc(doc(db, "household", currentUid, "documents", id));
+  }, []);
+
+  return { documents, loading, addDocument, updateDocument, deleteDocument };
 }

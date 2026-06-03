@@ -249,6 +249,11 @@ service cloud.firestore {
       }
     }
 
+    // Household documents - per user
+    match /household/{userId}/documents/{docId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

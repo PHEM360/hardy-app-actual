@@ -404,6 +404,30 @@ export interface HouseholdSettings {
   categories: string[];        // customisable list of item types
 }
 
+// ─── Household Documents ──────────────────────────────────────────────────────
+
+export type HouseholdDocCategory =
+  | "receipt"
+  | "warranty"
+  | "certificate"
+  | "manual"
+  | "insurance"
+  | "contract"
+  | "other";
+
+export interface HouseholdDocument {
+  id?: string;
+  name: string;
+  category: HouseholdDocCategory;
+  notes?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;   // MIME type e.g. "image/jpeg", "application/pdf"
+  fileSize?: number;   // bytes
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = {
   members: [],
   categories: [
