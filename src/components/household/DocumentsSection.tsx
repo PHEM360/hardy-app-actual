@@ -94,6 +94,11 @@ interface DocFormData {
   notes: string;
 }
 
+interface PendingFile {
+  file: File;
+  preview: string | null; // object URL for images
+}
+
 function AddEditSheet({
   open,
   existing,
@@ -103,17 +108,16 @@ function AddEditSheet({
   open: boolean;
   existing: HouseholdDocument | null;
   onClose: () => void;
-  onSave: (data: DocFormData, file: File | null) => Promise<void>;
+  onSave: (data: DocFormData, files: File[]) => Promise<void>;
 }) {
   const [form, setForm] = useState<DocFormData>({
     name: existing?.name ?? "",
     category: existing?.category ?? "other",
     notes: existing?.notes ?? "",
   });
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [saving, setSaving] = useState(false);
-  const [savedName, setSavedName] = useState<string | null>(null); // triggers "add another?" screen
+  const [savedName, setSavedName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -127,8 +131,7 @@ function AddEditSheet({
         category: existing?.category ?? "other",
         notes: existing?.notes ?? "",
       });
-      setFile(null);
-      setPreview(null);
+      setPendingFiles([]);
       setSaving(false);
       setSavedName(null);
     }
@@ -136,38 +139,40 @@ function AddEditSheet({
 
   const resetForAnother = () => {
     setForm({ name: "", category: "other", notes: "" });
-    setFile(null);
-    setPreview(null);
+    setPendingFiles([]);
     setSavedName(null);
-    // Reset inputs so same file can be reselected
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  const handleFile = (f: File) => {
-    setFile(f);
-    if (f.type.startsWith("image/")) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-    } else {
-      setPreview(null);
-    }
-    // Auto-fill name if empty
+  const addFile = (f: File) => {
+    const preview = f.type.startsWith("image/") ? URL.createObjectURL(f) : null;
+    setPendingFiles((prev) => [...prev, { file: f, preview }]);
+    // Auto-fill name from first file only
     if (!form.name) {
-      const nameNoExt = f.name.replace(/\.[^.]+$/, "");
-      setForm((p) => ({ ...p, name: nameNoExt }));
+      setForm((p) => ({ ...p, name: f.name.replace(/\.[^.]+$/, "") }));
     }
+    // Reset the input so same file can be picked again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setPendingFiles((prev) => {
+      const next = [...prev];
+      // Revoke object URL to avoid memory leaks
+      if (next[index].preview) URL.revokeObjectURL(next[index].preview!);
+      next.splice(index, 1);
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      await onSave(form, file);
-      // Only show "add another?" when adding new (not editing)
-      if (!existing) {
-        setSavedName(form.name);
-      }
+      await onSave(form, pendingFiles.map((p) => p.file));
+      if (!existing) setSavedName(form.name);
     } finally {
       setSaving(false);
     }
@@ -210,57 +215,68 @@ function AddEditSheet({
         {/* ── Normal form ── */}
         {!savedName && (
         <div className="space-y-4">
-          {/* File picker row */}
+          {/* File / photo section */}
           <div className="space-y-2">
-            <Label>File / Photo</Label>
+            <Label>Photos / Files</Label>
+
+            {/* Previews of already-selected files */}
+            {pendingFiles.length > 0 && (
+              <div className="space-y-2">
+                {pendingFiles.map((pf, i) => (
+                  pf.preview ? (
+                    <div key={i} className="relative rounded-xl overflow-hidden border">
+                      <img src={pf.preview} alt={pf.file.name} className="w-full h-40 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 rounded-md px-2 py-0.5 truncate max-w-[70%]">{pf.file.name}</span>
+                    </div>
+                  ) : (
+                    <div key={i} className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-muted/40">
+                      <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm truncate flex-1">{pf.file.name}</span>
+                      <button type="button" onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+
+            {/* Show existing file when editing */}
+            {existing?.fileName && pendingFiles.length === 0 && (
+              <div className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-muted/40">
+                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-sm truncate flex-1 text-muted-foreground">{existing.fileName} (current)</span>
+              </div>
+            )}
+
+            {/* Add buttons — always visible */}
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
               >
-                <Paperclip className="w-4 h-4" /> Upload file
+                <Paperclip className="w-4 h-4" />
+                {pendingFiles.length > 0 ? "Add another file" : "Upload file"}
               </button>
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
               >
-                <Camera className="w-4 h-4" /> Take photo
+                <Camera className="w-4 h-4" />
+                {pendingFiles.length > 0 ? "Add another photo" : "Take photo"}
               </button>
             </div>
-            <input ref={fileInputRef} type="file" className="hidden" accept="*/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            <input ref={cameraInputRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-
-            {/* Preview */}
-            {preview && (
-              <div className="relative rounded-xl overflow-hidden border max-h-48">
-                <img src={preview} alt="preview" className="w-full h-48 object-cover" />
-                <button
-                  type="button"
-                  onClick={() => { setFile(null); setPreview(null); }}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            )}
-            {file && !preview && (
-              <div className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-muted/40">
-                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm truncate flex-1">{file.name}</span>
-                <button type="button" onClick={() => setFile(null)} className="text-muted-foreground hover:text-destructive">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            {/* Show existing file if editing and no new file chosen */}
-            {existing?.fileName && !file && (
-              <div className="flex items-center gap-2 rounded-xl border px-3 py-2 bg-muted/40">
-                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm truncate flex-1 text-muted-foreground">{existing.fileName} (current)</span>
-              </div>
-            )}
+            <input ref={fileInputRef} type="file" className="hidden" accept="*/*" onChange={(e) => { if (e.target.files?.[0]) addFile(e.target.files[0]); }} />
+            <input ref={cameraInputRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => { if (e.target.files?.[0]) addFile(e.target.files[0]); }} />
           </div>
 
           {/* Name */}
@@ -359,30 +375,40 @@ function DetailSheet({
         </SheetHeader>
 
         <div className="space-y-4">
-          {/* File preview / thumbnail */}
-          {doc.fileUrl && isImage(doc.fileType) && (
-            <div className="rounded-2xl overflow-hidden border">
-              <img src={doc.fileUrl} alt={doc.name} className="w-full max-h-72 object-contain bg-muted/30" />
-            </div>
-          )}
-          {doc.fileUrl && isPdf(doc.fileType) && (
-            <div className="flex items-center gap-3 rounded-xl border p-3 bg-muted/40">
-              <FileText className="w-6 h-6 text-rose-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{doc.fileName ?? "PDF Document"}</p>
-                {doc.fileSize && <p className="text-xs text-muted-foreground">{formatBytes(doc.fileSize)}</p>}
-              </div>
-            </div>
-          )}
-          {doc.fileUrl && !isImage(doc.fileType) && !isPdf(doc.fileType) && (
-            <div className="flex items-center gap-3 rounded-xl border p-3 bg-muted/40">
-              <FileText className="w-6 h-6 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{doc.fileName ?? "File"}</p>
-                {doc.fileSize && <p className="text-xs text-muted-foreground">{formatBytes(doc.fileSize)}</p>}
-              </div>
-            </div>
-          )}
+          {/* File previews — show all files if multiple, otherwise just the one */}
+          {(() => {
+            const urls = doc.fileUrls ?? (doc.fileUrl ? [doc.fileUrl] : []);
+            const names = doc.fileNames ?? (doc.fileName ? [doc.fileName] : []);
+            const types = doc.fileTypes ?? (doc.fileType ? [doc.fileType] : []);
+            return urls.map((url, i) => {
+              const name = names[i] ?? `File ${i + 1}`;
+              const type = types[i];
+              if (isImage(type)) {
+                return (
+                  <div key={i} className="rounded-2xl overflow-hidden border">
+                    <img src={url} alt={name} className="w-full max-h-72 object-contain bg-muted/30" />
+                    <div className="flex items-center justify-between px-3 py-2 border-t bg-muted/20">
+                      <span className="text-xs text-muted-foreground truncate">{name}</span>
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline ml-2 shrink-0 flex items-center gap-1">
+                        <Eye className="w-3 h-3" /> View
+                      </a>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} className="flex items-center gap-3 rounded-xl border p-3 bg-muted/40">
+                  <FileText className={`w-6 h-6 shrink-0 ${isPdf(type) ? "text-rose-500" : "text-muted-foreground"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{name}</p>
+                  </div>
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1">
+                    <Eye className="w-3 h-3" /> View
+                  </a>
+                </div>
+              );
+            });
+          })()}
 
           {/* Notes */}
           {doc.notes && (
@@ -541,11 +567,19 @@ export default function DocumentsSection() {
     return { url, name: file.name, type: file.type, size: file.size };
   };
 
-  const handleSave = async (data: { name: string; category: HouseholdDocCategory; notes: string }, file: File | null) => {
+  const handleSave = async (data: { name: string; category: HouseholdDocCategory; notes: string }, files: File[]) => {
     let fileFields: Partial<HouseholdDocument> = {};
-    if (file) {
-      const { url, name, type, size } = await uploadFile(file);
-      fileFields = { fileUrl: url, fileName: name, fileType: type, fileSize: size };
+    if (files.length > 0) {
+      const uploaded = await Promise.all(files.map(uploadFile));
+      fileFields = {
+        fileUrl: uploaded[0].url,
+        fileName: uploaded[0].name,
+        fileType: uploaded[0].type,
+        fileSize: uploaded[0].size,
+        fileUrls: uploaded.map((u) => u.url),
+        fileNames: uploaded.map((u) => u.name),
+        fileTypes: uploaded.map((u) => u.type),
+      };
     }
     if (editTarget?.id) {
       await updateDocument(editTarget.id, { ...data, ...fileFields });

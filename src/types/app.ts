@@ -424,6 +424,9 @@ export interface HouseholdDocument {
   fileName?: string;
   fileType?: string;   // MIME type e.g. "image/jpeg", "application/pdf"
   fileSize?: number;   // bytes
+  fileUrls?: string[]; // all uploaded file URLs (including fileUrl as first)
+  fileNames?: string[];
+  fileTypes?: string[];
   createdAt?: any;
   updatedAt?: any;
 }
