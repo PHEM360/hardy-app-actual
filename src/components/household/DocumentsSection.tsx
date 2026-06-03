@@ -113,6 +113,7 @@ function AddEditSheet({
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedName, setSavedName] = useState<string | null>(null); // triggers "add another?" screen
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,8 +130,19 @@ function AddEditSheet({
       setFile(null);
       setPreview(null);
       setSaving(false);
+      setSavedName(null);
     }
   }
+
+  const resetForAnother = () => {
+    setForm({ name: "", category: "other", notes: "" });
+    setFile(null);
+    setPreview(null);
+    setSavedName(null);
+    // Reset inputs so same file can be reselected
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
 
   const handleFile = (f: File) => {
     setFile(f);
@@ -152,6 +164,10 @@ function AddEditSheet({
     setSaving(true);
     try {
       await onSave(form, file);
+      // Only show "add another?" when adding new (not editing)
+      if (!existing) {
+        setSavedName(form.name);
+      }
     } finally {
       setSaving(false);
     }
@@ -164,6 +180,35 @@ function AddEditSheet({
           <SheetTitle>{existing ? "Edit Document" : "Add Document"}</SheetTitle>
         </SheetHeader>
 
+        {/* ── "Add another?" confirmation screen ── */}
+        {savedName && (
+          <div className="flex flex-col items-center gap-5 py-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <span className="text-3xl">✅</span>
+            </div>
+            <div>
+              <p className="font-semibold text-base">"{savedName}" saved!</p>
+              <p className="text-sm text-muted-foreground mt-1">Would you like to add another document?</p>
+            </div>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={onClose}
+                className="flex-1 py-3 rounded-xl border text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors"
+              >
+                No, I'm done
+              </button>
+              <button
+                onClick={resetForAnother}
+                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                Yes, add another
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Normal form ── */}
+        {!savedName && (
         <div className="space-y-4">
           {/* File picker row */}
           <div className="space-y-2">
@@ -275,6 +320,7 @@ function AddEditSheet({
             </Button>
           </div>
         </div>
+        )} {/* end !savedName */}
       </SheetContent>
     </Sheet>
   );
