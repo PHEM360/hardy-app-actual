@@ -1007,14 +1007,18 @@ function AddEditDialog({
         await uploadBytes(r, file);
         urls.push(await getDownloadURL(r));
       }
-      set("documents", [...(form.documents ?? []), ...urls]);
+      // Use functional update to avoid stale-closure overwriting previously uploaded files
+      setForm((f) => ({ ...f, documents: [...(f.documents ?? []), ...urls] }));
     } finally {
       setUploading(false);
+      // Reset inputs so the same file can be re-selected / a new one chosen
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
   };
 
   const removeDocument = (url: string) => {
-    set("documents", (form.documents ?? []).filter((u) => u !== url));
+    setForm((f) => ({ ...f, documents: (f.documents ?? []).filter((u) => u !== url) }));
   };
 
   const handleSave = () => {
