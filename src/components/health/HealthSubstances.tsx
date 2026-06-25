@@ -626,12 +626,6 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <button
-            onClick={onLock}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground border border-border/50 px-2.5 py-1.5 rounded-lg hover:bg-muted"
-          >
-            <Lock className="w-3 h-3" /> Lock
-          </button>
           <Button
             onClick={() => setWeaningOpen(true)}
             size="sm"
@@ -928,38 +922,9 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
 
 // ── Exported component ───────────────────────────────────────────────────────
 export default function HealthSubstances() {
-  const { user } = useAuth();
-  const { isTotpConfigured, verifyTotp, loading } = useSubstances();
-
-  const [state, setState] = useState<"locked" | "unlocked" | "setup">("locked");
-
-  // Auto-show setup if not configured
-  useEffect(() => {
-    if (!loading && !isTotpConfigured) setState("setup");
-  }, [loading, isTotpConfigured]);
+  const { loading } = useSubstances();
 
   if (loading) return <div className="py-20 text-center text-xs text-muted-foreground">Loading…</div>;
 
-  if (state === "setup" || !isTotpConfigured) {
-    return (
-      <TotpSetup
-        email={user?.email ?? "user"}
-        onComplete={() => setState("unlocked")}
-      />
-    );
-  }
-
-  if (state === "locked") {
-    return (
-      <TotpInput
-        onVerify={(code) => {
-          if (verifyTotp(code)) { setState("unlocked"); return true; }
-          return false;
-        }}
-        onSetupRequest={() => setState("setup")}
-      />
-    );
-  }
-
-  return <SubstancesContent onLock={() => setState("locked")} />;
+  return <SubstancesContent onLock={() => {}} />;
 }
