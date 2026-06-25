@@ -18,10 +18,20 @@ export interface SubstanceLog {
   createdAt?: any;
 }
 
+export interface WeaningEntry {
+  id?: string;
+  date: string;        // ISO "2026-06-25"
+  substance: string;
+  targetDose: number;
+  unit: string;
+}
+
 interface SubstanceConfig {
   totpSecret?: string;
   totpSetupComplete?: boolean;
-  substanceNames?: string[];   // list of tracked substance names
+  substanceNames?: string[];
+  weaningSchedule?: WeaningEntry[];
+  calendarOverrides?: Record<string, "green" | "amber" | "red">;
 }
 
 export function useSubstances() {
@@ -121,8 +131,13 @@ export function useSubstances() {
   /** Log a substance use */
   const addLog = useCallback(async (entry: Omit<SubstanceLog, "id" | "createdAt">) => {
     if (!user) return;
+    // Strip undefined — Firestore rejects them and causes "invalid data" error
+    const clean: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(entry)) {
+      if (v !== undefined) clean[k] = v;
+    }
     await addDoc(collection(db, "substanceLogs", user.uid, "logs"), {
-      ...entry,
+      ...clean,
       createdAt: serverTimestamp(),
     });
   }, [user]);
@@ -133,6 +148,30 @@ export function useSubstances() {
     await deleteDoc(doc(db, "substanceLogs", user.uid, "logs", id));
   }, [user]);
 
+  /** Save the entire weaning schedule */
+  const saveWeaningSchedule = useCallback(async (entries: WeaningEntry[]) => {
+    if (!user) return;
+    // Strip id fields before writing to Firestore
+    const clean = entries.map(({ id: _id, ...rest }) => rest);
+    await setDoc(doc(db, "substancesConfig", user.uid), {
+      weaningSchedule: clean,
+    }, { merge: true });
+  }, [user]);
+
+  /** Set or clear a manual calendar colour override for a date */
+  const setCalendarOverride = useCallback(async (date: string, status: "green" | "amber" | "red" | null) => {
+    if (!user) return;
+    const overrides = { ...(config.calendarOverrides ?? {}) };
+    if (status === null) {
+      delete overrides[date];
+    } else {
+      overrides[date] = status;
+    }
+    await setDoc(doc(db, "substancesConfig", user.uid), {
+      calendarOverrides: overrides,
+    }, { merge: true });
+  }, [user, config.calendarOverrides]);
+
   const isTotpConfigured = Boolean(config.totpSecret && config.totpSetupComplete);
   const latestLog = logs[0] ?? null;
   const substanceNames: string[] = config.substanceNames ?? [];
@@ -141,6 +180,10 @@ export function useSubstances() {
     logs, loading, config, isTotpConfigured, latestLog, substanceNames,
     setupTotp, confirmTotpSetup, verifyTotp, resetTotp,
     addLog, deleteLog, addSubstanceName, removeSubstanceName,
+    weaningSchedule: (config.weaningSchedule ?? []) as WeaningEntry[],
+    calendarOverrides: (config.calendarOverrides ?? {}) as Record<string, "green" | "amber" | "red">,
+    saveWeaningSchedule,
+    setCalendarOverride,
   };
 }
 

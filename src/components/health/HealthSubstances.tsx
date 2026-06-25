@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck, Lock, KeyRound, Plus, Trash2, QrCode,
   AlertCircle, CheckCircle2, ChevronDown, ChevronUp, RefreshCw, Clock, Calendar, FlaskConical, X,
+  Settings, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +11,51 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useSubstances, type SubstanceLog } from "@/hooks/useSubstances";
+import { useSubstances, type SubstanceLog, type WeaningEntry } from "@/hooks/useSubstances";
 import { useAuth } from "@/auth/AuthContext";
-import { format, parseISO, differenceInDays, startOfDay } from "date-fns";
+import {
+  format, parseISO, differenceInDays, startOfDay,
+  startOfMonth, endOfMonth, eachDayOfInterval, getDay,
+  isToday, addMonths, subMonths,
+} from "date-fns";
 import QRCode from "react-qr-code";
 
 const COMMON_UNITS = ["mg", "g", "ml", "μg", "tablet", "capsule", "dose", "line", "joint", "other"];
+
+// ── Substance colour palette ─────────────────────────────────────────────────
+const SUBSTANCE_PALETTE = [
+  "#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b",
+  "#ef4444", "#ec4899", "#6366f1", "#84cc16", "#f97316", "#14b8a6",
+];
+function substanceColor(name: string, allNames: string[]): string {
+  const idx = allNames.indexOf(name);
+  if (idx < 0) return "#94a3b8";
+  return SUBSTANCE_PALETTE[idx % SUBSTANCE_PALETTE.length];
+}
+
+// ── Calendar day status logic ────────────────────────────────────────────────
+function computeDayStatus(
+  date: string,
+  logs: SubstanceLog[],
+  plan: WeaningEntry[],
+): "green" | "amber" | "red" | "neutral" {
+  const entries = plan.filter((e) => e.date === date);
+  if (entries.length === 0) return "neutral";
+  const dayLogs = logs.filter((l) => l.date === date);
+  let worst: "green" | "amber" | "red" = "green";
+  let hasData = false;
+  for (const entry of entries) {
+    const matching = dayLogs.filter(
+      (l) => l.name === entry.substance && l.unit === entry.unit,
+    );
+    if (matching.length === 0) continue;
+    hasData = true;
+    const logged = matching.reduce((s, l) => s + (parseFloat(l.dose) || 0), 0);
+    if (logged > entry.targetDose * 1.1) { worst = "red"; }
+    else if (logged > entry.targetDose && worst !== "red") { worst = "amber"; }
+  }
+  return hasData ? worst : "neutral";
+}
 
 // ── TOTP code input (6 boxes) ────────────────────────────────────────────────
 function TotpInput({ onVerify, onSetupRequest }: {
@@ -199,12 +239,313 @@ function TotpSetup({ email, onComplete }: { email: string; onComplete: () => voi
   );
 }
 
+// ── Weaning schedule settings dialog ────────────────────────────────────────
+function WeaningScheduleDialog({
+  open, onClose, weaningSchedule, substanceNames, onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  weaningSchedule: WeaningEntry[];
+  substanceNames: string[];
+  onSave: (entries: WeaningEntry[]) => Promise<void>;
+}) {
+  const [entries, setEntries] = useState<WeaningEntry[]>([]);
+  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newSub, setNewSub] = useState(substanceNames[0] ?? "");
+  const [newDose, setNewDose] = useState("");
+  const [newUnit, setNewUnit] = useState("mg");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setEntries([...weaningSchedule].sort((a, b) => a.date.localeCompare(b.date)));
+      setNewSub(substanceNames[0] ?? "");
+    }
+  }, [open, weaningSchedule, substanceNames]);
+
+  const addEntry = () => {
+    if (!newDate || !newSub || !newDose) return;
+    setEntries((prev) =>
+      [...prev, { id: `${newDate}_${newSub}_${Date.now()}`, date: newDate, substance: newSub, targetDose: parseFloat(newDose), unit: newUnit }]
+        .sort((a, b) => a.date.localeCompare(b.date))
+    );
+    setNewDose("");
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try { await onSave(entries); onClose(); } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[85dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-violet-600" /> Weaning Schedule
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <p className="text-xs text-muted-foreground">Set target doses by date. The calendar highlights days where actual intake exceeded the plan.</p>
+
+          {/* Existing entries */}
+          {entries.length > 0 && (
+            <div className="space-y-1 max-h-44 overflow-y-auto rounded-xl border border-border/40 p-2">
+              {entries.map((e, i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 text-xs">
+                  <span className="text-muted-foreground shrink-0 w-14">{format(parseISO(e.date), "d MMM yy")}</span>
+                  <span className="flex-1 font-medium truncate">{e.substance}</span>
+                  <span className="font-bold shrink-0">{e.targetDose} {e.unit}</span>
+                  <button onClick={() => setEntries((p) => p.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new entry */}
+          <div className="rounded-xl border border-border/50 p-3 space-y-2.5 bg-muted/10">
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Add Entry</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Date</Label>
+                <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-9 rounded-lg text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Substance</Label>
+                {substanceNames.length > 0 ? (
+                  <Select value={newSub} onValueChange={setNewSub}>
+                    <SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{substanceNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={newSub} onChange={(e) => setNewSub(e.target.value)} className="h-9 rounded-lg text-xs" placeholder="Substance" />
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Target dose</Label>
+                <Input type="number" value={newDose} onChange={(e) => setNewDose(e.target.value)} placeholder="e.g. 20" className="h-9 rounded-lg text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Unit</Label>
+                <Select value={newUnit} onValueChange={setNewUnit}>
+                  <SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{COMMON_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button size="sm" onClick={addEntry} disabled={!newDate || !newSub || !newDose}
+              className="w-full h-8 rounded-lg text-xs bg-violet-600 hover:bg-violet-700 text-white">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add to schedule
+            </Button>
+          </div>
+
+          <Button onClick={handleSave} disabled={saving} className="w-full h-11 rounded-xl bg-violet-600 hover:bg-violet-700 text-white">
+            {saving ? "Saving…" : "Save Schedule"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Weaning calendar ─────────────────────────────────────────────────────────
+function WeaningCalendar({
+  logs, weaningSchedule, calendarOverrides, onSetOverride, allSubstanceNames,
+}: {
+  logs: SubstanceLog[];
+  weaningSchedule: WeaningEntry[];
+  calendarOverrides: Record<string, "green" | "amber" | "red">;
+  onSetOverride: (date: string, status: "green" | "amber" | "red" | null) => void;
+  allSubstanceNames: string[];
+}) {
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
+  const [popDate, setPopDate] = useState<string | null>(null);
+
+  const monthStart = startOfMonth(month);
+  const monthEnd = endOfMonth(month);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startPad = (getDay(monthStart) + 6) % 7; // Mon=0
+  const cells: (Date | null)[] = [...Array(startPad).fill(null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const DOW = ["M", "T", "W", "T", "F", "S", "S"];
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    if (!popDate) return;
+    const close = () => setPopDate(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [popDate]);
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card shadow-soft p-3">
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => setMonth((m) => subMonths(m, 1))} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-xs font-bold text-card-foreground">{format(month, "MMMM yyyy")}</span>
+        <button onClick={() => setMonth((m) => addMonths(m, 1))} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-0.5">
+        {DOW.map((d, i) => (
+          <div key={i} className="text-center text-[9px] font-semibold text-muted-foreground py-0.5">{d}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const dateStr = format(day, "yyyy-MM-dd");
+          const isFuture = day > new Date();
+          const autoStatus = isFuture ? "neutral" : computeDayStatus(dateStr, logs, weaningSchedule);
+          const override = calendarOverrides[dateStr] ?? null;
+          const status = override ?? autoStatus;
+          const today = isToday(day);
+
+          const dayLogs = logs.filter((l) => l.date === dateStr);
+          const uniqSubs = Array.from(new Set(dayLogs.map((l) => l.name)));
+          const isPopped = popDate === dateStr;
+
+          const cellBg =
+            status === "green" ? "bg-green-100 border-green-300" :
+            status === "amber" ? "bg-amber-100 border-amber-300" :
+            status === "red"   ? "bg-red-100 border-red-300" :
+            "bg-card border-border/30";
+
+          return (
+            <div key={i} className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setPopDate(isPopped ? null : dateStr); }}
+                className={`w-full border rounded-lg flex flex-col items-start p-0.5 transition-all min-h-[40px] ${cellBg} ${today ? "ring-2 ring-violet-400 ring-inset" : ""} ${isFuture ? "opacity-40" : "hover:brightness-95"}`}
+              >
+                <span className={`text-[9px] font-bold leading-none px-0.5 ${today ? "text-violet-600" : "text-card-foreground"}`}>
+                  {format(day, "d")}
+                </span>
+                {/* Override indicator dot */}
+                {override && (
+                  <div className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full border border-white ${
+                    override === "green" ? "bg-green-600" : override === "amber" ? "bg-amber-500" : "bg-red-500"
+                  }`} />
+                )}
+                {/* Substance dots */}
+                {uniqSubs.length > 0 && (
+                  <div className="flex flex-wrap gap-0.5 mt-auto px-0.5 pb-0.5">
+                    {uniqSubs.slice(0, 4).map((sub) => (
+                      <div
+                        key={sub}
+                        style={{ backgroundColor: substanceColor(sub, allSubstanceNames) }}
+                        className="w-1.5 h-1.5 rounded-full"
+                      />
+                    ))}
+                  </div>
+                )}
+              </button>
+
+              {/* Detail / override popover */}
+              {isPopped && (
+                <div
+                  className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-1 w-56 rounded-xl border border-border bg-card shadow-2xl p-3 space-y-2.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-xs font-bold">{format(day, "d MMMM yyyy")}</p>
+
+                  {/* Logged doses */}
+                  {dayLogs.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground">No doses logged</p>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground">Logged</p>
+                      {dayLogs.map((log, li) => (
+                        <div key={li} className="flex items-center gap-1.5 text-[10px]">
+                          <div style={{ backgroundColor: substanceColor(log.name, allSubstanceNames) }} className="w-2 h-2 rounded-full shrink-0" />
+                          <span className="font-medium flex-1 truncate">{log.name}</span>
+                          <span className="text-muted-foreground shrink-0">{log.dose} {log.unit}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Weaning plan */}
+                  {weaningSchedule.filter((e) => e.date === dateStr).length > 0 && (
+                    <div className="border-t border-border/30 pt-1.5">
+                      <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">Plan (max)</p>
+                      {weaningSchedule.filter((e) => e.date === dateStr).map((e, ei) => (
+                        <p key={ei} className="text-[10px] text-muted-foreground">{e.substance}: {e.targetDose} {e.unit}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Colour override */}
+                  <div className="border-t border-border/30 pt-1.5">
+                    <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">Override colour</p>
+                    <div className="flex gap-1.5 items-center">
+                      <button
+                        onClick={() => { onSetOverride(dateStr, null); setPopDate(null); }}
+                        className={`flex-1 py-1 text-[10px] rounded-md border font-medium transition-colors ${
+                          !override ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:bg-muted"
+                        }`}
+                      >Auto</button>
+                      {(["green", "amber", "red"] as const).map((s) => (
+                        <button
+                          key={s}
+                          title={s}
+                          onClick={() => { onSetOverride(dateStr, override === s ? null : s); setPopDate(null); }}
+                          className={`w-7 h-7 rounded-md border-2 transition-all ${
+                            s === "green" ? (override === "green" ? "bg-green-500 border-green-700" : "bg-green-100 border-green-300") :
+                            s === "amber" ? (override === "amber" ? "bg-amber-500 border-amber-700" : "bg-amber-100 border-amber-300") :
+                            (override === "red" ? "bg-red-500 border-red-700" : "bg-red-100 border-red-300")
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-border/30">
+        {([["green", "On target"] as const, ["amber", "≤10% over"] as const, ["red", ">10% over"] as const]).map(([s, label]) => (
+          <div key={s} className="flex items-center gap-1">
+            <div className={`w-2.5 h-2.5 rounded-sm ${s === "green" ? "bg-green-300" : s === "amber" ? "bg-amber-300" : "bg-red-300"}`} />
+            <span className="text-[9px] text-muted-foreground">{label}</span>
+          </div>
+        ))}
+        {allSubstanceNames.slice(0, 5).map((name) => (
+          <div key={name} className="flex items-center gap-1">
+            <div style={{ backgroundColor: substanceColor(name, allSubstanceNames) }} className="w-2.5 h-2.5 rounded-full" />
+            <span className="text-[9px] text-muted-foreground">{name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main substance log view ──────────────────────────────────────────────────
 function SubstancesContent({ onLock }: { onLock: () => void }) {
-  const { logs, loading, addLog, deleteLog, resetTotp, substanceNames, addSubstanceName, removeSubstanceName } = useSubstances();
+  const {
+    logs, loading, addLog, deleteLog, resetTotp, substanceNames, addSubstanceName, removeSubstanceName,
+    weaningSchedule, calendarOverrides, saveWeaningSchedule, setCalendarOverride,
+  } = useSubstances();
   const [logOpen, setLogOpen] = useState(false);
   const [addSubstanceOpen, setAddSubstanceOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [weaningOpen, setWeaningOpen] = useState(false);
   const [expandedSubstance, setExpandedSubstance] = useState<string | null>(null);
 
   // Form state
@@ -291,6 +632,14 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
           >
             <Lock className="w-3 h-3" /> Lock
           </button>
+          <Button
+            onClick={() => setWeaningOpen(true)}
+            size="sm"
+            variant="outline"
+            className="rounded-xl text-xs h-8 gap-1 border-violet-200 text-violet-700 hover:bg-violet-50"
+          >
+            <Settings className="w-3.5 h-3.5" /> Weaning
+          </Button>
           <Button
             onClick={() => setAddSubstanceOpen(true)}
             size="sm"
@@ -445,6 +794,37 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
           <RefreshCw className="w-3 h-3" /> Reset authenticator
         </button>
       </div>
+
+      {/* Weaning calendar */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-card-foreground flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-violet-500" /> Weaning Calendar
+          </h4>
+          <button
+            onClick={() => setWeaningOpen(true)}
+            className="text-[11px] text-violet-600 hover:text-violet-800 flex items-center gap-1"
+          >
+            <Settings className="w-3 h-3" /> Edit schedule
+          </button>
+        </div>
+        <WeaningCalendar
+          logs={logs}
+          weaningSchedule={weaningSchedule}
+          calendarOverrides={calendarOverrides}
+          onSetOverride={setCalendarOverride}
+          allSubstanceNames={allSubstanceNames}
+        />
+      </div>
+
+      {/* Weaning schedule settings */}
+      <WeaningScheduleDialog
+        open={weaningOpen}
+        onClose={() => setWeaningOpen(false)}
+        weaningSchedule={weaningSchedule}
+        substanceNames={allSubstanceNames}
+        onSave={saveWeaningSchedule}
+      />
 
       {/* Add substance dialog */}
       <Dialog open={addSubstanceOpen} onOpenChange={setAddSubstanceOpen}>
