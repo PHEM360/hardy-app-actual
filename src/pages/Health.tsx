@@ -21,6 +21,53 @@ import { format, parseISO } from "date-fns";
 const EMOJIS = ["🧘", "🍷", "💊", "🚭", "🍕", "😴", "🏃", "❤️", "🧠", "⚡", "🌿", "🌊", "🎯", "💪", "✨"];
 const COLORS  = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
 
+// ── Mini sparkline (pure SVG, no extra deps) ──────────────────────────────────
+function MiniSparkline({
+  values,
+  color = "#ffffff",
+  width = 80,
+  height = 36,
+}: {
+  values: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const pad = 3;
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * w;
+    const y = pad + h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(" ");
+  // Fill area under line
+  const first = pts[0];
+  const last  = pts[pts.length - 1];
+  const area  = `${first} ${polyline} ${last.split(",")[0]},${pad + h} ${pad},${pad + h}`;
+
+  return (
+    <svg width={width} height={height} className="shrink-0 overflow-visible">
+      <defs>
+        <linearGradient id={`sg-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill={`url(#sg-${color.replace("#","")})`} />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Latest value dot */}
+      <circle cx={pts[pts.length - 1].split(",")[0]} cy={pts[pts.length - 1].split(",")[1]} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
 type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai";
 
 export default function Health() {
@@ -182,8 +229,8 @@ export default function Health() {
                 {profile.showWeightOnOverview && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     className="p-4 rounded-2xl bg-gradient-primary">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-primary-foreground/70 uppercase tracking-wider font-semibold mb-1">Weight</p>
                         <p className="text-3xl font-black font-display text-primary-foreground">
                           {latestWeight ? `${latestWeight.weight} kg` : "—"}
@@ -195,7 +242,13 @@ export default function Health() {
                         )}
                         {bmi && <p className="text-xs text-primary-foreground/80 mt-0.5">BMI {bmi.toFixed(1)}</p>}
                       </div>
-                      <DeltaBadge val={weightDiff} unit=" kg" />
+                      <div className="flex flex-col items-end gap-1.5">
+                        <DeltaBadge val={weightDiff} unit=" kg" />
+                        <MiniSparkline
+                          values={entries.slice(-12).map((e) => e.weight)}
+                          color="rgba(255,255,255,0.9)"
+                        />
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -203,8 +256,8 @@ export default function Health() {
                 {profile.showBpOnOverview && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}
                     className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Blood Pressure</p>
                         <p className="text-3xl font-black font-display text-card-foreground">
                           {latestBP ? `${latestBP.systolic}/${latestBP.diastolic}` : "—"}
@@ -217,7 +270,21 @@ export default function Health() {
                           </p>
                         )}
                       </div>
-                      <DeltaBadge val={bpDiff} unit=" sys" />
+                      <div className="flex flex-col items-end gap-1.5">
+                        <DeltaBadge val={bpDiff} unit=" sys" />
+                        {bpEntries.length >= 2 && (
+                          <div className="flex flex-col gap-0.5 items-end">
+                            <MiniSparkline
+                              values={bpEntries.slice(-12).map((e) => e.systolic)}
+                              color="#ef4444"
+                            />
+                            <MiniSparkline
+                              values={bpEntries.slice(-12).map((e) => e.diastolic)}
+                              color="#3b82f6"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -225,8 +292,8 @@ export default function Health() {
                 {profile.showWaistOnOverview && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
                     className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
                         <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Waist</p>
                         <p className="text-3xl font-black font-display text-card-foreground">
                           {latestMeas?.waistCm ? `${latestMeas.waistCm} cm` : "—"}
@@ -237,7 +304,13 @@ export default function Health() {
                           </p>
                         )}
                       </div>
-                      <DeltaBadge val={waistDiff} unit=" cm" />
+                      <div className="flex flex-col items-end gap-1.5">
+                        <DeltaBadge val={waistDiff} unit=" cm" />
+                        <MiniSparkline
+                          values={measurements.filter((m) => m.waistCm != null).slice(-12).map((m) => m.waistCm!)}
+                          color="#10b981"
+                        />
+                      </div>
                     </div>
                   </motion.div>
                 )}
