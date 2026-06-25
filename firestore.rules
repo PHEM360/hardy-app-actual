@@ -147,6 +147,10 @@ service cloud.firestore {
       match /documents/{documentId} {
         allow read, write: if isAuthenticated();
       }
+      
+      match /notes/{noteId} {
+        allow read, write: if isAuthenticated();
+      }
     }
 
     // Tasks - per user

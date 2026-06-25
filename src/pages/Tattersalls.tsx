@@ -1,15 +1,16 @@
 import { useState, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
-import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File } from "lucide-react";
+import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTattersalls } from "@/hooks/useTattersalls";
+import { useTattersalls, type TatDocument } from "@/hooks/useTattersalls";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {
@@ -24,7 +25,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const Tattersalls = () => {
-  const { balanceHistory, expenses, documents, loading, uploadingDoc, addBalance, addExpense, uploadDocument } = useTattersalls();
+  const { balanceHistory, expenses, documents, notes, loading, uploadingDoc, addBalance, addExpense, uploadDocument, updateDocument, addNote, toggleNote, deleteNote } = useTattersalls();
 
   // Add balance dialog
   const [addBalOpen, setAddBalOpen] = useState(false);
@@ -46,6 +47,17 @@ const Tattersalls = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
+
+  // Document detail/edit sheet
+  const [docDetail, setDocDetail] = useState<TatDocument | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [savingDoc, setSavingDoc] = useState(false);
+
+  // Notes / tasks
+  const [newNoteText, setNewNoteText] = useState("");
+  const [newNoteAuthor, setNewNoteAuthor] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
 
   const currentBalance = balanceHistory.length > 0 ? balanceHistory[balanceHistory.length - 1].balance : 0;
 
@@ -98,6 +110,30 @@ const Tattersalls = () => {
     setUploadOpen(false);
     // Route all camera images through the document scanner
     setScannerFile(file);
+  };
+
+  const openDocDetail = (doc: TatDocument) => {
+    setDocDetail(doc);
+    setEditName(doc.name);
+    setEditNotes(doc.notes ?? "");
+  };
+
+  const saveDocChanges = async () => {
+    if (!docDetail?.id) return;
+    setSavingDoc(true);
+    try {
+      await updateDocument(docDetail.id, { name: editName.trim() || docDetail.name, notes: editNotes });
+      setDocDetail(null);
+    } finally { setSavingDoc(false); }
+  };
+
+  const handleAddNote = async () => {
+    if (!newNoteText.trim()) return;
+    setAddingNote(true);
+    try {
+      await addNote(newNoteText.trim(), newNoteAuthor.trim() || undefined);
+      setNewNoteText("");
+    } finally { setAddingNote(false); }
   };
 
   if (loading) {
@@ -177,7 +213,7 @@ const Tattersalls = () => {
       </div>
 
       {/* Documents */}
-      <div>
+      <div className="mb-5">
         <div className="flex items-center justify-between px-1 mb-2">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documents</h3>
           <button onClick={() => setUploadOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
@@ -187,24 +223,82 @@ const Tattersalls = () => {
         <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
           {documents.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-6">No documents yet — upload one above.</p>
-          ) : documents.map((doc, i) => (
-            <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors">
-              {doc.fileType === "image" ? (
-                <img src={doc.url} alt={doc.name} className="w-8 h-8 rounded object-cover flex-shrink-0 border border-border/40" />
-              ) : doc.fileType === "pdf" ? (
-                <div className="w-8 h-8 rounded bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-4 h-4 text-destructive" />
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded bg-muted border border-border/40 flex items-center justify-center flex-shrink-0">
-                  <File className="w-4 h-4 text-muted-foreground" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
+          ) : documents.map((doc) => (
+            <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5">
+              {/* Thumbnail / icon — links out */}
+              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                {doc.fileType === "image" ? (
+                  <img src={doc.url} alt={doc.name} className="w-8 h-8 rounded object-cover border border-border/40" />
+                ) : doc.fileType === "pdf" ? (
+                  <div className="w-8 h-8 rounded bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-destructive" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded bg-muted border border-border/40 flex items-center justify-center">
+                    <File className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
+              </a>
+              {/* Name + notes — tapping opens edit sheet */}
+              <button className="flex-1 min-w-0 text-left" onClick={() => openDocDetail(doc)}>
                 <p className="text-sm font-medium text-card-foreground truncate">{doc.name}</p>
-                <p className="text-[10px] text-muted-foreground">{new Date(doc.date).toLocaleDateString("en-GB")}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(doc.date).toLocaleDateString("en-GB")}
+                  {doc.notes ? ` · ${doc.notes.slice(0, 40)}${doc.notes.length > 40 ? "…" : ""}` : ""}
+                </p>
+              </button>
+              <button onClick={() => openDocDetail(doc)} className="text-muted-foreground hover:text-foreground ml-1 flex-shrink-0">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Notes & Tasks */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between px-1 mb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <StickyNote className="w-3.5 h-3.5" /> Notes & Tasks
+          </h3>
+        </div>
+
+        {/* Add note input */}
+        <div className="flex gap-2 mb-3">
+          <Input
+            value={newNoteText}
+            onChange={(e) => setNewNoteText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddNote()}
+            placeholder="Add a note or task…"
+            className="flex-1 h-9 rounded-xl text-sm"
+          />
+          <Input
+            value={newNoteAuthor}
+            onChange={(e) => setNewNoteAuthor(e.target.value)}
+            placeholder="Who?"
+            className="w-24 h-9 rounded-xl text-sm"
+          />
+          <Button size="sm" onClick={handleAddNote} disabled={addingNote || !newNoteText.trim()} className="h-9 rounded-xl px-3">
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
+          {notes.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">No notes yet — add one above.</p>
+          ) : notes.map((note) => (
+            <div key={note.id} className={`flex items-start gap-3 px-3 py-2.5 transition-colors ${note.done ? "bg-muted/20" : ""}`}>
+              <button onClick={() => toggleNote(note.id, !note.done)} className="mt-0.5 flex-shrink-0 text-muted-foreground hover:text-primary">
+                {note.done ? <CheckSquare className="w-4 h-4 text-green-500" /> : <Square className="w-4 h-4" />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm ${note.done ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{note.text}</p>
+                {note.author && <p className="text-[10px] text-muted-foreground mt-0.5">{note.author}</p>}
               </div>
-            </a>
+              <button onClick={() => deleteNote(note.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -349,6 +443,49 @@ const Tattersalls = () => {
         }}
         onCancel={() => setScannerFile(null)}
       />
+
+      {/* Document detail / edit sheet */}
+      <Sheet open={!!docDetail} onOpenChange={(o) => !o && setDocDetail(null)}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto pb-safe">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Edit Document</SheetTitle>
+          </SheetHeader>
+          {docDetail && (
+            <div className="space-y-4">
+              {/* Preview */}
+              {docDetail.fileType === "image" && (
+                <div className="rounded-xl overflow-hidden border">
+                  <img src={docDetail.url} alt={docDetail.name} className="w-full max-h-52 object-contain bg-muted/30" />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Notes</Label>
+                <textarea
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                  rows={3}
+                  placeholder="Add notes about this document…"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <a href={docDetail.url} target="_blank" rel="noopener noreferrer" className="flex-1">
+                  <Button variant="outline" className="w-full rounded-xl gap-1.5">
+                    <FileText className="w-4 h-4" /> View file
+                  </Button>
+                </a>
+                <Button onClick={saveDocChanges} disabled={savingDoc} className="flex-1 rounded-xl">
+                  {savingDoc ? "Saving…" : <><Check className="w-4 h-4 mr-1" /> Save</>}
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </FeaturePageShell>
   );
 };

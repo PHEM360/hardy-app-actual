@@ -5,6 +5,8 @@ import {
   setDoc,
   collection,
   addDoc,
+  updateDoc,
+  deleteDoc,
   query,
   orderBy,
   onSnapshot as onColSnapshot,
@@ -37,6 +39,15 @@ export interface TatDocument {
   date: string;
   url: string;
   fileType: string;
+  notes?: string;
+}
+
+export interface TatNote {
+  id: string;
+  text: string;
+  author?: string;
+  done: boolean;
+  createdAt?: any;
 }
 
 // Single shared Firestore doc for balance + expenses
@@ -46,6 +57,7 @@ export function useTattersalls() {
   const [balanceHistory, setBalanceHistory] = useState<BalanceRecord[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [documents, setDocuments] = useState<TatDocument[]>([]);
+  const [notes, setNotes] = useState<TatNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
@@ -79,6 +91,27 @@ export function useTattersalls() {
           date: d.data().date ?? "",
           url: d.data().url ?? "",
           fileType: d.data().fileType ?? "file",
+          notes: d.data().notes ?? "",
+        }))
+      );
+    });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to notes/tasks subcollection
+  useEffect(() => {
+    const q = query(
+      collection(db, "tattersalls", "shared", "notes"),
+      orderBy("createdAt", "desc")
+    );
+    const unsub = onColSnapshot(q, (snap) => {
+      setNotes(
+        snap.docs.map((d) => ({
+          id: d.id,
+          text: d.data().text ?? "",
+          author: d.data().author ?? "",
+          done: d.data().done ?? false,
+          createdAt: d.data().createdAt,
         }))
       );
     });
@@ -118,6 +151,7 @@ export function useTattersalls() {
         date: new Date().toISOString().split("T")[0],
         url,
         fileType,
+        notes: "",
         createdAt: serverTimestamp(),
       });
     } finally {
@@ -125,14 +159,40 @@ export function useTattersalls() {
     }
   }, []);
 
+  const updateDocument = useCallback(async (id: string, data: Partial<Pick<TatDocument, "name" | "notes">>) => {
+    await updateDoc(doc(db, "tattersalls", "shared", "documents", id), data as Record<string, unknown>);
+  }, []);
+
+  const addNote = useCallback(async (text: string, author?: string) => {
+    await addDoc(collection(db, "tattersalls", "shared", "notes"), {
+      text,
+      author: author ?? "",
+      done: false,
+      createdAt: serverTimestamp(),
+    });
+  }, []);
+
+  const toggleNote = useCallback(async (id: string, done: boolean) => {
+    await updateDoc(doc(db, "tattersalls", "shared", "notes", id), { done });
+  }, []);
+
+  const deleteNote = useCallback(async (id: string) => {
+    await deleteDoc(doc(db, "tattersalls", "shared", "notes", id));
+  }, []);
+
   return {
     balanceHistory,
     expenses,
     documents,
+    notes,
     loading,
     uploadingDoc,
     addBalance,
     addExpense,
     uploadDocument,
+    updateDocument,
+    addNote,
+    toggleNote,
+    deleteNote,
   };
 }

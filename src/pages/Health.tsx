@@ -29,7 +29,7 @@ function MiniSparkline({
   color = "#ffffff",
   color2,
   width = 112,
-  height = 58,
+  height = 64,
 }: {
   values: number[];
   values2?: number[];
@@ -41,33 +41,30 @@ function MiniSparkline({
 }) {
   if (values.length < 2) return null;
 
-  const xAxisH = 13; // bottom reserved for date labels
-  const padT = 5;
-  const padL = 2;
-  const padR = 2;
+  const xAxisH = 15; // bottom reserved for date labels — clear of the chart
+  const yAxisW = 22; // left reserved for y-axis labels
+  const padT   = 5;
+  const padR   = 4;
   const chartH = height - xAxisH - padT;
-  const chartW = width - padL - padR;
+  const chartW = width - yAxisW - padR;
+  const chartX = yAxisW; // chart starts after y-axis labels
 
   const allVals = values2 ? [...values, ...values2] : values;
   const min = Math.min(...allVals);
   const max = Math.max(...allVals);
   const range = max - min || 1;
 
-  const toX = (i: number, len: number) => padL + (i / (len - 1)) * chartW;
+  const toX = (i: number, len: number) => chartX + (i / (len - 1)) * chartW;
   const toY = (v: number) => padT + chartH - ((v - min) / range) * chartH;
 
   const pts1 = values.map((v, i) => `${toX(i, values.length)},${toY(v)}`);
   const pts2 = values2?.map((v, i) => `${toX(i, values2.length)},${toY(v)}`);
-  const fillPts1 = `${padL},${padT + chartH} ${pts1.join(" ")} ${toX(values.length - 1, values.length)},${padT + chartH}`;
+  const fillPts1 = `${chartX},${padT + chartH} ${pts1.join(" ")} ${toX(values.length - 1, values.length)},${padT + chartH}`;
 
-  const labelFirst = dates?.[0] ? format(parseISO(dates[0]), "d MMM") : "";
-  const labelLast  = dates && dates.length > 0 ? format(parseISO(dates[dates.length - 1]), "d MMM") : "";
+  const labelFirst = dates?.[0]                      ? format(parseISO(dates[0]),                       "d MMM") : "";
+  const labelLast  = dates && dates.length > 0       ? format(parseISO(dates[dates.length - 1]),        "d MMM") : "";
 
   const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1);
-  const yMin = fmt(min);
-  const yMax = fmt(max);
-
-  // Safe gradient id — strip non-alphanumeric
   const gradId = `sg${color.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
@@ -79,46 +76,39 @@ function MiniSparkline({
         </linearGradient>
       </defs>
 
+      {/* Y-axis labels — left column, clear of chart area */}
+      <text x={yAxisW - 3} y={padT + 6}           fontSize="7" fill={color} fillOpacity="0.65" textAnchor="end">{fmt(max)}</text>
+      <text x={yAxisW - 3} y={padT + chartH}       fontSize="7" fill={color} fillOpacity="0.65" textAnchor="end">{fmt(min)}</text>
+
       {/* Subtle dashed mid-gridline */}
-      <line
-        x1={padL} y1={padT + chartH / 2}
-        x2={padL + chartW} y2={padT + chartH / 2}
-        stroke={color} strokeOpacity="0.18" strokeWidth="0.5" strokeDasharray="2,2"
-      />
-      {/* Baseline */}
-      <line
-        x1={padL} y1={padT + chartH}
-        x2={padL + chartW} y2={padT + chartH}
-        stroke={color} strokeOpacity="0.2" strokeWidth="0.5"
-      />
+      <line x1={chartX} y1={padT + chartH / 2} x2={chartX + chartW} y2={padT + chartH / 2}
+        stroke={color} strokeOpacity="0.15" strokeWidth="0.5" strokeDasharray="2,2" />
+      {/* Baseline — separator between chart and x labels */}
+      <line x1={chartX} y1={padT + chartH} x2={chartX + chartW} y2={padT + chartH}
+        stroke={color} strokeOpacity="0.25" strokeWidth="0.7" />
 
       {/* Fill area */}
       <polygon points={fillPts1} fill={`url(#${gradId})`} />
 
       {/* Series 1 line */}
       <polyline points={pts1.join(" ")} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-
       {/* Series 2 line */}
       {pts2 && color2 && (
         <polyline points={pts2.join(" ")} fill="none" stroke={color2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       )}
 
-      {/* Endpoint dot(s) */}
+      {/* Endpoint dots */}
       <circle cx={toX(values.length - 1, values.length)} cy={toY(values[values.length - 1])} r="2.5" fill={color} />
       {pts2 && color2 && values2 && (
         <circle cx={toX(values2.length - 1, values2.length)} cy={toY(values2[values2.length - 1])} r="2.5" fill={color2} />
       )}
 
-      {/* Y-axis: max at top, min at bottom */}
-      <text x={padL} y={padT + 7}           fontSize="7" fill={color} fillOpacity="0.65" textAnchor="start">{yMax}</text>
-      <text x={padL} y={padT + chartH - 1}  fontSize="7" fill={color} fillOpacity="0.65" textAnchor="start">{yMin}</text>
-
-      {/* X-axis: first and last date */}
+      {/* X-axis date labels — clearly BELOW the baseline */}
       {labelFirst && (
-        <text x={padL}         y={height - 1} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="start">{labelFirst}</text>
+        <text x={chartX} y={height - 2} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="start">{labelFirst}</text>
       )}
       {labelLast && (
-        <text x={padL + chartW} y={height - 1} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="end">{labelLast}</text>
+        <text x={chartX + chartW} y={height - 2} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="end">{labelLast}</text>
       )}
     </svg>
   );
