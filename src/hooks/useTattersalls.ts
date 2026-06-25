@@ -50,12 +50,24 @@ export interface TatNote {
   createdAt?: any;
 }
 
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  "Insurance",
+  "Council Tax",
+  "Gas & Electricity",
+  "Water",
+  "Ground Rent",
+  "Maintenance",
+  "Mortgage",
+  "Other",
+];
+
 // Single shared Firestore doc for balance + expenses
 const SHARED_DOC = doc(db, "tattersalls", "shared");
 
 export function useTattersalls() {
   const [balanceHistory, setBalanceHistory] = useState<BalanceRecord[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>(DEFAULT_EXPENSE_CATEGORIES);
   const [documents, setDocuments] = useState<TatDocument[]>([]);
   const [notes, setNotes] = useState<TatNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +80,7 @@ export function useTattersalls() {
         const data = snap.data();
         setBalanceHistory(data.balanceHistory ?? []);
         setExpenses(data.expenses ?? []);
+        setExpenseCategories(data.expenseCategories ?? DEFAULT_EXPENSE_CATEGORIES);
       } else {
         setBalanceHistory([]);
         setExpenses([]);
@@ -138,6 +151,10 @@ export function useTattersalls() {
     await setDoc(SHARED_DOC, { expenses: [...existing, expense] }, { merge: true });
   }, []);
 
+  const saveExpenseCategories = useCallback(async (cats: string[]) => {
+    await setDoc(SHARED_DOC, { expenseCategories: cats }, { merge: true });
+  }, []);
+
   const uploadDocument = useCallback(async (file: File) => {
     setUploadingDoc(true);
     try {
@@ -183,12 +200,14 @@ export function useTattersalls() {
   return {
     balanceHistory,
     expenses,
+    expenseCategories,
     documents,
     notes,
     loading,
     uploadingDoc,
     addBalance,
     addExpense,
+    saveExpenseCategories,
     uploadDocument,
     updateDocument,
     addNote,

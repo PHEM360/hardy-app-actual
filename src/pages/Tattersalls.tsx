@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
-import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square } from "lucide-react";
+import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,7 +25,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const Tattersalls = () => {
-  const { balanceHistory, expenses, documents, notes, loading, uploadingDoc, addBalance, addExpense, uploadDocument, updateDocument, addNote, toggleNote, deleteNote } = useTattersalls();
+  const { balanceHistory, expenses, expenseCategories, documents, notes, loading, uploadingDoc, addBalance, addExpense, saveExpenseCategories, uploadDocument, updateDocument, addNote, toggleNote, deleteNote } = useTattersalls();
 
   // Add balance dialog
   const [addBalOpen, setAddBalOpen] = useState(false);
@@ -58,6 +58,16 @@ const Tattersalls = () => {
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteAuthor, setNewNoteAuthor] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+
+  // Settings (expense categories)
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editCategories, setEditCategories] = useState<string[]>([]);
+  const [newCatName, setNewCatName] = useState("");
+  const [savingCats, setSavingCats] = useState(false);
+
+  // Computed
+  const regularExpenses = expenses.filter((e) => e.frequency !== "One-off");
+  const oneOffExpenses = expenses.filter((e) => e.frequency === "One-off");
 
   const currentBalance = balanceHistory.length > 0 ? balanceHistory[balanceHistory.length - 1].balance : 0;
 
@@ -136,6 +146,30 @@ const Tattersalls = () => {
     } finally { setAddingNote(false); }
   };
 
+  const openSettings = () => {
+    setEditCategories([...expenseCategories]);
+    setNewCatName("");
+    setSettingsOpen(true);
+  };
+
+  const handleAddCategory = () => {
+    const t = newCatName.trim();
+    if (!t || editCategories.includes(t)) return;
+    setEditCategories((prev) => [...prev, t]);
+    setNewCatName("");
+  };
+
+  const handleRemoveCategory = (i: number) =>
+    setEditCategories((prev) => prev.filter((_, idx) => idx !== i));
+
+  const handleSaveCategories = async () => {
+    setSavingCats(true);
+    try {
+      await saveExpenseCategories(editCategories);
+      setSettingsOpen(false);
+    } finally { setSavingCats(false); }
+  };
+
   if (loading) {
     return (
       <FeaturePageShell title="Tattersalls" subtitle="Flat management & expenses" icon={<Building className="w-5 h-5" />}>
@@ -189,72 +223,6 @@ const Tattersalls = () => {
         )}
       </div>
 
-      {/* Expenses */}
-      <div className="mb-5">
-        <div className="flex items-center justify-between px-1 mb-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</h3>
-          <button onClick={() => setAddExpOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
-            <Plus className="w-3.5 h-3.5" /> Add Expense
-          </button>
-        </div>
-        <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
-          {expenses.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">No expenses yet.</p>
-          ) : expenses.map((exp, i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-2.5">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
-                <p className="text-[10px] text-muted-foreground">{exp.date} · {exp.type} · {exp.frequency}</p>
-              </div>
-              <span className="text-sm font-bold font-display text-card-foreground">£{exp.amount}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Documents */}
-      <div className="mb-5">
-        <div className="flex items-center justify-between px-1 mb-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documents</h3>
-          <button onClick={() => setUploadOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
-            <Upload className="w-3.5 h-3.5" /> Upload
-          </button>
-        </div>
-        <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
-          {documents.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">No documents yet — upload one above.</p>
-          ) : documents.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5">
-              {/* Thumbnail / icon — links out */}
-              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                {doc.fileType === "image" ? (
-                  <img src={doc.url} alt={doc.name} className="w-8 h-8 rounded object-cover border border-border/40" />
-                ) : doc.fileType === "pdf" ? (
-                  <div className="w-8 h-8 rounded bg-destructive/10 border border-destructive/20 flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-destructive" />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 rounded bg-muted border border-border/40 flex items-center justify-center">
-                    <File className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                )}
-              </a>
-              {/* Name + notes — tapping opens edit sheet */}
-              <button className="flex-1 min-w-0 text-left" onClick={() => openDocDetail(doc)}>
-                <p className="text-sm font-medium text-card-foreground truncate">{doc.name}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {new Date(doc.date).toLocaleDateString("en-GB")}
-                  {doc.notes ? ` · ${doc.notes.slice(0, 40)}${doc.notes.length > 40 ? "…" : ""}` : ""}
-                </p>
-              </button>
-              <button onClick={() => openDocDetail(doc)} className="text-muted-foreground hover:text-foreground ml-1 flex-shrink-0">
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Notes & Tasks */}
       <div className="mb-5">
         <div className="flex items-center justify-between px-1 mb-2">
@@ -303,6 +271,100 @@ const Tattersalls = () => {
         </div>
       </div>
 
+      {/* Expenses */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between px-1 mb-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</h3>
+          <div className="flex items-center gap-3">
+            <button onClick={openSettings} className="text-muted-foreground hover:text-foreground" title="Manage categories">
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setAddExpOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
+              <Plus className="w-3.5 h-3.5" /> Add Expense
+            </button>
+          </div>
+        </div>
+
+        {/* Regular expenses */}
+        <div className="mb-3">
+          <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-1 mb-1.5">Regular</p>
+          <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
+            {regularExpenses.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No regular expenses yet.</p>
+            ) : regularExpenses.map((exp, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
+                  <p className="text-[10px] text-muted-foreground">{exp.date} · {exp.type} · {exp.frequency}</p>
+                </div>
+                <span className="text-sm font-bold font-display text-card-foreground">£{exp.amount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* One-off expenses */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-1 mb-1.5">One-off</p>
+          <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
+            {oneOffExpenses.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No one-off expenses yet.</p>
+            ) : oneOffExpenses.map((exp, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
+                  <p className="text-[10px] text-muted-foreground">{exp.date} · {exp.type}</p>
+                </div>
+                <span className="text-sm font-bold font-display text-card-foreground">£{exp.amount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Documents */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between px-1 mb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documents</h3>
+          <button onClick={() => setUploadOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
+            <Upload className="w-3.5 h-3.5" /> Upload
+          </button>
+        </div>
+        <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
+          {documents.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">No documents yet — upload one above.</p>
+          ) : documents.map((doc) => (
+            <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5">
+              {/* Thumbnail / icon — links out */}
+              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                {doc.fileType === "image" ? (
+                  <img src={doc.url} alt={doc.name} className="w-8 h-8 rounded object-cover border border-border/40" />
+                ) : doc.fileType === "pdf" ? (
+                  <div className="w-8 h-8 rounded bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-destructive" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded bg-muted border border-border/40 flex items-center justify-center">
+                    <File className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
+              </a>
+              {/* Name + notes — tapping opens edit sheet */}
+              <button className="flex-1 min-w-0 text-left" onClick={() => openDocDetail(doc)}>
+                <p className="text-sm font-medium text-card-foreground truncate">{doc.name}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {new Date(doc.date).toLocaleDateString("en-GB")}
+                  {doc.notes ? ` · ${doc.notes.slice(0, 40)}${doc.notes.length > 40 ? "…" : ""}` : ""}
+                </p>
+              </button>
+              <button onClick={() => openDocDetail(doc)} className="text-muted-foreground hover:text-foreground ml-1 flex-shrink-0">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Add Balance Dialog */}
       <Dialog open={addBalOpen} onOpenChange={(o) => { setAddBalOpen(o); if (!o) { setNewBalDate(new Date().toISOString().split("T")[0]); setNewBal(""); } }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
@@ -342,7 +404,7 @@ const Tattersalls = () => {
                 <Select value={newExpType} onValueChange={setNewExpType}>
                   <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["General", "Maintenance", "Utilities", "Insurance", "Mortgage", "Other"].map(t => (
+                    {expenseCategories.map(t => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
@@ -354,7 +416,7 @@ const Tattersalls = () => {
               <Select value={newExpFrequency} onValueChange={setNewExpFrequency}>
                 <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Daily", "Weekly", "Monthly", "Quarterly", "Bi-annually", "Annually", "Other"].map(f => (
+                  {["Daily", "Weekly", "Monthly", "Quarterly", "Bi-annually", "Annually", "One-off", "Other"].map(f => (
                     <SelectItem key={f} value={f}>{f}</SelectItem>
                   ))}
                 </SelectContent>
@@ -443,6 +505,42 @@ const Tattersalls = () => {
         }}
         onCancel={() => setScannerFile(null)}
       />
+
+      {/* Settings — expense categories */}
+      <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setNewCatName(""); }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+          <DialogHeader><DialogTitle className="font-display">Expense Categories</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="rounded-xl bg-card border border-border/50 divide-y divide-border/30 overflow-hidden max-h-56 overflow-y-auto">
+              {editCategories.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No categories yet.</p>
+              ) : editCategories.map((cat, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2.5">
+                  <span className="flex-1 text-sm text-card-foreground">{cat}</span>
+                  <button onClick={() => handleRemoveCategory(i)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+                placeholder="New category…"
+                className="h-9 rounded-xl flex-1 text-sm"
+              />
+              <Button size="sm" onClick={handleAddCategory} disabled={!newCatName.trim()} className="h-9 rounded-xl px-3">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            <Button onClick={handleSaveCategories} disabled={savingCats} className="w-full h-10 rounded-xl bg-gradient-primary">
+              {savingCats ? "Saving…" : "Save Categories"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Document detail / edit sheet */}
       <Sheet open={!!docDetail} onOpenChange={(o) => !o && setDocDetail(null)}>
