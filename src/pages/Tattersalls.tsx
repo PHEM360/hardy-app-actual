@@ -24,6 +24,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const PILL_PALETTE = [
+  "bg-blue-100 text-blue-700",
+  "bg-purple-100 text-purple-700",
+  "bg-amber-100 text-amber-700",
+  "bg-cyan-100 text-cyan-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-orange-100 text-orange-700",
+  "bg-rose-100 text-rose-700",
+  "bg-pink-100 text-pink-700",
+  "bg-indigo-100 text-indigo-700",
+  "bg-teal-100 text-teal-700",
+  "bg-lime-100 text-lime-700",
+  "bg-slate-100 text-slate-600",
+];
+
 const Tattersalls = () => {
   const { balanceHistory, expenses, expenseCategories, documents, notes, loading, uploadingDoc, addBalance, addExpense, saveExpenseCategories, uploadDocument, updateDocument, addNote, toggleNote, deleteNote } = useTattersalls();
 
@@ -69,6 +84,11 @@ const Tattersalls = () => {
   const regularExpenses = expenses.filter((e) => e.frequency !== "One-off");
   const oneOffExpenses = expenses.filter((e) => e.frequency === "One-off");
 
+  const catPillClass = (type: string) => {
+    const idx = expenseCategories.indexOf(type);
+    return idx === -1 ? "bg-slate-100 text-slate-600" : PILL_PALETTE[idx % PILL_PALETTE.length];
+  };
+
   const currentBalance = balanceHistory.length > 0 ? balanceHistory[balanceHistory.length - 1].balance : 0;
 
   const handleAddBalance = async () => {
@@ -98,7 +118,7 @@ const Tattersalls = () => {
         frequency: newExpFrequency,
         amount: parseFloat(newExpAmount) || 0,
       });
-      setNewExpDesc(""); setNewExpAmount(""); setNewExpType("General"); setNewExpFrequency("Monthly");
+      setNewExpDesc(""); setNewExpAmount(""); setNewExpType(expenseCategories[0] ?? ""); setNewExpFrequency("Monthly");
       setAddExpOpen(false);
     } finally {
       setAddExpLoading(false);
@@ -181,7 +201,20 @@ const Tattersalls = () => {
   }
 
   return (
-    <FeaturePageShell title="Tattersalls" subtitle="Flat management & expenses" icon={<Building className="w-5 h-5" />}>
+    <FeaturePageShell
+      title="Tattersalls"
+      subtitle="Flat management & expenses"
+      icon={<Building className="w-5 h-5" />}
+      action={
+        <button
+          onClick={openSettings}
+          className="w-9 h-9 rounded-xl bg-muted/60 hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      }
+    >
       {/* Balance Summary */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl bg-gradient-warm mb-5">
         <p className="text-xs text-secondary-foreground/70 uppercase tracking-wider font-medium">Joint Balance</p>
@@ -275,14 +308,9 @@ const Tattersalls = () => {
       <div className="mb-5">
         <div className="flex items-center justify-between px-1 mb-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expenses</h3>
-          <div className="flex items-center gap-3">
-            <button onClick={openSettings} className="text-muted-foreground hover:text-foreground" title="Manage categories">
-              <Settings className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => setAddExpOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium">
-              <Plus className="w-3.5 h-3.5" /> Add Expense
-            </button>
-          </div>
+          <button onClick={() => { setNewExpType(expenseCategories[0] ?? ""); setAddExpOpen(true); }} className="flex items-center gap-1 text-xs text-primary font-medium">
+            <Plus className="w-3.5 h-3.5" /> Add Expense
+          </button>
         </div>
 
         {/* Regular expenses */}
@@ -295,9 +323,12 @@ const Tattersalls = () => {
               <div key={i} className="flex items-center gap-3 px-3 py-2.5">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
-                  <p className="text-[10px] text-muted-foreground">{exp.date} · {exp.type} · {exp.frequency}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${catPillClass(exp.type)}`}>{exp.type}</span>
+                    <span className="text-[10px] text-muted-foreground">{exp.frequency} · {exp.date}</span>
+                  </div>
                 </div>
-                <span className="text-sm font-bold font-display text-card-foreground">£{exp.amount}</span>
+                <span className="text-sm font-bold font-display text-card-foreground flex-shrink-0">£{exp.amount}</span>
               </div>
             ))}
           </div>
@@ -313,9 +344,12 @@ const Tattersalls = () => {
               <div key={i} className="flex items-center gap-3 px-3 py-2.5">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
-                  <p className="text-[10px] text-muted-foreground">{exp.date} · {exp.type}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${catPillClass(exp.type)}`}>{exp.type}</span>
+                    <span className="text-[10px] text-muted-foreground">{exp.date}</span>
+                  </div>
                 </div>
-                <span className="text-sm font-bold font-display text-card-foreground">£{exp.amount}</span>
+                <span className="text-sm font-bold font-display text-card-foreground flex-shrink-0">£{exp.amount}</span>
               </div>
             ))}
           </div>
@@ -509,8 +543,9 @@ const Tattersalls = () => {
       {/* Settings — expense categories */}
       <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setNewCatName(""); }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
-          <DialogHeader><DialogTitle className="font-display">Expense Categories</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display">Settings</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expense Categories</p>
             <div className="rounded-xl bg-card border border-border/50 divide-y divide-border/30 overflow-hidden max-h-56 overflow-y-auto">
               {editCategories.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">No categories yet.</p>
