@@ -24,46 +24,102 @@ const COLORS  = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899
 // ── Mini sparkline (pure SVG, no extra deps) ──────────────────────────────────
 function MiniSparkline({
   values,
+  values2,
+  dates,
   color = "#ffffff",
-  width = 80,
-  height = 36,
+  color2,
+  width = 112,
+  height = 58,
 }: {
   values: number[];
+  values2?: number[];
+  dates?: string[];
   color?: string;
+  color2?: string;
   width?: number;
   height?: number;
 }) {
   if (values.length < 2) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const pad = 3;
-  const w = width - pad * 2;
-  const h = height - pad * 2;
 
-  const pts = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * w;
-    const y = pad + h - ((v - min) / range) * h;
-    return `${x},${y}`;
-  });
-  const polyline = pts.join(" ");
-  // Fill area under line
-  const first = pts[0];
-  const last  = pts[pts.length - 1];
-  const area  = `${first} ${polyline} ${last.split(",")[0]},${pad + h} ${pad},${pad + h}`;
+  const xAxisH = 13; // bottom reserved for date labels
+  const padT = 5;
+  const padL = 2;
+  const padR = 2;
+  const chartH = height - xAxisH - padT;
+  const chartW = width - padL - padR;
+
+  const allVals = values2 ? [...values, ...values2] : values;
+  const min = Math.min(...allVals);
+  const max = Math.max(...allVals);
+  const range = max - min || 1;
+
+  const toX = (i: number, len: number) => padL + (i / (len - 1)) * chartW;
+  const toY = (v: number) => padT + chartH - ((v - min) / range) * chartH;
+
+  const pts1 = values.map((v, i) => `${toX(i, values.length)},${toY(v)}`);
+  const pts2 = values2?.map((v, i) => `${toX(i, values2.length)},${toY(v)}`);
+  const fillPts1 = `${padL},${padT + chartH} ${pts1.join(" ")} ${toX(values.length - 1, values.length)},${padT + chartH}`;
+
+  const labelFirst = dates?.[0] ? format(parseISO(dates[0]), "d MMM") : "";
+  const labelLast  = dates && dates.length > 0 ? format(parseISO(dates[dates.length - 1]), "d MMM") : "";
+
+  const fmt = (v: number) => v % 1 === 0 ? String(v) : v.toFixed(1);
+  const yMin = fmt(min);
+  const yMax = fmt(max);
+
+  // Safe gradient id — strip non-alphanumeric
+  const gradId = `sg${color.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
     <svg width={width} height={height} className="shrink-0 overflow-visible">
       <defs>
-        <linearGradient id={`sg-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.35" />
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity="0.28" />
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <polygon points={area} fill={`url(#sg-${color.replace("#","")})`} />
-      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Latest value dot */}
-      <circle cx={pts[pts.length - 1].split(",")[0]} cy={pts[pts.length - 1].split(",")[1]} r="2.5" fill={color} />
+
+      {/* Subtle dashed mid-gridline */}
+      <line
+        x1={padL} y1={padT + chartH / 2}
+        x2={padL + chartW} y2={padT + chartH / 2}
+        stroke={color} strokeOpacity="0.18" strokeWidth="0.5" strokeDasharray="2,2"
+      />
+      {/* Baseline */}
+      <line
+        x1={padL} y1={padT + chartH}
+        x2={padL + chartW} y2={padT + chartH}
+        stroke={color} strokeOpacity="0.2" strokeWidth="0.5"
+      />
+
+      {/* Fill area */}
+      <polygon points={fillPts1} fill={`url(#${gradId})`} />
+
+      {/* Series 1 line */}
+      <polyline points={pts1.join(" ")} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Series 2 line */}
+      {pts2 && color2 && (
+        <polyline points={pts2.join(" ")} fill="none" stroke={color2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+
+      {/* Endpoint dot(s) */}
+      <circle cx={toX(values.length - 1, values.length)} cy={toY(values[values.length - 1])} r="2.5" fill={color} />
+      {pts2 && color2 && values2 && (
+        <circle cx={toX(values2.length - 1, values2.length)} cy={toY(values2[values2.length - 1])} r="2.5" fill={color2} />
+      )}
+
+      {/* Y-axis: max at top, min at bottom */}
+      <text x={padL} y={padT + 7}           fontSize="7" fill={color} fillOpacity="0.65" textAnchor="start">{yMax}</text>
+      <text x={padL} y={padT + chartH - 1}  fontSize="7" fill={color} fillOpacity="0.65" textAnchor="start">{yMin}</text>
+
+      {/* X-axis: first and last date */}
+      {labelFirst && (
+        <text x={padL}         y={height - 1} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="start">{labelFirst}</text>
+      )}
+      {labelLast && (
+        <text x={padL + chartW} y={height - 1} fontSize="7.5" fill={color} fillOpacity="0.6" textAnchor="end">{labelLast}</text>
+      )}
     </svg>
   );
 }
@@ -246,6 +302,7 @@ export default function Health() {
                         <DeltaBadge val={weightDiff} unit=" kg" />
                         <MiniSparkline
                           values={entries.slice(-12).map((e) => e.weight)}
+                          dates={entries.slice(-12).map((e) => e.date)}
                           color="rgba(255,255,255,0.9)"
                         />
                       </div>
@@ -273,16 +330,13 @@ export default function Health() {
                       <div className="flex flex-col items-end gap-1.5">
                         <DeltaBadge val={bpDiff} unit=" sys" />
                         {bpEntries.length >= 2 && (
-                          <div className="flex flex-col gap-0.5 items-end">
-                            <MiniSparkline
-                              values={bpEntries.slice(-12).map((e) => e.systolic)}
-                              color="#ef4444"
-                            />
-                            <MiniSparkline
-                              values={bpEntries.slice(-12).map((e) => e.diastolic)}
-                              color="#3b82f6"
-                            />
-                          </div>
+                          <MiniSparkline
+                            values={bpEntries.slice(-12).map((e) => e.systolic)}
+                            values2={bpEntries.slice(-12).map((e) => e.diastolic)}
+                            dates={bpEntries.slice(-12).map((e) => e.date)}
+                            color="#ef4444"
+                            color2="#3b82f6"
+                          />
                         )}
                       </div>
                     </div>
@@ -308,6 +362,7 @@ export default function Health() {
                         <DeltaBadge val={waistDiff} unit=" cm" />
                         <MiniSparkline
                           values={measurements.filter((m) => m.waistCm != null).slice(-12).map((m) => m.waistCm!)}
+                          dates={measurements.filter((m) => m.waistCm != null).slice(-12).map((m) => m.date)}
                           color="#10b981"
                         />
                       </div>
