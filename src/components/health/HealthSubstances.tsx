@@ -438,16 +438,24 @@ function WeaningCalendar({
                     override === "green" ? "bg-green-600" : override === "amber" ? "bg-amber-500" : "bg-red-500"
                   }`} />
                 )}
-                {/* Substance dots */}
+                {/* Substance name pills */}
                 {uniqSubs.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5 mt-auto px-0.5 pb-0.5">
-                    {uniqSubs.slice(0, 4).map((sub) => (
-                      <div
-                        key={sub}
-                        style={{ backgroundColor: substanceColor(sub, allSubstanceNames) }}
-                        className="w-1.5 h-1.5 rounded-full"
-                      />
-                    ))}
+                  <div className="flex flex-col gap-0.5 mt-auto w-full px-0.5 pb-0.5">
+                    {uniqSubs.slice(0, 3).map((sub) => {
+                      const col = substanceColor(sub, allSubstanceNames);
+                      return (
+                        <span
+                          key={sub}
+                          style={{ backgroundColor: col + "33", color: col, borderColor: col + "66" }}
+                          className="text-[7px] font-bold leading-none px-1 py-0.5 rounded border truncate w-full block text-center"
+                        >
+                          {sub.length > 6 ? sub.slice(0, 6) + "…" : sub}
+                        </span>
+                      );
+                    })}
+                    {uniqSubs.length > 3 && (
+                      <span className="text-[7px] text-muted-foreground text-center">+{uniqSubs.length - 3}</span>
+                    )}
                   </div>
                 )}
               </button>
