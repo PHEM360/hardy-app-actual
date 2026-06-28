@@ -34,15 +34,15 @@ export interface WidgetLayoutItem {
 export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { id: "greeting",      type: "greeting",      xFrac: 0,   wFrac: 1.0, y: 0,    h: 100,  visible: true  },
   { id: "quick_links",   type: "quick_links",   xFrac: 0,   wFrac: 1.0, y: 108,  h: 190,  visible: true  },
-  { id: "today",         type: "today",         xFrac: 0,   wFrac: 0.5, y: 260,  h: 204,  visible: true  },
-  { id: "tasks",         type: "tasks",         xFrac: 0.5, wFrac: 0.5, y: 260,  h: 204,  visible: true  },
-  { id: "calendar_mini", type: "calendar_mini", xFrac: 0,   wFrac: 1.0, y: 472,  h: 264,  visible: true  },
-  { id: "finance",       type: "finance",       xFrac: 0,   wFrac: 0.5, y: 744,  h: 188,  visible: true  },
-  { id: "households",    type: "households",    xFrac: 0.5, wFrac: 0.5, y: 744,  h: 188,  visible: true  },
-  { id: "pets",          type: "pets",          xFrac: 0,   wFrac: 0.5, y: 940,  h: 188,  visible: true  },
-  { id: "tattersalls",   type: "tattersalls",   xFrac: 0.5, wFrac: 0.5, y: 940,  h: 188,  visible: true  },
-  { id: "companies",     type: "companies",     xFrac: 0,   wFrac: 0.5, y: 1136, h: 188,  visible: true  },
-  { id: "weight",        type: "weight",        xFrac: 0.5, wFrac: 0.5, y: 1136, h: 188,  visible: true  },
+  { id: "today",         type: "today",         xFrac: 0,   wFrac: 0.5, y: 306,  h: 204,  visible: true  },
+  { id: "tasks",         type: "tasks",         xFrac: 0.5, wFrac: 0.5, y: 306,  h: 204,  visible: true  },
+  { id: "calendar_mini", type: "calendar_mini", xFrac: 0,   wFrac: 1.0, y: 518,  h: 264,  visible: true  },
+  { id: "finance",       type: "finance",       xFrac: 0,   wFrac: 0.5, y: 790,  h: 188,  visible: true  },
+  { id: "households",    type: "households",    xFrac: 0.5, wFrac: 0.5, y: 790,  h: 188,  visible: true  },
+  { id: "pets",          type: "pets",          xFrac: 0,   wFrac: 0.5, y: 986,  h: 188,  visible: true  },
+  { id: "tattersalls",   type: "tattersalls",   xFrac: 0.5, wFrac: 0.5, y: 986,  h: 188,  visible: true  },
+  { id: "companies",     type: "companies",     xFrac: 0,   wFrac: 0.5, y: 1182, h: 188,  visible: true  },
+  { id: "weight",        type: "weight",        xFrac: 0.5, wFrac: 0.5, y: 1182, h: 188,  visible: true  },
 ];
 
 export const WIDGET_LABELS: Record<WidgetType, string> = {
@@ -125,7 +125,7 @@ export function useDashboardLayout() {
           const saved: WidgetLayoutItem[] = data.layout;
           const savedIds = new Set(saved.map((w) => w.id));
           const newDefaults = DEFAULT_LAYOUT.filter((d) => !savedIds.has(d.id));
-          setLayout([...saved, ...newDefaults]);
+          setLayout(resolveOverlaps([...saved, ...newDefaults]));
           return;
         }
       }

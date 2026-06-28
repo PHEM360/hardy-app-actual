@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
-import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square, Settings } from "lucide-react";
+import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square, Settings, MessageCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTattersalls, type TatDocument } from "@/hooks/useTattersalls";
+import { useAuth } from "@/auth/AuthContext";
+import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {
@@ -39,8 +42,38 @@ const PILL_PALETTE = [
   "bg-slate-100 text-slate-600",
 ];
 
+// Row tint for alternating expense rows — subtle category-hued bg
+const ROW_TINT_PALETTE = [
+  "bg-blue-50/60 dark:bg-blue-950/20",
+  "bg-purple-50/60 dark:bg-purple-950/20",
+  "bg-amber-50/60 dark:bg-amber-950/20",
+  "bg-cyan-50/60 dark:bg-cyan-950/20",
+  "bg-emerald-50/60 dark:bg-emerald-950/20",
+  "bg-orange-50/60 dark:bg-orange-950/20",
+  "bg-rose-50/60 dark:bg-rose-950/20",
+  "bg-pink-50/60 dark:bg-pink-950/20",
+  "bg-indigo-50/60 dark:bg-indigo-950/20",
+  "bg-teal-50/60 dark:bg-teal-950/20",
+  "bg-lime-50/60 dark:bg-lime-950/20",
+  "bg-slate-50/60 dark:bg-slate-950/20",
+];
+
 const Tattersalls = () => {
-  const { balanceHistory, expenses, expenseCategories, documents, notes, loading, uploadingDoc, addBalance, addExpense, saveExpenseCategories, uploadDocument, updateDocument, addNote, toggleNote, deleteNote } = useTattersalls();
+  const { user } = useAuth();
+  const { balanceHistory, expenses, expenseCategories, documents, notes, loading, uploadingDoc, addBalance, addExpense, saveExpenseCategories, uploadDocument, updateDocument, addNote, updateNote, addComment, toggleNote, deleteNote } = useTattersalls();
+
+  // App users for "Who?" dropdown
+  const [appUsers, setAppUsers] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    getDocs(collection(db, "users")).then((snap) => {
+      setAppUsers(
+        snap.docs.map((d) => ({
+          id: d.id,
+          name: d.data().firstName ?? d.data().displayName ?? d.data().email ?? d.id,
+        }))
+      );
+    }).catch(() => {});
+  }, []);
 
   // Add balance dialog
   const [addBalOpen, setAddBalOpen] = useState(false);
@@ -69,10 +102,22 @@ const Tattersalls = () => {
   const [editNotes, setEditNotes] = useState("");
   const [savingDoc, setSavingDoc] = useState(false);
 
-  // Notes / tasks
+  // Notes / tasks — add form
+  const [addMode, setAddMode] = useState<null | 'note' | 'task'>(null);
   const [newNoteText, setNewNoteText] = useState("");
   const [newNoteAuthor, setNewNoteAuthor] = useState("");
+  const [newNoteAuthorOther, setNewNoteAuthorOther] = useState("");
+  const [newNoteType, setNewNoteType] = useState<'task' | 'note'>('task');
+  const [newNoteDueDate, setNewNoteDueDate] = useState("");
+  const [newNoteAddToTasks, setNewNoteAddToTasks] = useState(false);
+  const [newNoteReminder, setNewNoteReminder] = useState("none");
   const [addingNote, setAddingNote] = useState(false);
+  // Edit & comments
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState("");
+  const [expandedCommentId, setExpandedCommentId] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState("");
+  const [newCommentAuthor, setNewCommentAuthor] = useState("");
 
   // Settings (expense categories)
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -160,10 +205,48 @@ const Tattersalls = () => {
   const handleAddNote = async () => {
     if (!newNoteText.trim()) return;
     setAddingNote(true);
+    const resolvedAuthor = newNoteAuthor === "__other__"
+      ? newNoteAuthorOther.trim() || undefined
+      : newNoteAuthor || undefined;
     try {
-      await addNote(newNoteText.trim(), newNoteAuthor.trim() || undefined);
-      setNewNoteText("");
+      await addNote(
+        newNoteText.trim(),
+        resolvedAuthor,
+        newNoteType,
+        newNoteType === 'task' ? (newNoteDueDate || undefined) : undefined,
+        user?.uid,
+      );
+      if (newNoteType === 'task' && newNoteAddToTasks && user?.uid) {
+        const taskData: Record<string, unknown> = {
+          title: newNoteText.trim(),
+          status: "todo",
+          dueDate: newNoteDueDate || null,
+          createdAt: serverTimestamp(),
+        };
+        if (newNoteReminder === "onDay") {
+          taskData.reminder = { mode: "onDayAt", timeOfDay: "09:00", channels: ["email"] };
+        } else if (newNoteReminder === "dayBefore") {
+          taskData.reminder = { mode: "relative", relativeAmount: 1, relativeUnit: "days", relativeDirection: "before", timeOfDay: "09:00", channels: ["email"] };
+        }
+        await addDoc(collection(db, "tasks", user.uid, "items"), taskData);
+      }
+      setNewNoteText(""); setNewNoteAuthor(""); setNewNoteAuthorOther("");
+      setNewNoteDueDate(""); setNewNoteAddToTasks(false); setNewNoteReminder("none");
+      setAddMode(null);
     } finally { setAddingNote(false); }
+  };
+
+  const handleSaveEdit = async (noteId: string) => {
+    if (!editNoteText.trim()) return;
+    await updateNote(noteId, editNoteText.trim());
+    setEditingNoteId(null);
+  };
+
+  const handleAddComment = async (noteId: string) => {
+    if (!newCommentText.trim()) return;
+    const name = newCommentAuthor.trim() || (appUsers.find(u => u.id === user?.uid)?.name ?? "Someone");
+    await addComment(noteId, newCommentText.trim(), name);
+    setNewCommentText(""); setNewCommentAuthor("");
   };
 
   const openSettings = () => {
@@ -258,49 +341,189 @@ const Tattersalls = () => {
 
       {/* Notes & Tasks */}
       <div className="mb-5">
-        <div className="flex items-center justify-between px-1 mb-2">
+        {/* Header with Add buttons */}
+        <div className="flex items-center justify-between px-1 mb-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <StickyNote className="w-3.5 h-3.5" /> Notes & Tasks
           </h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setAddMode(addMode === 'note' ? null : 'note'); setNewNoteType('note'); setNewNoteText(""); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm ${addMode === 'note' ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200"}`}
+            >
+              <StickyNote className="w-3.5 h-3.5" /> Add Note
+            </button>
+            <button
+              onClick={() => { setAddMode(addMode === 'task' ? null : 'task'); setNewNoteType('task'); setNewNoteText(""); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm ${addMode === 'task' ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-200"}`}
+            >
+              <CheckSquare className="w-3.5 h-3.5" /> Add Task
+            </button>
+          </div>
         </div>
 
-        {/* Add note input */}
-        <div className="flex gap-2 mb-3">
-          <Input
-            value={newNoteText}
-            onChange={(e) => setNewNoteText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddNote()}
-            placeholder="Add a note or task…"
-            className="flex-1 h-9 rounded-xl text-sm"
-          />
-          <Input
-            value={newNoteAuthor}
-            onChange={(e) => setNewNoteAuthor(e.target.value)}
-            placeholder="Who?"
-            className="w-24 h-9 rounded-xl text-sm"
-          />
-          <Button size="sm" onClick={handleAddNote} disabled={addingNote || !newNoteText.trim()} className="h-9 rounded-xl px-3">
-            <Plus className="w-4 h-4" />
-          </Button>
-        </div>
+        {/* Collapsible add form */}
+        {addMode !== null && (
+          <div className={`rounded-xl border shadow-soft p-3 mb-3 space-y-3 ${addMode === 'note' ? "bg-amber-50/60 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/40" : "bg-emerald-50/60 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/40"}`}>
+            <Input
+              autoFocus
+              value={newNoteText}
+              onChange={(e) => setNewNoteText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddNote()}
+              placeholder={addMode === 'note' ? "Write your note…" : "Describe the task…"}
+              className="h-9 rounded-xl text-sm w-full"
+            />
+            <div>
+              <select
+                value={newNoteAuthor}
+                onChange={(e) => setNewNoteAuthor(e.target.value)}
+                className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+              >
+                <option value="">Who? (optional)</option>
+                {appUsers.map((u) => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+                <option value="__other__">Other…</option>
+              </select>
+              {newNoteAuthor === "__other__" && (
+                <Input value={newNoteAuthorOther} onChange={(e) => setNewNoteAuthorOther(e.target.value)}
+                  placeholder="Enter name…" className="mt-2 h-9 rounded-xl text-sm w-full" />
+              )}
+            </div>
+            {addMode === 'task' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Due date</label>
+                  <Input type="date" value={newNoteDueDate} onChange={(e) => setNewNoteDueDate(e.target.value)} className="h-9 rounded-xl text-sm w-full" />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={newNoteAddToTasks} onChange={(e) => setNewNoteAddToTasks(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                  <span className="text-sm text-card-foreground">Add to main task list</span>
+                </label>
+                {newNoteAddToTasks && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Reminder</label>
+                    <select value={newNoteReminder} onChange={(e) => setNewNoteReminder(e.target.value)}
+                      className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50">
+                      <option value="none">None</option>
+                      <option value="onDay">On the day at 9am</option>
+                      <option value="dayBefore">1 day before</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button onClick={handleAddNote} disabled={addingNote || !newNoteText.trim()}
+                className={`flex-1 h-9 rounded-xl text-sm ${addMode === 'note' ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}>
+                <Plus className="w-4 h-4 mr-1" />
+                {addingNote ? "Adding…" : addMode === 'note' ? "Add Note" : "Add Task"}
+              </Button>
+              <Button variant="ghost" onClick={() => setAddMode(null)} className="h-9 px-3 rounded-xl text-xs">Cancel</Button>
+            </div>
+          </div>
+        )}
 
+        {/* Note / task list */}
         <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
           {notes.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">No notes yet — add one above.</p>
-          ) : notes.map((note) => (
-            <div key={note.id} className={`flex items-start gap-3 px-3 py-2.5 transition-colors ${note.done ? "bg-muted/20" : ""}`}>
-              <button onClick={() => toggleNote(note.id, !note.done)} className="mt-0.5 flex-shrink-0 text-muted-foreground hover:text-primary">
-                {note.done ? <CheckSquare className="w-4 h-4 text-green-500" /> : <Square className="w-4 h-4" />}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm ${note.done ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{note.text}</p>
-                {note.author && <p className="text-[10px] text-muted-foreground mt-0.5">{note.author}</p>}
+            <p className="text-xs text-muted-foreground text-center py-6">No notes or tasks yet — add one above.</p>
+          ) : notes.map((note) => {
+            const isNoteType = note.type === 'note';
+            const isEditing = editingNoteId === note.id;
+            const isCommentsOpen = expandedCommentId === note.id;
+            const commentCount = note.comments?.length ?? 0;
+            const canEdit = !note.authorId || note.authorId === user?.uid;
+            return (
+              <div key={note.id} className={`transition-colors ${isNoteType ? "bg-amber-50/40 dark:bg-amber-950/15" : note.done ? "bg-muted/15" : ""}`}>
+                <div className="flex items-start gap-3 px-3 py-2.5">
+                  {/* Checkbox or sticky note icon */}
+                  {isNoteType ? (
+                    <StickyNote className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-400" />
+                  ) : (
+                    <button onClick={() => toggleNote(note.id, !note.done)} className="mt-0.5 flex-shrink-0 text-muted-foreground hover:text-primary">
+                      {note.done ? <CheckSquare className="w-4 h-4 text-green-500" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  )}
+
+                  {/* Text + meta */}
+                  <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                      <div className="flex gap-2 items-center">
+                        <Input autoFocus value={editNoteText} onChange={(e) => setEditNoteText(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveEdit(note.id); if (e.key === "Escape") setEditingNoteId(null); }}
+                          className="h-8 rounded-lg text-sm flex-1" />
+                        <button onClick={() => handleSaveEdit(note.id)} className="text-xs text-primary font-semibold px-2"><Check className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingNoteId(null)} className="text-xs text-muted-foreground px-1"><X className="w-4 h-4" /></button>
+                      </div>
+                    ) : (
+                      <p className={`text-sm ${!isNoteType && note.done ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{note.text}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      {note.author && <span className="text-[10px] text-muted-foreground">{note.author}</span>}
+                      {note.dueDate && <span className="text-[10px] text-muted-foreground">Due: {new Date(note.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                    {/* Comments badge */}
+                    <button
+                      onClick={() => { setExpandedCommentId(isCommentsOpen ? null : note.id); setNewCommentText(""); setNewCommentAuthor(""); }}
+                      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full transition-colors ${isCommentsOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      {commentCount > 0 && <span>{commentCount}</span>}
+                    </button>
+                    {/* Edit (author only) */}
+                    {canEdit && !isEditing && (
+                      <button onClick={() => { setEditingNoteId(note.id); setEditNoteText(note.text); }}
+                        className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {/* Delete */}
+                    <button onClick={() => deleteNote(note.id)} className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Comments panel */}
+                {isCommentsOpen && (
+                  <div className="px-3 pb-3 pt-0 border-t border-border/20 bg-muted/20">
+                    {commentCount > 0 && (
+                      <div className="space-y-1.5 py-2">
+                        {note.comments!.map((c) => (
+                          <div key={c.id} className="flex gap-2 items-start">
+                            <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-[9px] font-bold text-primary">{c.authorName.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[10px] font-semibold text-foreground">{c.authorName} </span>
+                              <span className="text-[10px] text-muted-foreground">{c.text}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-1">
+                      <Input value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAddComment(note.id)}
+                        placeholder="Add a comment…" className="h-8 rounded-lg text-xs flex-1" />
+                      <select value={newCommentAuthor} onChange={(e) => setNewCommentAuthor(e.target.value)}
+                        className="h-8 rounded-lg border border-input bg-background px-2 text-xs text-foreground focus:outline-none w-28">
+                        <option value="">Who?</option>
+                        {appUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                      </select>
+                      <button onClick={() => handleAddComment(note.id)} disabled={!newCommentText.trim()}
+                        className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40">Post</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button onClick={() => deleteNote(note.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -319,8 +542,11 @@ const Tattersalls = () => {
           <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
             {regularExpenses.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-6">No regular expenses yet.</p>
-            ) : regularExpenses.map((exp, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+            ) : regularExpenses.map((exp, i) => {
+              const catIdx = expenseCategories.indexOf(exp.type);
+              const rowTint = catIdx !== -1 ? ROW_TINT_PALETTE[catIdx % ROW_TINT_PALETTE.length] : (i % 2 === 0 ? "bg-slate-50/60 dark:bg-slate-950/20" : "");
+              return (
+              <div key={i} className={`flex items-center gap-3 px-3 py-2.5 ${rowTint}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -330,7 +556,7 @@ const Tattersalls = () => {
                 </div>
                 <span className="text-sm font-bold font-display text-card-foreground flex-shrink-0">£{exp.amount}</span>
               </div>
-            ))}
+            ); })}
           </div>
         </div>
 
@@ -340,8 +566,11 @@ const Tattersalls = () => {
           <div className="rounded-xl bg-card border border-border/50 shadow-soft divide-y divide-border/30 overflow-hidden">
             {oneOffExpenses.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-6">No one-off expenses yet.</p>
-            ) : oneOffExpenses.map((exp, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+            ) : oneOffExpenses.map((exp, i) => {
+              const catIdx = expenseCategories.indexOf(exp.type);
+              const rowTint = catIdx !== -1 ? ROW_TINT_PALETTE[catIdx % ROW_TINT_PALETTE.length] : (i % 2 === 0 ? "bg-slate-50/60 dark:bg-slate-950/20" : "");
+              return (
+              <div key={i} className={`flex items-center gap-3 px-3 py-2.5 ${rowTint}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-card-foreground">{exp.desc}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -351,7 +580,7 @@ const Tattersalls = () => {
                 </div>
                 <span className="text-sm font-bold font-display text-card-foreground flex-shrink-0">£{exp.amount}</span>
               </div>
-            ))}
+            ); })}
           </div>
         </div>
       </div>

@@ -512,10 +512,13 @@ const Pets = () => {
       </Dialog>
 
       {pets.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="text-5xl mb-4">🐾</div>
-          <p className="text-sm font-semibold text-card-foreground mb-1">No pets yet</p>
-          <p className="text-xs text-muted-foreground mb-4">Add your first pet to get started.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-warm flex items-center justify-center text-4xl mb-5 shadow-elevated">🐾</div>
+          <p className="text-base font-bold text-card-foreground mb-1">No pets yet</p>
+          <p className="text-sm text-muted-foreground mb-5 max-w-xs">Add your first furry family member to start tracking their health, treatments and more.</p>
+          <button onClick={() => setAddPetOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-primary text-white text-sm font-semibold shadow-glow">
+            <Plus className="w-4 h-4" /> Add First Pet
+          </button>
         </div>
       )}
 
@@ -565,7 +568,10 @@ const Pets = () => {
       {/* Treatment Status */}
       <div className="mb-5">
         <div className="flex items-center justify-between px-1 mb-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Treatment Status</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-amber-500 inline-block" />
+            Treatment Status
+          </h3>
           <button onClick={() => setAddTreatmentOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Record</button>
         </div>
 
@@ -705,7 +711,10 @@ const Pets = () => {
       {/* Weight Graph */}
       <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-soft mb-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Weight History</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
+            Weight History
+          </h3>
           <button onClick={() => setAddWeightOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Log</button>
         </div>
         <div className="flex gap-3 mb-3">
@@ -739,7 +748,10 @@ const Pets = () => {
 
       {/* Insurance */}
       <div className="space-y-3 mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Insurance</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-blue-500 inline-block" />
+          Insurance
+        </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {pets.map((pet, i) => {
             const expanded = insuranceExpanded === pet.id;

@@ -182,8 +182,9 @@ function CompanyForm({
 function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <div className="flex items-center gap-2 pt-3 pb-1.5">
+      <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block flex-shrink-0" />
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
-      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">{count}</span>
+      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">{count}</span>
     </div>
   );
 }
@@ -419,13 +420,13 @@ const Companies = () => {
         <div>
           <AnimatePresence mode="popLayout">
             {companies.length === 0 ? (
-              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-16 gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center text-2xl">🏢</div>
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-20 gap-4">
+                <div className="w-20 h-20 rounded-3xl bg-gradient-primary flex items-center justify-center text-3xl shadow-elevated">🏢</div>
                 <div className="text-center">
-                  <p className="text-sm font-medium">No companies yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Add your first company to get started</p>
+                  <p className="text-base font-bold text-card-foreground">No companies yet</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xs">Add your first company to start managing your business portfolio.</p>
                 </div>
-                <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5">
+                <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5 bg-gradient-primary text-white shadow-glow">
                   <Plus className="w-3.5 h-3.5" /> Add First Company
                 </Button>
               </motion.div>

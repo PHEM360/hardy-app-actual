@@ -21,6 +21,7 @@ import Companies from "@/pages/Companies";
 import CompanyDetail from "@/pages/CompanyDetail";
 import More from "@/pages/More";
 import Settings from "@/pages/Settings";
+import NotificationSettings from "@/pages/NotificationSettings";
 import Themes from "@/pages/Themes";
 import LogInDetails from "@/pages/LogInDetails";
 import QRCodes from "@/pages/QRCodes";
@@ -72,6 +73,8 @@ const App = () => (
             <Route path="/companies/:id" element={<CompanyDetail />} />
             <Route path="/more" element={<More />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/notifications" element={<NotificationSettings />} />
+            <Route path="/notification-settings" element={<NotificationSettings />} />
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
             <Route path="/qr-codes" element={<QRCodes />} />

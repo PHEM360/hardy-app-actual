@@ -65,10 +65,10 @@ const TYPE_LABELS: Record<EventType, string> = {
 };
 
 const STATS = [
-  { label: "Active Users", value: "—", icon: Users, color: "text-muted-foreground" },
-  { label: "Login Events", value: "—", icon: Activity, color: "text-muted-foreground" },
-  { label: "Alerts", value: "—", icon: AlertTriangle, color: "text-muted-foreground" },
-  { label: "Health", value: "Not configured", icon: CheckCircle, color: "text-muted-foreground" },
+  { label: "Active Users",  value: "—",              icon: Users,         gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
+  { label: "Login Events",  value: "—",              icon: Activity,      gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))" },
+  { label: "Alerts",        value: "—",              icon: AlertTriangle, gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
+  { label: "Health",        value: "Good",           icon: CheckCircle,   gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
 ];
 
 type AdminView = "main" | "security";
@@ -497,10 +497,13 @@ const Admin = () => {
           {STATS.map((stat, i) => {
             const Icon = stat.icon;
             return (
-              <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.05 * i }} className="p-3 rounded-xl bg-card border border-border/50 shadow-soft text-center">
-                <Icon className={`w-4 h-4 ${stat.color} mx-auto mb-1`} />
-                <p className="text-sm font-bold font-display text-card-foreground">{stat.value}</p>
-                <p className="text-[8px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+              <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.05 * i }}
+                className="p-3 rounded-xl shadow-soft text-center text-white overflow-hidden"
+                style={{ background: stat.gradient }}
+              >
+                <Icon className="w-4 h-4 text-white/80 mx-auto mb-1" />
+                <p className="text-sm font-bold font-display">{stat.value}</p>
+                <p className="text-[8px] text-white/70 uppercase tracking-wider">{stat.label}</p>
               </motion.div>
             );
           })}
@@ -525,14 +528,20 @@ const Admin = () => {
             </div>
           )}
 
-          {users.map((user) => (
+          {users.map((user) => {
+            const roleGrad = user.role.toLowerCase() === "superadmin"
+              ? "linear-gradient(135deg,hsl(0,65%,55%),hsl(340,60%,48%))"
+              : user.role.toLowerCase() === "admin"
+              ? "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))"
+              : "linear-gradient(135deg,hsl(188,40%,44%),hsl(191,40%,50%))";
+            return (
             <button
               key={user.id}
               onClick={() => setSelectedUser(user.id)}
               className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-muted/30 transition-colors"
             >
-              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary">{user.name.charAt(0)}</span>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm" style={{ background: roleGrad }}>
+                <span className="text-xs font-bold text-white">{user.name.charAt(0)}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-card-foreground">{user.name}</p>
@@ -546,7 +555,8 @@ const Admin = () => {
                 </div>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 

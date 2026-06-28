@@ -156,11 +156,11 @@ function TaskDetailSheet({
 }) {
   const [quickAddInput, setQuickAddInput] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  // Which subtask is expanded (shows notes textarea + due date input)
   const [expandedSubId, setExpandedSubId] = useState<string | null>(null);
-  // Which subtask title is being edited inline
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
   const [editingSubTitle, setEditingSubTitle] = useState("");
+  const [dragSubIdx, setDragSubIdx] = useState<number | null>(null);
+  const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
 
   if (!task) return null;
 
@@ -182,13 +182,17 @@ function TaskDetailSheet({
     updateTask(task.id, { subtasks: task.subtasks!.filter((s) => s.id !== subId) });
   };
 
-  const moveSub = (idx: number, dir: -1 | 1) => {
-    if (!task.id) return;
-    const subs = [...task.subtasks!];
-    const next = idx + dir;
-    if (next < 0 || next >= subs.length) return;
-    [subs[idx], subs[next]] = [subs[next], subs[idx]];
-    updateTask(task.id, { subtasks: subs });
+  const handleSubDragStart = (idx: number) => setDragSubIdx(idx);
+  const handleSubDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverSubIdx(idx); };
+  const handleSubDrop = () => {
+    if (dragSubIdx === null || dragOverSubIdx === null || dragSubIdx === dragOverSubIdx) {
+      setDragSubIdx(null); setDragOverSubIdx(null); return;
+    }
+    const subs = [...(task.subtasks ?? [])];
+    const [moved] = subs.splice(dragSubIdx, 1);
+    subs.splice(dragOverSubIdx, 0, moved);
+    updateTask(task.id!, { subtasks: subs });
+    setDragSubIdx(null); setDragOverSubIdx(null);
   };
 
   const commitSubTitle = (subId: string) => {
@@ -286,8 +290,15 @@ function TaskDetailSheet({
                 return (
                   <div
                     key={sub.id}
+                    draggable
+                    onDragStart={() => handleSubDragStart(idx)}
+                    onDragOver={(e) => handleSubDragOver(e, idx)}
+                    onDrop={handleSubDrop}
+                    onDragEnd={() => { setDragSubIdx(null); setDragOverSubIdx(null); }}
                     className={`rounded-xl border transition-all ${
-                      sub.done
+                      dragOverSubIdx === idx && dragSubIdx !== idx
+                        ? "border-primary/50 bg-primary/5"
+                        : sub.done
                         ? "bg-muted/20 border-border/30"
                         : isExpanded
                         ? "bg-card border-border shadow-sm"
@@ -295,7 +306,15 @@ function TaskDetailSheet({
                     }`}
                   >
                     {/* ── Top row ── */}
-                    <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+                    <div className="flex items-start gap-2 px-2 pt-2.5 pb-2">
+                      {/* Drag handle */}
+                      <span
+                        className="mt-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </span>
+
                       {/* Done checkbox */}
                       <button
                         onClick={() => {
@@ -305,7 +324,7 @@ function TaskDetailSheet({
                             status: newDone ? "done" : "todo",
                           });
                         }}
-                        className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                           sub.done
                             ? "bg-green-500 border-green-500 text-white"
                             : "border-muted-foreground/40 hover:border-green-400"
@@ -331,7 +350,7 @@ function TaskDetailSheet({
                           />
                         ) : (
                           <button
-                            className={`text-sm text-left w-full truncate ${
+                            className={`text-sm text-left w-full break-words ${
                               sub.done ? "line-through text-muted-foreground" : "text-card-foreground"
                             }`}
                             onClick={() => {
@@ -394,26 +413,6 @@ function TaskDetailSheet({
                       >
                         <Sun className="w-3 h-3" />
                       </button>
-
-                      {/* Reorder */}
-                      <div className="flex flex-col flex-shrink-0">
-                        <button
-                          onClick={() => moveSub(idx, -1)}
-                          disabled={idx === 0}
-                          className="p-0 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                          title="Move up"
-                        >
-                          <ChevronUp className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => moveSub(idx, 1)}
-                          disabled={idx === (task.subtasks?.length ?? 0) - 1}
-                          className="p-0 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                          title="Move down"
-                        >
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                      </div>
 
                       {/* Delete */}
                       <button
@@ -627,7 +626,6 @@ function TaskForm({
   });
   const [tagInput, setTagInput] = useState("");
   const [subtaskInput, setSubtaskInput] = useState("");
-  const [formTab, setFormTab] = useState<"details" | "subtasks" | "notes">("details");
 
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -657,174 +655,165 @@ function TaskForm({
   const safeCategory = settings.categories.includes(form.category) ? form.category : settings.categories[0] ?? "Other";
 
   return (
-    <div className="pt-1">
-      {/* Form tabs */}
-      <div className="flex gap-1 mb-4 bg-muted rounded-2xl p-1">
-        {(["details", "subtasks", "notes"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setFormTab(t)}
-            className={`flex-1 text-xs font-semibold py-2 rounded-xl capitalize transition-all ${
-              formTab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t === "subtasks" ? `Subtasks${form.subtasks?.length ? ` (${form.subtasks.length})` : ""}` : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
+    <div className="pt-1 space-y-3.5">
+      {/* Title */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Title *</Label>
+        <Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Task title" className="h-10 rounded-xl" />
       </div>
 
-      {formTab === "details" && (
-        <div className="space-y-3.5">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Title *</Label>
-            <Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Task title" className="h-10 rounded-xl" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</Label>
-            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Optional details…" className="rounded-xl resize-none" rows={2} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Priority</Label>
-              <Select value={form.priority} onValueChange={(v) => set("priority", v as TaskPriority)}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      <span className="flex items-center gap-2">
-                        <span className="inline-block w-2 h-2 rounded-full" style={{ background: p.hex }} />
-                        {p.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</Label>
-              <Select value={form.status} onValueChange={(v) => set("status", v as TaskStatus)}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Category</Label>
-              <Select value={safeCategory} onValueChange={(v) => set("category", v)}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {settings.categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      <span className="flex items-center gap-2">
-                        {settings.categoryColors?.[c] && (
-                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: settings.categoryColors[c] }} />
-                        )}
-                        {c}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Due Date</Label>
-              <Input type="date" value={form.dueDate || ""} onChange={(e) => set("dueDate", e.target.value)} className="h-10 rounded-xl" />
-            </div>
-          </div>
-          {settings.companies.length > 0 && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Company</Label>
-              <Select value={form.company || ""} onValueChange={(v) => set("company", v === "__none__" ? "" : v)}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="None" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {settings.companies.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      <span className="flex items-center gap-2">
-                        {settings.companyColors?.[c] && (
-                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: settings.companyColors[c] }} />
-                        )}
-                        {c}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          {settings.customFields.map((field) => (
-            <div key={field.id} className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{field.label}</Label>
-              <Select value={form.customFields?.[field.id] ?? ""} onValueChange={(v) => setCustomField(field.id, v)}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder={`Select ${field.label}…`} /></SelectTrigger>
-                <SelectContent>
-                  {field.options.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tags</Label>
-            <div className="flex gap-2">
-              <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())} placeholder="Type tag + Enter" className="h-9 rounded-xl flex-1" />
-              <Button type="button" variant="outline" onClick={addTag} className="h-9 rounded-xl px-3">Add</Button>
-            </div>
-            {form.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {form.tags.map((t) => (
-                  <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full">
-                    {t}
-                    <button onClick={() => set("tags", form.tags.filter((x) => x !== t))} className="text-muted-foreground hover:text-foreground">×</button>
+      {/* Description / Notes */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description / Notes</Label>
+        <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Optional details, notes, links…" className="rounded-xl resize-none" rows={3} />
+      </div>
+
+      {/* Priority + Status */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Priority</Label>
+          <Select value={form.priority} onValueChange={(v) => set("priority", v as TaskPriority)}>
+            <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PRIORITIES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: p.hex }} />
+                    {p.label}
                   </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => set("isToday", !form.isToday)}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border transition-colors ${
-              form.isToday ? "bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/30 dark:border-amber-700" : "border-border text-muted-foreground hover:bg-muted/50"
-            }`}
-          >
-            <Sun className="w-3.5 h-3.5" />
-            {form.isToday ? "Added to Today ✓" : "Add to Today"}
-          </button>
-        </div>
-      )}
-
-      {formTab === "subtasks" && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <Input value={subtaskInput} onChange={(e) => setSubtaskInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSubtask())} placeholder="Add subtask…" className="h-9 rounded-xl flex-1" />
-            <Button type="button" variant="outline" onClick={addSubtask} className="h-9 rounded-xl px-3">Add</Button>
-          </div>
-          {(form.subtasks ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">No subtasks yet.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {(form.subtasks ?? []).map((sub) => (
-                <div key={sub.id} className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2">
-                  <button onClick={() => toggleSubtask(sub.id)} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border"}`}>
-                    {sub.done && <CheckCircle2 className="w-3 h-3" />}
-                  </button>
-                  <span className={`flex-1 text-sm ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
-                  <button onClick={() => removeSubtask(sub.id)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
-                </div>
+                </SelectItem>
               ))}
-            </div>
-          )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</Label>
+          <Select value={form.status} onValueChange={(v) => set("status", v as TaskStatus)}>
+            <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Category + Due Date */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Category</Label>
+          <Select value={safeCategory} onValueChange={(v) => set("category", v)}>
+            <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {settings.categories.map((c) => (
+                <SelectItem key={c} value={c}>
+                  <span className="flex items-center gap-2">
+                    {settings.categoryColors?.[c] && (
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: settings.categoryColors[c] }} />
+                    )}
+                    {c}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Due Date</Label>
+          <Input type="date" value={form.dueDate || ""} onChange={(e) => set("dueDate", e.target.value)} className="h-10 rounded-xl" />
+        </div>
+      </div>
+
+      {/* Company */}
+      {settings.companies.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Company</Label>
+          <Select value={form.company || ""} onValueChange={(v) => set("company", v === "__none__" ? "" : v)}>
+            <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="None" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {settings.companies.map((c) => (
+                <SelectItem key={c} value={c}>
+                  <span className="flex items-center gap-2">
+                    {settings.companyColors?.[c] && (
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: settings.companyColors[c] }} />
+                    )}
+                    {c}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {formTab === "notes" && (
-        <div className="space-y-2">
-          <Textarea value={form.notes ?? ""} onChange={(e) => set("notes", e.target.value)} placeholder="Private notes, links, context…" className="rounded-xl resize-none" rows={10} />
-          <p className="text-[10px] text-muted-foreground">Notes are only visible to you.</p>
+      {/* Custom fields */}
+      {settings.customFields.map((field) => (
+        <div key={field.id} className="space-y-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{field.label}</Label>
+          <Select value={form.customFields?.[field.id] ?? ""} onValueChange={(v) => setCustomField(field.id, v)}>
+            <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder={`Select ${field.label}…`} /></SelectTrigger>
+            <SelectContent>
+              {field.options.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-      )}
+      ))}
+
+      {/* Tags */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tags</Label>
+        <div className="flex gap-2">
+          <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())} placeholder="Type tag + Enter" className="h-9 rounded-xl flex-1" />
+          <Button type="button" variant="outline" onClick={addTag} className="h-9 rounded-xl px-3">Add</Button>
+        </div>
+        {form.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {form.tags.map((t) => (
+              <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full">
+                {t}
+                <button onClick={() => set("tags", form.tags.filter((x) => x !== t))} className="text-muted-foreground hover:text-foreground">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Subtasks */}
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Subtasks{form.subtasks?.length ? ` (${form.subtasks.length})` : ""}
+        </Label>
+        <div className="flex gap-2">
+          <Input value={subtaskInput} onChange={(e) => setSubtaskInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSubtask())} placeholder="Add subtask…" className="h-9 rounded-xl flex-1" />
+          <Button type="button" variant="outline" onClick={addSubtask} className="h-9 rounded-xl px-3">Add</Button>
+        </div>
+        {(form.subtasks ?? []).length > 0 && (
+          <div className="space-y-1.5">
+            {(form.subtasks ?? []).map((sub) => (
+              <div key={sub.id} className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2">
+                <button onClick={() => toggleSubtask(sub.id)} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-border"}`}>
+                  {sub.done && <CheckCircle2 className="w-3 h-3" />}
+                </button>
+                <span className={`flex-1 text-sm ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
+                <button onClick={() => removeSubtask(sub.id)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add to Today */}
+      <button
+        onClick={() => set("isToday", !form.isToday)}
+        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border transition-colors ${
+          form.isToday
+            ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+            : "bg-amber-100 border-amber-200 text-amber-700 hover:bg-amber-200 hover:border-amber-300 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-400"
+        }`}
+      >
+        <Sun className="w-3.5 h-3.5" />
+        {form.isToday ? "Added to Today ✓" : "Add to Today"}
+      </button>
 
       <div className="flex gap-2 pt-4 mt-2 border-t border-border/40">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-10 rounded-xl">Cancel</Button>
@@ -1193,13 +1182,281 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
 
 type TaskView = "list" | "tile" | "kanban" | "company";
 
+// ─── Task Expanded Detail (inline expansion for list view) ────────────────────
+
+function TaskExpandedDetail({
+  task, onEdit, onDelete, onToggleToday, onStatusChange, settings, updateTask,
+}: {
+  task: Task; onEdit: () => void; onDelete: () => void;
+  onToggleToday: () => void; onStatusChange: (s: TaskStatus) => void;
+  settings: TaskSettings; updateTask: (id: string, data: Partial<Task>) => Promise<void>;
+}) {
+  const [quickAddInput, setQuickAddInput] = useState("");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [expandedSubId, setExpandedSubId] = useState<string | null>(null);
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
+  const [editingSubTitle, setEditingSubTitle] = useState("");
+  const [dragSubIdx, setDragSubIdx] = useState<number | null>(null);
+  const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
+
+  const priority = PRIORITIES.find((p) => p.value === task.priority)!;
+  const status = STATUSES.find((s) => s.value === task.status)!;
+  const subtaskCount = task.subtasks?.length ?? 0;
+  const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
+
+  const patchSub = (subId: string, patch: Partial<TaskSubtask>) => {
+    if (!task.id) return;
+    updateTask(task.id, { subtasks: task.subtasks!.map((s) => s.id === subId ? { ...s, ...patch } : s) });
+  };
+  const deleteSub = (subId: string) => {
+    if (!task.id) return;
+    updateTask(task.id, { subtasks: task.subtasks!.filter((s) => s.id !== subId) });
+  };
+  const handleSubDragStart = (idx: number) => setDragSubIdx(idx);
+  const handleSubDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverSubIdx(idx); };
+  const handleSubDrop = () => {
+    if (dragSubIdx === null || dragOverSubIdx === null || dragSubIdx === dragOverSubIdx) {
+      setDragSubIdx(null); setDragOverSubIdx(null); return;
+    }
+    const subs = [...(task.subtasks ?? [])];
+    const [moved] = subs.splice(dragSubIdx, 1);
+    subs.splice(dragOverSubIdx, 0, moved);
+    updateTask(task.id!, { subtasks: subs });
+    setDragSubIdx(null); setDragOverSubIdx(null);
+  };
+  const commitSubTitle = (subId: string) => {
+    const t = editingSubTitle.trim();
+    if (t) patchSub(subId, { title: t });
+    setEditingSubId(null); setEditingSubTitle("");
+  };
+
+  return (
+    <div className="rounded-b-2xl border border-t-0 border-border/60 bg-card overflow-hidden">
+      {/* Top action row */}
+      <div className="px-4 pt-3 pb-2 flex gap-2">
+        <Button size="sm" onClick={onToggleToday}
+          className={`flex-1 rounded-xl h-9 gap-1.5 border font-semibold transition-colors ${
+            task.isToday
+              ? "bg-amber-500 border-amber-500 text-white hover:bg-amber-600"
+              : "bg-amber-100 border-amber-200 text-amber-700 hover:bg-amber-200 hover:border-amber-300 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-400"
+          }`}>
+          <Sun className="w-3.5 h-3.5" />{task.isToday ? "Remove from Today" : "Add to Today"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={onEdit} className="flex-1 rounded-xl h-9">Edit</Button>
+      </div>
+
+      <div className="px-4 pb-3 space-y-4">
+
+        {/* Description */}
+        {task.description && (
+          <p className="text-sm text-muted-foreground leading-relaxed">{task.description}</p>
+        )}
+
+        {/* Meta chips */}
+        <div className="flex flex-wrap gap-1.5">
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${priority.bg}`}>{priority.label}</span>
+          <span className={`text-xs px-2.5 py-1 rounded-full bg-muted font-medium ${status.color}`}>{status.label}</span>
+          {task.category && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.category}</span>}
+          {task.company && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.company}</span>}
+          {task.dueDate && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">
+              Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          )}
+          {task.isToday && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">Today</span>}
+        </div>
+
+        {/* Tags */}
+        {task.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {task.tags.map((t) => (
+              <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Subtasks */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Subtasks</p>
+            {subtaskCount > 0 && <span className="text-xs text-muted-foreground">{subtaskDone}/{subtaskCount}</span>}
+          </div>
+          {subtaskCount > 0 && (
+            <div className="h-1 bg-muted rounded-full overflow-hidden mb-3">
+              <div className="h-full bg-green-400 rounded-full transition-all duration-300" style={{ width: `${(subtaskDone / subtaskCount) * 100}%` }} />
+            </div>
+          )}
+          <div className="space-y-2">
+            {(task.subtasks ?? []).map((sub, idx) => {
+              const subStatus = sub.status ?? (sub.done ? "done" : "todo");
+              const subPriority = PRIORITIES.find((p) => p.value === (sub.priority ?? "medium"))!;
+              const subStatusMeta = STATUSES.find((s) => s.value === subStatus)!;
+              const isSubExpanded = expandedSubId === sub.id;
+              const isEditingTitle = editingSubId === sub.id;
+              return (
+                <div
+                  key={sub.id}
+                  draggable
+                  onDragStart={() => handleSubDragStart(idx)}
+                  onDragOver={(e) => handleSubDragOver(e, idx)}
+                  onDrop={handleSubDrop}
+                  onDragEnd={() => { setDragSubIdx(null); setDragOverSubIdx(null); }}
+                  className={`rounded-xl border transition-all ${
+                    dragOverSubIdx === idx && dragSubIdx !== idx ? "border-primary/50 bg-primary/5"
+                    : sub.done ? "bg-muted/20 border-border/30"
+                    : isSubExpanded ? "bg-card border-border shadow-sm"
+                    : "bg-muted/40 border-border/40 hover:border-border/70"
+                  }`}
+                >
+                  <div className="flex items-start gap-2 px-2 pt-2.5 pb-2">
+                    <span className="mt-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </span>
+                    <button
+                      onClick={() => { const nd = !sub.done; patchSub(sub.id, { done: nd, status: nd ? "done" : "todo" }); }}
+                      className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${sub.done ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/40 hover:border-green-400"}`}
+                      title={sub.done ? "Mark incomplete" : "Mark done"}
+                    >
+                      {sub.done && <CheckCircle2 className="w-2.5 h-2.5" />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      {isEditingTitle ? (
+                        <input autoFocus value={editingSubTitle} onChange={(e) => setEditingSubTitle(e.target.value)}
+                          onBlur={() => commitSubTitle(sub.id)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitSubTitle(sub.id); } if (e.key === "Escape") { setEditingSubId(null); setEditingSubTitle(""); } }}
+                          className="w-full bg-transparent border-b border-primary outline-none text-sm py-0.5" />
+                      ) : (
+                        <button
+                          className={`text-sm text-left w-full break-words ${sub.done ? "line-through text-muted-foreground" : "text-card-foreground"}`}
+                          onClick={() => { setEditingSubId(sub.id); setEditingSubTitle(sub.title); }}
+                          title="Click to edit title"
+                        >{sub.title}</button>
+                      )}
+                    </div>
+                    <button onClick={() => { const i2 = STATUSES.findIndex((s) => s.value === subStatus); const nx = STATUSES[(i2+1)%STATUSES.length]; patchSub(sub.id, { status: nx.value, done: nx.value === "done" }); }}
+                      title="Cycle status" className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}>
+                      {subStatusMeta.label}
+                    </button>
+                    <button onClick={() => { const i = PRIORITIES.findIndex((p) => p.value === (sub.priority ?? "medium")); const nx = PRIORITIES[(i+1)%PRIORITIES.length]; patchSub(sub.id, { priority: nx.value }); }}
+                      title="Cycle priority" className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}>
+                      {subPriority.label}
+                    </button>
+                    <button onClick={() => setExpandedSubId(isSubExpanded ? null : sub.id)} title={isSubExpanded ? "Collapse" : "Notes & date"}
+                      className={`p-0.5 rounded flex-shrink-0 transition-colors ${isSubExpanded || sub.notes || sub.dueDate ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                      <StickyNote className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => patchSub(sub.id, { isToday: !sub.isToday })} title={sub.isToday ? "Remove from Today" : "Add to Today"}
+                      className={`p-0.5 rounded flex-shrink-0 transition-colors ${sub.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}>
+                      <Sun className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => deleteSub(sub.id)} className="p-0.5 rounded flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors" title="Delete subtask">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {isSubExpanded && (
+                    <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                        <textarea value={sub.notes ?? ""} onChange={(e) => patchSub(sub.id, { notes: e.target.value })} placeholder="Add notes…" rows={3}
+                          className="w-full text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-2 resize-none outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/60 leading-relaxed" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Due Date</p>
+                        <input type="date" value={sub.dueDate ?? ""} onChange={(e) => patchSub(sub.id, { dueDate: e.target.value || undefined })}
+                          className="text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 text-foreground" />
+                      </div>
+                    </div>
+                  )}
+                  {!isSubExpanded && (sub.notes || sub.dueDate) && (
+                    <div className="px-9 pb-2 flex flex-wrap gap-2">
+                      {sub.dueDate && <span className="text-[10px] text-muted-foreground">📅 {new Date(sub.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+                      {sub.notes && <span className="text-[10px] text-muted-foreground italic truncate max-w-[200px]">{sub.notes}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Quick-add subtask */}
+          {task.id && (
+            <div className="mt-2">
+              {showQuickAdd ? (
+                <div className="flex gap-2">
+                  <input autoFocus value={quickAddInput} onChange={(e) => setQuickAddInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const title = quickAddInput.trim(); if (!title) return;
+                        const ns: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
+                        updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), ns] });
+                        setExpandedSubId(ns.id); setQuickAddInput(""); setShowQuickAdd(false);
+                      }
+                      if (e.key === "Escape") { setShowQuickAdd(false); setQuickAddInput(""); }
+                    }}
+                    placeholder="Subtask title… (Enter to add)"
+                    className="h-8 rounded-xl flex-1 text-sm bg-muted/40 border border-border/50 px-3 outline-none focus:border-primary/60" />
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const title = quickAddInput.trim(); if (!title) return;
+                    const ns: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
+                    updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), ns] });
+                    setExpandedSubId(ns.id); setQuickAddInput(""); setShowQuickAdd(false);
+                  }} className="h-8 rounded-xl px-3 text-xs">Add</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowQuickAdd(false); setQuickAddInput(""); }} className="h-8 w-8 rounded-xl px-0"><X className="w-3 h-3" /></Button>
+                </div>
+              ) : (
+                <button onClick={() => setShowQuickAdd(true)}
+                  className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors">
+                  <Plus className="w-3 h-3" /> Add subtask
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Notes */}
+        {task.notes?.trim() && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Notes</p>
+            <div className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{task.notes}</div>
+          </div>
+        )}
+
+        {/* Custom fields */}
+        {settings.customFields.filter((f) => task.customFields?.[f.id]).length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Custom Fields</p>
+            <div className="space-y-1.5">
+              {settings.customFields.filter((f) => task.customFields?.[f.id]).map((f) => (
+                <div key={f.id} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{f.label}</span>
+                  <span className="font-medium">{task.customFields![f.id]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border/50 flex justify-end">
+        <Button variant="outline" size="sm" onClick={onDelete}
+          className="h-9 w-9 px-0 rounded-xl text-destructive hover:bg-destructive/10 hover:border-destructive/40">
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Task Card (List view) ────────────────────────────────────────────────────
 
-function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, settings, colourBy }: {
+function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrgencyChange, settings, colourBy, isExpanded = false }: {
   task: Task; onOpen: () => void; onDelete: () => void;
   onToggleToday: () => void; onStatusChange: (s: TaskStatus) => void;
   onUrgencyChange: (u: UrgencyLevel) => void;
   settings: TaskSettings; colourBy: ColourBy;
+  isExpanded?: boolean;
 }) {
   const isDone = task.status === "done";
   const isHighPriority = task.priority === "critical" || task.priority === "high";
@@ -1222,7 +1479,9 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
   return (
     <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
       onClick={onOpen}
-      className={`group rounded-2xl border shadow-soft overflow-hidden cursor-pointer hover:shadow-md transition-all ${isDone ? "opacity-55" : ""}`}
+      className={`group border shadow-soft overflow-hidden cursor-pointer transition-all ${
+        isExpanded ? "rounded-t-2xl rounded-b-none border-b-0" : "rounded-2xl hover:shadow-md"
+      } ${isDone ? "opacity-55" : ""}`}
       style={accentColour ? {
         borderColor: `${accentColour}55`,
         background: `linear-gradient(135deg, ${accentColour}18 0%, ${accentColour}08 100%)`,
@@ -1230,7 +1489,6 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
     >
       {accentColour && <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
-        {/* Done checkbox — left side, replaces the old urgency dot */}
         <DoneCheckbox done={isDone} onClick={toggleDone} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -1260,7 +1518,6 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
             <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
           {task.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-          {/* Status circle — right side: red (todo) or orange (in progress) */}
           <StatusCircle
             status={task.status}
             onClick={(e) => {
@@ -1268,6 +1525,7 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
               onStatusChange(task.status === "in_progress" ? "todo" : "in_progress");
             }}
           />
+          <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/50 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
         </div>
       </div>
       {subtaskCount > 0 && (
@@ -1866,6 +2124,7 @@ const Tasks = () => {
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<TaskView>("list");
   const [colourBy, setColourBy] = useState<ColourBy>("none");
@@ -2100,23 +2359,53 @@ const Tasks = () => {
         </div>
       ) : (
         <div className="space-y-2">
-          <AnimatePresence mode="popLayout">
-            {filtered.length === 0 ? (
-              <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-muted-foreground text-center py-10">
-                {tasks.length === 0 ? "No tasks yet — add your first one." : "No tasks match this filter."}
-              </motion.p>
-            ) : (
-              filtered.map((task) => (
-                <TaskCard key={task.id} task={task} settings={settings} colourBy={colourBy}
-                  onOpen={() => openDetail(task)}
-                  onDelete={() => task.id && deleteTask(task.id)}
-                  onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
-                  onStatusChange={(s) => task.id && setStatus(task.id, s)}
-                  onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
-                />
-              ))
-            )}
-          </AnimatePresence>
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-10">
+              {tasks.length === 0 ? "No tasks yet — add your first one." : "No tasks match this filter."}
+            </p>
+          ) : (
+            filtered.map((task) => {
+              const isExpanded = expandedTaskId === task.id;
+              const liveTask = tasks.find((t) => t.id === task.id) ?? task;
+              return (
+                <div key={task.id}>
+                  <TaskCard
+                    task={task}
+                    settings={settings}
+                    colourBy={colourBy}
+                    isExpanded={isExpanded}
+                    onOpen={() => setExpandedTaskId(isExpanded ? null : task.id!)}
+                    onDelete={() => { if (task.id) { deleteTask(task.id); if (isExpanded) setExpandedTaskId(null); } }}
+                    onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
+                    onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                    onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
+                  />
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        key="detail"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="overflow-hidden"
+                      >
+                        <TaskExpandedDetail
+                          task={liveTask}
+                          onEdit={() => openEdit(liveTask)}
+                          onDelete={() => { if (liveTask.id) { deleteTask(liveTask.id); setExpandedTaskId(null); } }}
+                          onToggleToday={() => liveTask.id && toggleToday(liveTask.id, liveTask.isToday)}
+                          onStatusChange={(s) => liveTask.id && setStatus(liveTask.id, s)}
+                          settings={settings}
+                          updateTask={updateTask}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

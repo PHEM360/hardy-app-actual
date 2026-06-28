@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, Plus, Trash2, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AvatarType } from "@/types/app";
 import { useAuth } from "@/auth/AuthContext";
 import { signOut, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
@@ -44,15 +43,6 @@ const ALL_NAV_OPTIONS = [
 ];
 const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
 
-// ── Notification types ──
-interface ReminderSetting { id: string; value: number; unit: "mins" | "hrs" | "days" | "weeks" }
-interface NotificationType {
-  key: string; label: string; group: string; enabled: boolean; reminders: ReminderSetting[];
-}
-const INITIAL_NOTIFICATION_TYPES: NotificationType[] = [
-  { key: "household_item", label: "Household Item Due", group: "Household", enabled: true, reminders: [{ id: "r5", value: 14, unit: "days" }] },
-];
-
 // ── Avatar preview component ──
 const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }: {
   type: AvatarType; emoji: string; initials: string; bgColor: string; textColor: string; firstName: string;
@@ -77,8 +67,6 @@ const Settings = () => {
   const { profile, saveProfile } = useUserProfile();
   const existingHouseholdNames = useHouseholdNames();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
-  const [pushNotifications, setPushNotifications] = useState(true);
-
   const [firstName, setFirstName] = useState(user?.displayName || "");
   const [surname, setSurname] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName || "");
@@ -94,7 +82,6 @@ const Settings = () => {
   const [navItems, setNavItems] = useState<string[]>(DEFAULT_NAV);
   const [navSaveSuccess, setNavSaveSuccess] = useState(false);
 
-  const [notifTypes, setNotifTypes] = useState(INITIAL_NOTIFICATION_TYPES);
   const [saveProfileLoading, setSaveProfileLoading] = useState(false);
   const [saveProfileError, setSaveProfileError] = useState<string | null>(null);
   const [saveProfileSuccess, setSaveProfileSuccess] = useState(false);
@@ -212,32 +199,14 @@ const Settings = () => {
     }
   }, [darkMode]);
 
-  const toggleNotifType = (key: string) => {
-    setNotifTypes(prev => prev.map(n => n.key === key ? { ...n, enabled: !n.enabled } : n));
-  };
-  const addReminder = (key: string) => {
-    setNotifTypes(prev => prev.map(n => {
-      if (n.key !== key || n.reminders.length >= 3) return n;
-      return { ...n, reminders: [...n.reminders, { id: `r${Date.now()}`, value: 1, unit: "days" }] };
-    }));
-  };
-  const removeReminder = (key: string, remId: string) => {
-    setNotifTypes(prev => prev.map(n => n.key === key ? { ...n, reminders: n.reminders.filter(r => r.id !== remId) } : n));
-  };
-  const updateReminder = (key: string, remId: string, field: "value" | "unit", val: string) => {
-    setNotifTypes(prev => prev.map(n => n.key === key ? {
-      ...n,
-      reminders: n.reminders.map(r => r.id === remId ? { ...r, [field]: field === "value" ? parseInt(val) || 0 : val } : r),
-    } : n));
-  };
-
-  const groups = [...new Set(notifTypes.map(n => n.group))];
-
   return (
     <FeaturePageShell title="Settings" subtitle="Account & app preferences" icon={<SettingsIcon className="w-5 h-5" />}>
       {/* Profile */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Profile</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-gradient-primary flex items-center justify-center text-white text-[10px]">P</span>
+          Profile
+        </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
           <div className="flex gap-4 items-start">
             <div className="flex flex-col items-center gap-2">
@@ -331,7 +300,10 @@ const Settings = () => {
 
       {/* Bottom Nav customisation */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Bottom Navigation</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-blue-500 flex items-center justify-center text-white text-[10px]">N</span>
+          Bottom Navigation
+        </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
           <p className="text-xs text-muted-foreground">Drag to reorder. Tap to toggle on/off. <strong>More</strong> and <strong>Sign Out</strong> are always shown on the right.</p>
           <div className="space-y-1.5">
@@ -387,69 +359,37 @@ const Settings = () => {
             <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">Sign Out</span>
           </div>
           {navSaveSuccess && <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Navigation saved</p>}
-          <Button onClick={saveNavItems} className="w-full h-10 rounded-xl text-sm">Save Navigation</Button>
+          <Button onClick={saveNavItems} className="w-full h-10 rounded-xl text-sm bg-gradient-primary">Save Navigation</Button>
         </div>
       </div>
 
       {/* Notifications */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Notifications</h3>
-        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-border/30">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-amber-500 flex items-center justify-center text-white text-[10px]">N</span>
+          Notifications
+        </h3>
+        <button
+          onClick={() => navigate("/notifications")}
+          className="w-full flex items-center justify-between p-4 rounded-xl bg-card border border-border/50 shadow-soft hover:bg-muted/40 transition-colors text-left"
+        >
+          <div className="flex items-center gap-3">
+            <Bell className="w-4 h-4 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium text-card-foreground">Push Notifications</p>
-              <p className="text-[10px] text-muted-foreground">Receive alerts on your device</p>
+              <p className="text-sm font-medium text-card-foreground">Notification Settings</p>
+              <p className="text-[10px] text-muted-foreground">Email, SMS, and push — configure channels and reminders</p>
             </div>
-            <Switch checked={pushNotifications} onCheckedChange={setPushNotifications} />
           </div>
-          {groups.map((group) => (
-            <div key={group}>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{group}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {notifTypes.filter(n => n.group === group).map((nt) => (
-                  <div key={nt.key} className="space-y-2 p-2.5 rounded-lg bg-muted/30 border border-border/30">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-medium text-card-foreground leading-tight">{nt.label}</p>
-                      <Switch checked={nt.enabled} onCheckedChange={() => toggleNotifType(nt.key)} className="scale-90" />
-                    </div>
-                    {nt.enabled && (
-                      <div className="space-y-1.5">
-                        {nt.reminders.map((rem) => (
-                          <div key={rem.id} className="flex items-center gap-1.5">
-                            <Input type="number" value={rem.value} onChange={(e) => updateReminder(nt.key, rem.id, "value", e.target.value)} className="h-6 w-16 rounded-md text-[10px] text-center" min={1} />
-                            <Select value={rem.unit} onValueChange={(v) => updateReminder(nt.key, rem.id, "unit", v)}>
-                              <SelectTrigger className="h-6 w-20 rounded-md text-[10px]"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="mins">mins</SelectItem>
-                                <SelectItem value="hrs">hrs</SelectItem>
-                                <SelectItem value="days">days</SelectItem>
-                                <SelectItem value="weeks">weeks</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <span className="text-[9px] text-muted-foreground">before</span>
-                            <button onClick={() => removeReminder(nt.key, rem.id)} className="p-0.5 text-muted-foreground hover:text-destructive">
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        ))}
-                        {nt.reminders.length < 3 && (
-                          <button onClick={() => addReminder(nt.key)} className="flex items-center gap-1 text-[9px] text-primary font-medium">
-                            <Plus className="w-2.5 h-2.5" /> Add another reminder
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+          <span className="text-muted-foreground text-lg leading-none">›</span>
+        </button>
       </div>
 
       {/* Appearance */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Appearance</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-purple-500 flex items-center justify-center text-white text-[10px]">A</span>
+          Appearance
+        </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -466,7 +406,10 @@ const Settings = () => {
 
       {/* AI Configuration */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">AI Configuration</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-violet-600 flex items-center justify-center text-white text-[10px]">AI</span>
+          AI Configuration
+        </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-xl bg-violet-500/15 flex-shrink-0">
@@ -523,7 +466,10 @@ const Settings = () => {
 
       {/* Security */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">Security</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-red-500 flex items-center justify-center text-white text-[10px]">S</span>
+          Security
+        </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
           {!showChangePassword ? (
             <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2" onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(false); }}>

@@ -55,6 +55,10 @@ async function requireSuperAdmin(uid: string) {
 	}
 }
 
+// ── Notification functions ──
+export { onTaskWrite } from "./notifications/scheduler";
+export { processScheduledNotifications, scheduleDailyDigests } from "./notifications/processor";
+
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
 	await requireSuperAdmin(uid);

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare2, Receipt, KeyRound, CalendarPlus, Plus, Camera, Paperclip, X } from "lucide-react";
+import { CheckSquare2, Receipt, KeyRound, CalendarPlus, Plus, Camera, Paperclip, X, FileUp } from "lucide-react";
+import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -20,6 +21,7 @@ export function QuickLinksWidget() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [expForm, setExpForm] = useState({
     companyId: "", description: "", amount: "",
     date: new Date().toISOString().split("T")[0], category: "Other",
@@ -54,6 +56,7 @@ export function QuickLinksWidget() {
     { icon: CalendarPlus, label: "New Event",   sub: "Calendar",      color: "text-blue-500 bg-blue-50 dark:bg-blue-950/40",      action: () => navigate("/calendar") },
     { icon: Plus,         label: "Add Task",    sub: "Tasks",         color: "text-green-500 bg-green-50 dark:bg-green-950/40",   action: () => navigate("/tasks") },
     { icon: Plus,         label: "Finance",     sub: "Household",     color: "text-teal-500 bg-teal-50 dark:bg-teal-950/40",      action: () => navigate("/household-finance") },
+    { icon: FileUp,       label: "Upload Doc",  sub: "Documents",     color: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40", action: () => setUploadOpen(true) },
   ];
 
   return (
@@ -62,7 +65,7 @@ export function QuickLinksWidget() {
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Links</span>
       </div>
 
-      <div className="grid grid-cols-3 grid-rows-2 gap-1.5 flex-1 min-h-0">
+      <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
         {links.map(({ icon: Icon, label, color, action }) => (
           <button
             key={label}
@@ -76,6 +79,8 @@ export function QuickLinksWidget() {
           </button>
         ))}
       </div>
+
+      <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
 
       {/* Add Expense Dialog */}
       <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>

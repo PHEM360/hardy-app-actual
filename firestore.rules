@@ -258,6 +258,22 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Notification preferences - per user
+    match /notificationPrefs/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Scheduled notifications - written by Cloud Functions; readable by owner
+    match /scheduledNotifications/{notifId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false; // Cloud Functions only
+    }
+
+    // General document store - per user
+    match /documents/{userId}/items/{docId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

@@ -848,7 +848,7 @@ function ItemTile({
     <div className="relative group h-full">
       <button
         onClick={onOpen}
-        className="relative w-full h-full text-left rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[10rem]"
+        className="relative w-full h-full text-left rounded-2xl border p-3.5 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden min-h-[7.5rem]"
         style={bg?.gradient ? { background: bg.gradient } : undefined}
       >
         {/* Large faint decorative icon — clipped nicely by overflow-hidden */}
@@ -2048,37 +2048,23 @@ export default function Households() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 p-1 bg-muted/40 rounded-2xl">
-        <button
-          onClick={() => setActiveTab("items")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "items"
-              ? "bg-background text-foreground shadow-soft"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Home className="w-4 h-4" /> Items
-        </button>
-        <button
-          onClick={() => setActiveTab("cameras")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "cameras"
-              ? "bg-background text-foreground shadow-soft"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Video className="w-4 h-4" /> Cameras
-        </button>
-        <button
-          onClick={() => setActiveTab("documents")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "documents"
-              ? "bg-background text-foreground shadow-soft"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <FileText className="w-4 h-4" /> Docs
-        </button>
+      <div className="flex gap-1.5 mb-6 p-1 bg-muted/40 rounded-2xl">
+        {([
+          { id: "items",     label: "Items",   icon: <Home className="w-4 h-4" />,     gradient: "linear-gradient(135deg,hsl(28,65%,52%),hsl(18,60%,46%))" },
+          { id: "cameras",   label: "Cameras", icon: <Video className="w-4 h-4" />,    gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))" },
+          { id: "documents", label: "Docs",    icon: <FileText className="w-4 h-4" />, gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-bold transition-all ${
+              activeTab === tab.id ? "text-white shadow-md" : "text-muted-foreground hover:text-foreground"
+            }`}
+            style={activeTab === tab.id ? { background: tab.gradient } : {}}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Items tab */}

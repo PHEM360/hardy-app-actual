@@ -186,7 +186,10 @@ const Finance = () => {
 
       {/* Account Summary Cards — click to select in graph, long press to manage */}
       <div className="flex items-center justify-between px-1 mb-2">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Accounts</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
+          Accounts
+        </h3>
         <div className="flex gap-1.5">
           <button onClick={() => setAddAccountOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
           <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
@@ -295,7 +298,7 @@ const Finance = () => {
 
         <div className="flex-1" />
 
-        <button onClick={() => setAddBalanceOpen(true)} className="h-8 px-3 rounded-lg text-xs font-semibold bg-primary text-primary-foreground flex items-center gap-1">
+        <button onClick={() => setAddBalanceOpen(true)} className="h-8 px-3 rounded-lg text-xs font-semibold bg-gradient-primary text-white flex items-center gap-1">
           <Plus className="w-3.5 h-3.5" /> Log Balance
         </button>
         <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
@@ -330,7 +333,10 @@ const Finance = () => {
       {/* Chart View */}
       {viewMode === "chart" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Balance Over Time</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
+            Balance Over Time
+          </h3>
           <div className="h-64 sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>

@@ -55,12 +55,18 @@ const Inheritance = () => {
   return (
     <FeaturePageShell title="IHT Planner" subtitle="Inheritance tax scenario modelling" icon={<Calculator className="w-5 h-5" />}>
       {/* Summary */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl bg-gradient-primary mb-5">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl bg-gradient-primary mb-5 shadow-elevated">
         <p className="text-xs text-primary-foreground/70 uppercase tracking-wider font-medium">Projected Estate ({projectionYears}yr)</p>
-        <p className="text-2xl font-bold font-display text-primary-foreground mt-1">£{finalEstate.estate.toLocaleString("en-GB")}</p>
-        <div className="flex gap-4 mt-2 text-xs text-primary-foreground/80">
-          <span>IHT: £{finalEstate.iht.toLocaleString("en-GB")}</span>
-          <span>After tax: £{finalEstate.afterTax.toLocaleString("en-GB")}</span>
+        <p className="text-3xl font-bold font-display text-primary-foreground mt-1">£{finalEstate.estate.toLocaleString("en-GB")}</p>
+        <div className="flex gap-3 mt-3 flex-wrap">
+          <div className="flex-1 min-w-0 bg-white/10 rounded-xl px-3 py-2">
+            <p className="text-[10px] text-primary-foreground/60 uppercase tracking-wide">IHT Liability</p>
+            <p className="text-sm font-bold text-red-200">£{finalEstate.iht.toLocaleString("en-GB")}</p>
+          </div>
+          <div className="flex-1 min-w-0 bg-white/10 rounded-xl px-3 py-2">
+            <p className="text-[10px] text-primary-foreground/60 uppercase tracking-wide">After Tax</p>
+            <p className="text-sm font-bold text-green-200">£{finalEstate.afterTax.toLocaleString("en-GB")}</p>
+          </div>
         </div>
       </motion.div>
 
@@ -75,7 +81,10 @@ const Inheritance = () => {
 
       {/* Projection Chart */}
       <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Estate Projection</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
+          Estate Projection
+        </h3>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={selected.data}>
@@ -104,15 +113,21 @@ const Inheritance = () => {
 
       {/* Assets */}
       <div className="mb-5">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Assets</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2 flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-blue-500 inline-block" />
+          Assets
+        </h3>
         <div className="space-y-2">
           {selected.scenario.assets.map((asset) => (
-            <div key={asset.id} className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border/50">
+            <div key={asset.id} className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border/50 hover:shadow-soft transition-shadow">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-sm">{asset.type === "property" ? "🏠" : asset.type === "investment" ? "📈" : asset.type === "cash" ? "💰" : "📦"}</span>
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-card-foreground">{asset.name}</p>
                 <p className="text-[10px] text-muted-foreground capitalize">{asset.type} · {asset.growthRate}% growth</p>
               </div>
-              <span className="text-sm font-bold font-display text-card-foreground">£{asset.value.toLocaleString("en-GB")}</span>
+              <span className="text-sm font-bold font-display text-primary">£{asset.value.toLocaleString("en-GB")}</span>
             </div>
           ))}
         </div>
@@ -138,17 +153,20 @@ const Inheritance = () => {
 
       {/* Thresholds */}
       <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tax Thresholds</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-amber-500 inline-block" />
+          Tax Thresholds
+        </h3>
         <div className="space-y-2">
           {[
-            ["Nil Rate Band", `£${selected.scenario.nilRateBand.toLocaleString("en-GB")}`],
-            ["Residence Nil Rate", `£${selected.scenario.residenceNilRate.toLocaleString("en-GB")}`],
-            ["Combined Exemption", `£${(selected.scenario.nilRateBand + selected.scenario.residenceNilRate).toLocaleString("en-GB")}`],
-            ["IHT Rate", "40%"],
-          ].map(([label, value]) => (
-            <div key={label} className="flex justify-between">
+            ["Nil Rate Band", `£${selected.scenario.nilRateBand.toLocaleString("en-GB")}`, "text-card-foreground"],
+            ["Residence Nil Rate", `£${selected.scenario.residenceNilRate.toLocaleString("en-GB")}`, "text-card-foreground"],
+            ["Combined Exemption", `£${(selected.scenario.nilRateBand + selected.scenario.residenceNilRate).toLocaleString("en-GB")}`, "text-primary font-bold"],
+            ["IHT Rate", "40%", "text-destructive font-bold"],
+          ].map(([label, value, valueClass]) => (
+            <div key={label} className="flex justify-between items-center py-0.5">
               <span className="text-xs text-muted-foreground">{label}</span>
-              <span className="text-xs font-medium text-card-foreground">{value}</span>
+              <span className={`text-xs font-medium ${valueClass}`}>{value}</span>
             </div>
           ))}
         </div>

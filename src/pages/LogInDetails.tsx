@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { KeyRound, Plus, Eye, EyeOff, Copy, Trash2, Check, Globe, User, Lock, Tag, ChevronDown, ChevronUp } from "lucide-react";
+import { KeyRound, Plus, Eye, EyeOff, Copy, Trash2, Check, Globe, User, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
   serverTimestamp, query, orderBy,
@@ -34,6 +34,22 @@ const EMPTY: Omit<Credential, "id" | "createdAt" | "updatedAt"> = {
 
 const CATEGORIES = ["Banking", "Email", "Shopping", "Work", "Social", "Finance", "Health", "Government", "Other"];
 
+const CAT_STYLES: Record<string, { border: string; avatar: string; avatarText: string }> = {
+  Banking:    { border: "border-l-blue-400",   avatar: "bg-blue-100 dark:bg-blue-900/40",   avatarText: "text-blue-700 dark:text-blue-300" },
+  Email:      { border: "border-l-green-400",  avatar: "bg-green-100 dark:bg-green-900/40", avatarText: "text-green-700 dark:text-green-300" },
+  Shopping:   { border: "border-l-orange-400", avatar: "bg-orange-100 dark:bg-orange-900/40", avatarText: "text-orange-700 dark:text-orange-300" },
+  Work:       { border: "border-l-purple-400", avatar: "bg-purple-100 dark:bg-purple-900/40", avatarText: "text-purple-700 dark:text-purple-300" },
+  Social:     { border: "border-l-pink-400",   avatar: "bg-pink-100 dark:bg-pink-900/40",   avatarText: "text-pink-700 dark:text-pink-300" },
+  Finance:    { border: "border-l-emerald-400",avatar: "bg-emerald-100 dark:bg-emerald-900/40", avatarText: "text-emerald-700 dark:text-emerald-300" },
+  Health:     { border: "border-l-red-400",    avatar: "bg-red-100 dark:bg-red-900/40",     avatarText: "text-red-700 dark:text-red-300" },
+  Government: { border: "border-l-slate-400",  avatar: "bg-slate-100 dark:bg-slate-800/60", avatarText: "text-slate-700 dark:text-slate-300" },
+  Other:      { border: "border-l-gray-300",   avatar: "bg-gray-100 dark:bg-gray-800/60",   avatarText: "text-gray-600 dark:text-gray-400" },
+};
+
+function getCatStyle(cat?: string) {
+  return CAT_STYLES[cat ?? ""] ?? { border: "border-l-primary/40", avatar: "bg-primary/10", avatarText: "text-primary" };
+}
+
 // ─── Credential Card ──────────────────────────────────────────────────────────
 
 function CredentialCard({
@@ -57,6 +73,7 @@ function CredentialCard({
   };
 
   const initials = cred.name.slice(0, 2).toUpperCase();
+  const catStyle = getCatStyle(cred.category);
 
   return (
     <motion.div
@@ -64,15 +81,15 @@ function CredentialCard({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      className="rounded-2xl border border-border/60 bg-card shadow-soft overflow-hidden"
+      className={`rounded-2xl border border-border/60 border-l-4 ${catStyle.border} bg-card shadow-soft overflow-hidden`}
     >
       {/* Header row */}
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
       >
-        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-bold text-primary">{initials}</span>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${catStyle.avatar}`}>
+          <span className={`text-xs font-bold ${catStyle.avatarText}`}>{initials}</span>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-card-foreground truncate">{cred.name}</p>

@@ -34,3 +34,15 @@ export async function getAnalyticsIfSupported() {
     return undefined;
   }
 }
+
+// Messaging is not supported in all environments (e.g. Safari without permission, Node).
+// Returns the messaging instance if supported, null otherwise.
+export async function getMessagingIfSupported() {
+  try {
+    const { isSupported, getMessaging } = await import("firebase/messaging");
+    if (!(await isSupported())) return null;
+    return getMessaging(app);
+  } catch {
+    return null;
+  }
+}

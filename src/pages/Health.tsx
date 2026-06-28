@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain } from "lucide-react";
+import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain, FolderOpen, FileText, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,8 @@ import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { useMeds } from "@/hooks/useMeds";
 import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
 import { useHealthProfile } from "@/hooks/useHealthProfile";
+import { useDocuments } from "@/hooks/useDocuments";
+import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { format, parseISO } from "date-fns";
 
 const EMOJIS = ["🧘", "🍷", "💊", "🚭", "🍕", "😴", "🏃", "❤️", "🧠", "⚡", "🌿", "🌊", "🎯", "💪", "✨"];
@@ -114,7 +116,7 @@ function MiniSparkline({
   );
 }
 
-type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai";
+type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai" | "documents";
 
 export default function Health() {
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker();
@@ -122,8 +124,12 @@ export default function Health() {
   const { tabs, addTab, deleteTab } = useHealthTabs();
   const { profile, saveProfile } = useHealthProfile();
 
+  const { documents, deleteDocument } = useDocuments();
+  const healthDocs = documents.filter((d) => d.destination === "health");
+
   const [activeTab, setActiveTab] = useState<CoreTab | string>("overview");
   const [newTabOpen, setNewTabOpen] = useState(false);
+  const [docUploadOpen, setDocUploadOpen] = useState(false);
 
   // New tab form
   const [ntName, setNtName]           = useState("");
@@ -157,6 +163,7 @@ export default function Health() {
     { id: "meds",        label: "Medications",     icon: <Pill className="w-4 h-4" /> },
     { id: "substances",  label: "Substances",      icon: <FlaskConical className="w-4 h-4" /> },
     { id: "ai",          label: "AI Analysis",     icon: <Brain className="w-4 h-4" /> },
+    { id: "documents",   label: "Documents",       icon: <FolderOpen className="w-4 h-4" /> },
   ];
 
   const activeCustomTab = tabs.find((t) => t.id === activeTab);
@@ -412,6 +419,64 @@ export default function Health() {
               medications={medications}
               profile={profile}
             />
+          )}
+
+          {activeTab === "documents" && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-muted-foreground">
+                  {healthDocs.length === 0 ? "No health documents yet" : `${healthDocs.length} document${healthDocs.length !== 1 ? "s" : ""}`}
+                </p>
+                <Button size="sm" onClick={() => setDocUploadOpen(true)} className="gap-1.5 h-8 rounded-xl bg-gradient-primary">
+                  <Upload className="w-3.5 h-3.5" /> Upload
+                </Button>
+              </div>
+
+              {healthDocs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+                    <FolderOpen className="w-8 h-8 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No health documents yet</p>
+                  <p className="text-xs text-muted-foreground/70">Upload medical records, test results, or any health-related files</p>
+                  <Button variant="outline" size="sm" onClick={() => setDocUploadOpen(true)} className="mt-1 gap-1.5 rounded-xl">
+                    <Upload className="w-3.5 h-3.5" /> Upload a document
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {healthDocs.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-2xl border border-border/50 bg-card hover:bg-muted/30 transition-colors">
+                      <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-950/40 flex items-center justify-center flex-shrink-0">
+                        {doc.mimeType.startsWith("image/") ? (
+                          <img src={doc.url} alt={doc.name} className="w-10 h-10 rounded-xl object-cover" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.size ? `${(doc.size / 1024).toFixed(0)} KB` : ""}{doc.createdAt?.toDate ? ` · ${doc.createdAt.toDate().toLocaleDateString("en-GB")}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                          <Download className="w-4 h-4" />
+                        </a>
+                        <button onClick={() => deleteDocument(doc.id!)}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <UploadDocumentDialog open={docUploadOpen} onOpenChange={setDocUploadOpen} />
+            </div>
           )}
 
           {activeCustomTab && (

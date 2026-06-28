@@ -192,7 +192,10 @@ const HouseholdFinance = () => {
 
           {/* Account Cards */}
           <div className="flex items-center justify-between px-1 mb-2">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Accounts</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <span className="w-1 h-4 rounded-full bg-gradient-warm inline-block" />
+              Accounts
+            </h3>
             <div className="flex gap-2">
               <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
                 <DialogTrigger asChild>
@@ -213,34 +216,49 @@ const HouseholdFinance = () => {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-            {latestBalances.filter(a => !a.hidden).map((acc, i) => (
-              <motion.button
-                key={acc.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.03 * i }}
-                onClick={() => toggleAccount(acc.id)}
-                className={`p-3 rounded-xl border text-left transition-all ${
-                  selectedAccounts.includes(acc.id)
-                    ? "bg-card border-primary/30 shadow-soft"
-                    : "bg-muted/30 border-border/30 opacity-60"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  <span className="text-[10px] text-muted-foreground uppercase truncate">{acc.name}</span>
-                </div>
-                <p className="text-sm font-bold font-display text-card-foreground">
-                  £{acc.latestBalance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
-                </p>
-              </motion.button>
-            ))}
+            {latestBalances.filter(a => !a.hidden).map((acc, i) => {
+              const color = COLORS[i % COLORS.length];
+              const isSelected = selectedAccounts.includes(acc.id);
+              return (
+                <motion.button
+                  key={acc.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.03 * i }}
+                  onClick={() => toggleAccount(acc.id)}
+                  className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
+                    isSelected
+                      ? "bg-card shadow-soft"
+                      : "bg-muted/30 border-border/30 opacity-60"
+                  }`}
+                  style={{
+                    borderLeftWidth: 4,
+                    borderLeftColor: isSelected ? color : "transparent",
+                    borderColor: isSelected ? `${color}33` : undefined,
+                  }}
+                >
+                  {isSelected && (
+                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none rounded-xl" style={{ background: color }} />
+                  )}
+                  <div className="flex items-center gap-1.5 mb-1 relative">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    <span className="text-[10px] text-muted-foreground uppercase truncate">{acc.name}</span>
+                  </div>
+                  <p className="text-sm font-bold font-display text-card-foreground relative">
+                    £{acc.latestBalance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                  </p>
+                </motion.button>
+              );
+            })}
           </div>
 
           {/* Chart */}
           <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Balance Over Time</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
+                Balance Over Time
+              </h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowTaxYears(!showTaxYears)}

@@ -156,46 +156,47 @@ const Today = () => {
   return (
     <div className="pb-28">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-3 sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
-        <div>
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
+        <div className="px-3 py-2 bg-gradient-primary flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-amber-500" />
-            <p className="text-sm font-semibold text-foreground">Today</p>
+            <Sun className="w-4 h-4 text-white/80" />
+            <p className="text-sm font-bold text-white">Today</p>
           </div>
-          <p className="text-[11px] text-muted-foreground ml-6">
+          <p className="text-[11px] text-white/70 font-medium">
             {format(today, "EEEE d MMMM")}
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          {editMode && hiddenWidgets.length > 0 && (
+        <div className="flex items-center justify-end px-3 py-2">
+          <div className="flex items-center gap-2">
+            {editMode && hiddenWidgets.length > 0 && (
+              <button
+                onClick={() => setShowHiddenPanel((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                {hiddenWidgets.length} hidden
+              </button>
+            )}
+            {editMode && (
+              <button
+                onClick={resetLayout}
+                className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
+                title="Reset layout"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
-              onClick={() => setShowHiddenPanel((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
+              onClick={() => { setEditMode((v) => !v); setShowHiddenPanel(false); }}
+              className={`flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 transition-colors ${
+                editMode
+                  ? "bg-amber-500 text-white"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
             >
-              <EyeOff className="w-3.5 h-3.5" />
-              {hiddenWidgets.length} hidden
+              {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
             </button>
-          )}
-          {editMode && (
-            <button
-              onClick={resetLayout}
-              className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
-              title="Reset layout"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <button
-            onClick={() => { setEditMode((v) => !v); setShowHiddenPanel(false); }}
-            className={`flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 transition-colors ${
-              editMode
-                ? "bg-amber-500 text-white"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
-          </button>
+          </div>
         </div>
       </div>
 

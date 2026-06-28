@@ -6,6 +6,7 @@ import {
   collection,
   addDoc,
   updateDoc,
+  arrayUnion,
   deleteDoc,
   query,
   orderBy,
@@ -42,12 +43,23 @@ export interface TatDocument {
   notes?: string;
 }
 
+export interface TatComment {
+  id: string;
+  text: string;
+  authorName: string;
+  createdAt?: any;
+}
+
 export interface TatNote {
   id: string;
   text: string;
   author?: string;
+  authorId?: string;
   done: boolean;
   createdAt?: any;
+  type?: 'task' | 'note';
+  dueDate?: string;
+  comments?: TatComment[];
 }
 
 export const DEFAULT_EXPENSE_CATEGORIES = [
@@ -123,8 +135,12 @@ export function useTattersalls() {
           id: d.id,
           text: d.data().text ?? "",
           author: d.data().author ?? "",
+          authorId: d.data().authorId ?? undefined,
           done: d.data().done ?? false,
           createdAt: d.data().createdAt,
+          type: d.data().type ?? 'task',
+          dueDate: d.data().dueDate ?? undefined,
+          comments: d.data().comments ?? [],
         }))
       );
     });
@@ -180,12 +196,38 @@ export function useTattersalls() {
     await updateDoc(doc(db, "tattersalls", "shared", "documents", id), data as Record<string, unknown>);
   }, []);
 
-  const addNote = useCallback(async (text: string, author?: string) => {
+  const addNote = useCallback(async (
+    text: string,
+    author?: string,
+    type?: 'task' | 'note',
+    dueDate?: string,
+    authorId?: string,
+  ) => {
     await addDoc(collection(db, "tattersalls", "shared", "notes"), {
       text,
       author: author ?? "",
+      authorId: authorId ?? "",
       done: false,
       createdAt: serverTimestamp(),
+      type: type ?? 'task',
+      comments: [],
+      ...(dueDate ? { dueDate } : {}),
+    });
+  }, []);
+
+  const updateNote = useCallback(async (id: string, text: string) => {
+    await updateDoc(doc(db, "tattersalls", "shared", "notes", id), { text });
+  }, []);
+
+  const addComment = useCallback(async (noteId: string, text: string, authorName: string) => {
+    const comment: TatComment = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      text,
+      authorName,
+      createdAt: new Date().toISOString(),
+    };
+    await updateDoc(doc(db, "tattersalls", "shared", "notes", noteId), {
+      comments: arrayUnion(comment),
     });
   }, []);
 
@@ -211,6 +253,8 @@ export function useTattersalls() {
     uploadDocument,
     updateDocument,
     addNote,
+    updateNote,
+    addComment,
     toggleNote,
     deleteNote,
   };
