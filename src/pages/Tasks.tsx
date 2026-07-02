@@ -164,8 +164,8 @@ function TaskDetailSheet({
 
   if (!task) return null;
 
-  const priority = PRIORITIES.find((p) => p.value === task.priority)!;
-  const status = STATUSES.find((s) => s.value === task.status)!;
+  const priority = PRIORITIES.find((p) => p.value === task.priority) ?? PRIORITIES[2];
+  const status = STATUSES.find((s) => s.value === task.status) ?? STATUSES[0];
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const isDone = task.status === "done";
@@ -1199,8 +1199,8 @@ function TaskExpandedDetail({
   const [dragSubIdx, setDragSubIdx] = useState<number | null>(null);
   const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
 
-  const priority = PRIORITIES.find((p) => p.value === task.priority)!;
-  const status = STATUSES.find((s) => s.value === task.status)!;
+  const priority = PRIORITIES.find((p) => p.value === task.priority) ?? PRIORITIES[2];
+  const status = STATUSES.find((s) => s.value === task.status) ?? STATUSES[0];
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
 

@@ -47,7 +47,7 @@ export function TasksWidget() {
             {top3.map((t) => (
               <div key={t.id} className="flex items-center gap-1.5">
                 <span className={`text-[9px] px-1 py-0.5 rounded-full font-semibold flex-shrink-0 ${PRIORITY_COLOR[t.priority] ?? "bg-muted text-muted-foreground"}`}>
-                  {t.priority[0].toUpperCase()}
+                  {t.priority?.[0]?.toUpperCase() ?? "?"}
                 </span>
                 <span className="text-[11px] text-foreground truncate">{t.title}</span>
               </div>
