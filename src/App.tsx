@@ -28,6 +28,7 @@ import QRCodes from "@/pages/QRCodes";
 import Locate from "@/pages/Locate";
 import CalendarPage from "@/pages/Calendar";
 import NotFound from "@/pages/NotFound";
+import Freezer from "@/pages/Freezer";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/household-finance" element={<HouseholdFinance />} />
             <Route path="/inheritance" element={<Inheritance />} />
             <Route path="/households" element={<Households />} />
+            <Route path="/freezer" element={<Freezer />} />
             <Route path="/weight" element={<Health />} />
             <Route path="/health" element={<Health />} />
             <Route path="/tattersalls" element={<Tattersalls />} />

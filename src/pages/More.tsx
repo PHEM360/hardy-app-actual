@@ -13,6 +13,7 @@ import {
   Palette,
   Bell,
   Settings,
+  Snowflake,
 } from "lucide-react";
 
 type MoreItem = {
@@ -100,6 +101,13 @@ const SECTIONS: Section[] = [
         icon: Building,
         route: "/tattersalls",
         gradient: "linear-gradient(135deg, hsl(192,52%,46%), hsl(202,48%,40%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Freezer",
+        icon: Snowflake,
+        route: "/freezer",
+        gradient: "linear-gradient(135deg, hsl(198,75%,55%), hsl(215,70%,48%))",
         iconColor: "#fff",
       },
     ],

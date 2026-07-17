@@ -202,6 +202,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Freezer inventory - per user
+    match /freezer/{userId}/items/{itemId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // QR codes library - per user
     match /qrcodes/{userId}/items/{qrId} {
       allow read, write: if isOwner(userId) || isAdmin();
