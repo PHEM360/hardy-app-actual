@@ -4,7 +4,7 @@ import Twilio from "twilio";
 import { logger } from "firebase-functions";
 import { NotifChannel } from "./types";
 
-const FROM_EMAIL = "chris@hardyapp.co.uk";
+export const FROM_EMAIL = "chris@hardyapp.co.uk";
 
 export interface NotifPayload {
   uid: string;

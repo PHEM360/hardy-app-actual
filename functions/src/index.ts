@@ -11,6 +11,9 @@ import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import * as postmark from "postmark";
+import { postmarkKey } from "./notifications/scheduler";
+import { FROM_EMAIL } from "./notifications/sender";
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -114,6 +117,91 @@ export const inviteUser = onCall(async (request) => {
 
 	return { uid: created.uid };
 });
+
+function validatePasswordStrength(password: string) {
+	if (password.length < 8) {
+		throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
+	}
+	if (!/[0-9]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain at least one number (0–9).");
+	}
+	if (!/[^a-zA-Z0-9]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain at least one special character (e.g. ! @ # $).");
+	}
+}
+
+// Directly set a user's password (admin action) — used for both the
+// "Set Temporary" reset-password flow and any other admin-initiated
+// password change.
+export const resetUserPassword = onCall(async (request) => {
+	const uid = requireAuth(request);
+	await requireSuperAdmin(uid);
+
+	const targetUid = String(request.data?.uid || "");
+	const newPassword = String(request.data?.newPassword || "");
+
+	if (!targetUid || !newPassword) {
+		throw new HttpsError("invalid-argument", "uid and newPassword are required.");
+	}
+	validatePasswordStrength(newPassword);
+
+	try {
+		await admin.auth().updateUser(targetUid, { password: newPassword });
+	} catch (err: any) {
+		logger.error("resetUserPassword: updateUser failed", { targetUid, error: err?.message });
+		throw new HttpsError("internal", err?.message || "Failed to set password.");
+	}
+
+	logger.info("resetUserPassword: password updated", { targetUid, by: uid });
+	return { success: true };
+});
+
+// Generate a Firebase Auth password reset link and email it via Postmark
+// (Firebase's own default Auth mailer isn't configured for this project).
+export const sendPasswordResetLink = onCall(
+	{ secrets: [postmarkKey] },
+	async (request) => {
+		const uid = requireAuth(request);
+		await requireSuperAdmin(uid);
+
+		const targetUid = String(request.data?.uid || "");
+		if (!targetUid) {
+			throw new HttpsError("invalid-argument", "uid is required.");
+		}
+
+		const userRecord = await admin.auth().getUser(targetUid);
+		const email = userRecord.email;
+		if (!email) {
+			throw new HttpsError("failed-precondition", "This user has no email address on file.");
+		}
+
+		let link: string;
+		try {
+			link = await admin.auth().generatePasswordResetLink(email);
+		} catch (err: any) {
+			logger.error("sendPasswordResetLink: generatePasswordResetLink failed", { email, error: err?.message });
+			throw new HttpsError("internal", "Failed to generate reset link.");
+		}
+
+		try {
+			const client = new postmark.ServerClient(postmarkKey.value());
+			await client.sendEmail({
+				From: FROM_EMAIL,
+				To: email,
+				Subject: "Reset your Hardy Hub password",
+				TextBody: `We received a request to reset your Hardy Hub password.\n\nClick the link below to choose a new password:\n${link}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
+				HtmlBody: `<p>We received a request to reset your Hardy Hub password.</p><p><a href="${link}">Click here to choose a new password</a>.</p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`,
+				MessageStream: "outbound",
+			});
+		} catch (err: any) {
+			logger.error("sendPasswordResetLink: postmark send failed", { email, error: err?.message });
+			throw new HttpsError("internal", "Failed to send reset email.");
+		}
+
+		logger.info("sendPasswordResetLink: email sent", { targetUid, email, by: uid });
+		return { success: true };
+	}
+);
 
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});

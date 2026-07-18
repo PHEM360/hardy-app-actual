@@ -12,8 +12,7 @@ import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
@@ -211,17 +210,19 @@ const Admin = () => {
     setResetPwResult(null);
     try {
       if (resetPwMode === "email") {
-        await sendPasswordResetEmail(auth, currentUser.email);
+        const call = httpsCallable(functions, "sendPasswordResetLink");
+        await call({ uid: currentUser.id });
         setResetPwResult({ ok: true, msg: `Reset link sent to ${currentUser.email}` });
       } else {
-        // Set temporary password via Cloud Function
+        // Set password directly via Cloud Function
         const call = httpsCallable(functions, "resetUserPassword");
         await call({ uid: currentUser.id, newPassword: tempPassword });
-        setResetPwResult({ ok: true, msg: "Temporary password set successfully." });
+        setResetPwResult({ ok: true, msg: "Password set successfully." });
         setTempPassword("");
       }
     } catch (err: any) {
-      setResetPwResult({ ok: false, msg: err?.message ?? "Failed to reset password." });
+      const msg = String(err?.message ?? "").replace(/^.*HttpsError:\s*/i, "").replace(/\s*\(.*\)$/, "").trim();
+      setResetPwResult({ ok: false, msg: msg || "Failed to reset password." });
     } finally {
       setResetPwLoading(false);
     }
