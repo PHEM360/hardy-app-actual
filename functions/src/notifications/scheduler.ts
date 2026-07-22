@@ -34,7 +34,12 @@ export const onTaskWrite = onDocumentWritten(
     try {
       const userRecord = await admin.auth().getUser(userId);
       authEmail = userRecord.email ?? "";
-    } catch (_) {}
+    } catch (err) {
+      logger.debug("Unable to resolve auth email while scheduling notification", {
+        userId,
+        err,
+      });
+    }
 
     const emailTo = prefs.email.enabled ? (prefs.email.address || authEmail) : "";
     const smsTo = prefs.sms.enabled ? prefs.sms.phone : "";

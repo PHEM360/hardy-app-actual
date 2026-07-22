@@ -43,7 +43,12 @@ export const processScheduledNotifications = onSchedule(
         try {
           const u = await admin.auth().getUser(notif.uid);
           authEmail = u.email ?? "";
-        } catch (_) {}
+        } catch (err) {
+          logger.debug("Unable to resolve auth email for scheduled notification", {
+            uid: notif.uid,
+            err,
+          });
+        }
 
         const emailTo = prefs.email.enabled ? (prefs.email.address || authEmail) : "";
         const smsTo = prefs.sms.enabled ? prefs.sms.phone : "";

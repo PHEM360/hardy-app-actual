@@ -1,7 +1,7 @@
 {
   "name": "functions",
   "scripts": {
-    "lint": "eslint -c .eslintrc.js .",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint -c .eslintrc.js .",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
