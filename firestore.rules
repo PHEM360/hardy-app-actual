@@ -28,6 +28,17 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
       );
     }
+
+    // Shared-ownership helper for companies (and their subcollections/settings):
+    // legacy (ownerless) companies stay visible to everyone during migration.
+    function canAccessCompany(companyId) {
+      let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
+      return isAdmin() ||
+        !('ownerId' in c) ||
+        c.ownerId == "" ||
+        request.auth.uid == c.ownerId ||
+        request.auth.uid in c.sharedWith;
+    }
     
     // Users collection - users can read/write their own data, admins can manage all
     match /users/{userId} {
@@ -168,28 +179,47 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
-    // Companies - per user
-    match /companies/{userId}/items/{companyId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    // Companies - shared via ownerId + sharedWith, same model as pets.
+    // Legacy companies (no ownerId) remain readable by all authenticated users during migration.
+    match /companies/{companyId} {
+      allow read, update: if isAuthenticated() && (
+        isAdmin() ||
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid in resource.data.sharedWith
+      );
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        isAdmin() ||
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
+        request.auth.uid == resource.data.ownerId
+      );
 
       match /logins/{loginId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
       match /services/{serviceId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
       match /expenses/{expenseId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
       match /insurance/{policyId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
       match /income/{incomeId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
       match /taxReturns/{returnId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
       }
+    }
+
+    // Company settings (income/expense categories, tax rate) - same sharing model as companies
+    match /companySettings/{companyId} {
+      allow read, write: if isAuthenticated() && canAccessCompany(companyId);
     }
 
     // Household items - per user

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, Globe, Hash, MapPin,
-  CheckCircle2, XCircle, ChevronRight, QrCode,
+  CheckCircle2, XCircle, ChevronRight, QrCode, UserPlus, X,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
+import { useAppUsers } from "@/hooks/useAppUsers";
 import { useCompanies } from "@/hooks/useCompanies";
 import { Company } from "@/types/app";
 
@@ -42,6 +46,70 @@ const EMPTY: Omit<Company, "id" | "createdAt" | "updatedAt"> = {
   contact: {},
 };
 
+interface SharingProps {
+  isOwner: boolean;
+  sharedWith: string[];
+  appUsers: { id: string; name: string; email: string }[];
+  shareEmail: string;
+  onShareEmailChange: (v: string) => void;
+  onShare: () => void;
+  onUnshare: (uid: string) => void;
+  shareLoading: boolean;
+  shareError: string | null;
+  shareSuccess: boolean;
+}
+
+function SharingSection({ sharing }: { sharing: SharingProps }) {
+  const {
+    sharedWith, appUsers, shareEmail, onShareEmailChange, onShare, onUnshare,
+    shareLoading, shareError, shareSuccess,
+  } = sharing;
+
+  return (
+    <div className="space-y-2 pt-1 border-t border-border/40">
+      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Shared With</Label>
+      {sharedWith.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {sharedWith.map((uid) => {
+            const person = appUsers.find((u) => u.id === uid);
+            return (
+              <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+                {person?.name || "Unknown user"}
+                <button onClick={() => onUnshare(uid)} className="text-muted-foreground hover:text-destructive">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          type="email"
+          value={shareEmail}
+          onChange={(e) => onShareEmailChange(e.target.value)}
+          placeholder="name@example.com"
+          className="h-9 rounded-xl text-sm flex-1"
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onShare}
+          disabled={!shareEmail.trim() || shareLoading}
+          className="h-9 rounded-xl gap-1 flex-shrink-0"
+        >
+          <UserPlus className="w-3.5 h-3.5" /> Share
+        </Button>
+      </div>
+      {shareError && <p className="text-[11px] text-destructive">{shareError}</p>}
+      {shareSuccess && <p className="text-[11px] text-success font-medium">✓ Shared successfully!</p>}
+    </div>
+  );
+}
+
 function CompanyForm({
   initial,
   allCompanies,
@@ -49,6 +117,7 @@ function CompanyForm({
   onSave,
   onCancel,
   saving,
+  sharing,
 }: {
   initial: Omit<Company, "id" | "createdAt" | "updatedAt">;
   allCompanies: Company[];
@@ -56,6 +125,7 @@ function CompanyForm({
   onSave: (c: Omit<Company, "id" | "createdAt" | "updatedAt">) => void;
   onCancel: () => void;
   saving: boolean;
+  sharing?: SharingProps;
 }) {
   const [form, setForm] = useState(initial);
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
@@ -169,6 +239,8 @@ function CompanyForm({
         </div>
       </div>
 
+      {sharing?.isOwner && <SharingSection sharing={sharing} />}
+
       <div className="flex gap-2 pt-2">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-10 rounded-xl">Cancel</Button>
         <Button onClick={() => onSave(form)} disabled={!form.name.trim() || saving} className="flex-1 h-10 rounded-xl text-white" style={{ backgroundColor: form.color }}>
@@ -191,13 +263,23 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
 
 // ─── Company Tile ─────────────────────────────────────────────────────────────
 
-function CompanyTile({ co, index, children: tradingNameChildren, onEdit, onDelete, onNavigate, onEditChild, onDeleteChild, onNavigateChild }: {
+function CompanyTile({ co, index, children: tradingNameChildren, currentUid, appUsers, onEdit, onDelete, onNavigate, onEditChild, onDeleteChild, onNavigateChild }: {
   co: Company; index: number;
   children?: Company[];
+  currentUid?: string;
+  appUsers: { id: string; name: string; email: string }[];
   onEdit: () => void; onDelete: () => void; onNavigate: () => void;
   onEditChild?: (c: Company) => void; onDeleteChild?: (c: Company) => void; onNavigateChild?: (c: Company) => void;
 }) {
   const typeLabel = co.companyType ? COMPANY_TYPE_LABELS[co.companyType] : null;
+  const isOwner = !co.ownerId || co.ownerId === currentUid;
+  const sharedWith = co.sharedWith ?? [];
+  const sharedLabel = isOwner
+    ? (sharedWith.length > 0 ? `Shared with ${sharedWith.map((uid) => appUsers.find((u) => u.id === uid)?.name || "someone").join(", ")}` : null)
+    : (() => {
+        const owner = appUsers.find((u) => u.id === co.ownerId);
+        return owner ? `Shared by ${owner.name}` : "Shared with you";
+      })();
   return (
     <motion.div
       layout
@@ -219,15 +301,18 @@ function CompanyTile({ co, index, children: tradingNameChildren, onEdit, onDelet
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(); }}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              title="Edit / share"
             >
               <Edit2 className="w-3 h-3" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/40 transition-colors"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
+            {isOwner && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/40 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -243,6 +328,11 @@ function CompanyTile({ co, index, children: tradingNameChildren, onEdit, onDelet
           {co.isRegistered && (
             <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-700 dark:text-green-400 flex items-center gap-0.5">
               <CheckCircle2 className="w-2.5 h-2.5" /> Registered
+            </span>
+          )}
+          {sharedLabel && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400">
+              {sharedLabel}
             </span>
           )}
         </div>
@@ -337,11 +427,18 @@ function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany: () => void; on
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Companies = () => {
-  const { companies, loading, addCompany, updateCompany, deleteCompany } = useCompanies();
+  const { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany } = useCompanies();
+  const { user } = useAuth();
+  const appUsers = useAppUsers();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareSuccess, setShareSuccess] = useState(false);
 
   const handleSave = async (form: Omit<Company, "id" | "createdAt" | "updatedAt">) => {
     setSaving(true);
@@ -351,6 +448,44 @@ const Companies = () => {
       setDialogOpen(false);
       setEditCompany(null);
     } finally { setSaving(false); }
+  };
+
+  const handleShare = async () => {
+    if (!shareEmail.trim() || !editCompany?.id) return;
+    setShareError(null);
+    setShareLoading(true);
+    setShareSuccess(false);
+    try {
+      const usersQ = query(collection(db, "users"), where("email", "==", shareEmail.trim().toLowerCase()));
+      const snap = await getDocs(usersQ);
+      if (snap.empty) {
+        setShareError("No user found with that email address.");
+        return;
+      }
+      const targetUid = snap.docs[0].id;
+      if (targetUid === user?.uid) {
+        setShareError("That's your own account!");
+        return;
+      }
+      if (editCompany.sharedWith?.includes(targetUid)) {
+        setShareError("Already shared with this user.");
+        return;
+      }
+      await shareCompany(editCompany.id, targetUid);
+      setEditCompany((prev) => prev ? { ...prev, sharedWith: [...(prev.sharedWith ?? []), targetUid] } : prev);
+      setShareSuccess(true);
+      setShareEmail("");
+    } catch (err: any) {
+      setShareError(err?.message ?? "Failed to share. Try again.");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleUnshare = async (targetUid: string) => {
+    if (!editCompany?.id) return;
+    await unshareCompany(editCompany.id, targetUid);
+    setEditCompany((prev) => prev ? { ...prev, sharedWith: (prev.sharedWith ?? []).filter((id) => id !== targetUid) } : prev);
   };
 
   const tradingNames = useMemo(() => companies.filter((c) => c.companyType === "trading_name"), [companies]);
@@ -367,11 +502,13 @@ const Companies = () => {
       key={co.id}
       co={co}
       index={i}
+      currentUid={user?.uid}
+      appUsers={appUsers}
       children={getChildren(co.id!)}
-      onEdit={() => { setEditCompany(co); setDialogOpen(true); }}
+      onEdit={() => { setEditCompany(co); setShareEmail(""); setShareError(null); setShareSuccess(false); setDialogOpen(true); }}
       onDelete={() => co.id && deleteCompany(co.id)}
       onNavigate={() => navigate(`/companies/${co.id}`)}
-      onEditChild={(child) => { setEditCompany(child); setDialogOpen(true); }}
+      onEditChild={(child) => { setEditCompany(child); setShareEmail(""); setShareError(null); setShareSuccess(false); setDialogOpen(true); }}
       onDeleteChild={(child) => child.id && deleteCompany(child.id)}
       onNavigateChild={(child) => navigate(`/companies/${child.id}`)}
     />
@@ -491,6 +628,18 @@ const Companies = () => {
             onSave={handleSave}
             onCancel={() => { setDialogOpen(false); setEditCompany(null); }}
             saving={saving}
+            sharing={editCompany ? {
+              isOwner: !editCompany.ownerId || editCompany.ownerId === user?.uid,
+              sharedWith: editCompany.sharedWith ?? [],
+              appUsers,
+              shareEmail,
+              onShareEmailChange: setShareEmail,
+              onShare: handleShare,
+              onUnshare: handleUnshare,
+              shareLoading,
+              shareError,
+              shareSuccess,
+            } : undefined}
           />
         </DialogContent>
       </Dialog>

@@ -9,6 +9,8 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import {
   ref,
@@ -33,12 +35,18 @@ export function useCompanies() {
 
   useEffect(() => {
     if (!uid) return;
-    const q = query(
-      collection(db, "companies", uid, "items"),
-      orderBy("createdAt", "desc")
-    );
+    // Query all companies — filter client-side so legacy companies (no ownerId)
+    // remain visible and new companies are scoped to owner + sharedWith.
+    const q = query(collection(db, "companies"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
-      setCompanies(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Company)));
+      const next = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Company))
+        .filter((c) =>
+          !c.ownerId ||
+          c.ownerId === uid ||
+          (c.sharedWith ?? []).includes(uid)
+        );
+      setCompanies(next);
       setLoading(false);
     });
     return unsub;
@@ -46,57 +54,68 @@ export function useCompanies() {
 
   const addCompany = useCallback(async (company: Omit<Company, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;
-    await addDoc(collection(db, "companies", uid, "items"), {
+    await addDoc(collection(db, "companies"), {
       ...company,
+      ownerId: uid,
+      sharedWith: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
   }, [uid]);
 
   const updateCompany = useCallback(async (id: string, updates: Partial<Company>) => {
-    if (!uid) return;
-    await updateDoc(doc(db, "companies", uid, "items", id), {
+    await updateDoc(doc(db, "companies", id), {
       ...updates,
       updatedAt: serverTimestamp(),
     });
-  }, [uid]);
+  }, []);
 
   const deleteCompany = useCallback(async (id: string) => {
-    if (!uid) return;
-    await deleteDoc(doc(db, "companies", uid, "items", id));
-  }, [uid]);
+    await deleteDoc(doc(db, "companies", id));
+  }, []);
 
-  return { companies, loading, addCompany, updateCompany, deleteCompany };
+  const shareCompany = useCallback(async (companyId: string, targetUid: string) => {
+    await updateDoc(doc(db, "companies", companyId), {
+      sharedWith: arrayUnion(targetUid),
+    });
+  }, []);
+
+  const unshareCompany = useCallback(async (companyId: string, targetUid: string) => {
+    await updateDoc(doc(db, "companies", companyId), {
+      sharedWith: arrayRemove(targetUid),
+    });
+  }, []);
+
+  return { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany };
 }
 
 // ─── Logins ────────────────────────────────────────────────────────────────────
 
 export function useCompanyLogins(companyId: string | undefined) {
   const [logins, setLogins] = useState<CompanyLogin[]>([]);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
-    const q = query(collection(db, "companies", uid, "items", companyId, "logins"), orderBy("service"));
+    if (!companyId) return;
+    const q = query(collection(db, "companies", companyId, "logins"), orderBy("service"));
     return onSnapshot(q, (snap) => {
       setLogins(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyLogin)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addLogin = useCallback(async (login: Omit<CompanyLogin, "id">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "logins"), login);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "logins"), login);
+  }, [companyId]);
 
   const updateLogin = useCallback(async (id: string, updates: Partial<CompanyLogin>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "logins", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "logins", id), updates);
+  }, [companyId]);
 
   const deleteLogin = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "logins", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "logins", id));
+  }, [companyId]);
 
   return { logins, addLogin, updateLogin, deleteLogin };
 }
@@ -105,30 +124,29 @@ export function useCompanyLogins(companyId: string | undefined) {
 
 export function useCompanyServices(companyId: string | undefined) {
   const [services, setServices] = useState<CompanyService[]>([]);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
-    const q = query(collection(db, "companies", uid, "items", companyId, "services"), orderBy("name"));
+    if (!companyId) return;
+    const q = query(collection(db, "companies", companyId, "services"), orderBy("name"));
     return onSnapshot(q, (snap) => {
       setServices(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyService)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addService = useCallback(async (service: Omit<CompanyService, "id">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "services"), service);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "services"), service);
+  }, [companyId]);
 
   const updateService = useCallback(async (id: string, updates: Partial<CompanyService>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "services", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "services", id), updates);
+  }, [companyId]);
 
   const deleteService = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "services", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "services", id));
+  }, [companyId]);
 
   return { services, addService, updateService, deleteService };
 }
@@ -138,51 +156,50 @@ export function useCompanyServices(companyId: string | undefined) {
 export function useCompanyExpenses(companyId: string | undefined) {
   const [expenses, setExpenses] = useState<CompanyExpense[]>([]);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     const q = query(
-      collection(db, "companies", uid, "items", companyId, "expenses"),
+      collection(db, "companies", companyId, "expenses"),
       orderBy("date", "desc")
     );
     return onSnapshot(q, (snap) => {
       setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyExpense)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addExpense = useCallback(async (expense: Omit<CompanyExpense, "id" | "createdAt">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "expenses"), {
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "expenses"), {
       ...expense,
       createdAt: serverTimestamp(),
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const updateExpense = useCallback(async (id: string, updates: Partial<CompanyExpense>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "expenses", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "expenses", id), updates);
+  }, [companyId]);
 
   const deleteExpense = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "expenses", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "expenses", id));
+  }, [companyId]);
 
   const uploadReceipt = useCallback(async (expenseId: string, file: File, currentUrls: string[]) => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     setUploadingReceipt(true);
     try {
-      const storageRef = ref(storage, `companies/${uid}/${companyId}/receipts/${Date.now()}_${file.name}`);
+      const storageRef = ref(storage, `companies/${companyId}/receipts/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, "companies", uid, "items", companyId, "expenses", expenseId), {
+      await updateDoc(doc(db, "companies", companyId, "expenses", expenseId), {
         receipts: [...(currentUrls || []), url],
       });
     } finally {
       setUploadingReceipt(false);
     }
-  }, [uid, companyId]);
+  }, [companyId]);
 
   return { expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense, uploadReceipt };
 }
@@ -191,36 +208,35 @@ export function useCompanyExpenses(companyId: string | undefined) {
 
 export function useCompanyInsurance(companyId: string | undefined) {
   const [policies, setPolicies] = useState<CompanyInsurance[]>([]);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     const q = query(
-      collection(db, "companies", uid, "items", companyId, "insurance"),
+      collection(db, "companies", companyId, "insurance"),
       orderBy("renewalDate")
     );
     return onSnapshot(q, (snap) => {
       setPolicies(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyInsurance)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addPolicy = useCallback(async (policy: Omit<CompanyInsurance, "id" | "createdAt">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "insurance"), {
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "insurance"), {
       ...policy,
       createdAt: serverTimestamp(),
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const updatePolicy = useCallback(async (id: string, updates: Partial<CompanyInsurance>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "insurance", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "insurance", id), updates);
+  }, [companyId]);
 
   const deletePolicy = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "insurance", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "insurance", id));
+  }, [companyId]);
 
   return { policies, addPolicy, updatePolicy, deletePolicy };
 }
@@ -229,36 +245,35 @@ export function useCompanyInsurance(companyId: string | undefined) {
 
 export function useCompanyIncome(companyId: string | undefined) {
   const [incomes, setIncomes] = useState<CompanyIncome[]>([]);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     const q = query(
-      collection(db, "companies", uid, "items", companyId, "income"),
+      collection(db, "companies", companyId, "income"),
       orderBy("date", "desc")
     );
     return onSnapshot(q, (snap) => {
       setIncomes(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyIncome)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addIncome = useCallback(async (income: Omit<CompanyIncome, "id" | "createdAt">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "income"), {
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "income"), {
       ...income,
       createdAt: serverTimestamp(),
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const updateIncome = useCallback(async (id: string, updates: Partial<CompanyIncome>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "income", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "income", id), updates);
+  }, [companyId]);
 
   const deleteIncome = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "income", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "income", id));
+  }, [companyId]);
 
   return { incomes, addIncome, updateIncome, deleteIncome };
 }
@@ -268,49 +283,48 @@ export function useCompanyIncome(companyId: string | undefined) {
 export function useCompanyTaxReturns(companyId: string | undefined) {
   const [taxReturns, setTaxReturns] = useState<CompanyTaxReturn[]>([]);
   const [uploadingPdf, setUploadingPdf] = useState(false);
-  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     const q = query(
-      collection(db, "companies", uid, "items", companyId, "taxReturns"),
+      collection(db, "companies", companyId, "taxReturns"),
       orderBy("taxYear", "desc")
     );
     return onSnapshot(q, (snap) => {
       setTaxReturns(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyTaxReturn)));
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const addReturn = useCallback(async (ret: Omit<CompanyTaxReturn, "id" | "createdAt">) => {
-    if (!uid || !companyId) return;
-    await addDoc(collection(db, "companies", uid, "items", companyId, "taxReturns"), {
+    if (!companyId) return;
+    await addDoc(collection(db, "companies", companyId, "taxReturns"), {
       ...ret,
       createdAt: serverTimestamp(),
     });
-  }, [uid, companyId]);
+  }, [companyId]);
 
   const updateReturn = useCallback(async (id: string, updates: Partial<CompanyTaxReturn>) => {
-    if (!uid || !companyId) return;
-    await updateDoc(doc(db, "companies", uid, "items", companyId, "taxReturns", id), updates);
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "taxReturns", id), updates);
+  }, [companyId]);
 
   const deleteReturn = useCallback(async (id: string) => {
-    if (!uid || !companyId) return;
-    await deleteDoc(doc(db, "companies", uid, "items", companyId, "taxReturns", id));
-  }, [uid, companyId]);
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "taxReturns", id));
+  }, [companyId]);
 
   const uploadPdf = useCallback(async (returnId: string, file: File) => {
-    if (!uid || !companyId) return;
+    if (!companyId) return;
     setUploadingPdf(true);
     try {
-      const storageRef = ref(storage, `companies/${uid}/${companyId}/taxreturns/${Date.now()}_${file.name}`);
+      const storageRef = ref(storage, `companies/${companyId}/taxreturns/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, "companies", uid, "items", companyId, "taxReturns", returnId), { pdfUrl: url });
+      await updateDoc(doc(db, "companies", companyId, "taxReturns", returnId), { pdfUrl: url });
     } finally {
       setUploadingPdf(false);
     }
-  }, [uid, companyId]);
+  }, [companyId]);
 
   return { taxReturns, uploadingPdf, addReturn, updateReturn, deleteReturn, uploadPdf };
 }
@@ -319,16 +333,15 @@ export function useCompanyTaxReturns(companyId: string | undefined) {
 
 export function useMultiCompanyFinance(companyIds: string[]) {
   const [data, setData] = useState<Record<string, { income: CompanyIncome[]; expenses: CompanyExpense[] }>>({});
-  const uid = auth.currentUser?.uid;
   const idsKey = companyIds.join(",");
 
   useEffect(() => {
-    if (!uid || companyIds.length === 0) return;
+    if (companyIds.length === 0) return;
     const unsubs: (() => void)[] = [];
 
     companyIds.forEach((cid) => {
-      const iQ = query(collection(db, "companies", uid, "items", cid, "income"), orderBy("date", "desc"));
-      const eQ = query(collection(db, "companies", uid, "items", cid, "expenses"), orderBy("date", "desc"));
+      const iQ = query(collection(db, "companies", cid, "income"), orderBy("date", "desc"));
+      const eQ = query(collection(db, "companies", cid, "expenses"), orderBy("date", "desc"));
       unsubs.push(
         onSnapshot(iQ, (snap) => {
           setData((prev) => ({
@@ -353,7 +366,7 @@ export function useMultiCompanyFinance(companyIds: string[]) {
 
     return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, idsKey]);
+  }, [idsKey]);
 
   return data;
 }

@@ -31,6 +31,7 @@ import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
+import RequireFeature from "@/auth/RequireFeature";
 
 const queryClient = new QueryClient();
 
@@ -52,8 +53,22 @@ const App = () => (
           >
             {/* Make the root domain show the login page. Move dashboard to /dashboard */}
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/finance" element={<Finance />} />
-            <Route path="/pets" element={<Pets />} />
+            <Route
+              path="/finance"
+              element={
+                <RequireFeature featureKey="finance_personal">
+                  <Finance />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/pets"
+              element={
+                <RequireFeature featureKey="pets">
+                  <Pets />
+                </RequireFeature>
+              }
+            />
             <Route
               path="/admin"
               element={
@@ -62,17 +77,80 @@ const App = () => (
                 </RequireRole>
               }
             />
-            <Route path="/household-finance" element={<HouseholdFinance />} />
-            <Route path="/inheritance" element={<Inheritance />} />
-            <Route path="/households" element={<Households />} />
+            <Route
+              path="/household-finance"
+              element={
+                <RequireFeature featureKey="finance_household">
+                  <HouseholdFinance />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/inheritance"
+              element={
+                <RequireFeature featureKey="inheritance_tax">
+                  <Inheritance />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/households"
+              element={
+                <RequireFeature featureKey="households">
+                  <Households />
+                </RequireFeature>
+              }
+            />
             <Route path="/freezer" element={<Freezer />} />
-            <Route path="/weight" element={<Health />} />
-            <Route path="/health" element={<Health />} />
-            <Route path="/tattersalls" element={<Tattersalls />} />
-            <Route path="/tasks" element={<Tasks />} />
+            <Route
+              path="/weight"
+              element={
+                <RequireFeature featureKey="weight_tracking">
+                  <Health />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/health"
+              element={
+                <RequireFeature featureKey="weight_tracking">
+                  <Health />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/tattersalls"
+              element={
+                <RequireFeature featureKey="tattersalls">
+                  <Tattersalls />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/tasks"
+              element={
+                <RequireFeature featureKey="tasks">
+                  <Tasks />
+                </RequireFeature>
+              }
+            />
             <Route path="/today" element={<Today />} />
-            <Route path="/companies" element={<Companies />} />
-            <Route path="/companies/:id" element={<CompanyDetail />} />
+            <Route
+              path="/companies"
+              element={
+                <RequireFeature featureKey="companies">
+                  <Companies />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/companies/:id"
+              element={
+                <RequireFeature featureKey="companies">
+                  <CompanyDetail />
+                </RequireFeature>
+              }
+            />
             <Route path="/more" element={<More />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/notifications" element={<NotificationSettings />} />
@@ -80,7 +158,14 @@ const App = () => (
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
             <Route path="/qr-codes" element={<QRCodes />} />
-            <Route path="/calendar" element={<CalendarPage />} />
+            <Route
+              path="/calendar"
+              element={
+                <RequireFeature featureKey="calendar">
+                  <CalendarPage />
+                </RequireFeature>
+              }
+            />
           </Route>
           <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />

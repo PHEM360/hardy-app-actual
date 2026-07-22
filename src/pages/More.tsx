@@ -15,6 +15,9 @@ import {
   Settings,
   Snowflake,
 } from "lucide-react";
+import { useUserRole } from "@/auth/useUserRole";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
 
 type MoreItem = {
   label: string;
@@ -142,15 +145,27 @@ const SECTIONS: Section[] = [
 
 const More = () => {
   const navigate = useNavigate();
+  const { role, loading } = useUserRole();
+  const { profile } = useUserProfile();
 
   let delay = 0;
+
+  const visibleSections = SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      const key = ROUTE_FEATURE_KEY[item.route];
+      if (!key) return true;
+      if (loading) return false;
+      return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
+    }),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <div className="px-4 py-5 pb-24">
       <h1 className="text-xl font-bold font-display text-foreground mb-5">More</h1>
 
       <div className="space-y-6">
-        {SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title}>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-1">
               {section.title}

@@ -15,6 +15,9 @@ import { TattersallsWidget }   from "@/components/widgets/TattersallsWidget";
 import { CompaniesWidget }     from "@/components/widgets/CompaniesWidget";
 import { WeightWidget }        from "@/components/widgets/WeightWidget";
 import { QuickLinksWidget }    from "@/components/widgets/QuickLinksWidget";
+import { useUserRole } from "@/auth/useUserRole";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
 
 // ─── Widget content map ───────────────────────────────────────────────────────
 
@@ -48,7 +51,16 @@ const Dashboard = () => {
   const [editMode, setEditMode] = useState(false);
   const [showHiddenPanel, setShowHiddenPanel] = useState(false);
 
-  const { layout, updateWidget, resetLayout } = useDashboardLayout();
+  const { layout: fullLayout, updateWidget, resetLayout } = useDashboardLayout();
+  const { role, loading: roleLoading } = useUserRole();
+  const { profile } = useUserProfile();
+
+  const layout = fullLayout.filter((w) => {
+    const key = WIDGET_FEATURE_KEY[w.type];
+    if (!key) return true;
+    if (roleLoading) return false;
+    return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
+  });
 
   // Measure container width
   useEffect(() => {

@@ -8,6 +8,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useUserRole } from "@/auth/useUserRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
 
 type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
 
@@ -84,22 +85,18 @@ const BottomNav = () => {
   const { role, loading } = useUserRole();
   const { profile } = useUserProfile();
 
-  const isAdmin = role === "admin" || role === "superadmin";
-  const memberHasFeature = (key: string) => {
-    if (isAdmin) return true;
-    if (!profile || profile.enabledFeatures.length === 0) return true;
-    return profile.enabledFeatures.includes(key as any);
-  };
-
   const rawPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
 
   const navItems = rawPaths
     .filter((path) => path !== "/more")
     .filter((path) => {
-      if (path === "/admin") return !loading && isAdmin;
-      if (path === "/pets") return !loading && memberHasFeature("pets");
-      if (path === "/finance") return !loading && memberHasFeature("finance");
-      return true;
+      // Admin nav access is role-based only — the per-member "Admin" feature
+      // toggle doesn't actually grant the admin role, so it can't gate this.
+      if (path === "/admin") return !loading && (role === "admin" || role === "superadmin");
+      const key = ROUTE_FEATURE_KEY[path];
+      if (!key) return true;
+      if (loading) return false;
+      return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
     })
     .map((path) => ({ path, ...ALL_NAV_ITEMS[path] }))
     .filter((item) => Boolean(item.icon));

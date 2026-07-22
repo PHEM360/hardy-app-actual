@@ -340,6 +340,8 @@ export interface Company {
   companyType?: "registered" | "sole_trader" | "trading_name" | "other";
   parentCompanyId?: string; // for trading_name: ID of the registered parent company
   contact: CompanyContactDetails;
+  ownerId?: string;        // uid of the creator — legacy (ownerless) companies stay visible to all during migration
+  sharedWith?: string[];   // uids of other users granted access
   createdAt?: any;
   updatedAt?: any;
 }
