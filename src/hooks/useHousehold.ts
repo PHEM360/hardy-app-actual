@@ -18,22 +18,24 @@ import {
   DEFAULT_HOUSEHOLD_SETTINGS,
   HouseholdDocument,
 } from "@/types/app";
+import { useActiveHousehold } from "./useActiveHousehold";
 
 // ─── Items ────────────────────────────────────────────────────────────────────
 
 export function useHouseholdItems() {
   const [items, setItems] = useState<HouseholdItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const { activeHouseholdId } = useActiveHousehold();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
-    return unsub;
-  }, []);
+    if (!activeHouseholdId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!uid) return;
-    const col = collection(db, "household", uid, "items");
+    setLoading(true);
+    const col = collection(db, "household", activeHouseholdId, "items");
     const unsub = onSnapshot(col, (snap) => {
       setItems(
         snap.docs.map((d) => ({ id: d.id, ...(d.data() as HouseholdItem) }))
@@ -41,36 +43,33 @@ export function useHouseholdItems() {
       setLoading(false);
     });
     return unsub;
-  }, [uid]);
+  }, [activeHouseholdId]);
 
   const addItem = useCallback(
     async (item: Omit<HouseholdItem, "id">) => {
-      const currentUid = auth.currentUser?.uid;
-      if (!currentUid) return;
-      await addDoc(collection(db, "household", currentUid, "items"), {
+      if (!activeHouseholdId) return;
+      await addDoc(collection(db, "household", activeHouseholdId, "items"), {
         ...item,
         createdAt: serverTimestamp(),
       });
     },
-    []
+    [activeHouseholdId]
   );
 
   const updateItem = useCallback(
     async (id: string, data: Partial<HouseholdItem>) => {
-      const currentUid = auth.currentUser?.uid;
-      if (!currentUid) return;
-      await updateDoc(doc(db, "household", currentUid, "items", id), data as Record<string, unknown>);
+      if (!activeHouseholdId) return;
+      await updateDoc(doc(db, "household", activeHouseholdId, "items", id), data as Record<string, unknown>);
     },
-    []
+    [activeHouseholdId]
   );
 
   const deleteItem = useCallback(
     async (id: string) => {
-      const currentUid = auth.currentUser?.uid;
-      if (!currentUid) return;
-      await deleteDoc(doc(db, "household", currentUid, "items", id));
+      if (!activeHouseholdId) return;
+      await deleteDoc(doc(db, "household", activeHouseholdId, "items", id));
     },
-    []
+    [activeHouseholdId]
   );
 
   return { items, loading, addItem, updateItem, deleteItem };
@@ -83,33 +82,35 @@ export function useHouseholdSettings() {
     DEFAULT_HOUSEHOLD_SETTINGS
   );
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const { activeHouseholdId } = useActiveHousehold();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
-    return unsub;
-  }, []);
+    if (!activeHouseholdId) {
+      setSettings(DEFAULT_HOUSEHOLD_SETTINGS);
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!uid) return;
-    const ref = doc(db, "household", uid, "settings", "main");
+    setLoading(true);
+    const ref = doc(db, "household", activeHouseholdId, "settings", "main");
     getDoc(ref).then((snap) => {
       if (snap.exists()) {
         setSettings(snap.data() as HouseholdSettings);
+      } else {
+        setSettings(DEFAULT_HOUSEHOLD_SETTINGS);
       }
       setLoading(false);
     });
-  }, [uid]);
+  }, [activeHouseholdId]);
 
   const saveSettings = useCallback(
     async (next: HouseholdSettings) => {
-      const currentUid = auth.currentUser?.uid;
-      if (!currentUid) return;
-      const ref = doc(db, "household", currentUid, "settings", "main");
+      if (!activeHouseholdId) return;
+      const ref = doc(db, "household", activeHouseholdId, "settings", "main");
       await setDoc(ref, next, { merge: true });
       setSettings(next);
     },
-    []
+    [activeHouseholdId]
   );
 
   return { settings, loading, saveSettings };
@@ -120,16 +121,17 @@ export function useHouseholdSettings() {
 export function useHouseholdDocuments() {
   const [documents, setDocuments] = useState<HouseholdDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const { activeHouseholdId } = useActiveHousehold();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
-    return unsub;
-  }, []);
+    if (!activeHouseholdId) {
+      setDocuments([]);
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!uid) return;
-    const col = collection(db, "household", uid, "documents");
+    setLoading(true);
+    const col = collection(db, "household", activeHouseholdId, "documents");
     const unsub = onSnapshot(col, (snap) => {
       setDocuments(
         snap.docs.map((d) => ({ id: d.id, ...(d.data() as HouseholdDocument) }))
@@ -137,32 +139,29 @@ export function useHouseholdDocuments() {
       setLoading(false);
     });
     return unsub;
-  }, [uid]);
+  }, [activeHouseholdId]);
 
   const addDocument = useCallback(async (doc_: Omit<HouseholdDocument, "id">) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await addDoc(collection(db, "household", currentUid, "documents"), {
+    if (!activeHouseholdId) return;
+    await addDoc(collection(db, "household", activeHouseholdId, "documents"), {
       ...doc_,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-  }, []);
+  }, [activeHouseholdId]);
 
   const updateDocument = useCallback(async (id: string, data: Partial<HouseholdDocument>) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await updateDoc(doc(db, "household", currentUid, "documents", id), {
+    if (!activeHouseholdId) return;
+    await updateDoc(doc(db, "household", activeHouseholdId, "documents", id), {
       ...data,
       updatedAt: serverTimestamp(),
     } as Record<string, unknown>);
-  }, []);
+  }, [activeHouseholdId]);
 
   const deleteDocument = useCallback(async (id: string) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await deleteDoc(doc(db, "household", currentUid, "documents", id));
-  }, []);
+    if (!activeHouseholdId) return;
+    await deleteDoc(doc(db, "household", activeHouseholdId, "documents", id));
+  }, [activeHouseholdId]);
 
   return { documents, loading, addDocument, updateDocument, deleteDocument };
 }

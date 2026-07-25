@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { Bell, Settings } from "lucide-react";
+import { Bell, Settings, ChevronDown, Home } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) => (
   <motion.div
@@ -25,9 +27,11 @@ const TopBar = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const { activeHouseholdId, availableHouseholds, setActiveHouseholdId } = useActiveHousehold();
   const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
   const [now, setNow] = useState(new Date());
+  const [householdMenuOpen, setHouseholdMenuOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30000);
@@ -100,7 +104,33 @@ const TopBar = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
+          {availableHouseholds.length > 1 && (
+            <Popover open={householdMenuOpen} onOpenChange={setHouseholdMenuOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl hover:bg-white/10 transition-colors max-w-[9rem]">
+                  <Home className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-white/90 truncate">
+                    {availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household"}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-1.5">
+                {availableHouseholds.map((h) => (
+                  <button
+                    key={h.id}
+                    onClick={() => { setActiveHouseholdId(h.id); setHouseholdMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      h.id === activeHouseholdId ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {h.name}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
           <button
             onClick={() => navigate("/notifications")}
             className="relative p-2 rounded-xl hover:bg-white/10 transition-colors"

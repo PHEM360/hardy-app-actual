@@ -18,6 +18,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useQRCodes, useQRCodeSettings } from "@/hooks/useQRCodes";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { QRCodeItem, LabelDesign } from "@/types/app";
 
 type View = "library" | "generator" | "settings";
@@ -1003,7 +1006,9 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const QRCodes = () => {
-  const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign } = useQRCodes();
+  const { scopeUserId, permission } = useSharedScope("qrcodes");
+  const canEdit = permission === "edit";
+  const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign } = useQRCodes(scopeUserId ?? undefined);
   const { settings } = useQRCodeSettings();
   const navigate = useNavigate();
 
@@ -1076,12 +1081,16 @@ const QRCodes = () => {
       subtitle="Generate & manage"
       icon={<QrCode className="w-5 h-5" />}
       action={
-        <button
-          onClick={() => navigate("/companies")}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back
-        </button>
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="qrcodes" />
+          <ShareAccessButton page="qrcodes" />
+          <button
+            onClick={() => navigate("/companies")}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          </button>
+        </div>
       }
     >
       <AnimatePresence mode="wait">
@@ -1096,7 +1105,7 @@ const QRCodes = () => {
             <LibraryView
               qrCodes={qrCodes}
               loading={loading}
-              onNew={() => { setEditItem(null); setView("generator"); }}
+              onNew={canEdit ? () => { setEditItem(null); setView("generator"); } : () => {}}
               onEdit={(item) => { setEditItem(item); setView("generator"); }}
               onDelete={deleteQRCode}
               onPrint={(item) => { setPrintItem(item); setPrintOpen(true); }}

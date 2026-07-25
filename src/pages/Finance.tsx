@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFinance } from "@/hooks/useFinance";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 
 // Mock data removed — accounts and entries now come from Firestore via useFinance.
 
@@ -58,7 +61,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 type ViewMode = "chart" | "table";
 
 const Finance = () => {
-  const { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry } = useFinance();
+  const { scopeUserId, permission } = useSharedScope("finance");
+  const canEdit = permission === "edit";
+  const { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry } = useFinance(scopeUserId ?? undefined);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   // Keep selectedAccounts in sync when accounts load
   useMemo(() => {
@@ -172,7 +177,17 @@ const Finance = () => {
   const managingEntries = manageAccountId ? entries.filter(e => e.accountId === manageAccountId).sort((a, b) => b.date.localeCompare(a.date)) : [];
 
   return (
-    <FeaturePageShell title="My Finances" subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />}>
+    <FeaturePageShell
+      title="My Finances"
+      subtitle="Account balances over time"
+      icon={<Wallet className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="finance" />
+          <ShareAccessButton page="finance" />
+        </div>
+      }
+    >
       {/* Total Balance */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl border border-primary/15 shadow-card mb-5" style={{ background: "linear-gradient(135deg, hsl(190, 29%, 35%) 0%, hsl(191, 33%, 50%) 100%)" }}>
         <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total Balance</p>
@@ -191,7 +206,9 @@ const Finance = () => {
           Accounts
         </h3>
         <div className="flex gap-1.5">
-          <button onClick={() => setAddAccountOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
+          {canEdit && (
+            <button onClick={() => setAddAccountOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Account</button>
+          )}
           <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
             <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
               <DialogHeader><DialogTitle className="font-display">New Account</DialogTitle></DialogHeader>
@@ -298,9 +315,11 @@ const Finance = () => {
 
         <div className="flex-1" />
 
-        <button onClick={() => setAddBalanceOpen(true)} className="h-8 px-3 rounded-lg text-xs font-semibold bg-gradient-primary text-white flex items-center gap-1">
-          <Plus className="w-3.5 h-3.5" /> Log Balance
-        </button>
+        {canEdit && (
+          <button onClick={() => setAddBalanceOpen(true)} className="h-8 px-3 rounded-lg text-xs font-semibold bg-gradient-primary text-white flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Log Balance
+          </button>
+        )}
         <Dialog open={addBalanceOpen} onOpenChange={setAddBalanceOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
             <DialogHeader><DialogTitle className="font-display">Log Balance</DialogTitle></DialogHeader>

@@ -17,6 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { format, subMonths, subYears, parseISO, differenceInDays } from "date-fns";
 import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { type BPEntry } from "@/hooks/useWeightTracker";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import DogLoader from "@/components/DogLoader";
 
 // ── Period filter ──────────────────────────────────────────────────────────────
@@ -124,10 +127,12 @@ function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v:
 
 // ── Main component ─────────────────────────────────────────────────────────────
 const HealthTracker = () => {
+  const { scopeUserId, permission } = useSharedScope("health");
+  const canEdit = permission === "edit";
   const {
     entries, heightEntries, botoxRecords, bpEntries, loading,
     addEntry, addHeightEntry, addBotoxRecord, addBPEntry,
-  } = useWeightTracker();
+  } = useWeightTracker(scopeUserId ?? undefined);
 
   const [weightOpen, setWeightOpen]         = useState(false);
   const [newWeight, setNewWeight]           = useState("");
@@ -280,7 +285,17 @@ const HealthTracker = () => {
   }
 
   return (
-    <FeaturePageShell title="Health" subtitle="Weight, BP & treatments" icon={<HeartPulse className="w-5 h-5" />}>
+    <FeaturePageShell
+      title="Health"
+      subtitle="Weight, BP & treatments"
+      icon={<HeartPulse className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="health" />
+          <ShareAccessButton page="health" />
+        </div>
+      }
+    >
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-2 gap-3 mb-5">
@@ -292,7 +307,7 @@ const HealthTracker = () => {
         >
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs text-primary-foreground/70 uppercase tracking-wider font-medium">Current Weight</p>
-            <button onClick={() => setWeightOpen(true)} className="flex items-center gap-0.5 text-[10px] text-primary-foreground/70 hover:text-primary-foreground font-medium">
+            <button onClick={() => canEdit && setWeightOpen(true)} className="flex items-center gap-0.5 text-[10px] text-primary-foreground/70 hover:text-primary-foreground font-medium">
               <Plus className="w-3 h-3" /> Log
             </button>
           </div>
@@ -357,7 +372,7 @@ const HealthTracker = () => {
               <Ruler className="w-3.5 h-3.5 text-muted-foreground" />
               <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Height</p>
             </div>
-            <button onClick={() => setHeightOpen(true)} className="text-[10px] text-primary font-medium flex items-center gap-0.5">
+            <button onClick={() => canEdit && setHeightOpen(true)} className="text-[10px] text-primary font-medium flex items-center gap-0.5">
               <Plus className="w-3 h-3" /> Update
             </button>
           </div>
@@ -470,7 +485,7 @@ const HealthTracker = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <PeriodPicker value={bpPeriod} onChange={setBpPeriod} />
             <ViewToggle view={bpView} onChange={setBpView} />
-            <button onClick={() => { setBpError(null); setBpOpen(true); }} className="flex items-center gap-1 text-xs text-primary font-medium">
+            <button onClick={() => { if (canEdit) { setBpError(null); setBpOpen(true); } }} className="flex items-center gap-1 text-xs text-primary font-medium">
               <Plus className="w-3.5 h-3.5" /> Log
             </button>
           </div>
@@ -552,7 +567,7 @@ const HealthTracker = () => {
             <Syringe className="w-3.5 h-3.5 text-muted-foreground" />
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Neck Botox</h3>
           </div>
-          <button onClick={() => { setBotoxError(null); setBotoxOpen(true); }} className="flex items-center gap-1 text-xs text-primary font-medium">
+          <button onClick={() => { if (canEdit) { setBotoxError(null); setBotoxOpen(true); } }} className="flex items-center gap-1 text-xs text-primary font-medium">
             <Plus className="w-3.5 h-3.5" /> Add
           </button>
         </div>

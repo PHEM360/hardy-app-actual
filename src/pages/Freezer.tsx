@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFreezer } from "@/hooks/useFreezer";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 
 type BarcodeDetectorInstance = { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> };
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
@@ -15,7 +18,9 @@ type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => Barc
 const today = () => format(new Date(), "yyyy-MM-dd");
 
 const Freezer = () => {
-  const { items, loading, addItem, updateItem, removeItem } = useFreezer();
+  const { scopeUserId, permission } = useSharedScope("freezer");
+  const canEdit = permission === "edit";
+  const { items, loading, addItem, updateItem, removeItem } = useFreezer(scopeUserId ?? undefined);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -130,7 +135,20 @@ const Freezer = () => {
   };
 
   return (
-    <FeaturePageShell title="Freezer" subtitle={`${total} ${total === 1 ? "item" : "items"} currently in stock`} icon={<Snowflake className="h-5 w-5" />} action={<Button size="sm" className="rounded-xl" onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Add item</Button>}>
+    <FeaturePageShell
+      title="Freezer"
+      subtitle={`${total} ${total === 1 ? "item" : "items"} currently in stock`}
+      icon={<Snowflake className="h-5 w-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="freezer" />
+          <ShareAccessButton page="freezer" />
+          {canEdit && (
+            <Button size="sm" className="rounded-xl" onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Add item</Button>
+          )}
+        </div>
+      }
+    >
       <div className="space-y-4 pb-8">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

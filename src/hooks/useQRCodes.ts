@@ -17,10 +17,10 @@ import { QRCodeItem, QRCodeSettings, DEFAULT_QR_SETTINGS } from "@/types/app";
 
 // ─── QR Code items CRUD ────────────────────────────────────────────────────────
 
-export function useQRCodes() {
+export function useQRCodes(scopeUserId?: string) {
   const [qrCodes, setQrCodes] = useState<QRCodeItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const uid = auth.currentUser?.uid;
+  const uid = scopeUserId ?? auth.currentUser?.uid;
 
   useEffect(() => {
     if (!uid) return;
@@ -80,9 +80,9 @@ export function useQRCodes() {
 
 // ─── QR Code settings ──────────────────────────────────────────────────────────
 
-export function useQRCodeSettings() {
+export function useQRCodeSettings(scopeUserId?: string) {
   const [settings, setSettings] = useState<QRCodeSettings>(DEFAULT_QR_SETTINGS);
-  const uid = auth.currentUser?.uid;
+  const uid = scopeUserId ?? auth.currentUser?.uid;
 
   useEffect(() => {
     if (!uid) return;

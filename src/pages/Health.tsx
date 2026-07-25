@@ -17,6 +17,9 @@ import { useMeds } from "@/hooks/useMeds";
 import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
 import { useHealthProfile } from "@/hooks/useHealthProfile";
 import { useDocuments } from "@/hooks/useDocuments";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { format, parseISO } from "date-fns";
 
@@ -119,11 +122,14 @@ function MiniSparkline({
 type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai" | "documents";
 
 export default function Health() {
-  const { entries, heightEntries, bpEntries, measurements } = useWeightTracker();
-  const { medications } = useMeds();
+  const { scopeUserId } = useSharedScope("health");
+  const { entries, heightEntries, bpEntries, measurements } = useWeightTracker(scopeUserId ?? undefined);
+  const { medications } = useMeds(scopeUserId ?? undefined);
   const { tabs, addTab, deleteTab } = useHealthTabs();
-  const { profile, saveProfile } = useHealthProfile();
+  const { profile, saveProfile } = useHealthProfile(scopeUserId ?? undefined);
 
+  // Documents aren't part of the "health" share grain (the same collection is
+  // also used for non-health quick links), so this always stays scoped to self.
   const { documents, deleteDocument } = useDocuments();
   const healthDocs = documents.filter((d) => d.destination === "health");
 
@@ -198,6 +204,12 @@ export default function Health() {
       title="Health"
       subtitle="Your personal health dashboard"
       icon={<HeartPulse className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="health" />
+          <ShareAccessButton page="health" />
+        </div>
+      }
     >
       {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none -mx-1 px-1">
@@ -407,8 +419,8 @@ export default function Health() {
             </div>
           )}
 
-          {activeTab === "metrics" && <HealthMetrics />}
-          {activeTab === "meds"    && <HealthMeds />}
+          {activeTab === "metrics" && <HealthMetrics scopeUserId={scopeUserId ?? undefined} />}
+          {activeTab === "meds"    && <HealthMeds scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "substances" && <HealthSubstances />}
           {activeTab === "ai" && (
             <AiHealthAssessment

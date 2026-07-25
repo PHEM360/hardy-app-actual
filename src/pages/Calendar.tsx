@@ -23,6 +23,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCalendar } from "@/hooks/useCalendar";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
 import { useUserRole } from "@/auth/useUserRole";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -109,7 +112,9 @@ function defaultForm(prefillDate?: Date): EventForm {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const CalendarPage = () => {
-  const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar();
+  const { scopeUserId, permission: sharePermission } = useSharedScope("calendar");
+  const canEdit = sharePermission === "edit";
+  const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar(scopeUserId ?? undefined);
   const { settings: hSettings } = useHouseholdSettings();
   const { items: householdItems } = useHouseholdItems();
   const { pets } = usePets();
@@ -199,6 +204,7 @@ const CalendarPage = () => {
   // ─── Dialog openers ─────────────────────────────────────────────────────────
 
   const openAdd = (day?: Date) => {
+    if (!canEdit) return;
     setForm(defaultForm(day ?? selectedDay ?? undefined));
     setEditEvent(null);
     setConfirmDelete(false);
@@ -467,7 +473,16 @@ const CalendarPage = () => {
   // ─── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
-    <FeaturePageShell title="Calendar" icon={<CalendarDays className="w-5 h-5" />}>
+    <FeaturePageShell
+      title="Calendar"
+      icon={<CalendarDays className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="calendar" />
+          <ShareAccessButton page="calendar" />
+        </div>
+      }
+    >
 
       {/* ── Top navigation bar ── */}
       <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
@@ -529,13 +544,15 @@ const CalendarPage = () => {
           )}
 
           {/* Add event */}
-          <button
-            onClick={() => openAdd()}
-            className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => openAdd()}
+              className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </button>
+          )}
         </div>
       </div>
 

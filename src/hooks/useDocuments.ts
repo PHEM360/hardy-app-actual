@@ -18,19 +18,20 @@ export interface UserDocument {
   thumbnailUrl?: string;
 }
 
-export function useDocuments() {
+export function useDocuments(scopeUserId?: string) {
   const { user } = useAuth();
+  const uid = scopeUserId ?? user?.uid;
   const [documents, setDocuments] = useState<UserDocument[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!uid) {
       setDocuments([]);
       setLoading(false);
       return;
     }
     const q = query(
-      collection(db, "documents", user.uid, "items"),
+      collection(db, "documents", uid, "items"),
       orderBy("createdAt", "desc"),
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -38,20 +39,20 @@ export function useDocuments() {
       setLoading(false);
     });
     return unsub;
-  }, [user]);
+  }, [uid]);
 
   const addDocument = useCallback(async (data: Omit<UserDocument, "id" | "createdAt">) => {
-    if (!user) return;
-    await addDoc(collection(db, "documents", user.uid, "items"), {
+    if (!uid) return;
+    await addDoc(collection(db, "documents", uid, "items"), {
       ...data,
       createdAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [uid]);
 
   const deleteDocument = useCallback(async (docId: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, "documents", user.uid, "items", docId));
-  }, [user]);
+    if (!uid) return;
+    await deleteDoc(doc(db, "documents", uid, "items", docId));
+  }, [uid]);
 
   return { documents, addDocument, deleteDocument, loading };
 }

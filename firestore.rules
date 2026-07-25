@@ -39,7 +39,43 @@ service cloud.firestore {
         request.auth.uid == c.ownerId ||
         request.auth.uid in c.sharedWith;
     }
-    
+
+    function canAccessHousehold(householdId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == householdId ||
+        userDoc.householdId == householdId ||
+        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
+        (exists(/databases/$(database)/documents/households/$(householdId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds)
+      );
+    }
+
+    // Generic per-page individual sharing: pageShares/{ownerId}_{page}_{targetUid}
+    // grants the target user "view" or "edit" access to one of the owner's
+    // pages (finance, tasks, etc.) without touching household membership.
+    function pageShareId(ownerId, page) {
+      return ownerId + '_' + page + '_' + request.auth.uid;
+    }
+
+    function canViewPage(ownerId, page) {
+      return isAuthenticated() && (
+        isOwner(ownerId) ||
+        isAdmin() ||
+        exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page)))
+      );
+    }
+
+    function canEditPage(ownerId, page) {
+      return isAuthenticated() && (
+        isOwner(ownerId) ||
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))) &&
+          get(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))).data.permission == "edit")
+      );
+    }
+
     // Users collection - users can read/write their own data, admins can manage all
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -54,7 +90,40 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-    
+
+    // Households - formal multi-membership entity. Any current member can read/
+    // update (e.g. invite another member); only the creator or an admin can
+    // delete the household itself.
+    match /households/{householdId} {
+      allow read, update: if isAuthenticated() && (
+        isAdmin() || request.auth.uid in resource.data.memberIds
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid in request.resource.data.memberIds &&
+          request.resource.data.createdBy == request.auth.uid)
+      );
+      allow delete: if isAuthenticated() && (
+        isAdmin() || request.auth.uid == resource.data.createdBy
+      );
+    }
+
+    // Page shares - generic owner -> target grant (view/edit) for individual
+    // pages (finance, tasks, etc). Doc id is deterministic: {ownerId}_{page}_{targetUid}.
+    match /pageShares/{shareId} {
+      allow read, delete: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.targetUid == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        shareId == request.resource.data.ownerId + '_' + request.resource.data.page + '_' + request.resource.data.targetUid;
+      allow update: if isAuthenticated() && (
+        isAdmin() || resource.data.ownerId == request.auth.uid
+      );
+    }
+
     // Family collection - authenticated users can read, owners can write
     match /families/{familyId} {
       allow read: if isAuthenticated() && 
@@ -112,38 +181,48 @@ service cloud.firestore {
       );
     }
 
-    // Finance - each user's personal accounts
+    // Finance - each user's personal accounts, shareable via pageShares
     match /finance/{userId}/accounts/{accountId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
     }
 
     match /finance/{userId}/entries/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
     }
 
-    // Weight tracking - per user
+    // Weight tracking - per user, bundled into the "health" page share
+    // (weight, medications, health profile & health documents share one grant)
     match /weightTracker/{userId}/entries/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /weightTracker/{userId}/height/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /weightTracker/{userId}/botox/{recordId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /weightTracker/{userId}/bloodPressure/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /weightTracker/{userId}/measurements/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
 
-    // Medications - per user
+    // Medications - per user, bundled into the "health" page share
     match /medications/{userId}/meds/{medId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /medications/{userId}/logs/{logId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
 
     // Notifications - per user
@@ -164,12 +243,13 @@ service cloud.firestore {
       }
     }
 
-    // Tasks - per user
+    // Tasks - per user, shareable via pageShares
     match /tasks/{userId}/items/{taskId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "tasks");
+      allow write: if canEditPage(userId, "tasks");
     }
 
-    // Task settings - per user
+    // Task settings - strictly per user (not shared alongside the Tasks page)
     match /taskSettings/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
@@ -222,54 +302,68 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && canAccessCompany(companyId);
     }
 
-    // Household items - per user
-    match /household/{userId}/items/{itemId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    // Household items - shared by household membership, with owner-uid fallback for legacy data
+    match /household/{householdId}/items/{itemId} {
+      allow read, write: if canAccessHousehold(householdId);
     }
 
-    // Household settings - per user
-    match /household/{userId}/settings/{settingId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    // Household settings - shared by household membership, with owner-uid fallback for legacy data
+    match /household/{householdId}/settings/{settingId} {
+      allow read, write: if canAccessHousehold(householdId);
     }
 
-    // Freezer inventory - per user
+    // Freezer inventory - per user, shareable via pageShares
     match /freezer/{userId}/items/{itemId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "freezer");
+      allow write: if canEditPage(userId, "freezer");
     }
 
-    // QR codes library - per user
+    // QR codes library - per user, shareable via pageShares
     match /qrcodes/{userId}/items/{qrId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "qrcodes");
+      allow write: if canEditPage(userId, "qrcodes");
     }
 
-    // QR code settings - per user
+    // QR code settings - shared alongside the QR codes page
     match /qrcodes/{userId}/settings/{doc} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "qrcodes");
+      allow write: if canEditPage(userId, "qrcodes");
     }
 
-    // Calendar events - per user
+    // Calendar events - per user, shareable via pageShares
     match /calendar/{userId}/events/{eventId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "calendar");
+      allow write: if canEditPage(userId, "calendar");
     }
 
-    // Calendar meta/settings - per user
+    // Calendar meta/settings - shared alongside the Calendar page
     match /calendar/{userId}/meta/{doc} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "calendar");
+      allow write: if canEditPage(userId, "calendar");
     }
 
-    // Substances config - TOTP setup per user
+    // Substances config - TOTP setup per user - strictly private, never shared
     match /substancesConfig/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // Health profile - demographics & medical history per user
+    // Health profile - demographics & medical history per user, bundled into the "health" page share
     match /healthProfile/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
 
     // App-wide config (e.g. Gemini API key) - readable/writable by any authenticated user
     match /appConfig/{docId} {
       allow read, write: if isAuthenticated();
+    }
+
+    // Custom health tabs - per user (previously had no rule at all, denying all access)
+    match /healthTabs/{userId}/tabs/{tabId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+    match /healthTabs/{userId}/entries/{entryId} {
+      allow read, write: if isOwner(userId) || isAdmin();
     }
 
     // Substance logs - per user
@@ -280,17 +374,17 @@ service cloud.firestore {
       }
     }
 
-    // Cameras - per user
-    match /cameras/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    // Cameras - shared by household membership, with owner-uid fallback for legacy data
+    match /cameras/{householdId} {
+      allow read, write: if canAccessHousehold(householdId);
       match /list/{camId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if canAccessHousehold(householdId);
       }
     }
 
-    // Household documents - per user
-    match /household/{userId}/documents/{docId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    // Household documents - shared by household membership, with owner-uid fallback for legacy data
+    match /household/{householdId}/documents/{docId} {
+      allow read, write: if canAccessHousehold(householdId);
     }
 
     // Notification preferences - per user
@@ -304,9 +398,10 @@ service cloud.firestore {
       allow write: if false; // Cloud Functions only
     }
 
-    // General document store - per user
+    // General document store - per user, shareable via pageShares
     match /documents/{userId}/items/{docId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "documents");
+      allow write: if canEditPage(userId, "documents");
     }
 
     // Default deny all other collections

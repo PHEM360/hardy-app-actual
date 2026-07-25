@@ -18,6 +18,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -2113,7 +2116,9 @@ function CompanyGroupView({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Tasks = () => {
-  const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, toggleToday, setStatus } = useTasks();
+  const { scopeUserId, permission } = useSharedScope("tasks");
+  const canEdit = permission === "edit";
+  const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, toggleToday, setStatus } = useTasks(scopeUserId ?? undefined);
   const { settings, loading: settingsLoading, saveSettings } = useTaskSettings();
 
   const [activeTab, setActiveTab] = useState("All");
@@ -2228,6 +2233,12 @@ const Tasks = () => {
       title="Tasks"
       subtitle="Track everything"
       icon={<CheckSquare className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="tasks" />
+          <ShareAccessButton page="tasks" />
+        </div>
+      }
     >
       {/* Toolbar: view toggles + settings + new */}
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -2255,7 +2266,7 @@ const Tasks = () => {
           <button onClick={() => setSettingsOpen(true)} className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors" aria-label="Settings">
             <Settings2 className="w-4 h-4" />
           </button>
-          <button onClick={openAdd} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm">
+          <button onClick={openAdd} disabled={!canEdit} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-40 disabled:pointer-events-none">
             <Plus className="w-3.5 h-3.5" />
             <span>New</span>
           </button>

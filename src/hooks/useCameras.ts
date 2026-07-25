@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   collection, doc, onSnapshot,
-  addDoc, updateDoc, deleteDoc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc,
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 
 export type StreamType = "mjpeg" | "hls" | "snapshot" | "webrtc";
 
@@ -24,16 +24,17 @@ export interface Camera {
 export function useCameras() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const { activeHouseholdId } = useActiveHousehold();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
-    return unsub;
-  }, []);
+    if (!activeHouseholdId) {
+      setCameras([]);
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    if (!uid) return;
-    const col = collection(db, "cameras", uid, "list");
+    setLoading(true);
+    const col = collection(db, "cameras", activeHouseholdId, "list");
     const unsub = onSnapshot(col, (snap) => {
       setCameras(
         snap.docs.map((d) => ({ id: d.id, ...(d.data() as Camera) }))
@@ -42,28 +43,25 @@ export function useCameras() {
       setLoading(false);
     });
     return unsub;
-  }, [uid]);
+  }, [activeHouseholdId]);
 
   const addCamera = useCallback(async (cam: Omit<Camera, "id">) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await addDoc(collection(db, "cameras", currentUid, "list"), {
+    if (!activeHouseholdId) return;
+    await addDoc(collection(db, "cameras", activeHouseholdId, "list"), {
       ...cam,
       createdAt: new Date().toISOString(),
     });
-  }, []);
+  }, [activeHouseholdId]);
 
   const updateCamera = useCallback(async (id: string, cam: Partial<Camera>) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await updateDoc(doc(db, "cameras", currentUid, "list", id), cam);
-  }, []);
+    if (!activeHouseholdId) return;
+    await updateDoc(doc(db, "cameras", activeHouseholdId, "list", id), cam);
+  }, [activeHouseholdId]);
 
   const deleteCamera = useCallback(async (id: string) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await deleteDoc(doc(db, "cameras", currentUid, "list", id));
-  }, []);
+    if (!activeHouseholdId) return;
+    await deleteDoc(doc(db, "cameras", activeHouseholdId, "list", id));
+  }, [activeHouseholdId]);
 
   return { cameras, loading, addCamera, updateCamera, deleteCamera };
 }

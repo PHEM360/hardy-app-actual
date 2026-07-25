@@ -105,14 +105,14 @@ const BPTooltip = ({ active, payload }: any) => {
 
 function cmToIn(cm: number) { return (cm / 2.54).toFixed(1); }
 
-export default function HealthMetrics() {
+export default function HealthMetrics({ scopeUserId }: { scopeUserId?: string } = {}) {
   const {
     entries, heightEntries, botoxRecords, bpEntries, measurements, loading,
     addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry,
     deleteEntry, updateEntry,
-  } = useWeightTracker();
-  const { medications } = useMeds();
-  const { profile, saveProfile } = useHealthProfile();
+  } = useWeightTracker(scopeUserId);
+  const { medications } = useMeds(scopeUserId);
+  const { profile, saveProfile } = useHealthProfile(scopeUserId);
 
   const [unit, setUnit] = useState<"cm" | "in">("cm");
   const [demoOpen, setDemoOpen] = useState(false);

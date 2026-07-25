@@ -48,6 +48,7 @@ import {
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage, auth } from "@/lib/firebase";
 import { useHouseholdDocuments } from "@/hooks/useHousehold";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { HouseholdDocument, HouseholdDocCategory } from "@/types/app";
 
 // ─── Category metadata ──────────────────────────────────────────────────────
@@ -549,6 +550,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 
 export default function DocumentsSection() {
   const { documents, loading, addDocument, updateDocument, deleteDocument } = useHouseholdDocuments();
+  const { activeHouseholdId } = useActiveHousehold();
   const [viewMode, setViewMode] = useState<"tiles" | "list">("tiles");
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HouseholdDocument | null>(null);
@@ -557,10 +559,9 @@ export default function DocumentsSection() {
   const [filterCat, setFilterCat] = useState<HouseholdDocCategory | "all">("all");
 
   const uploadFile = async (file: File): Promise<{ url: string; name: string; type: string; size: number }> => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) throw new Error("Not logged in");
+    if (!auth.currentUser?.uid || !activeHouseholdId) throw new Error("No active household selected");
     const ext = file.name.split(".").pop() ?? "bin";
-    const path = `household/${uid}/documents/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const path = `household/${activeHouseholdId}/documents/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const ref = storageRef(storage, path);
     await uploadBytes(ref, file);
     const url = await getDownloadURL(ref);

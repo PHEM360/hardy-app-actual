@@ -12,13 +12,14 @@ export interface FreezerItem {
   imageUrl?: string;
 }
 
-export function useFreezer() {
+export function useFreezer(scopeUserId?: string) {
   const [items, setItems] = useState<FreezerItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const [ownUid, setOwnUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const uid = scopeUserId ?? ownUid;
 
   useEffect(() => onAuthStateChanged(auth, (user) => {
-    setUid(user?.uid ?? null);
+    setOwnUid(user?.uid ?? null);
     if (!user) setLoading(false);
   }), []);
 
@@ -31,22 +32,19 @@ export function useFreezer() {
   }, [uid]);
 
   const addItem = useCallback(async (item: Omit<FreezerItem, "id">) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) throw new Error("You must be signed in.");
-    await addDoc(collection(db, "freezer", currentUid, "items"), { ...item, createdAt: serverTimestamp() });
-  }, []);
+    if (!uid) throw new Error("You must be signed in.");
+    await addDoc(collection(db, "freezer", uid, "items"), { ...item, createdAt: serverTimestamp() });
+  }, [uid]);
 
   const updateItem = useCallback(async (id: string, data: Partial<FreezerItem>) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) throw new Error("You must be signed in.");
-    await updateDoc(doc(db, "freezer", currentUid, "items", id), data);
-  }, []);
+    if (!uid) throw new Error("You must be signed in.");
+    await updateDoc(doc(db, "freezer", uid, "items", id), data);
+  }, [uid]);
 
   const removeItem = useCallback(async (id: string) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) throw new Error("You must be signed in.");
-    await deleteDoc(doc(db, "freezer", currentUid, "items", id));
-  }, []);
+    if (!uid) throw new Error("You must be signed in.");
+    await deleteDoc(doc(db, "freezer", uid, "items", id));
+  }, [uid]);
 
   return { items, loading, addItem, updateItem, removeItem };
 }

@@ -50,8 +50,9 @@ export interface MeasurementEntry {
   hipCm?: number;
 }
 
-export function useWeightTracker() {
+export function useWeightTracker(scopeUserId?: string) {
   const { user } = useAuth();
+  const uid = scopeUserId ?? user?.uid;
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [heightEntries, setHeightEntries] = useState<HeightEntry[]>([]);
   const [botoxRecords, setBotoxRecords] = useState<BotoxRecord[]>([]);
@@ -60,7 +61,7 @@ export function useWeightTracker() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!uid) {
       setEntries([]);
       setHeightEntries([]);
       setBotoxRecords([]);
@@ -76,7 +77,7 @@ export function useWeightTracker() {
     };
 
     const unsubWeight = onSnapshot(
-      query(collection(db, "weightTracker", user.uid, "entries"), orderBy("date")),
+      query(collection(db, "weightTracker", uid, "entries"), orderBy("date")),
       (snap) => {
         setEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WeightEntry, "id">) })));
         weightLoaded = true; checkDone();
@@ -85,7 +86,7 @@ export function useWeightTracker() {
     );
 
     const unsubHeight = onSnapshot(
-      query(collection(db, "weightTracker", user.uid, "height"), orderBy("date")),
+      query(collection(db, "weightTracker", uid, "height"), orderBy("date")),
       (snap) => {
         setHeightEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<HeightEntry, "id">) })));
         heightLoaded = true; checkDone();
@@ -94,7 +95,7 @@ export function useWeightTracker() {
     );
 
     const unsubBotox = onSnapshot(
-      query(collection(db, "weightTracker", user.uid, "botox"), orderBy("date", "desc")),
+      query(collection(db, "weightTracker", uid, "botox"), orderBy("date", "desc")),
       (snap) => {
         setBotoxRecords(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BotoxRecord, "id">) })));
         botoxLoaded = true; checkDone();
@@ -103,7 +104,7 @@ export function useWeightTracker() {
     );
 
     const unsubBP = onSnapshot(
-      query(collection(db, "weightTracker", user.uid, "bloodPressure"), orderBy("date")),
+      query(collection(db, "weightTracker", uid, "bloodPressure"), orderBy("date")),
       (snap) => {
         setBpEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BPEntry, "id">) })));
         bpLoaded = true; checkDone();
@@ -112,7 +113,7 @@ export function useWeightTracker() {
     );
 
     const unsubMeas = onSnapshot(
-      query(collection(db, "weightTracker", user.uid, "measurements"), orderBy("date")),
+      query(collection(db, "weightTracker", uid, "measurements"), orderBy("date")),
       (snap) => {
         setMeasurements(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MeasurementEntry, "id">) })));
         measLoaded = true; checkDone();
@@ -121,79 +122,79 @@ export function useWeightTracker() {
     );
 
     return () => { unsubWeight(); unsubHeight(); unsubBotox(); unsubBP(); unsubMeas(); };
-  }, [user?.uid]);
+  }, [uid]);
 
   const addEntry = useCallback(
     async (weight: number, date?: string) => {
-      if (!user) return;
-      await addDoc(collection(db, "weightTracker", user.uid, "entries"), {
+      if (!uid) return;
+      await addDoc(collection(db, "weightTracker", uid, "entries"), {
         date: date ?? new Date().toISOString().split("T")[0],
         weight,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const addHeightEntry = useCallback(
     async (height: number) => {
-      if (!user) return;
-      await addDoc(collection(db, "weightTracker", user.uid, "height"), {
+      if (!uid) return;
+      await addDoc(collection(db, "weightTracker", uid, "height"), {
         date: new Date().toISOString().split("T")[0],
         height,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const addBotoxRecord = useCallback(
     async (record: Omit<BotoxRecord, "id">) => {
-      if (!user) return;
-      await addDoc(collection(db, "weightTracker", user.uid, "botox"), {
+      if (!uid) return;
+      await addDoc(collection(db, "weightTracker", uid, "botox"), {
         ...record,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const addBPEntry = useCallback(
     async (entry: Omit<BPEntry, "id">) => {
-      if (!user) return;
-      await addDoc(collection(db, "weightTracker", user.uid, "bloodPressure"), {
+      if (!uid) return;
+      await addDoc(collection(db, "weightTracker", uid, "bloodPressure"), {
         ...entry,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const addMeasurementEntry = useCallback(
     async (entry: Omit<MeasurementEntry, "id">) => {
-      if (!user) return;
-      await addDoc(collection(db, "weightTracker", user.uid, "measurements"), {
+      if (!uid) return;
+      await addDoc(collection(db, "weightTracker", uid, "measurements"), {
         ...entry,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const deleteEntry = useCallback(
     async (id: string) => {
-      if (!user) return;
-      await deleteDoc(doc(db, "weightTracker", user.uid, "entries", id));
+      if (!uid) return;
+      await deleteDoc(doc(db, "weightTracker", uid, "entries", id));
     },
-    [user]
+    [uid]
   );
 
   const updateEntry = useCallback(
     async (id: string, weight: number, date: string) => {
-      if (!user) return;
-      await updateDoc(doc(db, "weightTracker", user.uid, "entries", id), { weight, date });
+      if (!uid) return;
+      await updateDoc(doc(db, "weightTracker", uid, "entries", id), { weight, date });
     },
-    [user]
+    [uid]
   );
 
   return { entries, heightEntries, botoxRecords, bpEntries, measurements, loading, addEntry, addHeightEntry, addBotoxRecord, addBPEntry, addMeasurementEntry, deleteEntry, updateEntry };

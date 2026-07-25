@@ -203,6 +203,93 @@ export const sendPasswordResetLink = onCall(
 	}
 );
 
+// A Firestore document id can't be empty, contain "/", or be exactly "." or "..",
+// and must be <= 1500 bytes. Legacy household values were free-typed strings, so
+// guard against anything that would make an invalid path segment.
+function isValidHouseholdId(id: string): boolean {
+	if (!id || id === "." || id === "..") return false;
+	if (id.includes("/")) return false;
+	return Buffer.byteLength(id, "utf8") <= 1500;
+}
+
+// Additive, idempotent backfill: for every user's legacy householdId/householdIds
+// value, ensure a matching households/{id} doc exists with that user listed in
+// memberIds. Never moves or deletes anything — existing household/{id}/... and
+// cameras/{id}/... data stays exactly where it is; this only adds the membership
+// metadata layer on top of ids that already exist. Safe to re-run at any time.
+export const backfillHouseholds = onCall(async (request) => {
+	const uid = requireAuth(request);
+	await requireSuperAdmin(uid);
+
+	const usersSnap = await admin.firestore().collection("users").get();
+
+	const membersByHousehold = new Map<string, Set<string>>();
+	const skipped: string[] = [];
+
+	usersSnap.docs.forEach((userDoc) => {
+		const data = userDoc.data() || {};
+		const ids = new Set<string>();
+		if (Array.isArray(data.householdIds)) {
+			data.householdIds.forEach((id: unknown) => {
+				if (typeof id === "string" && id.trim()) ids.add(id.trim());
+			});
+		}
+		if (typeof data.householdId === "string" && data.householdId.trim()) {
+			ids.add(data.householdId.trim());
+		}
+		if (ids.size === 0) {
+			ids.add(userDoc.id); // legacy uid-as-household fallback
+		}
+
+		ids.forEach((id) => {
+			if (!isValidHouseholdId(id)) {
+				skipped.push(id);
+				return;
+			}
+			if (!membersByHousehold.has(id)) membersByHousehold.set(id, new Set());
+			membersByHousehold.get(id)!.add(userDoc.id);
+		});
+	});
+
+	const householdIds = Array.from(membersByHousehold.keys());
+	if (householdIds.length === 0) {
+		return { householdsTouched: 0, skipped };
+	}
+
+	const refs = householdIds.map((id) => admin.firestore().doc(`households/${id}`));
+	const existingSnaps = await admin.firestore().getAll(...refs);
+
+	let touched = 0;
+	for (let i = 0; i < refs.length; i += 500) {
+		const batch = admin.firestore().batch();
+		const chunkRefs = refs.slice(i, i + 500);
+		chunkRefs.forEach((ref, chunkIdx) => {
+			const idx = i + chunkIdx;
+			const id = householdIds[idx];
+			const existing = existingSnaps[idx];
+			const memberIds = Array.from(membersByHousehold.get(id)!);
+			const update: Record<string, unknown> = {
+				memberIds: admin.firestore.FieldValue.arrayUnion(...memberIds),
+			};
+			if (!existing.exists || !existing.data()?.name) {
+				update.name = id;
+			}
+			if (!existing.exists || !existing.data()?.createdBy) {
+				update.createdBy = memberIds.slice().sort()[0];
+			}
+			if (!existing.exists) {
+				update.createdAt = admin.firestore.FieldValue.serverTimestamp();
+			}
+			batch.set(ref, update, { merge: true });
+			touched += 1;
+		});
+		await batch.commit();
+	}
+
+	logger.info("backfillHouseholds: complete", { touched, skipped, by: uid });
+	return { householdsTouched: touched, skipped };
+});
+
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");

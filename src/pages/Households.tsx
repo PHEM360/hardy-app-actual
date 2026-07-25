@@ -110,6 +110,7 @@ import {
   Cloud,
   Dumbbell,
   Video,
+  Users,
 } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -127,6 +128,8 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAppUsers } from "@/hooks/useAppUsers";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import HouseholdManagerSheet from "@/components/household/HouseholdManagerSheet";
 
 // ─── Tile background catalogue ────────────────────────────────────────────────
 
@@ -134,7 +137,7 @@ interface TileBgDef {
   label: string;
   gradient: string;   // CSS background value
   dark?: boolean;     // true → white text on tile
-  decorIcon?: React.ComponentType<{ className?: string }>; // large faint bg graphic
+  decorIcon?: React.ComponentType<React.SVGProps<SVGSVGElement>>; // large faint bg graphic
 }
 
 const TILE_BACKGROUNDS: Record<string, TileBgDef> = {
@@ -944,6 +947,7 @@ function AddEditDialog({
   item,
   categories,
   members,
+  storageScopeId,
   onClose,
   onSave,
   permission,
@@ -953,6 +957,7 @@ function AddEditDialog({
   item: Omit<HouseholdItem, "id" | "createdAt"> | null;
   categories: string[];
   members: HouseholdMember[];
+  storageScopeId: string | null;
   onClose: () => void;
   onSave: (data: Omit<HouseholdItem, "id" | "createdAt">) => void;
   permission: NotificationPermission;
@@ -996,13 +1001,12 @@ function AddEditDialog({
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    if (!auth.currentUser?.uid || !storageScopeId) return;
     setUploading(true);
     try {
       const urls: string[] = [];
       for (const file of Array.from(files)) {
-        const path = `household/${uid}/${Date.now()}_${file.name}`;
+        const path = `household/${storageScopeId}/${Date.now()}_${file.name}`;
         const r = storageRef(storage, path);
         await uploadBytes(r, file);
         urls.push(await getDownloadURL(r));
@@ -1910,6 +1914,7 @@ export default function Households() {
   const { permission, requestPermission, checkAndScheduleAll, scheduleReminder } = usePushNotifications();
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const { activeHouseholdId, availableHouseholds } = useActiveHousehold();
   const appUsers = useAppUsers();
 
   // Auto-include the logged-in user in the members list if not already present
@@ -1930,6 +1935,7 @@ export default function Households() {
   })();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [householdsOpen, setHouseholdsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<HouseholdItem | null>(null);
   const [editItem, setEditItem] = useState<Omit<HouseholdItem, "id" | "createdAt"> | null>(null);
@@ -2031,7 +2037,10 @@ export default function Households() {
   const memberItems = (id: string) => items.filter((i) => i.assignedTo === id);
 
   return (
-    <FeaturePageShell title={profile?.householdIds?.[0] || profile?.householdId || "Household"} subtitle="Manage household items, policies & renewals">
+    <FeaturePageShell
+      title={availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household"}
+      subtitle="Manage household items, policies & renewals"
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         {activeTab === "items" ? (
@@ -2041,10 +2050,16 @@ export default function Households() {
         ) : (
           <div />
         )}
-        <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setSettingsOpen(true)}>
-          <Settings className="w-4 h-4" />
-          <span className="hidden sm:inline">Settings</span>
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setHouseholdsOpen(true)}>
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">Households</span>
+          </Button>
+          <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setSettingsOpen(true)}>
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -2157,12 +2172,16 @@ export default function Households() {
         appUsers={appUsers}
       />
 
+      {/* Households sheet */}
+      <HouseholdManagerSheet open={householdsOpen} onClose={() => setHouseholdsOpen(false)} />
+
       {/* Add / Edit */}
       <AddEditDialog
         open={addOpen}
         item={editItem}
         categories={settings.categories}
         members={settings.members}
+        storageScopeId={activeHouseholdId}
         onClose={() => { setAddOpen(false); setEditItem(null); setEditId(null); }}
         onSave={handleSave}
         permission={permission}

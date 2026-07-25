@@ -28,22 +28,23 @@ export interface BalanceEntry {
   balance: number;
 }
 
-export function useFinance() {
+export function useFinance(scopeUserId?: string) {
   const { user } = useAuth();
+  const uid = scopeUserId ?? user?.uid;
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<BalanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!uid) {
       setAccounts([]);
       setEntries([]);
       setLoading(false);
       return;
     }
 
-    const accountsRef = collection(db, "finance", user.uid, "accounts");
-    const entriesRef = collection(db, "finance", user.uid, "entries");
+    const accountsRef = collection(db, "finance", uid, "accounts");
+    const entriesRef = collection(db, "finance", uid, "entries");
 
     let accountsLoaded = false;
     let entriesLoaded = false;
@@ -86,12 +87,12 @@ export function useFinance() {
       unsubAccounts();
       unsubEntries();
     };
-  }, [user?.uid]);
+  }, [uid]);
 
   const addAccount = useCallback(
     async (name: string, type: string) => {
-      if (!user) return;
-      await addDoc(collection(db, "finance", user.uid, "accounts"), {
+      if (!uid) return;
+      await addDoc(collection(db, "finance", uid, "accounts"), {
         name,
         type,
         active: true,
@@ -99,36 +100,36 @@ export function useFinance() {
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const updateAccount = useCallback(
     async (accountId: string, updates: Partial<Account>) => {
-      if (!user) return;
-      await updateDoc(doc(db, "finance", user.uid, "accounts", accountId), updates as any);
+      if (!uid) return;
+      await updateDoc(doc(db, "finance", uid, "accounts", accountId), updates as any);
     },
-    [user]
+    [uid]
   );
 
   const addBalanceEntry = useCallback(
     async (accountId: string, date: string, balance: number) => {
-      if (!user) return;
-      await addDoc(collection(db, "finance", user.uid, "entries"), {
+      if (!uid) return;
+      await addDoc(collection(db, "finance", uid, "entries"), {
         accountId,
         date,
         balance,
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [uid]
   );
 
   const deleteEntry = useCallback(
     async (entryId: string) => {
-      if (!user) return;
-      await deleteDoc(doc(db, "finance", user.uid, "entries", entryId));
+      if (!uid) return;
+      await deleteDoc(doc(db, "finance", uid, "entries", entryId));
     },
-    [user]
+    [uid]
   );
 
   return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, deleteEntry };

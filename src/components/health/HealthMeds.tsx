@@ -106,9 +106,9 @@ function MedPill({ med, today, onLog, onSkip, onEdit, onDelete, isLogged, getLog
   );
 }
 
-export default function HealthMeds() {
-  const { medications, loading, addMedication, updateMedication, deleteMedication, logDose, scheduleTodayNotifications, isLogged, getLogForDose } = useMeds();
-  const { profile, saveProfile } = useHealthProfile();
+export default function HealthMeds({ scopeUserId }: { scopeUserId?: string } = {}) {
+  const { medications, loading, addMedication, updateMedication, deleteMedication, logDose, scheduleTodayNotifications, isLogged, getLogForDose } = useMeds(scopeUserId);
+  const { profile, saveProfile } = useHealthProfile(scopeUserId);
   const today = new Date().toISOString().split("T")[0];
 
   const [addOpen, setAddOpen]           = useState(false);

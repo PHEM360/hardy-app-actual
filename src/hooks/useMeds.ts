@@ -33,20 +33,21 @@ export interface MedLog {
   skipped?: boolean;
 }
 
-export function useMeds() {
+export function useMeds(scopeUserId?: string) {
   const { user } = useAuth();
+  const uid = scopeUserId ?? user?.uid;
   const [medications, setMedications] = useState<Medication[]>([]);
   const [logs, setLogs] = useState<MedLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { setMedications([]); setLogs([]); setLoading(false); return; }
+    if (!uid) { setMedications([]); setLogs([]); setLoading(false); return; }
 
     let medsLoaded = false, logsLoaded = false;
     const checkDone = () => { if (medsLoaded && logsLoaded) setLoading(false); };
 
     const unsubMeds = onSnapshot(
-      query(collection(db, "medications", user.uid, "meds"), orderBy("name")),
+      query(collection(db, "medications", uid, "meds"), orderBy("name")),
       (snap) => {
         setMedications(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Medication, "id">) })));
         medsLoaded = true; checkDone();
@@ -55,7 +56,7 @@ export function useMeds() {
     );
 
     const unsubLogs = onSnapshot(
-      query(collection(db, "medications", user.uid, "logs"), orderBy("date", "desc")),
+      query(collection(db, "medications", uid, "logs"), orderBy("date", "desc")),
       (snap) => {
         setLogs(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MedLog, "id">) })));
         logsLoaded = true; checkDone();
@@ -64,35 +65,35 @@ export function useMeds() {
     );
 
     return () => { unsubMeds(); unsubLogs(); };
-  }, [user?.uid]);
+  }, [uid]);
 
   const addMedication = useCallback(async (med: Omit<Medication, "id">) => {
-    if (!user) return;
-    await addDoc(collection(db, "medications", user.uid, "meds"), {
+    if (!uid) return;
+    await addDoc(collection(db, "medications", uid, "meds"), {
       ...med, createdAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [uid]);
 
   const updateMedication = useCallback(async (id: string, updates: Partial<Omit<Medication, "id">>) => {
-    if (!user) return;
-    await updateDoc(doc(db, "medications", user.uid, "meds", id), updates as any);
-  }, [user]);
+    if (!uid) return;
+    await updateDoc(doc(db, "medications", uid, "meds", id), updates as any);
+  }, [uid]);
 
   const deleteMedication = useCallback(async (id: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, "medications", user.uid, "meds", id));
-  }, [user]);
+    if (!uid) return;
+    await deleteDoc(doc(db, "medications", uid, "meds", id));
+  }, [uid]);
 
   const logDose = useCallback(async (
     medId: string, scheduledTime: string, date: string, skipped = false,
   ) => {
-    if (!user) return;
+    if (!uid) return;
     const now = new Date();
     const takenAt = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    await addDoc(collection(db, "medications", user.uid, "logs"), {
+    await addDoc(collection(db, "medications", uid, "logs"), {
       medId, scheduledTime, takenAt, date, skipped, createdAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [uid]);
 
   const isLogged = useCallback((medId: string, scheduledTime: string, date: string) => {
     return logs.some((l) => l.medId === medId && l.scheduledTime === scheduledTime && l.date === date);

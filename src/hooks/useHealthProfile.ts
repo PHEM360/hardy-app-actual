@@ -53,15 +53,16 @@ const DEFAULT_PROFILE: HealthProfile = {
   showMedsOnOverview:   true,
 };
 
-export function useHealthProfile() {
+export function useHealthProfile(scopeUserId?: string) {
   const { user } = useAuth();
+  const uid = scopeUserId ?? user?.uid;
   const [profile, setProfile] = useState<HealthProfile>(DEFAULT_PROFILE);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { setProfile(DEFAULT_PROFILE); setLoading(false); return; }
+    if (!uid) { setProfile(DEFAULT_PROFILE); setLoading(false); return; }
 
-    const unsub = onSnapshot(doc(db, "healthProfile", user.uid), (snap) => {
+    const unsub = onSnapshot(doc(db, "healthProfile", uid), (snap) => {
       if (snap.exists()) {
         setProfile({ ...DEFAULT_PROFILE, ...(snap.data() as Partial<HealthProfile>) });
       }
@@ -69,12 +70,12 @@ export function useHealthProfile() {
     }, () => setLoading(false));
 
     return unsub;
-  }, [user?.uid]);
+  }, [uid]);
 
   const saveProfile = useCallback(async (updates: Partial<HealthProfile>) => {
-    if (!user) return;
-    await setDoc(doc(db, "healthProfile", user.uid), updates, { merge: true });
-  }, [user]);
+    if (!uid) return;
+    await setDoc(doc(db, "healthProfile", uid), updates, { merge: true });
+  }, [uid]);
 
   return { profile, loading, saveProfile };
 }

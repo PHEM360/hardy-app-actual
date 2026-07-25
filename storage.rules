@@ -1,6 +1,22 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function isHouseholdAdmin(userDoc) {
+      return userDoc.role == "admin" || userDoc.role == "Admin" || userDoc.role == "superadmin" || userDoc.role == "Superadmin" || userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
+    }
+
+    function canAccessHousehold(householdId) {
+      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return request.auth != null && (
+        request.auth.uid == householdId ||
+        isHouseholdAdmin(userDoc) ||
+        userDoc.householdId == householdId ||
+        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
+        (firestore.exists(/databases/(default)/documents/households/$(householdId)) &&
+          request.auth.uid in firestore.get(/databases/(default)/documents/households/$(householdId)).data.memberIds)
+      );
+    }
+
     // Tattersalls documents — any authenticated user can read/write
     match /tattersalls/{allPaths=**} {
       allow read, write: if request.auth != null;
@@ -14,9 +30,9 @@ service firebase.storage {
       );
     }
 
-    // Household item documents — owner only
-    match /household/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Household item documents — shared by household membership, with owner-uid fallback for legacy data
+    match /household/{householdId}/{allPaths=**} {
+      allow read, write: if canAccessHousehold(householdId);
     }
 
     // Default: deny everything else

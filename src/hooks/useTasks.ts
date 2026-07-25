@@ -13,11 +13,11 @@ import {
 import { auth, db } from "@/lib/firebase";
 import { Task } from "@/types/app";
 
-export function useTasks() {
+export function useTasks(scopeUserId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const uid = auth.currentUser?.uid;
+  const uid = scopeUserId ?? auth.currentUser?.uid;
 
   useEffect(() => {
     if (!uid) return;

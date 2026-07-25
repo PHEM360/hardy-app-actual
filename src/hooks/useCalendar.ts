@@ -15,14 +15,15 @@ import type { CalendarEvent, CalendarSettings } from "@/types/app";
 
 const DEFAULT_SETTINGS: CalendarSettings = { defaultView: "month" };
 
-export function useCalendar() {
+export function useCalendar(scopeUserId?: string) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const [ownUid, setOwnUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const uid = scopeUserId ?? ownUid;
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setUid(user?.uid ?? null));
+    const unsub = onAuthStateChanged(auth, (user) => setOwnUid(user?.uid ?? null));
     return unsub;
   }, []);
 
@@ -50,42 +51,38 @@ export function useCalendar() {
   }, [uid]);
 
   const addEvent = useCallback(async (event: Omit<CalendarEvent, "id">) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await addDoc(collection(db, "calendar", currentUid, "events"), {
+    if (!uid) return;
+    await addDoc(collection(db, "calendar", uid, "events"), {
       ...event,
-      createdBy: currentUid,
+      createdBy: auth.currentUser?.uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-  }, []);
+  }, [uid]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CalendarEvent>) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await updateDoc(doc(db, "calendar", currentUid, "events", id), {
+    if (!uid) return;
+    await updateDoc(doc(db, "calendar", uid, "events", id), {
       ...data,
       updatedAt: serverTimestamp(),
     });
-  }, []);
+  }, [uid]);
 
   const deleteEvent = useCallback(async (id: string) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
-    await deleteDoc(doc(db, "calendar", currentUid, "events", id));
-  }, []);
+    if (!uid) return;
+    await deleteDoc(doc(db, "calendar", uid, "events", id));
+  }, [uid]);
 
   const saveSettings = useCallback(async (data: Partial<CalendarSettings>) => {
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) return;
+    if (!uid) return;
     const merged = { ...settings, ...data, updatedAt: serverTimestamp() };
     await setDoc(
-      doc(db, "calendar", currentUid, "meta", "settings"),
+      doc(db, "calendar", uid, "meta", "settings"),
       merged,
       { merge: true }
     );
     setSettings((s) => ({ ...s, ...data }));
-  }, [settings]);
+  }, [settings, uid]);
 
   return { events, settings, loading, addEvent, updateEvent, deleteEvent, saveSettings };
 }

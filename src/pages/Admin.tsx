@@ -14,7 +14,9 @@ import { functions } from "@/lib/firebase";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
-import { useHouseholdNames } from "@/hooks/useHouseholdNames";
+import { useAllHouseholds, useHouseholds } from "@/hooks/useHouseholds";
+import { useAllPageShares, revokePageShareById } from "@/hooks/usePageShares";
+import { useAppUsers } from "@/hooks/useAppUsers";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
 
 const ADMIN_EMAIL = "chris.hardy.07@googlemail.com";
@@ -70,7 +72,7 @@ const STATS = [
   { label: "Health",        value: "Good",           icon: CheckCircle,   gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
 ];
 
-type AdminView = "main" | "security";
+type AdminView = "main" | "security" | "sharing";
 
 const Admin = () => {
   const { user } = useAuth();
@@ -271,25 +273,70 @@ const Admin = () => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, enabledFeatures: features } : u));
   };
 
-  const updateHousehold = async (userId: string, householdIds: string[]) => {
-    const householdId = householdIds[0] || null;
-    await updateDoc(doc(db, "users", userId), { householdId, householdIds: householdIds.length ? householdIds : [] });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, householdId: householdId ?? undefined, householdIds } : u));
+  const { households: allHouseholds } = useAllHouseholds();
+  const { createHouseholdFor, addHouseholdMemberById, removeHouseholdMember, deleteHousehold } = useHouseholds();
+  const { shares: allPageShares } = useAllPageShares();
+  const appUsersForSharing = useAppUsers();
+  const nameForUid = (uid: string) => appUsersForSharing.find((u) => u.id === uid)?.name || uid;
+  const existingHouseholdNames = useMemo(
+    () => Array.from(new Set(allHouseholds.map((h) => h.name))).sort(),
+    [allHouseholds]
+  );
+
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<string | null>(null);
+  const runBackfill = async () => {
+    setBackfillLoading(true);
+    setBackfillResult(null);
+    try {
+      const call = httpsCallable(functions, "backfillHouseholds");
+      const result = await call({});
+      const data = result.data as { householdsTouched: number; skipped: string[] };
+      setBackfillResult(`Updated ${data.householdsTouched} household(s).${data.skipped.length ? ` Skipped ${data.skipped.length} invalid id(s).` : ""}`);
+    } catch (err: any) {
+      setBackfillResult(err.message || "Backfill failed.");
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
+
+  const saveHouseholds = async (userId: string, selectedNames: string[]) => {
+    setActionLoading(true);
+    try {
+      const currentMemberships = allHouseholds.filter((h) => h.memberIds.includes(userId));
+      const currentNames = currentMemberships.map((h) => h.name);
+
+      for (const h of currentMemberships) {
+        if (!selectedNames.includes(h.name)) {
+          await removeHouseholdMember(h.id, userId);
+        }
+      }
+      for (const name of selectedNames) {
+        if (currentNames.includes(name)) continue;
+        const existing = allHouseholds.find((h) => h.name === name);
+        if (existing) {
+          await addHouseholdMemberById(existing.id, userId);
+        } else {
+          await createHouseholdFor(name, userId);
+        }
+      }
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   // Local dialog edit state
   const [editRole, setEditRole] = useState<"member" | "admin" | "superadmin">("member");
   const [editHouseholds, setEditHouseholds] = useState<string[]>([]);
-  const existingHouseholdNames = useHouseholdNames();
 
   // Sync local edit state when selected user changes
   useEffect(() => {
     if (!currentUser) return;
     const r = currentUser.role.toLowerCase() as "member" | "admin" | "superadmin";
     setEditRole(r);
-    setEditHouseholds(currentUser.householdIds ?? (currentUser.householdId ? [currentUser.householdId] : []));
+    setEditHouseholds(allHouseholds.filter((h) => h.memberIds.includes(currentUser.id)).map((h) => h.name));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUser]);
+  }, [selectedUser, allHouseholds]);
 
   const filteredEvents = MOCK_EVENTS.filter((e) => {
     if (filterType !== "all" && e.type !== filterType) return false;
@@ -372,6 +419,84 @@ const Admin = () => {
               </motion.div>
             );
           })}
+        </div>
+      </FeaturePageShell>
+    );
+  }
+
+  if (view === "sharing") {
+    return (
+      <FeaturePageShell title="Households & Sharing" subtitle="Oversight of household membership and page shares" icon={<Users className="w-5 h-5" />}>
+        <button onClick={() => setView("main")} className="flex items-center gap-1.5 text-xs text-primary font-medium mb-4">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Admin
+        </button>
+
+        {/* Backfill */}
+        <div className="mb-6 p-4 rounded-xl bg-muted/40 space-y-2">
+          <p className="text-sm font-semibold text-card-foreground">Household backfill</p>
+          <p className="text-xs text-muted-foreground">
+            Creates a households/{"{id}"} membership doc for every legacy householdId/householdIds value already
+            assigned to a user, without moving any existing data. Safe to re-run any time.
+          </p>
+          <Button size="sm" className="h-8 rounded-lg text-xs" disabled={backfillLoading} onClick={runBackfill}>
+            {backfillLoading ? "Running…" : "Run backfill"}
+          </Button>
+          {backfillResult && <p className="text-xs text-muted-foreground">{backfillResult}</p>}
+        </div>
+
+        {/* Households */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Households ({allHouseholds.length})</p>
+          <div className="space-y-2">
+            {allHouseholds.length === 0 && <p className="text-xs text-muted-foreground">No households yet.</p>}
+            {allHouseholds.map((h) => (
+              <div key={h.id} className="p-3 rounded-xl bg-card border border-border/50 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-card-foreground">{h.name}</p>
+                  <button
+                    onClick={() => deleteHousehold(h.id)}
+                    className="text-[10px] text-destructive font-medium flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {h.memberIds.map((uid) => (
+                    <span key={uid} className="flex items-center gap-1 text-[10px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+                      {nameForUid(uid)}
+                      <button onClick={() => removeHouseholdMember(h.id, uid)} className="text-muted-foreground hover:text-destructive">
+                        <UserX className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Page shares */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Page shares ({allPageShares.length})</p>
+          <div className="space-y-2">
+            {allPageShares.length === 0 && <p className="text-xs text-muted-foreground">No page shares yet.</p>}
+            {allPageShares.map((s) => (
+              <div key={s.id} className="p-3 rounded-xl bg-card border border-border/50 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-card-foreground truncate">
+                    {nameForUid(s.ownerId)} → {nameForUid(s.targetUid)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{s.page} · {s.permission}</p>
+                </div>
+                <button
+                  onClick={() => revokePageShareById(s.id)}
+                  className="text-[10px] text-destructive font-medium flex items-center gap-1 flex-shrink-0"
+                >
+                  <Trash2 className="w-3 h-3" /> Revoke
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </FeaturePageShell>
     );
@@ -561,6 +686,18 @@ const Admin = () => {
         </div>
       </div>
 
+      {/* Households & Sharing Link */}
+      <button
+        onClick={() => setView("sharing")}
+        className="w-full p-4 rounded-xl bg-card border border-border text-left flex items-center gap-3 shadow-card hover:bg-muted/40 transition-colors mb-3"
+      >
+        <Users className="w-5 h-5 text-primary" />
+        <div>
+          <p className="text-sm font-semibold text-card-foreground">Households & Sharing</p>
+          <p className="text-[10px] text-muted-foreground">Manage household membership & page shares, run backfill</p>
+        </div>
+      </button>
+
       {/* Security Dashboard Link */}
       <button
         onClick={() => setView("security")}
@@ -639,8 +776,12 @@ const Admin = () => {
                     size="sm"
                     variant="outline"
                     className="h-8 rounded-lg text-xs w-full mt-1"
-                    disabled={actionLoading || JSON.stringify(editHouseholds) === JSON.stringify(currentUser.householdIds ?? [])}
-                    onClick={() => updateHousehold(currentUser.id, editHouseholds)}
+                    disabled={
+                      actionLoading ||
+                      JSON.stringify([...editHouseholds].sort()) ===
+                        JSON.stringify(allHouseholds.filter((h) => h.memberIds.includes(currentUser.id)).map((h) => h.name).sort())
+                    }
+                    onClick={() => saveHouseholds(currentUser.id, editHouseholds)}
                   >
                     Save households
                   </Button>
