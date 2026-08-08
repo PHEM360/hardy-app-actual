@@ -2,41 +2,12 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pencil, Check, RotateCcw, Eye, EyeOff } from "lucide-react";
 import { useDashboardLayout, WIDGET_LABELS, WIDGET_ICONS } from "@/hooks/useDashboardLayout";
-import type { WidgetLayoutItem, WidgetType } from "@/hooks/useDashboardLayout";
+import type { WidgetLayoutItem } from "@/hooks/useDashboardLayout";
 import { WidgetShell } from "@/components/widgets/WidgetShell";
-import { GreetingWidget }      from "@/components/widgets/GreetingWidget";
-import { TodayWidget }         from "@/components/widgets/TodayWidget";
-import { TasksWidget }         from "@/components/widgets/TasksWidget";
-import { CalendarMiniWidget }  from "@/components/widgets/CalendarMiniWidget";
-import { FinanceWidget }       from "@/components/widgets/FinanceWidget";
-import { HouseholdsWidget }    from "@/components/widgets/HouseholdsWidget";
-import { PetsWidget }          from "@/components/widgets/PetsWidget";
-import { TattersallsWidget }   from "@/components/widgets/TattersallsWidget";
-import { CompaniesWidget }     from "@/components/widgets/CompaniesWidget";
-import { WeightWidget }        from "@/components/widgets/WeightWidget";
-import { QuickLinksWidget }    from "@/components/widgets/QuickLinksWidget";
+import { WidgetContent } from "@/components/widgets/WidgetContent";
 import { useUserRole } from "@/auth/useUserRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
-
-// ─── Widget content map ───────────────────────────────────────────────────────
-
-function WidgetContent({ type }: { type: WidgetType }) {
-  switch (type) {
-    case "greeting":      return <GreetingWidget />;
-    case "quick_links":   return <QuickLinksWidget />;
-    case "today":         return <TodayWidget />;
-    case "tasks":         return <TasksWidget />;
-    case "calendar_mini": return <CalendarMiniWidget />;
-    case "finance":       return <FinanceWidget />;
-    case "households":    return <HouseholdsWidget />;
-    case "pets":          return <PetsWidget />;
-    case "tattersalls":   return <TattersallsWidget />;
-    case "companies":     return <CompaniesWidget />;
-    case "weight":        return <WeightWidget />;
-    default:              return null;
-  }
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

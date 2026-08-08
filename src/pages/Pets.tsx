@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
+import { DogTagsSection } from "@/components/pets/DogTagsSection";
 import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote, Share2, UserPlus, FolderOpen, Upload, Camera, Trash2, FileText, ImageIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -1375,6 +1376,8 @@ const Pets = () => {
           <Button variant="outline" onClick={() => setSettingsOpen(false)} className="w-full h-10 rounded-xl mt-1 text-xs">Close</Button>
         </DialogContent>
       </Dialog>
+
+      <DogTagsSection pets={mergedPets} />
     </FeaturePageShell>
   );
 };

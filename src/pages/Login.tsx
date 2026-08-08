@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, PawPrint, Sparkles, Anchor, Tractor, Dog, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ const FLOATING_ICONS = ["🐾", "🏡", "🐕", "🐶", "⛵", "🚜", "🌾", "
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -74,7 +75,8 @@ const Login = () => {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/dashboard", { replace: true });
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from || "/dashboard", { replace: true });
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
     } finally {

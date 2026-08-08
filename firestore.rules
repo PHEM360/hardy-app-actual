@@ -4,8 +4,17 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // Helper functions
+    // QR-paired /display devices carry a `deviceId` custom claim (minted in
+    // claimDevicePairing). If that device has since been revoked (Settings ->
+    // Linked Displays -> Forget), its session is cut off here — this is the
+    // one real enforcement point, not just a cooperative client-side check.
+    // Normal sessions never carry this claim, so the `!('deviceId' in ...)`
+    // branch short-circuits before the extra get() runs — zero added cost
+    // for every non-device session.
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null &&
+        (!('deviceId' in request.auth.token) ||
+          !get(/databases/$(database)/documents/devices/$(request.auth.token.deviceId)).data.get('revoked', false));
     }
     
     function isOwner(userId) {
@@ -38,6 +47,18 @@ service cloud.firestore {
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
         request.auth.uid in c.sharedWith;
+    }
+
+    // Shared-ownership helper for pets (and their subcollections, e.g. dog
+    // tags) — same model as canAccessCompany: legacy (ownerless) pets stay
+    // visible to everyone during migration.
+    function canAccessPet(petId) {
+      let p = get(/databases/$(database)/documents/pets/$(petId)).data;
+      return isAdmin() ||
+        !('ownerId' in p) ||
+        p.ownerId == "" ||
+        request.auth.uid == p.ownerId ||
+        request.auth.uid in p.sharedWith;
     }
 
     function canAccessHousehold(householdId) {
@@ -179,6 +200,14 @@ service cloud.firestore {
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId
       );
+
+      // Dog tags — printable QR stickers for this pet. No public rule here:
+      // the /tag/:tagId scan page (hit by strangers with no account) never
+      // talks to Firestore directly, only through Cloud Functions using the
+      // Admin SDK — see functions/src/dogTags.ts.
+      match /tags/{tagId} {
+        allow read, write: if isAuthenticated() && canAccessPet(petId);
+      }
     }
 
     // Finance - each user's personal accounts, shareable via pageShares
@@ -387,6 +416,11 @@ service cloud.firestore {
       allow read, write: if canAccessHousehold(householdId);
     }
 
+    // /display photo frame library - shared by household membership, same as household items/documents
+    match /household/{householdId}/photos/{photoId} {
+      allow read, write: if canAccessHousehold(householdId);
+    }
+
     // Notification preferences - per user
     match /notificationPrefs/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
@@ -402,6 +436,21 @@ service cloud.firestore {
     match /documents/{userId}/items/{docId} {
       allow read: if canViewPage(userId, "documents");
       allow write: if canEditPage(userId, "documents");
+    }
+
+    // AI Analysis session history - strictly per user (uploaded documents can be sensitive)
+    match /aiAnalysis/{userId}/sessions/{sessionId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Always-on display devices — a device authenticates as the real account
+    // that paired/signed it in, so it can only ever touch its own doc here
+    // (not create/read others'). Creation happens either client-side right
+    // after the device's own sign-in (uid must match), or via the pairing
+    // Cloud Functions using the Admin SDK, which bypasses these rules.
+    match /devices/{deviceId} {
+      allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
     }
 
     // Default deny all other collections

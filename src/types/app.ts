@@ -13,6 +13,7 @@ export type FeatureKey =
   | "tasks"
   | "companies"
   | "calendar"
+  | "ai_analysis"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -146,6 +147,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "calendar",
     route: "/calendar",
     color: "info",
+  },
+  {
+    key: "ai_analysis",
+    label: "AI Analysis",
+    description: "Upload a document and ask questions about it",
+    icon: "sparkles",
+    route: "/ai-analysis",
+    color: "secondary",
   },
 ];
 

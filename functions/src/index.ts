@@ -9,11 +9,17 @@
 
 import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import * as postmark from "postmark";
+import { PDFParse } from "pdf-parse";
 import { postmarkKey } from "./notifications/scheduler";
 import { FROM_EMAIL } from "./notifications/sender";
+
+// AI Analysis — key lives only in Secret Manager, never sent to the browser.
+// Set it once with: firebase functions:secrets:set OPENAI_API_KEY
+export const openaiApiKey = defineSecret("OPENAI_API_KEY");
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -61,6 +67,19 @@ async function requireSuperAdmin(uid: string) {
 // ── Notification functions ──
 export { onTaskWrite } from "./notifications/scheduler";
 export { processScheduledNotifications, scheduleDailyDigests } from "./notifications/processor";
+
+// ── /display kiosk pairing ──
+export {
+	createDevicePairing,
+	getDevicePairingStatus,
+	approveDevicePairing,
+	denyDevicePairing,
+	claimDevicePairing,
+	getHouseholdCalendarEvents,
+} from "./display";
+
+// ── Dog tags (Pets page) ──
+export { getDogTagPublicInfo, reportDogTagScan } from "./dogTags";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
@@ -289,6 +308,124 @@ export const backfillHouseholds = onCall(async (request) => {
 	logger.info("backfillHouseholds: complete", { touched, skipped, by: uid });
 	return { householdsTouched: touched, skipped };
 });
+
+// ── AI Analysis ──────────────────────────────────────────────────────────────
+
+const AI_MAX_DOCUMENTS = 5;
+const AI_MAX_FILE_BYTES = 15 * 1024 * 1024; // 15MB
+const AI_MAX_EXTRACTED_CHARS = 40000;
+
+interface AiDocumentInput {
+	storagePath: string;
+	mimeType: string;
+}
+
+type AiContentPart =
+	| { type: "text"; text: string }
+	| { type: "image_url"; image_url: { url: string } };
+
+// Analyzes one or more of the caller's own uploaded documents against a question,
+// using GPT-4o-mini. PDFs are text-extracted server-side; images are sent directly
+// as vision input. The OpenAI key is a Secret Manager value — it never reaches the
+// client, unlike the existing client-side Gemini/OpenAI key used by the Health
+// AI feature.
+export const analyzeDocuments = onCall(
+	{ secrets: [openaiApiKey], timeoutSeconds: 120, memory: "512MiB" },
+	async (request) => {
+		const uid = requireAuth(request);
+
+		const documents = Array.isArray(request.data?.documents) ? (request.data.documents as AiDocumentInput[]) : [];
+		const question = String(request.data?.question || "").trim();
+
+		if (documents.length === 0) throw new HttpsError("invalid-argument", "At least one document is required.");
+		if (documents.length > AI_MAX_DOCUMENTS) {
+			throw new HttpsError("invalid-argument", `No more than ${AI_MAX_DOCUMENTS} documents per request.`);
+		}
+		if (!question) throw new HttpsError("invalid-argument", "A question is required.");
+
+		for (const d of documents) {
+			if (!d.storagePath || !d.storagePath.startsWith(`aiAnalysis/${uid}/`)) {
+				throw new HttpsError("permission-denied", "You can only analyze your own uploaded documents.");
+			}
+		}
+
+		const bucket = admin.storage().bucket();
+		const contentParts: AiContentPart[] = [];
+
+		for (const d of documents) {
+			const file = bucket.file(d.storagePath);
+			const [metadata] = await file.getMetadata();
+			const size = Number(metadata.size || 0);
+			if (size > AI_MAX_FILE_BYTES) {
+				throw new HttpsError("invalid-argument", `${d.storagePath.split("/").pop()} is too large (max 15MB).`);
+			}
+			const [buffer] = await file.download();
+			const label = d.storagePath.split("/").pop() ?? "document";
+
+			if (d.mimeType === "application/pdf") {
+				const parser = new PDFParse({ data: buffer });
+				try {
+					const result = await parser.getText();
+					const text = result.text.slice(0, AI_MAX_EXTRACTED_CHARS);
+					contentParts.push({ type: "text", text: `--- Document: ${label} ---\n${text}` });
+				} finally {
+					await parser.destroy();
+				}
+			} else if (d.mimeType.startsWith("image/")) {
+				const base64 = buffer.toString("base64");
+				contentParts.push({ type: "image_url", image_url: { url: `data:${d.mimeType};base64,${base64}` } });
+			} else {
+				throw new HttpsError("invalid-argument", `Unsupported file type: ${d.mimeType}`);
+			}
+		}
+
+		const systemPrompt = "You are a careful document analyst helping a family member understand a personal " +
+			"document (e.g. a bill, statement, insurance policy, or tax document). Answer the user's question using " +
+			"ONLY the content of the provided document(s). If the answer isn't in the document, say so clearly " +
+			"rather than guessing. Be concise and specific — cite figures, dates, and reference numbers exactly as " +
+			"they appear. Use plain, friendly English, with short paragraphs or a bullet list where that's clearer " +
+			"than prose.";
+
+		let response: Response;
+		try {
+			response = await fetch("https://api.openai.com/v1/chat/completions", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${openaiApiKey.value()}`,
+				},
+				body: JSON.stringify({
+					model: "gpt-4o-mini",
+					messages: [
+						{ role: "system", content: systemPrompt },
+						{ role: "user", content: [...contentParts, { type: "text", text: `Question: ${question}` }] },
+					],
+					max_tokens: 1200,
+					temperature: 0.2,
+				}),
+			});
+		} catch (err) {
+			logger.error("analyzeDocuments: fetch to OpenAI failed", { error: (err as Error).message });
+			throw new HttpsError("internal", "Could not reach the AI service. Please try again.");
+		}
+
+		if (!response.ok) {
+			const errText = await response.text();
+			logger.error("analyzeDocuments: OpenAI request failed", { status: response.status, errText });
+			if (response.status === 401) {
+				throw new HttpsError("failed-precondition", "The OpenAI API key is missing or invalid.");
+			}
+			throw new HttpsError("internal", "The AI service could not process this request.");
+		}
+
+		const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+		const answer = data.choices?.[0]?.message?.content;
+		if (!answer) throw new HttpsError("internal", "No answer was returned.");
+
+		logger.info("analyzeDocuments: success", { uid, documentCount: documents.length });
+		return { answer };
+	}
+);
 
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});

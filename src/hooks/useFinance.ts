@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -19,6 +20,10 @@ export interface Account {
   type: string;
   active: boolean;
   hidden: boolean;
+  // Optional predictive-modelling assumptions, set per account for the "Custom" scenario.
+  growthAssumptionPct?: number; // assumed annual growth rate, e.g. 5 for 5%/yr
+  monthlyContribution?: number; // assumed regular monthly deposit
+  feePct?: number; // assumed annual platform/fund fee, e.g. 0.5 for 0.5%/yr
 }
 
 export interface BalanceEntry {
@@ -132,5 +137,34 @@ export function useFinance(scopeUserId?: string) {
     [uid]
   );
 
-  return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, deleteEntry };
+  /**
+   * Bulk-writes imported balance rows. Rows with `existingEntryId` overwrite that
+   * entry (so re-importing corrected data updates rather than duplicates);
+   * everything else is created new. Chunked to stay under Firestore's 500-write
+   * batch limit.
+   */
+  const importEntries = useCallback(
+    async (rows: { accountId: string; date: string; balance: number; existingEntryId?: string }[]) => {
+      if (!uid || rows.length === 0) return;
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const row of chunk) {
+          const ref = row.existingEntryId
+            ? doc(db, "finance", uid, "entries", row.existingEntryId)
+            : doc(collection(db, "finance", uid, "entries"));
+          batch.set(
+            ref,
+            { accountId: row.accountId, date: row.date, balance: row.balance, createdAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
+        await batch.commit();
+      }
+    },
+    [uid]
+  );
+
+  return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, deleteEntry, importEntries };
 }

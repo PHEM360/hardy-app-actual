@@ -26,9 +26,14 @@ import Themes from "@/pages/Themes";
 import LogInDetails from "@/pages/LogInDetails";
 import QRCodes from "@/pages/QRCodes";
 import Locate from "@/pages/Locate";
+import Display from "@/pages/Display";
+import DisplayPair from "@/pages/DisplayPair";
+import TagScan from "@/pages/TagScan";
 import CalendarPage from "@/pages/Calendar";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
+import AiAnalysis from "@/pages/AiAnalysis";
+import FinancePreview from "@/pages/FinancePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
@@ -44,6 +49,19 @@ const App = () => (
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/locate" element={<Locate />} />
+          <Route path="/display" element={<Display />} />
+          <Route
+            path="/pair/:pairingId"
+            element={
+              <RequireAuth>
+                <DisplayPair />
+              </RequireAuth>
+            }
+          />
+          <Route path="/tag/:petId/:tagId" element={<TagScan />} />
+          {import.meta.env.DEV && (
+            <Route path="/dev/finance-preview" element={<FinancePreview />} />
+          )}
           <Route
             element={
               <RequireAuth>
@@ -158,6 +176,14 @@ const App = () => (
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
             <Route path="/qr-codes" element={<QRCodes />} />
+            <Route
+              path="/ai-analysis"
+              element={
+                <RequireFeature featureKey="ai_analysis">
+                  <AiAnalysis />
+                </RequireFeature>
+              }
+            />
             <Route
               path="/calendar"
               element={

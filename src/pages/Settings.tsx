@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { useAiConfig } from "@/hooks/useAiConfig";
+import { useMyDevices } from "@/hooks/useMyDevices";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -40,6 +42,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/households",        label: "Households" },
   { path: "/household-finance", label: "Household Finance" },
   { path: "/tattersalls",       label: "Tattersalls" },
+  { path: "/ai-analysis",       label: "AI Analysis" },
 ];
 const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
 
@@ -102,6 +105,12 @@ const Settings = () => {
   const [geminiSaving, setGeminiSaving] = useState(false);
   const [geminiSaved, setGeminiSaved] = useState(false);
   useEffect(() => { if (savedApiKey) setGeminiKeyInput(savedApiKey); }, [savedApiKey]);
+
+  // Linked Displays
+  const { devices, loading: devicesLoading, renameDevice, forgetDevice } = useMyDevices();
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [deviceLabelDraft, setDeviceLabelDraft] = useState("");
+  const [forgetConfirmId, setForgetConfirmId] = useState<string | null>(null);
 
   // Populate from Firestore profile once loaded
   useEffect(() => {
@@ -401,6 +410,97 @@ const Settings = () => {
             </div>
             <Switch checked={darkMode} onCheckedChange={setDarkMode} />
           </div>
+        </div>
+      </div>
+
+      {/* Linked Displays */}
+      <div className="mb-5">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-sky-600 flex items-center justify-center text-white text-[10px]">
+            <MonitorSmartphone className="w-3 h-3" />
+          </span>
+          Linked Displays
+        </h3>
+        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Always-on screens (hardyapp.co.uk/display) signed into your account. Removing one signs it out —
+            QR-paired displays disconnect within moments, direct sign-ins next time they check in.
+          </p>
+
+          {devicesLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {!devicesLoading && devices.length === 0 && (
+            <p className="text-xs text-muted-foreground">No displays linked yet.</p>
+          )}
+
+          {devices.map((d) => {
+            const lastSeen = d.lastSeenAt && typeof (d.lastSeenAt as { toDate?: () => Date }).toDate === "function"
+              ? (d.lastSeenAt as { toDate: () => Date }).toDate()
+              : null;
+            const isEditing = editingDeviceId === d.id;
+            const isConfirmingForget = forgetConfirmId === d.id;
+
+            return (
+              <div key={d.id} className="p-3 rounded-xl bg-muted/40 border border-border/40 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  {isEditing ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input
+                        value={deviceLabelDraft}
+                        onChange={(e) => setDeviceLabelDraft(e.target.value)}
+                        className="h-8 rounded-lg text-sm"
+                        autoFocus
+                      />
+                      <button
+                        onClick={async () => { await renameDevice(d.id, deviceLabelDraft); setEditingDeviceId(null); }}
+                        className="p-1.5 text-primary"
+                        aria-label="Save name"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setEditingDeviceId(d.id); setDeviceLabelDraft(d.label); }}
+                      className="flex items-center gap-1.5 text-sm font-medium text-card-foreground"
+                    >
+                      {d.label}
+                      <Pencil className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  )}
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground px-1.5 py-0.5 rounded-md bg-background border border-border/50 flex-shrink-0">
+                    {d.pairedVia === "qr" ? "QR paired" : "Direct sign-in"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] text-muted-foreground">
+                    {lastSeen ? `Active ${formatDistanceToNow(lastSeen, { addSuffix: true })}` : "Never checked in"}
+                  </p>
+
+                  {isConfirmingForget ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => { await forgetDevice(d.id); setForgetConfirmId(null); }}
+                        className="text-[11px] font-semibold text-destructive"
+                      >
+                        Confirm forget
+                      </button>
+                      <button onClick={() => setForgetConfirmId(null)} className="text-[11px] text-muted-foreground">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setForgetConfirmId(d.id)}
+                      className="text-[11px] font-medium text-destructive"
+                    >
+                      Forget device
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
