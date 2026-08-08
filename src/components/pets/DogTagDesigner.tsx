@@ -1,23 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
-import {
-  ArrowLeft,
-  Printer,
-  Download,
-  Save,
-  RefreshCw,
-  Trash2,
-  Phone,
-  MessageSquare,
-  Globe,
-  MapPin,
-} from "lucide-react";
+import { ArrowLeft, Printer, Download, Save, RefreshCw, Trash2, Link as LinkIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,8 +16,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Pet } from "@/hooks/usePets";
-import type { DogTag, DogTagActions, DogTagShape } from "@/hooks/useDogTags";
+import type { DogTag, DogTagProfile, DogTagShape } from "@/hooks/useDogTags";
+import { normalizeSlug } from "@/hooks/useDogTags";
 import { DOG_TAG_SHAPES, dogTagAspectRatio, dogTagShapeStyle } from "@/lib/dogTagShapes";
+import { DogTagProfilePanel } from "@/components/pets/DogTagProfilePanel";
 
 type TagDraft = {
   label: string;
@@ -38,14 +27,18 @@ type TagDraft = {
   bgColor: string;
   fgColor: string;
   stickerText: string;
-  actions: DogTagActions;
+  profile: DogTagProfile;
 };
+
+export function publicTagUrl(tag: DogTag): string {
+  if (tag.slug) return `${window.location.origin}/p/${tag.slug}`;
+  return `${window.location.origin}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
+}
 
 function StickerPreview({ tag, draft, size }: { tag: DogTag; draft: TagDraft; size: number }) {
   const aspect = dogTagAspectRatio(draft.shape);
   const width = aspect >= 1 ? size : size * aspect;
   const height = aspect >= 1 ? size / aspect : size;
-  const qrUrl = `${window.location.origin}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
 
   return (
     <div
@@ -53,7 +46,7 @@ function StickerPreview({ tag, draft, size }: { tag: DogTag; draft: TagDraft; si
       className="flex flex-col items-center justify-center gap-1.5 p-4 shadow-sm border border-border/40"
       style={{ width, height, backgroundColor: draft.bgColor, ...dogTagShapeStyle(draft.shape) }}
     >
-      <QRCodeSVG value={qrUrl} fgColor={draft.fgColor} bgColor="transparent" size={Math.min(width, height) * 0.5} />
+      <QRCodeSVG value={publicTagUrl(tag)} fgColor={draft.fgColor} bgColor="transparent" size={Math.min(width, height) * 0.5} />
       {draft.stickerText.trim() && (
         <p
           className="text-center font-bold leading-tight break-words"
@@ -73,6 +66,7 @@ export function DogTagDesigner({
   onSave,
   onRegenerate,
   onDelete,
+  onClaimSlug,
 }: {
   pet: Pet;
   tag: DogTag;
@@ -80,6 +74,7 @@ export function DogTagDesigner({
   onSave: (patch: TagDraft) => Promise<void>;
   onRegenerate: () => Promise<void>;
   onDelete: () => void;
+  onClaimSlug: (rawSlug: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const [draft, setDraft] = useState<TagDraft>({
     label: tag.label,
@@ -87,18 +82,19 @@ export function DogTagDesigner({
     bgColor: tag.bgColor,
     fgColor: tag.fgColor,
     stickerText: tag.stickerText,
-    actions: tag.actions,
+    profile: tag.profile,
   });
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [slugInput, setSlugInput] = useState(tag.slug);
+  const [slugSaving, setSlugSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSaved, setSlugSaved] = useState(false);
 
   const setField = <K extends keyof TagDraft>(key: K, value: TagDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
-
-  const setAction = <K extends keyof DogTagActions>(key: K, value: DogTagActions[K]) =>
-    setDraft((d) => ({ ...d, actions: { ...d.actions, [key]: value } }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -106,6 +102,23 @@ export function DogTagDesigner({
       await onSave(draft);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleClaimSlug = async () => {
+    setSlugSaving(true);
+    setSlugError(null);
+    setSlugSaved(false);
+    try {
+      const result = await onClaimSlug(slugInput);
+      if (result.ok) {
+        setSlugSaved(true);
+        setTimeout(() => setSlugSaved(false), 2000);
+      } else {
+        setSlugError(result.error);
+      }
+    } finally {
+      setSlugSaving(false);
     }
   };
 
@@ -176,6 +189,9 @@ export function DogTagDesigner({
         {/* Preview */}
         <div className="sm:flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#dde1e7] flex-shrink-0">
           <StickerPreview tag={tag} draft={draft} size={220} />
+          <p className="text-xs text-muted-foreground font-mono bg-card px-2 py-1 rounded-lg border border-border">
+            {publicTagUrl(tag).replace(/^https?:\/\//, "")}
+          </p>
           <button
             onClick={() => setRegenConfirmOpen(true)}
             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card border border-border rounded-xl px-3 py-1.5"
@@ -230,91 +246,38 @@ export function DogTagDesigner({
             </div>
           </div>
 
-          <div className="space-y-3 pt-3 border-t border-border">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">When scanned</p>
-
-            {/* Phone */}
-            <div className="rounded-xl border border-border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-sm font-medium">Show / call phone number</span>
-                </div>
-                <Switch checked={draft.actions.showPhone} onCheckedChange={(v) => setAction("showPhone", v)} />
-              </div>
-              {draft.actions.showPhone && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <Input
-                    value={draft.actions.contactName}
-                    onChange={(e) => setAction("contactName", e.target.value)}
-                    placeholder="Contact name"
-                    className="h-9 rounded-lg text-xs"
-                  />
-                  <Input
-                    value={draft.actions.phoneNumber}
-                    onChange={(e) => setAction("phoneNumber", e.target.value)}
-                    placeholder="Phone number"
-                    type="tel"
-                    className="h-9 rounded-lg text-xs"
-                  />
-                </div>
-              )}
+          {/* Public URL / slug */}
+          <div className="space-y-1.5 pt-1">
+            <Label className="text-xs flex items-center gap-1.5"><LinkIcon className="w-3.5 h-3.5 text-primary" /> Friendly URL (optional)</Label>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground flex-shrink-0">hardyapp.co.uk/p/</span>
+              <Input
+                value={slugInput}
+                onChange={(e) => { setSlugInput(normalizeSlug(e.target.value)); setSlugError(null); }}
+                placeholder="billy-lost"
+                className="h-9 rounded-lg text-xs flex-1"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleClaimSlug}
+                disabled={slugSaving || !slugInput || slugInput === tag.slug}
+                className="h-9 rounded-lg text-xs px-2.5 flex-shrink-0"
+              >
+                {slugSaved ? <Check className="w-3.5 h-3.5" /> : slugSaving ? "…" : "Claim"}
+              </Button>
             </div>
-
-            {/* Message */}
-            <div className="rounded-xl border border-border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-sm font-medium">Show a message</span>
-                </div>
-                <Switch checked={draft.actions.showMessage} onCheckedChange={(v) => setAction("showMessage", v)} />
-              </div>
-              {draft.actions.showMessage && (
-                <Textarea
-                  value={draft.actions.message}
-                  onChange={(e) => setAction("message", e.target.value)}
-                  placeholder={`${pet.name} appears to be lost. Please phone ${draft.actions.phoneNumber || "…"}${draft.actions.contactName ? ` (${draft.actions.contactName})` : ""}.`}
-                  className="rounded-lg resize-none text-xs"
-                  rows={3}
-                />
-              )}
-            </div>
-
-            {/* Webpage */}
-            <div className="rounded-xl border border-border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Globe className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-sm font-medium">Show a webpage</span>
-                </div>
-                <Switch checked={draft.actions.showWebpage} onCheckedChange={(v) => setAction("showWebpage", v)} />
-              </div>
-              {draft.actions.showWebpage && (
-                <Input
-                  value={draft.actions.webpageUrl}
-                  onChange={(e) => setAction("webpageUrl", e.target.value)}
-                  placeholder="https://…"
-                  type="url"
-                  className="h-9 rounded-lg text-xs"
-                />
-              )}
-            </div>
-
-            {/* Location */}
-            <div className="rounded-xl border border-border p-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-sm font-medium">Send location</span>
-                </div>
-                <Switch checked={draft.actions.sendLocation} onCheckedChange={(v) => setAction("sendLocation", v)} />
-              </div>
+            {slugError && <p className="text-[11px] text-destructive">{slugError}</p>}
+            {!slugError && tag.slug && (
               <p className="text-[11px] text-muted-foreground">
-                If the person who scans this allows location access, you'll get an automatic email with a map link —
-                no action needed from them.
+                QR and print now use hardyapp.co.uk/p/{tag.slug}
               </p>
-            </div>
+            )}
+          </div>
+
+          <div className="pt-1 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 pt-3">When scanned</p>
+            <DogTagProfilePanel profile={draft.profile} onChange={(patch) => setField("profile", { ...draft.profile, ...patch })} petName={pet.name} />
           </div>
 
           <div className="pt-3 border-t border-border">
@@ -335,7 +298,8 @@ export function DogTagDesigner({
             <AlertDialogTitle>Regenerate QR code?</AlertDialogTitle>
             <AlertDialogDescription>
               Any tag already printed with the current QR code will stop working — scanning it will show
-              "not active" instead. Only do this if a tag was lost or you want to retire it.
+              "not active" instead. Your friendly URL (if set) keeps working. Only do this if a tag was lost
+              or you want to retire it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -350,7 +314,7 @@ export function DogTagDesigner({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this tag?</AlertDialogTitle>
             <AlertDialogDescription>
-              This can't be undone, and any printed sticker for it will stop working.
+              This can't be undone, and any printed sticker or friendly URL for it will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

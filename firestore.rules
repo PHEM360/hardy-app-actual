@@ -210,6 +210,19 @@ service cloud.firestore {
       }
     }
 
+    // Dog tag friendly URLs (hardyapp.co.uk/p/{slug}). Uniqueness is enforced
+    // by this rule alone, not application code: allow create only requires
+    // being signed in (no way to check ownership before the doc exists), but
+    // once a slug is claimed, only its owner can update/delete it — so a
+    // second attempt to write over an already-claimed slug is treated as an
+    // update by Firestore (the doc now exists) and denied unless it's the
+    // same owner. First write wins.
+    match /dogTagSlugs/{slug} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
     // Finance - each user's personal accounts, shareable via pageShares
     match /finance/{userId}/accounts/{accountId} {
       allow read: if canViewPage(userId, "finance");

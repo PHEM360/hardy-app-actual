@@ -79,7 +79,7 @@ export {
 } from "./display";
 
 // ── Dog tags (Pets page) ──
-export { getDogTagPublicInfo, reportDogTagScan } from "./dogTags";
+export { getDogTagPublicInfo, getDogTagProfileBySlug, reportDogTagScan } from "./dogTags";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);

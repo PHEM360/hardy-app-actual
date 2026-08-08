@@ -29,6 +29,7 @@ import Locate from "@/pages/Locate";
 import Display from "@/pages/Display";
 import DisplayPair from "@/pages/DisplayPair";
 import TagScan from "@/pages/TagScan";
+import TagScanBySlug from "@/pages/TagScanBySlug";
 import CalendarPage from "@/pages/Calendar";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
@@ -59,6 +60,7 @@ const App = () => (
             }
           />
           <Route path="/tag/:petId/:tagId" element={<TagScan />} />
+          <Route path="/p/:slug" element={<TagScanBySlug />} />
           {import.meta.env.DEV && (
             <Route path="/dev/finance-preview" element={<FinancePreview />} />
           )}

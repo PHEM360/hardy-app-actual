@@ -1,27 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { getDogTagPublicInfo, reportDogTagScan, type DogTagPublicInfo } from "@/lib/dogTagApi";
+import { getDogTagProfileBySlug, reportDogTagScan, type DogTagPublicInfoBySlug } from "@/lib/dogTagApi";
 import { DogTagInvalidCard, DogTagProfileView, type LocationPhase } from "@/components/pets/DogTagProfileView";
 
-export default function TagScan() {
-  const { petId, tagId } = useParams<{ petId: string; tagId: string }>();
-  const [params] = useSearchParams();
-  const code = params.get("c") || "";
+export default function TagScanBySlug() {
+  const { slug } = useParams<{ slug: string }>();
 
   const [loading, setLoading] = useState(true);
-  const [info, setInfo] = useState<DogTagPublicInfo | null>(null);
+  const [info, setInfo] = useState<DogTagPublicInfoBySlug | null>(null);
   const [locationPhase, setLocationPhase] = useState<LocationPhase>("idle");
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!petId || !tagId || !code) {
+      if (!slug) {
         setLoading(false);
         return;
       }
       try {
-        const result = await getDogTagPublicInfo(petId, tagId, code);
+        const result = await getDogTagProfileBySlug(slug);
         if (!cancelled) setInfo(result);
       } finally {
         if (!cancelled) setLoading(false);
@@ -31,10 +29,10 @@ export default function TagScan() {
     return () => {
       cancelled = true;
     };
-  }, [petId, tagId, code]);
+  }, [slug]);
 
   const requestLocation = useCallback(() => {
-    if (!petId || !tagId) return;
+    if (!info?.petId || !info?.tagId) return;
     if (!navigator.geolocation) {
       setLocationPhase("error");
       return;
@@ -43,7 +41,7 @@ export default function TagScan() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          await reportDogTagScan(petId, tagId, pos.coords.latitude, pos.coords.longitude, code);
+          await reportDogTagScan(info.petId!, info.tagId!, pos.coords.latitude, pos.coords.longitude);
           setLocationPhase("sent");
         } catch {
           setLocationPhase("error");
@@ -54,7 +52,7 @@ export default function TagScan() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, [petId, tagId, code]);
+  }, [info]);
 
   useEffect(() => {
     if (info?.valid && info.profile?.sendLocation) requestLocation();

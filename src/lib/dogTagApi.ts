@@ -1,6 +1,30 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 
+export interface DogTagPublicPhone {
+  id: string;
+  label: string;
+  number: string;
+}
+
+export interface DogTagPublicCustomField {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface DogTagPublicProfile {
+  message: string;
+  phones: DogTagPublicPhone[];
+  address: string;
+  vetName: string;
+  vetPhone: string;
+  vetAddress: string;
+  customFields: DogTagPublicCustomField[];
+  externalUrl: string;
+  sendLocation: boolean;
+}
+
 export interface DogTagPublicInfo {
   valid: boolean;
   petName?: string;
@@ -8,16 +32,12 @@ export interface DogTagPublicInfo {
   bgColor?: string;
   fgColor?: string;
   stickerText?: string;
-  actions?: {
-    showPhone: boolean;
-    phoneNumber: string;
-    contactName: string;
-    showMessage: boolean;
-    message: string;
-    showWebpage: boolean;
-    webpageUrl: string;
-    sendLocation: boolean;
-  };
+  profile?: DogTagPublicProfile;
+}
+
+export interface DogTagPublicInfoBySlug extends DogTagPublicInfo {
+  petId?: string;
+  tagId?: string;
 }
 
 export async function getDogTagPublicInfo(petId: string, tagId: string, code: string): Promise<DogTagPublicInfo> {
@@ -29,15 +49,21 @@ export async function getDogTagPublicInfo(petId: string, tagId: string, code: st
   return res.data;
 }
 
+export async function getDogTagProfileBySlug(slug: string): Promise<DogTagPublicInfoBySlug> {
+  const fn = httpsCallable<{ slug: string }, DogTagPublicInfoBySlug>(functions, "getDogTagProfileBySlug");
+  const res = await fn({ slug });
+  return res.data;
+}
+
 export async function reportDogTagScan(
   petId: string,
   tagId: string,
-  code: string,
   lat: number,
-  lng: number
+  lng: number,
+  code?: string
 ): Promise<void> {
   const fn = httpsCallable<
-    { petId: string; tagId: string; code: string; lat: number; lng: number },
+    { petId: string; tagId: string; code?: string; lat: number; lng: number },
     { success: boolean }
   >(functions, "reportDogTagScan");
   await fn({ petId, tagId, code, lat, lng });

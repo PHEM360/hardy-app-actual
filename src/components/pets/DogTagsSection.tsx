@@ -2,12 +2,22 @@ import { useState } from "react";
 import { Plus, Tag as TagIcon, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
-import { useDogTags, type DogTag } from "@/hooks/useDogTags";
+import { useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
 import { DogTagDesigner } from "@/components/pets/DogTagDesigner";
 import { dogTagShapeStyle } from "@/lib/dogTagShapes";
 import type { Pet } from "@/hooks/usePets";
 
 function TagCard({ tag, onEdit }: { tag: DogTag; onEdit: () => void }) {
+  const summary = [
+    tag.profile.message && "Message",
+    tag.profile.phones.length > 0 && `${tag.profile.phones.length} phone${tag.profile.phones.length > 1 ? "s" : ""}`,
+    tag.profile.address && "Address",
+    tag.profile.vetName && "Vet",
+    tag.profile.sendLocation && "Location",
+  ]
+    .filter(Boolean)
+    .join(" · ") || "No details set yet";
+
   return (
     <button
       onClick={onEdit}
@@ -22,14 +32,8 @@ function TagCard({ tag, onEdit }: { tag: DogTag; onEdit: () => void }) {
       <div className="min-w-0">
         <p className="text-sm font-semibold truncate">{tag.label}</p>
         <p className="text-[11px] text-muted-foreground truncate">
-          {[
-            tag.actions.showPhone && "Phone",
-            tag.actions.showMessage && "Message",
-            tag.actions.showWebpage && "Webpage",
-            tag.actions.sendLocation && "Location",
-          ]
-            .filter(Boolean)
-            .join(" · ") || "No scan actions set"}
+          {tag.slug ? `/p/${tag.slug} · ` : ""}
+          {summary}
         </p>
       </div>
     </button>
@@ -38,7 +42,7 @@ function TagCard({ tag, onEdit }: { tag: DogTag; onEdit: () => void }) {
 
 function PetTagsGroup({ pet }: { pet: Pet }) {
   const { user } = useAuth();
-  const { tags, loading, addTag, updateTag, regenerateCode, deleteTag } = useDogTags(pet.id);
+  const { tags, loading, addTag, updateTag, regenerateCode, deleteTag, claimSlug } = useDogTags(pet.id);
   const [editingTag, setEditingTag] = useState<DogTag | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -46,27 +50,21 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
     setCreating(true);
     try {
       const ownerId = pet.ownerId || user?.uid || "";
-      const id = await addTag(ownerId, {
-        label: tags.length > 0 ? `Tag ${tags.length + 1}` : "Collar tag",
-        stickerText: pet.name,
-      });
+      const label = tags.length > 0 ? `Tag ${tags.length + 1}` : "Collar tag";
+      const id = await addTag(ownerId, { label, stickerText: pet.name });
       if (id) {
         setEditingTag({
           id,
           petId: pet.id,
           ownerId,
-          label: tags.length > 0 ? `Tag ${tags.length + 1}` : "Collar tag",
+          label,
           code: "",
+          slug: "",
           shape: "rounded",
           bgColor: "#ffffff",
           fgColor: "#000000",
           stickerText: pet.name,
-          actions: {
-            showPhone: false, phoneNumber: "", contactName: "",
-            showMessage: false, message: "",
-            showWebpage: false, webpageUrl: "",
-            sendLocation: false,
-          },
+          profile: DEFAULT_TAG_PROFILE,
         });
       }
     } finally {
@@ -118,6 +116,7 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
             deleteTag(liveEditingTag.id);
             setEditingTag(null);
           }}
+          onClaimSlug={(rawSlug) => claimSlug(liveEditingTag.ownerId, liveEditingTag.id, rawSlug)}
         />
       )}
     </div>
@@ -137,8 +136,8 @@ export function DogTagsSection({ pets }: { pets: Pet[] }) {
       </h3>
       <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-5">
         <p className="text-xs text-muted-foreground -mt-1">
-          Printable QR stickers for a collar. Scanning one can show a message, a phone number, a webpage,
-          and email you the finder's location — pick any combination per tag.
+          Printable QR stickers for a collar. Scanning one shows a message, phone numbers, address, vet
+          details and more — and can email you the finder's location.
         </p>
         {pets.map((pet) => (
           <PetTagsGroup key={pet.id} pet={pet} />
