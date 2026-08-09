@@ -125,13 +125,23 @@ export const reportDogTagScan = onCall(
     const lastNotified: FirebaseFirestore.Timestamp | undefined = tag.data.lastScanNotifiedAt;
     const debounced = !!lastNotified && Date.now() - lastNotified.toMillis() < SCAN_NOTIFY_DEBOUNCE_MS;
 
-    if (!debounced && ownerId) {
+    if (debounced) {
+      logger.info("reportDogTagScan: debounced, skipping notification", {
+        petId,
+        tagId,
+        msSinceLastNotify: lastNotified ? Date.now() - lastNotified.toMillis() : null,
+      });
+    } else if (!ownerId) {
+      logger.warn("reportDogTagScan: tag has no ownerId, skipping notification", { petId, tagId });
+    } else {
       const [petSnap, ownerSnap] = await Promise.all([
         admin.firestore().doc(`pets/${petId}`).get(),
         admin.firestore().doc(`users/${ownerId}`).get(),
       ]);
       const petName = petSnap.exists ? petSnap.data()?.name || "Your pet" : "Your pet";
       const ownerEmail: string | undefined = ownerSnap.exists ? ownerSnap.data()?.email : undefined;
+      const ownerData = ownerSnap.data() || {};
+      const fcmTokenCount = Array.isArray(ownerData.fcmTokens) ? ownerData.fcmTokens.length : 0;
 
       const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
       const when = new Date().toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
@@ -157,6 +167,13 @@ export const reportDogTagScan = onCall(
           twilioSid: twilioSid.value(),
           twilioToken: twilioToken.value(),
           twilioFrom: twilioFrom.value(),
+        });
+        logger.info("reportDogTagScan: notification sent", {
+          petId,
+          tagId,
+          ownerId,
+          emailSent: !!ownerEmail,
+          fcmTokenCount,
         });
       } catch (err) {
         logger.error("reportDogTagScan: notification failed", { petId, tagId, error: (err as Error).message });
