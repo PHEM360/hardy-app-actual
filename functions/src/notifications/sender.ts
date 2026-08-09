@@ -4,7 +4,26 @@ import Twilio from "twilio";
 import { logger } from "firebase-functions";
 import { NotifChannel } from "./types";
 
-export const FROM_EMAIL = "chris@hardyapp.co.uk";
+export const FROM_EMAIL = "hardyhub@bgmhealth.co.uk";
+
+// One shared transactional template ("hardy-hub-transactional", server 19722594 —
+// "Hardy Hub") covers every email this app sends, rather than each call site
+// hand-rolling its own HTML. See TemplateModel below for the variables it expects.
+export const TRANSACTIONAL_TEMPLATE_ALIAS = "hardy-hub-transactional";
+
+export interface TransactionalTemplateModel {
+  subject: string;
+  heading: string;
+  body_html: string;
+  body_text: string;
+  preheader?: string;
+  // Grouped (not flat action_url/action_label) because Postmark's Mustache-style
+  // {{#action}} section only exposes a nested object's own fields as unqualified
+  // {{url}}/{{label}} inside the block — sibling top-level variables resolve to
+  // nothing there (confirmed via the /templates/validate API).
+  action?: { url: string; label: string };
+  footer_note?: string;
+}
 
 export interface NotifPayload {
   uid: string;
@@ -17,6 +36,9 @@ export interface NotifPayload {
   subject: string;
   textBody: string;
   htmlBody: string;
+  actionUrl?: string;
+  actionLabel?: string;
+  footerNote?: string;
   postmarkKey: string;
   twilioSid: string;
   twilioToken: string;
@@ -27,15 +49,14 @@ export async function sendNotification(p: NotifPayload): Promise<void> {
   const sends: Promise<unknown>[] = [];
 
   if (p.channels.includes("email") && p.emailEnabled && p.emailTo) {
-    const client = new postmark.ServerClient(p.postmarkKey);
     sends.push(
-      client.sendEmail({
-        From: FROM_EMAIL,
-        To: p.emailTo,
-        Subject: p.subject,
-        TextBody: p.textBody,
-        HtmlBody: p.htmlBody,
-        MessageStream: "outbound",
+      sendTransactionalEmail(p.postmarkKey, p.emailTo, {
+        subject: p.subject,
+        heading: p.subject,
+        body_html: p.htmlBody,
+        body_text: p.textBody,
+        action: p.actionUrl && p.actionLabel ? { url: p.actionUrl, label: p.actionLabel } : undefined,
+        footer_note: p.footerNote,
       })
     );
   }
@@ -56,6 +77,22 @@ export async function sendNotification(p: NotifPayload): Promise<void> {
   }
 
   await Promise.all(sends);
+}
+
+/** Sends the one shared transactional template — the single place every Postmark send in this app goes through. */
+export async function sendTransactionalEmail(
+  postmarkKey: string,
+  to: string,
+  model: TransactionalTemplateModel
+): Promise<void> {
+  const client = new postmark.ServerClient(postmarkKey);
+  await client.sendEmailWithTemplate({
+    From: FROM_EMAIL,
+    To: to,
+    TemplateAlias: TRANSACTIONAL_TEMPLATE_ALIAS,
+    TemplateModel: model,
+    MessageStream: "outbound",
+  });
 }
 
 /**

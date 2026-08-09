@@ -12,10 +12,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import * as postmark from "postmark";
 import { PDFParse } from "pdf-parse";
 import { postmarkKey } from "./notifications/scheduler";
-import { FROM_EMAIL } from "./notifications/sender";
+import { sendTransactionalEmail } from "./notifications/sender";
 
 // AI Analysis — key lives only in Secret Manager, never sent to the browser.
 // Set it once with: firebase functions:secrets:set OPENAI_API_KEY
@@ -203,14 +202,13 @@ export const sendPasswordResetLink = onCall(
 		}
 
 		try {
-			const client = new postmark.ServerClient(postmarkKey.value());
-			await client.sendEmail({
-				From: FROM_EMAIL,
-				To: email,
-				Subject: "Reset your Hardy Hub password",
-				TextBody: `We received a request to reset your Hardy Hub password.\n\nClick the link below to choose a new password:\n${link}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
-				HtmlBody: `<p>We received a request to reset your Hardy Hub password.</p><p><a href="${link}">Click here to choose a new password</a>.</p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`,
-				MessageStream: "outbound",
+			await sendTransactionalEmail(postmarkKey.value(), email, {
+				subject: "Reset your Hardy Hub password",
+				heading: "Reset your Hardy Hub password",
+				body_html: "<p>We received a request to reset your Hardy Hub password.</p>",
+				body_text: "We received a request to reset your Hardy Hub password.",
+				action: { url: link, label: "Choose a new password" },
+				footer_note: "This link expires in 1 hour. If you didn't request this, you can ignore this email.",
 			});
 		} catch (err: any) {
 			logger.error("sendPasswordResetLink: postmark send failed", { email, error: err?.message });
