@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
 import {
@@ -14,7 +15,6 @@ import {
   Ruler,
   Type,
   Users,
-  FlipHorizontal,
   QrCode as QrCodeIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,9 @@ type TagDraft = {
   stickerText: string;
   sizeCm: number;
   qrSizeCm: number;
+  stickerTextSizeCm: number;
   backText: string;
+  backTextSizeCm: number;
   profile: DogTagProfile;
 };
 
@@ -71,18 +73,39 @@ function sectionLabel(icon: React.ReactNode, color: string, text: string) {
   );
 }
 
-function StickerPreview({ tag, draft, side, previewPx }: { tag: DogTag; draft: TagDraft; side: Side; previewPx: number }) {
-  const aspect = dogTagAspectRatio(draft.shape);
-  const width = aspect >= 1 ? previewPx : previewPx * aspect;
-  const height = aspect >= 1 ? previewPx / aspect : previewPx;
-  const qrPx = Math.min(width, height) * Math.min(1, draft.qrSizeCm / draft.sizeCm);
+/** widthCm/heightCm respect the shape's aspect ratio around a single "size". */
+function faceDimensionsCm(shape: DogTagShape, sizeCm: number) {
+  const aspect = dogTagAspectRatio(shape);
+  return {
+    widthCm: aspect >= 1 ? sizeCm : sizeCm * aspect,
+    heightCm: aspect >= 1 ? sizeCm / aspect : sizeCm,
+  };
+}
+
+/** One tag face, rendered at real cm dimensions — shared by the on-screen preview (scaled via CSS zoom) and the print sheet (1:1). */
+function TagFace({
+  tag,
+  draft,
+  side,
+  pxPerCm,
+}: {
+  tag: DogTag;
+  draft: TagDraft;
+  side: Side;
+  pxPerCm: number;
+}) {
+  const { widthCm, heightCm } = faceDimensionsCm(draft.shape, draft.sizeCm);
+  const qrPx = draft.qrSizeCm * pxPerCm;
 
   return (
     <div
-      id="dog-tag-print-target"
-      data-size-cm={draft.sizeCm}
-      className="flex flex-col items-center justify-center gap-1.5 p-4 shadow-lg border border-black/10"
-      style={{ width, height, backgroundColor: draft.bgColor, ...dogTagShapeStyle(draft.shape) }}
+      className="flex flex-col items-center justify-center gap-[2%] shadow-lg border border-black/10 overflow-hidden"
+      style={{
+        width: widthCm * pxPerCm,
+        height: heightCm * pxPerCm,
+        backgroundColor: draft.bgColor,
+        ...dogTagShapeStyle(draft.shape),
+      }}
     >
       {side === "front" ? (
         <>
@@ -91,8 +114,8 @@ function StickerPreview({ tag, draft, side, previewPx }: { tag: DogTag; draft: T
           </div>
           {draft.stickerText.trim() && (
             <p
-              className="text-center font-bold leading-tight break-words"
-              style={{ color: draft.fgColor, fontSize: Math.max(10, Math.min(width, height) * 0.09) }}
+              className="text-center font-bold leading-tight break-words px-1"
+              style={{ color: draft.fgColor, fontSize: draft.stickerTextSizeCm * pxPerCm }}
             >
               {draft.stickerText}
             </p>
@@ -100,13 +123,24 @@ function StickerPreview({ tag, draft, side, previewPx }: { tag: DogTag; draft: T
         </>
       ) : (
         <p
-          className="text-center font-bold leading-snug break-words whitespace-pre-line"
-          style={{ color: draft.fgColor, fontSize: Math.max(10, Math.min(width, height) * 0.1) }}
+          className="text-center font-bold leading-snug break-words whitespace-pre-line px-2"
+          style={{ color: draft.fgColor, fontSize: draft.backTextSizeCm * pxPerCm }}
         >
           {draft.backText.trim() || "IF FOUND\nPlease scan the QR code\non the front"}
         </p>
       )}
     </div>
+  );
+}
+
+/** Mounted straight under <body> (bypassing the whole app tree) so print CSS can hide #root entirely — a position:fixed target nested inside the still-laid-out (if invisible) Designer was getting repeated once per paginated page, producing multiple copies. */
+function PrintSheet({ tag, draft }: { tag: DogTag; draft: TagDraft }) {
+  return createPortal(
+    <div id="dog-tag-print-root" className="hidden print:flex flex-col items-center gap-8 py-8">
+      <TagFace tag={tag} draft={draft} side="front" pxPerCm={PRINT_PX_PER_CM} />
+      <TagFace tag={tag} draft={draft} side="back" pxPerCm={PRINT_PX_PER_CM} />
+    </div>,
+    document.body
   );
 }
 
@@ -135,7 +169,9 @@ export function DogTagDesigner({
     stickerText: tag.stickerText,
     sizeCm: tag.sizeCm,
     qrSizeCm: tag.qrSizeCm,
+    stickerTextSizeCm: tag.stickerTextSizeCm,
     backText: tag.backText,
+    backTextSizeCm: tag.backTextSizeCm,
     profile: tag.profile,
   });
   const [side, setSide] = useState<Side>("front");
@@ -187,7 +223,7 @@ export function DogTagDesigner({
   };
 
   const handleExport = useCallback(async () => {
-    const el = document.getElementById("dog-tag-print-target");
+    const el = document.getElementById("dog-tag-preview-current");
     if (!el) return;
     setExporting(true);
     try {
@@ -209,34 +245,27 @@ export function DogTagDesigner({
       s.id = styleId;
       document.head.appendChild(s);
     }
-    const aspect = dogTagAspectRatio(draft.shape);
-    const widthCm = aspect >= 1 ? draft.sizeCm : draft.sizeCm * aspect;
-    const heightCm = aspect >= 1 ? draft.sizeCm / aspect : draft.sizeCm;
-    const qrPxAtPrint = draft.qrSizeCm * PRINT_PX_PER_CM;
-
+    // #root (the whole app, incl. this Designer) is fully removed from layout
+    // during print — not just hidden — so the print sheet is the only thing
+    // with any height and the page count comes out to exactly what its own
+    // content needs, instead of the Designer's own (much taller) layout.
     s.textContent = `
       @media print {
-        * { visibility: hidden !important; }
-        #dog-tag-print-target, #dog-tag-print-target * { visibility: visible !important; }
-        #dog-tag-print-target {
-          position: fixed !important; top: 50% !important; left: 50% !important;
-          transform: translate(-50%, -50%) !important;
-          width: ${widthCm}cm !important; height: ${heightCm}cm !important;
-        }
-        #dog-tag-print-target .dog-tag-qr,
-        #dog-tag-print-target .dog-tag-qr svg {
-          width: ${qrPxAtPrint}px !important; height: ${qrPxAtPrint}px !important;
-        }
+        #root { display: none !important; }
+        #dog-tag-print-root { display: flex !important; }
       }
     `;
     window.print();
     setTimeout(() => s?.remove(), 2000);
-  }, [draft.shape, draft.sizeCm, draft.qrSizeCm]);
+  }, []);
 
   const recipientNames = recipients?.map((r) => r.name).join(", ");
+  const previewPxPerCm = 220 / draft.sizeCm;
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
+      <PrintSheet tag={tag} draft={draft} />
+
       {/* Top bar */}
       <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500">
         <button
@@ -250,7 +279,7 @@ export function DogTagDesigner({
           <p className="text-[11px] text-white/80">{draft.label}</p>
         </div>
         <Button variant="secondary" size="sm" onClick={handlePrint} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
-          <Printer className="w-3.5 h-3.5" /> Print
+          <Printer className="w-3.5 h-3.5" /> Print both sides
         </Button>
         <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
           <Download className="w-3.5 h-3.5" /> {exporting ? "Saving…" : "PNG"}
@@ -277,7 +306,9 @@ export function DogTagDesigner({
               </button>
             ))}
           </div>
-          <StickerPreview tag={tag} draft={draft} side={side} previewPx={220} />
+          <div id="dog-tag-preview-current">
+            <TagFace tag={tag} draft={draft} side={side} pxPerCm={previewPxPerCm} />
+          </div>
           <p className="text-xs text-muted-foreground font-mono bg-white/80 px-2 py-1 rounded-lg border border-border">
             {publicTagUrl(tag).replace(/^https?:\/\//, "")}
           </p>
@@ -296,16 +327,40 @@ export function DogTagDesigner({
             <Input value={draft.label} onChange={(e) => setField("label", e.target.value)} className="h-10 rounded-xl" placeholder="e.g. Collar tag" />
           </div>
 
-          <div className="space-y-1.5">
-            {sectionLabel(<FlipHorizontal className="w-3 h-3" />, "bg-violet-500", "Front & back text")}
-            <Input value={draft.stickerText} onChange={(e) => setField("stickerText", e.target.value)} className="h-10 rounded-xl" placeholder={`Front text, e.g. ${pet.name}`} />
-            <Textarea
-              value={draft.backText}
-              onChange={(e) => setField("backText", e.target.value)}
-              placeholder={"Back text, e.g.\nIF FOUND\nPlease scan QR code"}
-              className="rounded-xl resize-none text-sm"
-              rows={3}
-            />
+          <div className="space-y-3">
+            {sectionLabel(<QrCodeIcon className="w-3 h-3" />, "bg-violet-500", "Front")}
+            <div className="space-y-1.5 pl-1">
+              <Label className="text-[11px] text-muted-foreground">Front text</Label>
+              <Input value={draft.stickerText} onChange={(e) => setField("stickerText", e.target.value)} className="h-10 rounded-xl" placeholder={pet.name} />
+            </div>
+            <div className="space-y-1.5 pl-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Front text size</span>
+                <span className="text-xs font-semibold">{draft.stickerTextSizeCm.toFixed(2)} cm</span>
+              </div>
+              <Slider value={[draft.stickerTextSizeCm]} min={0.15} max={1.2} step={0.05} onValueChange={([v]) => setField("stickerTextSizeCm", v)} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {sectionLabel(<Type className="w-3 h-3" />, "bg-indigo-500", "Back")}
+            <div className="space-y-1.5 pl-1">
+              <Label className="text-[11px] text-muted-foreground">Back text</Label>
+              <Textarea
+                value={draft.backText}
+                onChange={(e) => setField("backText", e.target.value)}
+                placeholder={"IF FOUND\nPlease scan QR code"}
+                className="rounded-xl resize-none text-sm"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5 pl-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Back text size</span>
+                <span className="text-xs font-semibold">{draft.backTextSizeCm.toFixed(2)} cm</span>
+              </div>
+              <Slider value={[draft.backTextSizeCm]} min={0.15} max={1.2} step={0.05} onValueChange={([v]) => setField("backTextSizeCm", v)} />
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -371,7 +426,8 @@ export function DogTagDesigner({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Set your printer to 100% scale (not "fit to page") for these sizes to print accurately.
+              Set your printer to 100% scale (not "fit to page") for these sizes to print accurately. "Print
+              both sides" prints one front and one back, at true size.
             </p>
           </div>
 

@@ -89,7 +89,9 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
           stickerText: pet.name,
           sizeCm: 3.5,
           qrSizeCm: 1.8,
+          stickerTextSizeCm: 0.35,
           backText: "",
+          backTextSizeCm: 0.4,
           profile: DEFAULT_TAG_PROFILE,
           lastScanLocation: null,
         });

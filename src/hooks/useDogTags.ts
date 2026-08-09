@@ -60,8 +60,12 @@ export interface DogTag {
   sizeCm: number;
   /** QR code size, in cm — independently adjustable so text/QR balance works at any tag size. */
   qrSizeCm: number;
+  /** Front sticker text height, in cm. */
+  stickerTextSizeCm: number;
   /** Free text for the reverse side, e.g. "IF FOUND please scan the QR code". */
   backText: string;
+  /** Back text height, in cm. */
+  backTextSizeCm: number;
   profile: DogTagProfile;
   lastScanLocation: DogTagScanLocation | null;
 }
@@ -80,6 +84,8 @@ export const DEFAULT_TAG_PROFILE: DogTagProfile = {
 
 const DEFAULT_SIZE_CM = 3.5;
 const DEFAULT_QR_SIZE_CM = 1.8;
+const DEFAULT_STICKER_TEXT_SIZE_CM = 0.35;
+const DEFAULT_BACK_TEXT_SIZE_CM = 0.4;
 
 function genCode(): string {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
@@ -131,7 +137,9 @@ export function useDogTags(petId: string | null) {
               stickerText: data.stickerText || "",
               sizeCm: typeof data.sizeCm === "number" ? data.sizeCm : DEFAULT_SIZE_CM,
               qrSizeCm: typeof data.qrSizeCm === "number" ? data.qrSizeCm : DEFAULT_QR_SIZE_CM,
+              stickerTextSizeCm: typeof data.stickerTextSizeCm === "number" ? data.stickerTextSizeCm : DEFAULT_STICKER_TEXT_SIZE_CM,
               backText: data.backText || "",
+              backTextSizeCm: typeof data.backTextSizeCm === "number" ? data.backTextSizeCm : DEFAULT_BACK_TEXT_SIZE_CM,
               profile: { ...DEFAULT_TAG_PROFILE, ...(data.profile || {}) },
               lastScanLocation: data.lastScanLocation || null,
             } as DogTag;
@@ -161,7 +169,9 @@ export function useDogTags(petId: string | null) {
         stickerText: input.stickerText || "",
         sizeCm: input.sizeCm ?? DEFAULT_SIZE_CM,
         qrSizeCm: input.qrSizeCm ?? DEFAULT_QR_SIZE_CM,
+        stickerTextSizeCm: input.stickerTextSizeCm ?? DEFAULT_STICKER_TEXT_SIZE_CM,
         backText: input.backText || "",
+        backTextSizeCm: input.backTextSizeCm ?? DEFAULT_BACK_TEXT_SIZE_CM,
         profile: { ...DEFAULT_TAG_PROFILE, ...(input.profile || {}) },
         lastScanLocation: null,
         createdAt: serverTimestamp(),
