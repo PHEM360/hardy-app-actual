@@ -133,32 +133,33 @@ export const reportDogTagScan = onCall(
       const petName = petSnap.exists ? petSnap.data()?.name || "Your pet" : "Your pet";
       const ownerEmail: string | undefined = ownerSnap.exists ? ownerSnap.data()?.email : undefined;
 
-      if (ownerEmail) {
-        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        const when = new Date().toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
-        try {
-          await sendNotification({
-            uid: ownerId,
-            channels: ["email"],
-            emailEnabled: true,
-            emailTo: ownerEmail,
-            smsEnabled: false,
-            smsTo: "",
-            pushEnabled: false,
-            subject: `📍 ${petName}'s tag was scanned`,
-            textBody: `${petName}'s dog tag was just scanned at ${when}.`,
-            htmlBody: `<p><strong>${petName}'s</strong> dog tag was just scanned.</p><p>Time: ${when}</p>`,
-            actionUrl: mapsUrl,
-            actionLabel: "View location on map",
-            footerNote: "This is an automatic alert from Hardy Hub — no action is needed from whoever scanned the tag.",
-            postmarkKey: postmarkKey.value(),
-            twilioSid: twilioSid.value(),
-            twilioToken: twilioToken.value(),
-            twilioFrom: twilioFrom.value(),
-          });
-        } catch (err) {
-          logger.error("reportDogTagScan: notification failed", { petId, tagId, error: (err as Error).message });
-        }
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      const when = new Date().toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
+      try {
+        await sendNotification({
+          uid: ownerId,
+          // Push fires even if the owner has no email on file — it doesn't
+          // depend on it — and is more real-time/visible than email, so it
+          // goes out alongside it rather than as a fallback.
+          channels: ["email", "push"],
+          emailEnabled: !!ownerEmail,
+          emailTo: ownerEmail || "",
+          smsEnabled: false,
+          smsTo: "",
+          pushEnabled: true,
+          subject: `📍 ${petName}'s tag was scanned`,
+          textBody: `${petName}'s dog tag was just scanned at ${when}.`,
+          htmlBody: `<p><strong>${petName}'s</strong> dog tag was just scanned.</p><p>Time: ${when}</p>`,
+          actionUrl: mapsUrl,
+          actionLabel: "View location on map",
+          footerNote: "This is an automatic alert from Hardy Hub — no action is needed from whoever scanned the tag.",
+          postmarkKey: postmarkKey.value(),
+          twilioSid: twilioSid.value(),
+          twilioToken: twilioToken.value(),
+          twilioFrom: twilioFrom.value(),
+        });
+      } catch (err) {
+        logger.error("reportDogTagScan: notification failed", { petId, tagId, error: (err as Error).message });
       }
 
       await tag.ref.update({ lastScanNotifiedAt: admin.firestore.FieldValue.serverTimestamp() });
