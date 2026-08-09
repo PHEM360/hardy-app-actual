@@ -11,12 +11,21 @@ const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY as string | undefined;
  * When pushEnabled is true, requests notification permission (if not already
  * granted), fetches the device's FCM token, and stores it in Firestore under
  * users/{uid}.fcmTokens so Cloud Functions can reach every registered device.
+ *
+ * Safari/WebKit (this matters a lot on iOS) only honours
+ * Notification.requestPermission() when it's called synchronously as part of
+ * a real user gesture (a tap/click) — a request fired from a useEffect on
+ * mount/prop-change is too far removed from any click to count, and Safari
+ * silently does nothing rather than prompting. So besides the automatic
+ * effect below (which is enough for Chrome/Firefox), `registerToken` is also
+ * returned so a caller can invoke it directly inside an onClick/onCheckedChange
+ * handler — see the Push switch in NotificationSettings.tsx.
  */
 export function useFcmToken(pushEnabled: boolean) {
   const { user } = useAuth();
 
   const registerToken = useCallback(async () => {
-    if (!user?.uid || !pushEnabled) return;
+    if (!user?.uid) return;
     if (!VAPID_KEY) {
       console.warn("FCM: VITE_FCM_VAPID_KEY is not set — push tokens cannot be registered.");
       return;
@@ -42,9 +51,13 @@ export function useFcmToken(pushEnabled: boolean) {
     } catch (err) {
       console.warn("FCM token registration failed:", err);
     }
-  }, [user?.uid, pushEnabled]);
+  }, [user?.uid]);
 
+  // Automatic path — sufficient on Chrome/Firefox, which don't require the
+  // request to trace back to a gesture. Safari needs the direct call below.
   useEffect(() => {
-    registerToken();
-  }, [registerToken]);
+    if (pushEnabled) registerToken();
+  }, [pushEnabled, registerToken]);
+
+  return { registerToken };
 }

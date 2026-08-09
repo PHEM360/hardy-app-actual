@@ -225,7 +225,7 @@ export default function NotificationSettings() {
   const [saved, setSaved] = useState(false);
 
   // Register this device's FCM token whenever push is enabled (syncs across devices via Firestore)
-  useFcmToken(prefs.push.enabled);
+  const { registerToken } = useFcmToken(prefs.push.enabled);
 
   // Use local draft while editing; fall back to server prefs
   const draft = local ?? prefs;
@@ -330,13 +330,35 @@ export default function NotificationSettings() {
                   </div>
                   <Switch
                     checked={draft.push.enabled}
-                    onCheckedChange={(v) => upd({ push: { enabled: v } })}
+                    onCheckedChange={(v) => {
+                      upd({ push: { enabled: v } });
+                      // Called directly inside this tap handler (not from an
+                      // effect after prefs are saved) because Safari/iOS only
+                      // honours a permission prompt when it traces back to a
+                      // real user gesture — see useFcmToken.ts.
+                      if (v) registerToken();
+                    }}
                   />
                 </div>
                 {draft.push.enabled && (
-                  <p className="text-xs text-muted-foreground pl-6 leading-relaxed">
-                    Each device registers itself when you open the app. Notifications reach every device where you're signed in and have allowed alerts.
-                  </p>
+                  <div className="pl-6 space-y-2">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Each device registers itself when you open the app. Notifications reach every device where you're signed in and have allowed alerts.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => registerToken()}
+                    >
+                      Register this device
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Push is already on, so flipping the switch won't retry registration — tap this instead,
+                      especially on iPhone/iPad, where it must be triggered by a tap.
+                    </p>
+                  </div>
                 )}
               </div>
             </SectionCard>
