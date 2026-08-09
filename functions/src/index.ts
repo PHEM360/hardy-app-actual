@@ -78,7 +78,7 @@ export {
 } from "./display";
 
 // ── Dog tags (Pets page) ──
-export { getDogTagPublicInfo, getDogTagProfileBySlug, reportDogTagScan } from "./dogTags";
+export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);

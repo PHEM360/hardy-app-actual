@@ -1,9 +1,12 @@
-import { PawPrint, Phone, MessageCircle, MapPin, Stethoscope, Globe, CheckCircle2, AlertCircle } from "lucide-react";
+import { Phone, MessageCircle, MapPin, Stethoscope, Globe, CheckCircle2, AlertCircle, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { dogTagShapeStyle } from "@/lib/dogTagShapes";
 import type { DogTagPublicInfo } from "@/lib/dogTagApi";
 
 export type LocationPhase = "idle" | "requesting" | "sent" | "denied" | "error";
+
+const LOGO_URL =
+  "https://firebasestorage.googleapis.com/v0/b/hardyhub-7b30d.firebasestorage.app/o/App%20Icon.png?alt=media&token=aab46abd-0fff-477e-a7ce-6df736679001";
 
 export function DogTagInvalidCard() {
   return (
@@ -38,48 +41,61 @@ export function DogTagProfileView({
   const profile = info.profile;
 
   return (
-    <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl border border-border/40 overflow-hidden">
+    <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-2xl border border-black/5 overflow-hidden">
       <div
-        className="px-6 py-6 flex flex-col items-center gap-2 text-center"
-        style={{ backgroundColor: info.bgColor || "#f5f5f5" }}
+        className="px-6 pt-8 pb-7 flex flex-col items-center gap-3 text-center relative overflow-hidden"
+        style={{
+          background: `radial-gradient(circle at 30% 0%, ${info.bgColor || "#fef3c7"} 0%, #fde68a 45%, #fca5a5 100%)`,
+        }}
       >
         <div
-          className="w-14 h-14 flex items-center justify-center border border-black/10"
-          style={dogTagShapeStyle(info.shape || "rounded")}
-        >
-          <PawPrint className="w-7 h-7" style={{ color: info.fgColor || "#000" }} />
+          className="absolute -top-6 -left-6 w-24 h-24 opacity-20"
+          style={{ backgroundColor: info.fgColor || "#000", ...dogTagShapeStyle(info.shape || "rounded") }}
+        />
+        <img
+          src={LOGO_URL}
+          alt="Hardy Hub"
+          className="w-24 h-24 rounded-full border-4 border-white shadow-lg relative z-10 object-cover"
+        />
+        <div className="relative z-10 space-y-1">
+          <p className="flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider text-orange-800/70">
+            <PartyPopper className="w-3.5 h-3.5" /> Great news!
+          </p>
+          <p className="font-extrabold text-2xl text-zinc-900 leading-tight">
+            You've found {info.petName}!
+          </p>
+          <p className="text-xs text-zinc-700/80">Thank you for stopping to help 🐾</p>
         </div>
-        <p className="font-bold text-lg" style={{ color: info.fgColor || "#000" }}>
-          {info.petName}
-        </p>
       </div>
 
       <div className="px-6 py-6 space-y-4">
         {profile?.message && (
-          <div className="flex items-start gap-3">
-            <MessageCircle className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-foreground leading-relaxed">{profile.message}</p>
+          <div className="flex items-start gap-3 p-3 rounded-2xl bg-amber-50 border border-amber-200/70">
+            <MessageCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-zinc-800 leading-relaxed">{profile.message}</p>
           </div>
         )}
 
         {profile && profile.phones.length > 0 && (
           <div className="space-y-2">
             {profile.phones.map((phone) => (
-              <div key={phone.id} className="flex items-center gap-2 p-3 rounded-2xl bg-primary/5 border border-primary/20">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground truncate">{phone.number}</p>
-                  {phone.label && <p className="text-xs text-muted-foreground truncate">{phone.label}</p>}
+              <div key={phone.id} className="rounded-2xl border border-border/60 overflow-hidden shadow-sm">
+                <div className="px-3.5 pt-2.5 pb-2 bg-muted/30">
+                  <p className="text-sm font-bold text-foreground">{phone.number}</p>
+                  {phone.label && <p className="text-[11px] text-muted-foreground">{phone.label}</p>}
                 </div>
-                <a href={telHref(phone.number)} className="flex-shrink-0">
-                  <Button size="sm" className="h-8 rounded-lg text-xs gap-1 px-2.5">
-                    <Phone className="w-3.5 h-3.5" /> Call
-                  </Button>
-                </a>
-                <a href={smsHref(phone.number)} className="flex-shrink-0">
-                  <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1 px-2.5">
-                    <MessageCircle className="w-3.5 h-3.5" /> Text
-                  </Button>
-                </a>
+                <div className="grid grid-cols-2">
+                  <a href={telHref(phone.number)}>
+                    <button className="w-full h-11 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-semibold hover:brightness-105 transition-all">
+                      <Phone className="w-4 h-4" /> Call
+                    </button>
+                  </a>
+                  <a href={smsHref(phone.number)}>
+                    <button className="w-full h-11 flex items-center justify-center gap-1.5 bg-gradient-to-r from-sky-500 to-blue-500 text-white text-sm font-semibold hover:brightness-105 transition-all">
+                      <MessageCircle className="w-4 h-4" /> Text
+                    </button>
+                  </a>
+                </div>
               </div>
             ))}
           </div>
@@ -159,7 +175,7 @@ export function DogTagProfileView({
           </div>
         )}
 
-        <p className="text-[10px] text-muted-foreground text-center pt-2">Thank you for helping reunite a lost pet 🐾</p>
+        <p className="text-[10px] text-muted-foreground text-center pt-2">Powered by Hardy Hub 🐾</p>
       </div>
     </div>
   );

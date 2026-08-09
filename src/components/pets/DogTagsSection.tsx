@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, Tag as TagIcon, QrCode } from "lucide-react";
+import { Plus, Tag as TagIcon, QrCode, MapPin } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
@@ -18,25 +19,47 @@ function TagCard({ tag, onEdit }: { tag: DogTag; onEdit: () => void }) {
     .filter(Boolean)
     .join(" · ") || "No details set yet";
 
+  const lastScan = tag.lastScanLocation;
+  const lastScanAt =
+    lastScan?.at && typeof (lastScan.at as { toDate?: () => Date }).toDate === "function"
+      ? (lastScan.at as { toDate: () => Date }).toDate()
+      : null;
+
   return (
-    <button
-      onClick={onEdit}
-      className="flex items-center gap-3 p-3 rounded-2xl border border-border/50 bg-card shadow-soft text-left hover:border-primary/40 transition-colors"
-    >
-      <div
-        className="w-11 h-11 flex-shrink-0 flex items-center justify-center border border-border/40"
-        style={{ backgroundColor: tag.bgColor, ...dogTagShapeStyle(tag.shape) }}
+    <div className="rounded-2xl border border-border/50 bg-card shadow-soft overflow-hidden">
+      <button
+        onClick={onEdit}
+        className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
       >
-        <QrCode className="w-5 h-5" style={{ color: tag.fgColor }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold truncate">{tag.label}</p>
-        <p className="text-[11px] text-muted-foreground truncate">
-          {tag.slug ? `/p/${tag.slug} · ` : ""}
-          {summary}
-        </p>
-      </div>
-    </button>
+        <div
+          className="w-11 h-11 flex-shrink-0 flex items-center justify-center border border-black/10 shadow-sm"
+          style={{ backgroundColor: tag.bgColor, ...dogTagShapeStyle(tag.shape) }}
+        >
+          <QrCode className="w-5 h-5" style={{ color: tag.fgColor }} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold truncate">{tag.label}</p>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {tag.slug ? `/p/${tag.slug} · ` : ""}
+            {summary}
+          </p>
+        </div>
+      </button>
+      {lastScan && (
+        <a
+          href={`https://www.google.com/maps?q=${lastScan.lat},${lastScan.lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200/60 dark:border-amber-900/50 text-[11px] text-amber-700 dark:text-amber-400"
+        >
+          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">
+            Last scanned {lastScanAt ? formatDistanceToNow(lastScanAt, { addSuffix: true }) : "recently"}
+            {lastScan.placeName ? ` near ${lastScan.placeName}` : ""} · View on map
+          </span>
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -64,7 +87,11 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
           bgColor: "#ffffff",
           fgColor: "#000000",
           stickerText: pet.name,
+          sizeCm: 3.5,
+          qrSizeCm: 1.8,
+          backText: "",
           profile: DEFAULT_TAG_PROFILE,
+          lastScanLocation: null,
         });
       }
     } finally {
@@ -84,7 +111,12 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
           <span>{pet.avatar}</span>
           <p className="text-sm font-semibold">{pet.name}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={handleNewTag} disabled={creating} className="h-8 rounded-xl gap-1.5 text-xs px-3">
+        <Button
+          size="sm"
+          onClick={handleNewTag}
+          disabled={creating}
+          className="h-8 rounded-xl gap-1.5 text-xs px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
+        >
           <Plus className="w-3.5 h-3.5" /> {creating ? "Creating…" : "New tag"}
         </Button>
       </div>
@@ -129,12 +161,12 @@ export function DogTagsSection({ pets }: { pets: Pet[] }) {
   return (
     <div className="mb-5">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
-        <span className="w-5 h-5 rounded-md bg-amber-600 flex items-center justify-center text-white">
+        <span className="w-5 h-5 rounded-md bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-sm">
           <TagIcon className="w-3 h-3" />
         </span>
         Dog Tags
       </h3>
-      <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-5">
+      <div className="p-4 rounded-xl bg-card border border-orange-200/50 dark:border-orange-900/40 shadow-soft space-y-5">
         <p className="text-xs text-muted-foreground -mt-1">
           Printable QR stickers for a collar. Scanning one shows a message, phone numbers, address, vet
           details and more — and can email you the finder's location.

@@ -1,10 +1,27 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Printer, Download, Save, RefreshCw, Trash2, Link as LinkIcon, Check } from "lucide-react";
+import {
+  ArrowLeft,
+  Printer,
+  Download,
+  Save,
+  RefreshCw,
+  Trash2,
+  Link as LinkIcon,
+  Check,
+  Palette,
+  Ruler,
+  Type,
+  Users,
+  FlipHorizontal,
+  QrCode as QrCodeIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,8 +35,11 @@ import {
 import type { Pet } from "@/hooks/usePets";
 import type { DogTag, DogTagProfile, DogTagShape } from "@/hooks/useDogTags";
 import { normalizeSlug } from "@/hooks/useDogTags";
+import { getDogTagNotifyRecipients, type DogTagNotifyRecipient } from "@/lib/dogTagApi";
 import { DOG_TAG_SHAPES, dogTagAspectRatio, dogTagShapeStyle } from "@/lib/dogTagShapes";
 import { DogTagProfilePanel } from "@/components/pets/DogTagProfilePanel";
+
+type Side = "front" | "back";
 
 type TagDraft = {
   label: string;
@@ -27,32 +47,63 @@ type TagDraft = {
   bgColor: string;
   fgColor: string;
   stickerText: string;
+  sizeCm: number;
+  qrSizeCm: number;
+  backText: string;
   profile: DogTagProfile;
 };
+
+const PRINT_PX_PER_CM = 96 / 2.54; // standard 96dpi browser print assumption
 
 export function publicTagUrl(tag: DogTag): string {
   if (tag.slug) return `${window.location.origin}/p/${tag.slug}`;
   return `${window.location.origin}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
 }
 
-function StickerPreview({ tag, draft, size }: { tag: DogTag; draft: TagDraft; size: number }) {
+function sectionLabel(icon: React.ReactNode, color: string, text: string) {
+  return (
+    <Label className="text-xs font-semibold flex items-center gap-1.5">
+      <span className={`w-5 h-5 rounded-md ${color} flex items-center justify-center text-white flex-shrink-0`}>
+        {icon}
+      </span>
+      {text}
+    </Label>
+  );
+}
+
+function StickerPreview({ tag, draft, side, previewPx }: { tag: DogTag; draft: TagDraft; side: Side; previewPx: number }) {
   const aspect = dogTagAspectRatio(draft.shape);
-  const width = aspect >= 1 ? size : size * aspect;
-  const height = aspect >= 1 ? size / aspect : size;
+  const width = aspect >= 1 ? previewPx : previewPx * aspect;
+  const height = aspect >= 1 ? previewPx / aspect : previewPx;
+  const qrPx = Math.min(width, height) * Math.min(1, draft.qrSizeCm / draft.sizeCm);
 
   return (
     <div
       id="dog-tag-print-target"
-      className="flex flex-col items-center justify-center gap-1.5 p-4 shadow-sm border border-border/40"
+      data-size-cm={draft.sizeCm}
+      className="flex flex-col items-center justify-center gap-1.5 p-4 shadow-lg border border-black/10"
       style={{ width, height, backgroundColor: draft.bgColor, ...dogTagShapeStyle(draft.shape) }}
     >
-      <QRCodeSVG value={publicTagUrl(tag)} fgColor={draft.fgColor} bgColor="transparent" size={Math.min(width, height) * 0.5} />
-      {draft.stickerText.trim() && (
+      {side === "front" ? (
+        <>
+          <div className="dog-tag-qr" style={{ width: qrPx, height: qrPx }}>
+            <QRCodeSVG value={publicTagUrl(tag)} fgColor={draft.fgColor} bgColor="transparent" size={qrPx} style={{ width: "100%", height: "100%" }} />
+          </div>
+          {draft.stickerText.trim() && (
+            <p
+              className="text-center font-bold leading-tight break-words"
+              style={{ color: draft.fgColor, fontSize: Math.max(10, Math.min(width, height) * 0.09) }}
+            >
+              {draft.stickerText}
+            </p>
+          )}
+        </>
+      ) : (
         <p
-          className="text-center font-bold leading-tight break-words"
-          style={{ color: draft.fgColor, fontSize: Math.max(10, Math.min(width, height) * 0.09) }}
+          className="text-center font-bold leading-snug break-words whitespace-pre-line"
+          style={{ color: draft.fgColor, fontSize: Math.max(10, Math.min(width, height) * 0.1) }}
         >
-          {draft.stickerText}
+          {draft.backText.trim() || "IF FOUND\nPlease scan the QR code\non the front"}
         </p>
       )}
     </div>
@@ -82,8 +133,12 @@ export function DogTagDesigner({
     bgColor: tag.bgColor,
     fgColor: tag.fgColor,
     stickerText: tag.stickerText,
+    sizeCm: tag.sizeCm,
+    qrSizeCm: tag.qrSizeCm,
+    backText: tag.backText,
     profile: tag.profile,
   });
+  const [side, setSide] = useState<Side>("front");
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
@@ -92,6 +147,15 @@ export function DogTagDesigner({
   const [slugSaving, setSlugSaving] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugSaved, setSlugSaved] = useState(false);
+  const [recipients, setRecipients] = useState<DogTagNotifyRecipient[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDogTagNotifyRecipients(pet.id)
+      .then((r) => { if (!cancelled) setRecipients(r); })
+      .catch(() => { if (!cancelled) setRecipients([]); });
+    return () => { cancelled = true; };
+  }, [pet.id]);
 
   const setField = <K extends keyof TagDraft>(key: K, value: TagDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -129,13 +193,13 @@ export function DogTagDesigner({
     try {
       const dataUrl = await toPng(el, { cacheBust: true, pixelRatio: 3 });
       const a = document.createElement("a");
-      a.download = `${pet.name.replace(/\s+/g, "-").toLowerCase()}-${tag.label.replace(/\s+/g, "-").toLowerCase()}-tag.png`;
+      a.download = `${pet.name.replace(/\s+/g, "-").toLowerCase()}-${tag.label.replace(/\s+/g, "-").toLowerCase()}-${side}.png`;
       a.href = dataUrl;
       a.click();
     } finally {
       setExporting(false);
     }
-  }, [pet.name, tag.label]);
+  }, [pet.name, tag.label, side]);
 
   const handlePrint = useCallback(() => {
     const styleId = "dog-tag-print-style";
@@ -145,6 +209,11 @@ export function DogTagDesigner({
       s.id = styleId;
       document.head.appendChild(s);
     }
+    const aspect = dogTagAspectRatio(draft.shape);
+    const widthCm = aspect >= 1 ? draft.sizeCm : draft.sizeCm * aspect;
+    const heightCm = aspect >= 1 ? draft.sizeCm / aspect : draft.sizeCm;
+    const qrPxAtPrint = draft.qrSizeCm * PRINT_PX_PER_CM;
+
     s.textContent = `
       @media print {
         * { visibility: hidden !important; }
@@ -152,34 +221,41 @@ export function DogTagDesigner({
         #dog-tag-print-target {
           position: fixed !important; top: 50% !important; left: 50% !important;
           transform: translate(-50%, -50%) !important;
+          width: ${widthCm}cm !important; height: ${heightCm}cm !important;
+        }
+        #dog-tag-print-target .dog-tag-qr,
+        #dog-tag-print-target .dog-tag-qr svg {
+          width: ${qrPxAtPrint}px !important; height: ${qrPxAtPrint}px !important;
         }
       }
     `;
     window.print();
     setTimeout(() => s?.remove(), 2000);
-  }, []);
+  }, [draft.shape, draft.sizeCm, draft.qrSizeCm]);
+
+  const recipientNames = recipients?.map((r) => r.name).join(", ");
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
       {/* Top bar */}
-      <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 border-b border-border bg-card shadow-sm">
+      <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500">
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mr-1"
+          className="flex items-center gap-1.5 text-sm font-medium text-white/90 hover:text-white transition-colors mr-1"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">Dog Tag — {pet.name}</p>
-          <p className="text-[11px] text-muted-foreground">{draft.label}</p>
+          <p className="text-sm font-bold text-white truncate">🐾 Dog Tag — {pet.name}</p>
+          <p className="text-[11px] text-white/80">{draft.label}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handlePrint} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
+        <Button variant="secondary" size="sm" onClick={handlePrint} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
           <Printer className="w-3.5 h-3.5" /> Print
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
+        <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
           <Download className="w-3.5 h-3.5" /> {exporting ? "Saving…" : "PNG"}
         </Button>
-        <Button size="sm" onClick={handleSave} disabled={saving} className="h-8 rounded-xl gap-1.5 text-xs">
+        <Button size="sm" onClick={handleSave} disabled={saving} className="h-8 rounded-xl gap-1.5 text-xs bg-white text-orange-600 hover:bg-white/90">
           <Save className="w-3.5 h-3.5" /> {saving ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -187,40 +263,60 @@ export function DogTagDesigner({
       {/* Body */}
       <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-y-auto sm:overflow-hidden">
         {/* Preview */}
-        <div className="sm:flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#dde1e7] flex-shrink-0">
-          <StickerPreview tag={tag} draft={draft} size={220} />
-          <p className="text-xs text-muted-foreground font-mono bg-card px-2 py-1 rounded-lg border border-border">
+        <div className="sm:flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-gradient-to-br from-sky-100 via-indigo-50 to-amber-100 flex-shrink-0">
+          <div className="flex items-center gap-1 bg-white/70 backdrop-blur-sm rounded-full p-1 shadow-sm">
+            {(["front", "back"] as Side[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSide(s)}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
+                  side === s ? "bg-orange-500 text-white shadow-sm" : "text-muted-foreground hover:bg-white"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <StickerPreview tag={tag} draft={draft} side={side} previewPx={220} />
+          <p className="text-xs text-muted-foreground font-mono bg-white/80 px-2 py-1 rounded-lg border border-border">
             {publicTagUrl(tag).replace(/^https?:\/\//, "")}
           </p>
           <button
             onClick={() => setRegenConfirmOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card border border-border rounded-xl px-3 py-1.5"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-white/80 border border-border rounded-xl px-3 py-1.5"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Regenerate QR code
           </button>
         </div>
 
         {/* Form */}
-        <div className="w-full sm:w-96 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-border bg-card overflow-y-auto p-4 space-y-5">
+        <div className="w-full sm:w-96 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-border bg-card overflow-y-auto p-4 space-y-6">
           <div className="space-y-1.5">
-            <Label className="text-xs">Tag name</Label>
+            {sectionLabel(<Type className="w-3 h-3" />, "bg-sky-500", "Tag name")}
             <Input value={draft.label} onChange={(e) => setField("label", e.target.value)} className="h-10 rounded-xl" placeholder="e.g. Collar tag" />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Text on sticker</Label>
-            <Input value={draft.stickerText} onChange={(e) => setField("stickerText", e.target.value)} className="h-10 rounded-xl" placeholder={pet.name} />
+            {sectionLabel(<FlipHorizontal className="w-3 h-3" />, "bg-violet-500", "Front & back text")}
+            <Input value={draft.stickerText} onChange={(e) => setField("stickerText", e.target.value)} className="h-10 rounded-xl" placeholder={`Front text, e.g. ${pet.name}`} />
+            <Textarea
+              value={draft.backText}
+              onChange={(e) => setField("backText", e.target.value)}
+              placeholder={"Back text, e.g.\nIF FOUND\nPlease scan QR code"}
+              className="rounded-xl resize-none text-sm"
+              rows={3}
+            />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Shape</Label>
+            {sectionLabel(<QrCodeIcon className="w-3 h-3" />, "bg-fuchsia-500", "Shape")}
             <div className="grid grid-cols-4 gap-2">
               {DOG_TAG_SHAPES.map((s) => (
                 <button
                   key={s.value}
                   onClick={() => setField("shape", s.value)}
-                  className={`flex flex-col items-center gap-1 py-2 rounded-xl border transition-colors ${
-                    draft.shape === s.value ? "border-primary bg-primary/10" : "border-border bg-muted/30 hover:bg-muted/60"
+                  className={`flex flex-col items-center gap-1 py-2 rounded-xl border-2 transition-colors ${
+                    draft.shape === s.value ? "border-fuchsia-500 bg-fuchsia-50" : "border-border bg-muted/30 hover:bg-muted/60"
                   }`}
                 >
                   <div className="w-6 h-6 bg-foreground/70" style={dogTagShapeStyle(s.value)} />
@@ -231,7 +327,7 @@ export function DogTagDesigner({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Colours</Label>
+            {sectionLabel(<Palette className="w-3 h-3" />, "bg-pink-500", "Colours")}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center gap-2 p-2.5 rounded-xl border border-border bg-muted/30">
                 <div className="w-5 h-5 rounded-md border border-border/50 flex-shrink-0" style={{ backgroundColor: draft.bgColor }} />
@@ -246,9 +342,42 @@ export function DogTagDesigner({
             </div>
           </div>
 
+          <div className="space-y-3">
+            {sectionLabel(<Ruler className="w-3 h-3" />, "bg-amber-500", "Print size")}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Tag size</span>
+                <span className="text-xs font-semibold">{draft.sizeCm.toFixed(1)} cm</span>
+              </div>
+              <Slider
+                value={[draft.sizeCm]}
+                min={2}
+                max={8}
+                step={0.1}
+                onValueChange={([v]) => setField("sizeCm", Math.max(v, draft.qrSizeCm + 0.5))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">QR code size</span>
+                <span className="text-xs font-semibold">{draft.qrSizeCm.toFixed(1)} cm</span>
+              </div>
+              <Slider
+                value={[draft.qrSizeCm]}
+                min={1}
+                max={Math.max(1, draft.sizeCm - 0.5)}
+                step={0.1}
+                onValueChange={([v]) => setField("qrSizeCm", v)}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Set your printer to 100% scale (not "fit to page") for these sizes to print accurately.
+            </p>
+          </div>
+
           {/* Public URL / slug */}
-          <div className="space-y-1.5 pt-1">
-            <Label className="text-xs flex items-center gap-1.5"><LinkIcon className="w-3.5 h-3.5 text-primary" /> Friendly URL (optional)</Label>
+          <div className="space-y-1.5">
+            {sectionLabel(<LinkIcon className="w-3 h-3" />, "bg-emerald-500", "Friendly URL (optional)")}
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground flex-shrink-0">hardyapp.co.uk/p/</span>
               <Input
@@ -275,8 +404,13 @@ export function DogTagDesigner({
             )}
           </div>
 
-          <div className="pt-1 border-t border-border">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 pt-3">When scanned</p>
+          <div className="pt-1 border-t border-border space-y-3">
+            <div className="pt-3">{sectionLabel(<Users className="w-3 h-3" />, "bg-orange-500", "When scanned")}</div>
+            {recipients && recipients.length > 0 && (
+              <p className="text-[11px] text-muted-foreground -mt-1.5">
+                Notifies your household: <span className="font-medium text-foreground">{recipientNames}</span>
+              </p>
+            )}
             <DogTagProfilePanel profile={draft.profile} onChange={(patch) => setField("profile", { ...draft.profile, ...patch })} petName={pet.name} />
           </div>
 

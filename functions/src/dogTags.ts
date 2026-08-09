@@ -3,6 +3,33 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { postmarkKey, twilioSid, twilioToken, twilioFrom } from "./notifications/scheduler";
 import { sendNotification } from "./notifications/sender";
+import { resolveAllHouseholdMemberIds } from "./household";
+
+function requireAuth(request: { auth?: { uid: string } }) {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  return uid;
+}
+
+/**
+ * Best-effort reverse geocode via OpenStreetMap's free, keyless Nominatim API
+ * — used only to make the scan-location summary readable ("near Guildford")
+ * instead of raw coordinates. Never blocks the notification if it fails.
+ */
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+      { headers: { "User-Agent": "HardyHub/1.0 (family organiser app)" } }
+    );
+    if (!res.ok) return "";
+    const data = (await res.json()) as { address?: Record<string, string> };
+    const a = data.address || {};
+    return [a.village || a.suburb || a.town || a.city, a.county || a.state].filter(Boolean).join(", ");
+  } catch {
+    return "";
+  }
+}
 
 // Dog Tags — printable QR collar stickers. A stranger who finds the pet
 // scans a code encoding /tag/{petId}/{tagId}?c={code} (or visits a friendly
@@ -101,6 +128,29 @@ export const getDogTagProfileBySlug = onCall(async (request) => {
   return { ...toPublicInfo(petName, tag.data), petId, tagId };
 });
 
+// Lets the Designer show "Notifies: Chris, Sarah, ..." — the caller must be
+// signed in, but doesn't need to already have access to the pet: household
+// membership isn't sensitive the way the tag's contact details are.
+export const getDogTagNotifyRecipients = onCall(async (request) => {
+  requireAuth(request);
+  const petId = String(request.data?.petId || "");
+  if (!petId) throw new HttpsError("invalid-argument", "petId is required.");
+
+  const petSnap = await admin.firestore().doc(`pets/${petId}`).get();
+  const ownerId = petSnap.exists ? String(petSnap.data()?.ownerId || "") : "";
+  if (!ownerId) return { recipients: [] };
+
+  const memberIds = await resolveAllHouseholdMemberIds(ownerId);
+  const userSnaps = await admin.firestore().getAll(...memberIds.map((id) => admin.firestore().doc(`users/${id}`)));
+  const recipients = userSnaps.map((snap, i) => {
+    const data = snap.exists ? snap.data() || {} : {};
+    const name = data.displayName || [data.firstName, data.surname].filter(Boolean).join(" ") || "Family member";
+    return { uid: memberIds[i], name };
+  });
+
+  return { recipients };
+});
+
 export const reportDogTagScan = onCall(
   { secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom] },
   async (request) => {
@@ -134,52 +184,61 @@ export const reportDogTagScan = onCall(
     } else if (!ownerId) {
       logger.warn("reportDogTagScan: tag has no ownerId, skipping notification", { petId, tagId });
     } else {
-      const [petSnap, ownerSnap] = await Promise.all([
+      const [petSnap, memberIds, placeName] = await Promise.all([
         admin.firestore().doc(`pets/${petId}`).get(),
-        admin.firestore().doc(`users/${ownerId}`).get(),
+        resolveAllHouseholdMemberIds(ownerId),
+        reverseGeocode(lat, lng),
       ]);
       const petName = petSnap.exists ? petSnap.data()?.name || "Your pet" : "Your pet";
-      const ownerEmail: string | undefined = ownerSnap.exists ? ownerSnap.data()?.email : undefined;
-      const ownerData = ownerSnap.data() || {};
-      const fcmTokenCount = Array.isArray(ownerData.fcmTokens) ? ownerData.fcmTokens.length : 0;
+      const memberSnaps = await admin.firestore().getAll(...memberIds.map((id) => admin.firestore().doc(`users/${id}`)));
 
       const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
       const when = new Date().toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
-      try {
-        await sendNotification({
-          uid: ownerId,
-          // Push fires even if the owner has no email on file — it doesn't
-          // depend on it — and is more real-time/visible than email, so it
-          // goes out alongside it rather than as a fallback.
-          channels: ["email", "push"],
-          emailEnabled: !!ownerEmail,
-          emailTo: ownerEmail || "",
-          smsEnabled: false,
-          smsTo: "",
-          pushEnabled: true,
-          subject: `📍 ${petName}'s tag was scanned`,
-          textBody: `${petName}'s dog tag was just scanned at ${when}.`,
-          htmlBody: `<p><strong>${petName}'s</strong> dog tag was just scanned.</p><p>Time: ${when}</p>`,
-          actionUrl: mapsUrl,
-          actionLabel: "View location on map",
-          footerNote: "This is an automatic alert from Hardy Hub — no action is needed from whoever scanned the tag.",
-          postmarkKey: postmarkKey.value(),
-          twilioSid: twilioSid.value(),
-          twilioToken: twilioToken.value(),
-          twilioFrom: twilioFrom.value(),
-        });
-        logger.info("reportDogTagScan: notification sent", {
-          petId,
-          tagId,
-          ownerId,
-          emailSent: !!ownerEmail,
-          fcmTokenCount,
-        });
-      } catch (err) {
-        logger.error("reportDogTagScan: notification failed", { petId, tagId, error: (err as Error).message });
-      }
+      const locationLine = placeName ? ` near ${placeName}` : "";
 
-      await tag.ref.update({ lastScanNotifiedAt: admin.firestore.FieldValue.serverTimestamp() });
+      const results = await Promise.allSettled(
+        memberSnaps.map((snap) => {
+          const data = snap.exists ? snap.data() || {} : {};
+          const email: string | undefined = data.email;
+          return sendNotification({
+            uid: snap.id,
+            // Push fires even without an email on file for this member — it
+            // doesn't depend on it — and is more real-time/visible, so it
+            // goes out alongside email rather than as a fallback.
+            channels: ["email", "push"],
+            emailEnabled: !!email,
+            emailTo: email || "",
+            smsEnabled: false,
+            smsTo: "",
+            pushEnabled: true,
+            subject: `📍 ${petName}'s tag was scanned`,
+            textBody: `${petName}'s dog tag was just scanned${locationLine} at ${when}.`,
+            htmlBody: `<p><strong>${petName}'s</strong> dog tag was just scanned${locationLine}.</p><p>Time: ${when}</p>`,
+            actionUrl: mapsUrl,
+            actionLabel: "View location on map",
+            footerNote: "This is an automatic alert from Hardy Hub — no action is needed from whoever scanned the tag. Tap to open Hardy Hub.",
+            pushClickPath: "/pets",
+            postmarkKey: postmarkKey.value(),
+            twilioSid: twilioSid.value(),
+            twilioToken: twilioToken.value(),
+            twilioFrom: twilioFrom.value(),
+          });
+        })
+      );
+
+      const failures = results.filter((r) => r.status === "rejected").length;
+      logger.info("reportDogTagScan: notifications sent", {
+        petId,
+        tagId,
+        ownerId,
+        recipientCount: memberIds.length,
+        failures,
+      });
+
+      await tag.ref.update({
+        lastScanNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastScanLocation: { lat, lng, placeName, at: admin.firestore.FieldValue.serverTimestamp() },
+      });
     }
 
     return { success: true };

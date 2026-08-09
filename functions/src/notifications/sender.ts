@@ -38,6 +38,8 @@ export interface NotifPayload {
   actionUrl?: string;
   actionLabel?: string;
   footerNote?: string;
+  /** Where tapping the push notification itself should take the user (web app path, e.g. "/pets"). */
+  pushClickPath?: string;
   postmarkKey: string;
   twilioSid: string;
   twilioToken: string;
@@ -72,7 +74,7 @@ export async function sendNotification(p: NotifPayload): Promise<void> {
   }
 
   if (p.channels.includes("push") && p.pushEnabled) {
-    sends.push(sendFcmToUser(p.uid, p.subject, p.textBody));
+    sends.push(sendFcmToUser(p.uid, p.subject, p.textBody, p.pushClickPath));
   }
 
   await Promise.all(sends);
@@ -98,14 +100,19 @@ export async function sendTransactionalEmail(
  * Send an FCM push notification to every registered device token for a user.
  * Automatically cleans up expired/invalid tokens from Firestore.
  */
-async function sendFcmToUser(uid: string, title: string, body: string): Promise<void> {
+async function sendFcmToUser(uid: string, title: string, body: string, clickPath?: string): Promise<void> {
   const userDoc = await admin.firestore().doc(`users/${uid}`).get();
   const tokens: string[] = userDoc.data()?.fcmTokens ?? [];
   if (tokens.length === 0) return;
 
+  // clickPath rides in `data`, not `webpush.fcmOptions.link` — this app's
+  // service worker overrides onBackgroundMessage itself (to control the
+  // notification icon/etc), which bypasses FCM's automatic link-opening.
+  // The worker's own notificationclick handler reads data.url instead.
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
     notification: { title, body },
+    data: clickPath ? { url: clickPath } : undefined,
     webpush: {
       notification: { title, body, icon: "/favicon.ico" },
     },

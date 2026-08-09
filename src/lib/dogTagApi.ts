@@ -55,6 +55,20 @@ export async function getDogTagProfileBySlug(slug: string): Promise<DogTagPublic
   return res.data;
 }
 
+export interface DogTagNotifyRecipient {
+  uid: string;
+  name: string;
+}
+
+export async function getDogTagNotifyRecipients(petId: string): Promise<DogTagNotifyRecipient[]> {
+  const fn = httpsCallable<{ petId: string }, { recipients: DogTagNotifyRecipient[] }>(
+    functions,
+    "getDogTagNotifyRecipients"
+  );
+  const res = await fn({ petId });
+  return res.data.recipients;
+}
+
 export async function reportDogTagScan(
   petId: string,
   tagId: string,
