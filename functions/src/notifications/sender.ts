@@ -16,7 +16,6 @@ export interface TransactionalTemplateModel {
   heading: string;
   body_html: string;
   body_text: string;
-  preheader?: string;
   // Grouped (not flat action_url/action_label) because Postmark's Mustache-style
   // {{#action}} section only exposes a nested object's own fields as unqualified
   // {{url}}/{{label}} inside the block — sibling top-level variables resolve to
