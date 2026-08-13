@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Printer,
@@ -239,6 +240,21 @@ export function DogTagDesigner({
   }, [pet.name, tag.label, side]);
 
   const handlePrint = useCallback(() => {
+    // iOS/Android treat this as an installed app when added to the home
+    // screen (see the apple-mobile-web-app-capable meta tag) — there's no
+    // browser chrome to host the print sheet in that mode, so window.print()
+    // silently does nothing instead of erroring. Catch it and say so, rather
+    // than leaving the button looking broken.
+    const isStandalone =
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (isStandalone) {
+      toast.error("Printing isn't available from the Home Screen app", {
+        description: "Open hardyapp.co.uk in Safari or Chrome to print, or use the PNG button and print that image instead.",
+      });
+      return;
+    }
+
     const styleId = "dog-tag-print-style";
     let s = document.getElementById(styleId) as HTMLStyleElement | null;
     if (!s) {
@@ -279,11 +295,11 @@ export function DogTagDesigner({
           <p className="text-sm font-bold text-white truncate">🐾 Dog Tag — {pet.name}</p>
           <p className="text-[11px] text-white/80">{draft.label}</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={handlePrint} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
-          <Printer className="w-3.5 h-3.5" /> Print both sides
+        <Button variant="secondary" size="icon" onClick={handlePrint} className="h-8 w-8 sm:w-auto sm:px-3 rounded-xl gap-1.5 text-xs flex-shrink-0">
+          <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print both sides</span>
         </Button>
-        <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="h-8 rounded-xl gap-1.5 text-xs hidden sm:flex">
-          <Download className="w-3.5 h-3.5" /> {exporting ? "Saving…" : "PNG"}
+        <Button variant="secondary" size="icon" onClick={handleExport} disabled={exporting} className="h-8 w-8 sm:w-auto sm:px-3 rounded-xl gap-1.5 text-xs flex-shrink-0">
+          <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{exporting ? "Saving…" : "PNG"}</span>
         </Button>
         <Button size="sm" onClick={handleSave} disabled={saving} className="h-8 rounded-xl gap-1.5 text-xs bg-white text-orange-600 hover:bg-white/90">
           <Save className="w-3.5 h-3.5" /> {saving ? "Saving…" : "Save"}
