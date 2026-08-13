@@ -55,7 +55,7 @@ const TopBar = () => {
 
   const renderAvatar = () => {
     const avatarType = profile?.avatarType ?? "initials";
-    const bgColor = profile?.avatarBgColor ?? "hsl(188, 33%, 38%)";
+    const bgColor = profile?.avatarBgColor ?? "hsl(178, 55%, 36%)";
     const textColor = profile?.avatarTextColor ?? "#fff";
 
     if (avatarType === "emoji") {
@@ -85,8 +85,8 @@ const TopBar = () => {
       className="sticky top-0 z-40 border-b border-white/5 overflow-hidden"
       style={{
         background: isNight
-          ? "linear-gradient(135deg, hsl(210, 32%, 18%) 0%, hsl(200, 30%, 24%) 35%, hsl(192, 30%, 30%) 65%, hsl(188, 28%, 38%) 100%)"
-          : "linear-gradient(135deg, hsl(210, 28%, 25%) 0%, hsl(200, 28%, 30%) 35%, hsl(192, 30%, 36%) 65%, hsl(188, 28%, 44%) 100%)",
+          ? "linear-gradient(135deg, hsl(215, 35%, 16%) 0%, hsl(200, 32%, 22%) 35%, hsl(190, 35%, 28%) 65%, hsl(178, 55%, 36%) 100%)"
+          : "linear-gradient(135deg, hsl(215, 30%, 22%) 0%, hsl(200, 30%, 28%) 35%, hsl(190, 35%, 34%) 65%, hsl(178, 58%, 40%) 100%)",
         paddingTop: "env(safe-area-inset-top)",
       }}
     >

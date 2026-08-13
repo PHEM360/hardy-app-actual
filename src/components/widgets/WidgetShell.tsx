@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Rnd } from "react-rnd";
 import { GripHorizontal, Eye, EyeOff, Palette, X } from "lucide-react";
 import type { WidgetLayoutItem } from "@/hooks/useDashboardLayout";
@@ -15,12 +15,19 @@ const SNAP_COLS = 2;           // horizontal snap divisions
 const SNAP_ROW_PX = 20;        // vertical snap in pixels
 const MIN_H = 100;
 const MIN_W_FRAC = 0.5;        // minimum 50% width
+const TILE_GAP = 14;           // visual gap between side-by-side tiles, in px
 
 export function WidgetShell({ item, containerWidth, editMode, onUpdate, children }: WidgetShellProps) {
   const colW = containerWidth / SNAP_COLS;
   const x = item.xFrac * containerWidth;
   const w = item.wFrac * containerWidth;
   const [showPalette, setShowPalette] = useState(false);
+
+  // Rnd's own position/size stay on the raw (un-inset) grid so drag/resize
+  // snapping math is unaffected — the visual gap between adjacent tiles is
+  // applied to the rendered card itself via margin/width below.
+  const leftInset = item.xFrac > 0 ? TILE_GAP / 2 : 0;
+  const rightInset = item.xFrac + item.wFrac < 1 ? TILE_GAP / 2 : 0;
 
   const TINT_PRESETS = [
     { label: "Sky",    value: "#e0f2fe" },
@@ -80,10 +87,17 @@ export function WidgetShell({ item, containerWidth, editMode, onUpdate, children
     >
       {/* Inner card */}
       <div
-        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col border shadow-soft transition-shadow ${
-          editMode ? "border-primary/40 ring-2 ring-primary/20 shadow-md cursor-default" : "border-border/50"
+        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col border shadow-card transition-all duration-200 ${
+          editMode
+            ? "border-primary/40 ring-2 ring-primary/20 shadow-md cursor-default"
+            : "border-border hover:shadow-elevated hover:-translate-y-0.5 cursor-pointer"
         } ${!item.tintColor ? "bg-card" : ""}`}
-        style={{ padding: 0, ...(item.tintColor ? { backgroundColor: item.tintColor } : {}) }}
+        style={{
+          padding: 0,
+          marginLeft: leftInset,
+          width: `calc(100% - ${leftInset + rightInset}px)`,
+          ...(item.tintColor ? { backgroundColor: item.tintColor } : {}),
+        }}
       >
         {/* Edit mode header bar */}
         {editMode && (
@@ -112,7 +126,7 @@ export function WidgetShell({ item, containerWidth, editMode, onUpdate, children
                           title={p.label}
                           onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { tintColor: p.value }); setShowPalette(false); }}
                           className="w-8 h-8 rounded-lg border-2 transition-transform hover:scale-110 active:scale-95"
-                          style={{ backgroundColor: p.value, borderColor: item.tintColor === p.value ? "#6366f1" : "transparent" }}
+                          style={{ backgroundColor: p.value, borderColor: item.tintColor === p.value ? "hsl(178,62%,30%)" : "transparent" }}
                         />
                       ))}
                       {/* Clear colour */}

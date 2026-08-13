@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router-dom";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronRight } from "lucide-react";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameDay, isToday, isSameMonth,
 } from "date-fns";
 import { useCalendar } from "@/hooks/useCalendar";
+import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 const CAT_COLORS: Record<string, string> = {
   personal: "#6366f1",
@@ -19,6 +20,7 @@ export function CalendarMiniWidget() {
   const navigate = useNavigate();
   const { events } = useCalendar();
   const now = new Date();
+  const accent = WIDGET_ACCENT.calendar_mini;
 
   const monthStart  = startOfMonth(now);
   const monthEnd    = endOfMonth(now);
@@ -31,16 +33,24 @@ export function CalendarMiniWidget() {
 
   return (
     <button
-      className="w-full h-full p-3 flex flex-col text-left overflow-hidden"
+      className="w-full h-full p-3 pb-3.5 flex flex-col text-left overflow-y-auto group"
       onClick={() => navigate("/calendar")}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <CalendarDays className="w-3.5 h-3.5 text-blue-500" />
-          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Calendar</span>
+      <div
+        className="flex items-center justify-between mb-2 -mx-3 -mt-3 px-3 py-2.5 flex-shrink-0"
+        style={{ background: accentGradient(accent) }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
+            <CalendarDays className="w-3.5 h-3.5" />
+          </span>
+          <span className="text-[11px] font-bold text-white uppercase tracking-wider">Calendar</span>
         </div>
-        <span className="text-[11px] font-medium text-foreground">{format(now, "MMMM yyyy")}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] font-semibold text-white/90">{format(now, "MMMM yyyy")}</span>
+          <ChevronRight className="w-3 h-3 text-white/50 group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" />
+        </div>
       </div>
 
       {/* Week day headers */}
@@ -60,23 +70,21 @@ export function CalendarMiniWidget() {
           const isNow = isToday(day);
 
           return (
-            <div
-              key={i}
-              className={`flex flex-col items-center pt-0.5 rounded-md ${isNow ? "bg-primary/10" : ""} ${!inMonth ? "opacity-30" : ""}`}
-            >
+            <div key={i} className={`flex flex-col items-center pt-0.5 ${!inMonth ? "opacity-30" : ""}`}>
               <span
-                className={`text-[10px] leading-none font-medium ${
-                  isNow ? "text-primary font-bold" : inMonth ? "text-foreground" : "text-muted-foreground"
+                className={`flex items-center justify-center w-4 h-4 text-[10px] leading-none font-medium rounded-full ${
+                  isNow ? "text-white font-bold" : inMonth ? "text-foreground" : "text-muted-foreground"
                 }`}
+                style={isNow ? { background: accent } : undefined}
               >
                 {format(day, "d")}
               </span>
               {/* Event dots */}
-              <div className="flex flex-wrap justify-center gap-px mt-0.5">
+              <div className="flex items-center justify-center gap-0.5 mt-1 h-1.5">
                 {dayEvents.slice(0, 3).map((ev, j) => (
                   <div
                     key={j}
-                    className="w-1 h-1 rounded-full"
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{ background: CAT_COLORS[ev.category] ?? "#8b5cf6" }}
                   />
                 ))}

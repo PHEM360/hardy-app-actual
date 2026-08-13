@@ -37,6 +37,7 @@ import type { DogTag, DogTagProfile, DogTagShape } from "@/hooks/useDogTags";
 import { normalizeSlug } from "@/hooks/useDogTags";
 import { getDogTagNotifyRecipients, type DogTagNotifyRecipient } from "@/lib/dogTagApi";
 import { DOG_TAG_SHAPES, dogTagAspectRatio, dogTagShapeStyle } from "@/lib/dogTagShapes";
+import { APP_BASE_URL } from "@/lib/appUrl";
 import { DogTagProfilePanel } from "@/components/pets/DogTagProfilePanel";
 
 type Side = "front" | "back";
@@ -58,8 +59,8 @@ type TagDraft = {
 const PRINT_PX_PER_CM = 96 / 2.54; // standard 96dpi browser print assumption
 
 export function publicTagUrl(tag: DogTag): string {
-  if (tag.slug) return `${window.location.origin}/p/${tag.slug}`;
-  return `${window.location.origin}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
+  if (tag.slug) return `${APP_BASE_URL}/p/${tag.slug}`;
+  return `${APP_BASE_URL}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
 }
 
 function sectionLabel(icon: React.ReactNode, color: string, text: string) {
@@ -433,7 +434,11 @@ export function DogTagDesigner({
 
           {/* Public URL / slug */}
           <div className="space-y-1.5">
-            {sectionLabel(<LinkIcon className="w-3 h-3" />, "bg-emerald-500", "Friendly URL (optional)")}
+            {sectionLabel(<LinkIcon className="w-3 h-3" />, "bg-emerald-500", "Link when scanned")}
+            <p className="text-[11px] text-muted-foreground -mt-0.5">
+              Scanning this tag opens a web page. Give it a friendly address below, or leave it blank
+              and we'll use an automatically generated one instead.
+            </p>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground flex-shrink-0">hardyapp.co.uk/p/</span>
               <Input
@@ -453,10 +458,17 @@ export function DogTagDesigner({
               </Button>
             </div>
             {slugError && <p className="text-[11px] text-destructive">{slugError}</p>}
-            {!slugError && tag.slug && (
-              <p className="text-[11px] text-muted-foreground">
-                QR and print now use hardyapp.co.uk/p/{tag.slug}
-              </p>
+            {!slugError && (
+              tag.slug ? (
+                <p className="text-[11px] text-success flex items-center gap-1">
+                  <Check className="w-3 h-3 flex-shrink-0" />
+                  Using your friendly address — QR and print use hardyapp.co.uk/p/{tag.slug}
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  No friendly address set — this tag currently uses an automatically generated link.
+                </p>
+              )
             )}
           </div>
 

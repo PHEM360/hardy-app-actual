@@ -9,6 +9,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   QrCode, Plus, ArrowLeft, Settings2, Trash2, Edit2, Printer,
   Globe, FileText, Image, X, Check, Download, Tag, Phone, MapPin, Layers,
+  Link as LinkIcon,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useQRCodes, useQRCodeSettings } from "@/hooks/useQRCodes";
+import { APP_BASE_URL } from "@/lib/appUrl";
+import { normalizeSlug } from "@/lib/slug";
+import { qrCodeValue } from "@/lib/qrCodeValue";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import ShareAccessButton from "@/components/sharing/ShareAccessButton";
 import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
@@ -129,7 +133,7 @@ function PrintDialog({ item, open, onClose }: {
               style={{ backgroundColor: item.bgColor }}
             >
               <QRCodeSVG
-                value={item.content || " "}
+                value={qrCodeValue(item)}
                 fgColor={item.fgColor}
                 bgColor={item.bgColor}
                 size={Math.min(previewPx, 220)}
@@ -272,7 +276,7 @@ function QRCard({ item, index, onEdit, onDelete, onPrint, onLabel }: {
           style={{ backgroundColor: item.bgColor, border: "1px solid hsl(var(--border) / 0.3)" }}
         >
           <QRCodeSVG
-            value={item.content || " "}
+            value={qrCodeValue(item)}
             fgColor={item.fgColor}
             bgColor={item.bgColor}
             size={64}
@@ -327,13 +331,14 @@ function QRCard({ item, index, onEdit, onDelete, onPrint, onLabel }: {
 
 // ─── Generator View ───────────────────────────────────────────────────────────
 
-function GeneratorView({ editItem, settings, categories, onSave, onBack, saving }: {
+function GeneratorView({ editItem, settings, categories, onSave, onBack, saving, onClaimLinkSlug }: {
   editItem: QRCodeItem | null;
   settings: { fgColor: string; bgColor: string };
   categories: string[];
   onSave: (item: Omit<QRCodeItem, "id" | "createdAt" | "updatedAt">) => Promise<void>;
   onBack: () => void;
   saving: boolean;
+  onClaimLinkSlug: (qrCodeId: string, currentSlug: string | undefined, rawSlug: string, url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const [form, setForm] = useState({
     name:         editItem?.name         ?? "",
@@ -347,16 +352,47 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
   });
   const setF = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Derive the QR value: phone uses tel:, sendLocation overrides with the locate URL
-  const APP_URL = "https://hardyhub-7b30d.web.app";
+  // A friendly/auto-generated link only makes sense once this is saved (so it
+  // has an id to redirect to) and it's actually a plain URL — not relevant for
+  // phone/text/image codes, and "send location" already builds its own link.
+  const linkSlugApplies = form.contentType === "url" && !form.sendLocation;
+  const showLinkSlugSection = linkSlugApplies && !!editItem?.id;
+  const [slugInput, setSlugInput] = useState(editItem?.slug ?? "");
+  const [slugSaving, setSlugSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSaved, setSlugSaved] = useState(false);
+
+  const handleClaimLinkSlug = async () => {
+    if (!editItem?.id) return;
+    setSlugSaving(true);
+    setSlugError(null);
+    setSlugSaved(false);
+    try {
+      const result = await onClaimLinkSlug(editItem.id, editItem.slug, slugInput, form.content.trim());
+      if (result.ok) {
+        setSlugSaved(true);
+        setTimeout(() => setSlugSaved(false), 2000);
+      } else {
+        setSlugError(result.error);
+      }
+    } finally {
+      setSlugSaving(false);
+    }
+  };
+
+  // Derive the QR value: phone uses tel:, sendLocation overrides with the locate URL,
+  // a saved URL-type code routes through its own hardyapp.co.uk/l/:slug link.
   const qrValue = (() => {
     if (form.sendLocation) {
       const params = new URLSearchParams({ n: form.name || "QR Code" });
-      return `${APP_URL}/locate?${params.toString()}`;
+      return `${APP_BASE_URL}/locate?${params.toString()}`;
     }
     if (form.contentType === "phone") {
       const digits = form.content.replace(/\s/g, "");
       return digits ? `tel:${digits}` : "tel:";
+    }
+    if (linkSlugApplies && editItem?.slug) {
+      return `${APP_BASE_URL}/l/${editItem.slug}`;
     }
     return form.content.trim() || "https://example.com";
   })();
@@ -495,6 +531,60 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
           </div>
         )}
 
+        {/* Friendly link — URL codes only, and only once the code has been
+            saved (it needs an id to redirect to). Irrelevant for phone/text/
+            image codes, so it's hidden entirely rather than shown disabled. */}
+        {linkSlugApplies && (
+          showLinkSlugSection ? (
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5 text-muted-foreground" /> Link when scanned
+              </Label>
+              <p className="text-[11px] text-muted-foreground -mt-0.5">
+                Scanning this QR opens a web page. Give it a friendly address below, or leave it
+                blank and we'll use an automatically generated one instead.
+              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground flex-shrink-0">hardyapp.co.uk/l/</span>
+                <Input
+                  value={slugInput}
+                  onChange={(e) => { setSlugInput(normalizeSlug(e.target.value)); setSlugError(null); }}
+                  placeholder="our-menu"
+                  className="h-9 rounded-lg text-xs flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleClaimLinkSlug}
+                  disabled={slugSaving || !slugInput || slugInput === editItem?.slug}
+                  className="h-9 rounded-lg text-xs px-2.5 flex-shrink-0"
+                >
+                  {slugSaved ? <Check className="w-3.5 h-3.5" /> : slugSaving ? "…" : "Claim"}
+                </Button>
+              </div>
+              {slugError && <p className="text-[11px] text-destructive">{slugError}</p>}
+              {!slugError && (
+                editItem?.slugIsCustom ? (
+                  <p className="text-[11px] text-success flex items-center gap-1">
+                    <Check className="w-3 h-3 flex-shrink-0" />
+                    Using your friendly link — hardyapp.co.uk/l/{editItem.slug}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    No friendly link set — currently using an automatically generated one
+                    (hardyapp.co.uk/l/{editItem?.slug}).
+                  </p>
+                )
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground px-1">
+              Save this QR code to get a shareable link — you'll then be able to give it a
+              friendly address instead of an automatically generated one.
+            </p>
+          )
+        )}
+
         {/* Colours */}
         <div className="space-y-1.5">
           <Label>Colours</Label>
@@ -583,7 +673,7 @@ function GeneratorView({ editItem, settings, categories, onSave, onBack, saving 
               const payload = { ...form };
               if (form.sendLocation) {
                 const params = new URLSearchParams({ n: form.name.trim() || "QR Code" });
-                payload.content = `${APP_URL}/locate?${params.toString()}`;
+                payload.content = `${APP_BASE_URL}/locate?${params.toString()}`;
                 payload.contentType = "url";
               } else if (form.contentType === "phone") {
                 payload.content = `tel:${form.content.replace(/\s/g, "")}`;
@@ -1008,7 +1098,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
 const QRCodes = () => {
   const { scopeUserId, permission } = useSharedScope("qrcodes");
   const canEdit = permission === "edit";
-  const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign } = useQRCodes(scopeUserId ?? undefined);
+  const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign, claimLinkSlug } = useQRCodes(scopeUserId ?? undefined);
   const { settings } = useQRCodeSettings();
   const navigate = useNavigate();
 
@@ -1125,6 +1215,7 @@ const QRCodes = () => {
               onSave={handleSave}
               onBack={() => { setEditItem(null); setView("library"); }}
               saving={saving}
+              onClaimLinkSlug={claimLinkSlug}
             />
           )}
           {view === "settings" && (

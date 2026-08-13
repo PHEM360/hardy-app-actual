@@ -14,6 +14,7 @@ import {
   Bell,
   Settings,
   Snowflake,
+  Plane,
 } from "lucide-react";
 import { useUserRole } from "@/auth/useUserRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -78,6 +79,18 @@ const SECTIONS: Section[] = [
         icon: Calculator,
         route: "/inheritance",
         gradient: "linear-gradient(135deg, hsl(0,60%,52%), hsl(340,55%,46%))",
+        iconColor: "#fff",
+      },
+    ],
+  },
+  {
+    title: "Work",
+    items: [
+      {
+        label: "Annual Leave",
+        icon: Plane,
+        route: "/annual-leave",
+        gradient: "linear-gradient(135deg, hsl(198,60%,50%), hsl(210,55%,44%))",
         iconColor: "#fff",
       },
     ],
@@ -182,7 +195,7 @@ const More = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: d, type: "spring", stiffness: 320, damping: 26 }}
                     onClick={() => navigate(item.route)}
-                    className="flex flex-col items-center gap-2.5 p-3 rounded-2xl border border-border/40 bg-card shadow-soft active:scale-95 transition-transform hover:shadow-md hover:border-border/60"
+                    className="flex flex-col items-center gap-2.5 p-3 rounded-2xl border border-border bg-card shadow-soft active:scale-95 transition-all hover:shadow-elevated hover:-translate-y-0.5 hover:border-primary/30"
                   >
                     <div
                       className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md"

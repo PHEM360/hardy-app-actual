@@ -11,8 +11,8 @@ import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GAP     = 8;
-const PADDING = 12;
+const GAP     = 18;
+const PADDING = 16;
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -81,10 +81,10 @@ const Dashboard = () => {
           )}
           <button
             onClick={() => { setEditMode((v) => !v); setShowHiddenPanel(false); }}
-            className={`flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 transition-colors ${
+            className={`flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 transition-all ${
               editMode
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
             }`}
           >
             {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}

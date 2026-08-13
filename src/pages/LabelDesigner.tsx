@@ -3,6 +3,7 @@ import { Rnd } from "react-rnd";
 import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
 import { QRCodeItem, LabelDesign, LabelElement } from "@/types/app";
+import { qrCodeValue } from "@/lib/qrCodeValue";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,7 +104,7 @@ function ElContent({ el, item, allItems, pxPerCm }: ElContentProps) {
         }}
       >
         <QRCodeSVG
-          value={qrItem.content || " "}
+          value={qrCodeValue(qrItem)}
           fgColor={el.qrFgColor || qrItem.fgColor || "#000000"}
           bgColor={el.qrBgColor || "transparent"}
           size={sz}

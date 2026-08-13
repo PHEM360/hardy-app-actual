@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { PiggyBank, TrendingUp, TrendingDown } from "lucide-react";
+import { PiggyBank, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { useFinance } from "@/hooks/useFinance";
+import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
@@ -9,6 +10,7 @@ function fmt(n: number) {
 export function FinanceWidget() {
   const navigate = useNavigate();
   const { accounts, entries, loading } = useFinance();
+  const accent = WIDGET_ACCENT.finance;
 
   const activeAccounts = accounts.filter((a) => a.active && !a.hidden);
 
@@ -21,7 +23,6 @@ export function FinanceWidget() {
 
   const total = activeAccounts.reduce((sum, a) => sum + latestBalance(a.id), 0);
 
-  // Rough trend: compare to balance 30 days ago
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const oldTotal = activeAccounts.reduce((sum, a) => {
@@ -34,35 +35,44 @@ export function FinanceWidget() {
 
   return (
     <button
-      className="w-full h-full p-3 flex flex-col text-left overflow-hidden"
+      className="w-full h-full p-3 pb-3.5 flex flex-col text-left overflow-y-auto group"
       onClick={() => navigate("/finance")}
     >
-      <div className="flex items-center gap-1.5 mb-2 flex-shrink-0">
-        <PiggyBank className="w-3.5 h-3.5 text-amber-500" />
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Finance</span>
+      <div
+        className="flex items-center gap-2 -mx-3 -mt-3 mb-2 px-3 py-2.5 flex-shrink-0"
+        style={{ background: accentGradient(accent) }}
+      >
+        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
+          <PiggyBank className="w-3.5 h-3.5" />
+        </span>
+        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Finance</span>
+        <ChevronRight className="w-3 h-3 text-white/50 ml-auto group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" />
       </div>
 
       {loading ? (
         <p className="text-xs text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <div className="flex-shrink-0 mb-2">
-            <p className="text-xl font-bold font-display text-foreground leading-none">{fmt(total)}</p>
-            <div className={`flex items-center gap-0.5 mt-0.5 ${diff >= 0 ? "text-green-600" : "text-red-500"}`}>
+          <div className="flex-shrink-0 mb-2.5">
+            <p className="text-2xl font-bold font-display text-foreground leading-none">{fmt(total)}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              across {activeAccounts.length} account{activeAccounts.length === 1 ? "" : "s"}
+            </p>
+            <div className={`flex items-center gap-0.5 mt-1 ${diff >= 0 ? "text-success" : "text-destructive"}`}>
               {diff >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              <span className="text-[10px] font-medium">{diff >= 0 ? "+" : ""}{fmt(diff)} vs 30d</span>
+              <span className="text-xs font-semibold">{diff >= 0 ? "+" : ""}{fmt(diff)} vs 30 days ago</span>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden space-y-1">
+          <div className="flex-1 min-h-0 space-y-1">
             {activeAccounts.slice(0, 4).map((a) => (
-              <div key={a.id} className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground truncate flex-1">{a.name}</span>
-                <span className="text-[10px] font-medium text-foreground flex-shrink-0 ml-2">{fmt(latestBalance(a.id))}</span>
+              <div key={a.id} className="flex items-center justify-between gap-2 py-0.5">
+                <span className="text-xs text-muted-foreground truncate flex-1">{a.name}</span>
+                <span className="text-xs font-semibold text-foreground flex-shrink-0">{fmt(latestBalance(a.id))}</span>
               </div>
             ))}
             {activeAccounts.length > 4 && (
-              <p className="text-[9px] text-muted-foreground">+{activeAccounts.length - 4} more</p>
+              <p className="text-[11px] text-muted-foreground">+{activeAccounts.length - 4} more</p>
             )}
           </div>
         </>

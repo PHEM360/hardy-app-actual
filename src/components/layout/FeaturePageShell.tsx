@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface FeaturePageShellProps {
@@ -22,9 +22,9 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action }: FeaturePa
       >
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+          className="group flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-3"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
           Back
         </button>
         <div className="flex items-center gap-3 flex-wrap">
@@ -47,8 +47,11 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action }: FeaturePa
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="rounded-2xl border border-border bg-card p-8 text-center"
+          className="rounded-2xl border-2 border-dashed border-border bg-gradient-card p-10 text-center shadow-soft"
         >
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground">
+            <Sparkles className="h-5 w-5" />
+          </div>
           <p className="text-sm text-muted-foreground">
             This feature is coming soon. The module structure is ready for development.
           </p>

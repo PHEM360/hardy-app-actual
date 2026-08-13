@@ -659,7 +659,7 @@ const Admin = () => {
               ? "linear-gradient(135deg,hsl(0,65%,55%),hsl(340,60%,48%))"
               : user.role.toLowerCase() === "admin"
               ? "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))"
-              : "linear-gradient(135deg,hsl(188,40%,44%),hsl(191,40%,50%))";
+              : "linear-gradient(135deg,hsl(178,58%,42%),hsl(182,55%,46%))";
             return (
             <button
               key={user.id}

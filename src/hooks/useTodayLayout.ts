@@ -31,15 +31,15 @@ export interface TodayWidgetItem {
 
 export const DEFAULT_TODAY_LAYOUT: TodayWidgetItem[] = [
   { id: "ai",         type: "ai",         xFrac: 0,   wFrac: 1.0, y: 0,    h: 200, visible: true  },
-  { id: "focus",      type: "focus",      xFrac: 0,   wFrac: 1.0, y: 208,  h: 140, visible: true  },
-  { id: "tasks",      type: "tasks",      xFrac: 0,   wFrac: 0.5, y: 356,  h: 300, visible: true  },
-  { id: "intentions", type: "intentions", xFrac: 0.5, wFrac: 0.5, y: 356,  h: 300, visible: true  },
-  { id: "habits",     type: "habits",     xFrac: 0,   wFrac: 0.5, y: 664,  h: 220, visible: false },
-  { id: "water",      type: "water",      xFrac: 0.5, wFrac: 0.5, y: 664,  h: 220, visible: true  },
-  { id: "mood",       type: "mood",       xFrac: 0,   wFrac: 0.5, y: 892,  h: 180, visible: true  },
-  { id: "note",       type: "note",       xFrac: 0.5, wFrac: 0.5, y: 892,  h: 180, visible: true  },
-  { id: "checklist",  type: "checklist",  xFrac: 0,   wFrac: 1.0, y: 1080, h: 220, visible: true  },
-  { id: "reflection", type: "reflection", xFrac: 0,   wFrac: 1.0, y: 1308, h: 160, visible: false },
+  { id: "focus",      type: "focus",      xFrac: 0,   wFrac: 1.0, y: 218,  h: 140, visible: true  },
+  { id: "tasks",      type: "tasks",      xFrac: 0,   wFrac: 0.5, y: 376,  h: 300, visible: true  },
+  { id: "intentions", type: "intentions", xFrac: 0.5, wFrac: 0.5, y: 376,  h: 300, visible: true  },
+  { id: "habits",     type: "habits",     xFrac: 0,   wFrac: 0.5, y: 694,  h: 220, visible: false },
+  { id: "water",      type: "water",      xFrac: 0.5, wFrac: 0.5, y: 694,  h: 220, visible: true  },
+  { id: "mood",       type: "mood",       xFrac: 0,   wFrac: 0.5, y: 932,  h: 180, visible: true  },
+  { id: "note",       type: "note",       xFrac: 0.5, wFrac: 0.5, y: 932,  h: 180, visible: true  },
+  { id: "checklist",  type: "checklist",  xFrac: 0,   wFrac: 1.0, y: 1130, h: 220, visible: true  },
+  { id: "reflection", type: "reflection", xFrac: 0,   wFrac: 1.0, y: 1368, h: 160, visible: false },
 ];
 
 export const TODAY_WIDGET_LABELS: Record<TodayWidgetType, string> = {
@@ -68,6 +68,10 @@ export const TODAY_WIDGET_ICONS: Record<TodayWidgetType, string> = {
   reflection: "🌙",
 };
 
+// Bump whenever DEFAULT_TODAY_LAYOUT's geometry changes meaningfully — see the
+// matching constant/comment in useDashboardLayout.ts for the full rationale.
+const LAYOUT_VERSION = 2;
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTodayLayout() {
@@ -77,9 +81,24 @@ export function useTodayLayout() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(doc(db, "todayLayouts", user.uid), (snap) => {
+    const ref = doc(db, "todayLayouts", user.uid);
+    const unsub = onSnapshot(ref, (snap) => {
       if (!snap.exists()) return;
-      const saved: TodayWidgetItem[] = snap.data().layout ?? [];
+      const data = snap.data();
+      const saved: TodayWidgetItem[] = data.layout ?? [];
+      const savedVersion: number = data.layoutVersion ?? 0;
+
+      if (savedVersion < LAYOUT_VERSION) {
+        const savedById = new Map(saved.map((w) => [w.id, w]));
+        const refreshed = DEFAULT_TODAY_LAYOUT.map((def) => {
+          const prev = savedById.get(def.id);
+          return prev ? { ...def, visible: prev.visible } : def;
+        });
+        setLayout(refreshed);
+        setDoc(ref, { layout: refreshed, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
+        return;
+      }
+
       // Merge saved with defaults (ensures new widget types are added)
       const merged = DEFAULT_TODAY_LAYOUT.map((def) => {
         const found = saved.find((s) => s.id === def.id);
@@ -94,7 +113,7 @@ export function useTodayLayout() {
     if (!user) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "todayLayouts", user.uid), { layout: next }, { merge: true });
+      await setDoc(doc(db, "todayLayouts", user.uid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true });
     } finally {
       setSaving(false);
     }

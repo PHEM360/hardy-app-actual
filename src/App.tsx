@@ -30,7 +30,9 @@ import Display from "@/pages/Display";
 import DisplayPair from "@/pages/DisplayPair";
 import TagScan from "@/pages/TagScan";
 import TagScanBySlug from "@/pages/TagScanBySlug";
+import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
+import AnnualLeave from "@/pages/AnnualLeave";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
 import AiAnalysis from "@/pages/AiAnalysis";
@@ -61,6 +63,7 @@ const App = () => (
           />
           <Route path="/tag/:petId/:tagId" element={<TagScan />} />
           <Route path="/p/:slug" element={<TagScanBySlug />} />
+          <Route path="/l/:slug" element={<LinkRedirect />} />
           {import.meta.env.DEV && (
             <Route path="/dev/finance-preview" element={<FinancePreview />} />
           )}
@@ -191,6 +194,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="calendar">
                   <CalendarPage />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/annual-leave"
+              element={
+                <RequireFeature featureKey="annual_leave">
+                  <AnnualLeave />
                 </RequireFeature>
               }
             />

@@ -77,7 +77,7 @@ function getVaccinationStatus(pet: Pet, option: VaccinationOption) {
   return { text, bg: "bg-success/20", border: "border-success/35", nextDue: latest.dateDue };
 }
 
-const WEIGHT_COLORS = ["hsl(25, 62%, 67%)", "hsl(188, 33%, 38%)"];
+const WEIGHT_COLORS = ["hsl(32, 92%, 50%)", "hsl(178, 55%, 36%)"];
 
 const WeightTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {

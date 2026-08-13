@@ -8,12 +8,60 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   setDoc,
   serverTimestamp,
   deleteField,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { QRCodeItem, QRCodeSettings, DEFAULT_QR_SETTINGS } from "@/types/app";
+import { normalizeSlug, randomSlug } from "@/lib/slug";
+
+// ─── Friendly-link slugs (URL-type QR codes only) ──────────────────────────────
+//
+// Mirrors the dog tag slug system (useDogTags.ts / dogTagSlugs): a top-level
+// `qrLinkSlugs/{slug}` doc is the public redirect target for hardyapp.co.uk/l/:slug.
+// Unlike dog tags, the destination `url` is stored directly on the slug doc (not
+// looked up via a Cloud Function) since a redirect target isn't sensitive — anyone
+// scanning the QR would land on that URL anyway.
+//
+// Every URL-type, non-sendLocation QR code gets a slug automatically (a random one)
+// the moment it's saved, so the printed QR always encodes a stable app link instead
+// of the raw destination — the destination can then be changed later without
+// reprinting. `claimLinkSlug` lets the user swap the random one for a friendly one.
+
+async function ensureLinkSlugDoc(uid: string, qrCodeId: string, slug: string, url: string) {
+  await setDoc(doc(db, "qrLinkSlugs", slug), { ownerId: uid, qrCodeId, url, createdAt: serverTimestamp() }, { merge: true });
+}
+
+/** Keeps a QR code's `qrLinkSlugs` doc in sync with its content, creating one if needed. */
+async function syncLinkSlugForItem(
+  uid: string,
+  qrCodeId: string,
+  item: { contentType: string; content: string; sendLocation?: boolean; slug?: string },
+): Promise<string | undefined> {
+  const isUrlType = item.contentType === "url" && !item.sendLocation;
+
+  if (!isUrlType) {
+    if (item.slug) await deleteDoc(doc(db, "qrLinkSlugs", item.slug)).catch(() => {});
+    return undefined;
+  }
+
+  if (item.slug) {
+    await ensureLinkSlugDoc(uid, qrCodeId, item.slug, item.content);
+    return item.slug;
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const candidate = randomSlug();
+    const existing = await getDoc(doc(db, "qrLinkSlugs", candidate));
+    if (!existing.exists()) {
+      await ensureLinkSlugDoc(uid, qrCodeId, candidate, item.content);
+      return candidate;
+    }
+  }
+  return undefined;
+}
 
 // ─── QR Code items CRUD ────────────────────────────────────────────────────────
 
@@ -37,11 +85,13 @@ export function useQRCodes(scopeUserId?: string) {
 
   const addQRCode = useCallback(async (item: Omit<QRCodeItem, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;
-    await addDoc(collection(db, "qrcodes", uid, "items"), {
+    const ref = await addDoc(collection(db, "qrcodes", uid, "items"), {
       ...item,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    const slug = await syncLinkSlugForItem(uid, ref.id, item);
+    if (slug !== item.slug) await updateDoc(ref, { slug: slug ?? deleteField(), slugIsCustom: slug ? false : deleteField() });
   }, [uid]);
 
   const updateQRCode = useCallback(async (id: string, updates: Partial<QRCodeItem>) => {
@@ -50,7 +100,45 @@ export function useQRCodes(scopeUserId?: string) {
       ...updates,
       updatedAt: serverTimestamp(),
     });
+    // Only a full-form save (GeneratorView) includes contentType/content — a
+    // partial patch like { labelDesign } shouldn't touch the link slug.
+    if (updates.contentType !== undefined && updates.content !== undefined) {
+      const slug = await syncLinkSlugForItem(uid, id, updates as { contentType: string; content: string; sendLocation?: boolean; slug?: string });
+      if (slug !== updates.slug) {
+        await updateDoc(doc(db, "qrcodes", uid, "items", id), { slug: slug ?? deleteField(), slugIsCustom: slug ? false : deleteField() });
+      }
+    }
   }, [uid]);
+
+  /**
+   * Swaps a URL-type QR code's auto-generated link identifier for a friendly
+   * one. Uniqueness is enforced by firestore.rules (first write to
+   * qrLinkSlugs/{slug} wins), mirroring the dog tag slug system.
+   */
+  const claimLinkSlug = useCallback(
+    async (qrCodeId: string, currentSlug: string | undefined, rawSlug: string, url: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!uid) return { ok: false, error: "Not signed in." };
+      const slug = normalizeSlug(rawSlug);
+      if (!slug) return { ok: false, error: "Enter a link using letters, numbers and hyphens." };
+
+      const existing = await getDoc(doc(db, "qrLinkSlugs", slug));
+      if (existing.exists() && existing.data().qrCodeId !== qrCodeId) {
+        return { ok: false, error: "That link is already taken — try another." };
+      }
+
+      try {
+        if (currentSlug && currentSlug !== slug) {
+          await deleteDoc(doc(db, "qrLinkSlugs", currentSlug)).catch(() => {});
+        }
+        await ensureLinkSlugDoc(uid, qrCodeId, slug, url);
+        await updateDoc(doc(db, "qrcodes", uid, "items", qrCodeId), { slug, slugIsCustom: true, updatedAt: serverTimestamp() });
+        return { ok: true };
+      } catch {
+        return { ok: false, error: "That link is already taken — try another." };
+      }
+    },
+    [uid],
+  );
 
   const deleteQRCode = useCallback(async (id: string) => {
     if (!uid) return;
@@ -75,7 +163,7 @@ export function useQRCodes(scopeUserId?: string) {
     return ref.id;
   }, [uid]);
 
-  return { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign };
+  return { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign, claimLinkSlug };
 }
 
 // ─── QR Code settings ──────────────────────────────────────────────────────────

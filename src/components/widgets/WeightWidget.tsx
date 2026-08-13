@@ -1,29 +1,37 @@
 import { useNavigate } from "react-router-dom";
-import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { useWeightTracker } from "@/hooks/useWeightTracker";
+import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 export function WeightWidget() {
   const navigate = useNavigate();
   const { entries, loading } = useWeightTracker();
+  const accent = WIDGET_ACCENT.weight;
 
   const sorted = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latest = sorted[0];
   const previous = sorted[1];
   const diff = latest && previous ? latest.weight - previous.weight : 0;
   const TrendIcon = diff > 0.1 ? TrendingUp : diff < -0.1 ? TrendingDown : Minus;
-  const trendColor = diff > 0.1 ? "text-red-500" : diff < -0.1 ? "text-green-500" : "text-muted-foreground";
+  const trendColor = diff > 0.1 ? "text-destructive" : diff < -0.1 ? "text-success" : "text-muted-foreground";
 
-  // Last 5 entries for a simple sparkline
+  // Last 8 entries for a simple sparkline
   const recent = sorted.slice(0, 8).reverse();
 
   return (
     <button
-      className="w-full h-full p-3 flex flex-col text-left overflow-hidden"
+      className="w-full h-full p-3 pb-3.5 flex flex-col text-left overflow-y-auto group"
       onClick={() => navigate("/weight")}
     >
-      <div className="flex items-center gap-1.5 mb-2 flex-shrink-0">
-        <Activity className="w-3.5 h-3.5 text-emerald-500" />
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Health</span>
+      <div
+        className="flex items-center gap-2 -mx-3 -mt-3 mb-2 px-3 py-2.5 flex-shrink-0"
+        style={{ background: accentGradient(accent) }}
+      >
+        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
+          <Activity className="w-3.5 h-3.5" />
+        </span>
+        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Health</span>
+        <ChevronRight className="w-3 h-3 text-white/50 ml-auto group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" />
       </div>
 
       {loading ? (
@@ -34,11 +42,11 @@ export function WeightWidget() {
         </div>
       ) : (
         <>
-          <div className="flex items-end gap-2 mb-2 flex-shrink-0">
+          <div className="flex items-end gap-2 mb-1 flex-shrink-0">
             <p className="text-2xl font-bold font-display text-foreground leading-none">{latest.weight}<span className="text-sm font-normal text-muted-foreground ml-0.5">kg</span></p>
             <div className={`flex items-center gap-0.5 pb-0.5 ${trendColor}`}>
               <TrendIcon className="w-3 h-3" />
-              {diff !== 0 && <span className="text-[10px] font-medium">{diff > 0 ? "+" : ""}{diff.toFixed(1)}</span>}
+              {diff !== 0 && <span className="text-[10px] font-semibold">{diff > 0 ? "+" : ""}{diff.toFixed(1)}</span>}
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground mb-2 flex-shrink-0">
@@ -64,8 +72,8 @@ export function WeightWidget() {
                   <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+                        <stop offset="0%" stopColor={accent} stopOpacity="0.32" />
+                        <stop offset="100%" stopColor={accent} stopOpacity="0" />
                       </linearGradient>
                     </defs>
                     {/* Fill area */}
@@ -74,9 +82,9 @@ export function WeightWidget() {
                       fill="url(#wg)"
                     />
                     {/* Line */}
-                    <polyline points={polyline} fill="none" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points={polyline} fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     {/* Last dot */}
-                    <circle cx={lastPt[0]} cy={lastPt[1]} r="2.5" fill="#34d399" />
+                    <circle cx={lastPt[0]} cy={lastPt[1]} r="2.75" fill={accent} />
                   </svg>
                 );
               })()}

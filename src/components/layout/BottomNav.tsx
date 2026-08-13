@@ -13,7 +13,7 @@ import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
 type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
 
 const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
-  "/dashboard":         { icon: Home,          label: "Home",       color: "hsl(188,33%,38%)",  gradient: "linear-gradient(135deg,hsl(188,40%,44%),hsl(191,40%,50%))" },
+  "/dashboard":         { icon: Home,          label: "Home",       color: "hsl(178,55%,36%)",  gradient: "linear-gradient(135deg,hsl(178,58%,42%),hsl(182,55%,46%))" },
   "/finance":           { icon: PiggyBank,     label: "Finance",    color: "hsl(25,62%,55%)",   gradient: "linear-gradient(135deg,hsl(25,65%,58%),hsl(15,58%,52%))" },
   "/pets":              { icon: Heart,         label: "Pets",       color: "hsl(0,65%,50%)",    gradient: "linear-gradient(135deg,hsl(0,68%,55%),hsl(340,60%,48%))" },
   "/admin":             { icon: Shield,        label: "Admin",      color: "hsl(205,55%,48%)",  gradient: "linear-gradient(135deg,hsl(205,58%,52%),hsl(215,53%,45%))" },
@@ -109,7 +109,7 @@ const BottomNav = () => {
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
-        background: "linear-gradient(135deg, hsl(210, 28%, 22%) 0%, hsl(200, 28%, 27%) 40%, hsl(192, 30%, 33%) 70%, hsl(188, 28%, 40%) 100%)",
+        background: "linear-gradient(135deg, hsl(215, 32%, 18%) 0%, hsl(200, 30%, 25%) 40%, hsl(190, 33%, 31%) 70%, hsl(178, 55%, 38%) 100%)",
         backdropFilter: "blur(16px)",
       }}
     >

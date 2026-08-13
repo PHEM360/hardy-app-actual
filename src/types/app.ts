@@ -14,6 +14,7 @@ export type FeatureKey =
   | "companies"
   | "calendar"
   | "ai_analysis"
+  | "annual_leave"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -155,6 +156,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "sparkles",
     route: "/ai-analysis",
     color: "secondary",
+  },
+  {
+    key: "annual_leave",
+    label: "Annual Leave",
+    description: "NHS annual leave tracker & calculator",
+    icon: "plane",
+    route: "/annual-leave",
+    color: "info",
   },
 ];
 
@@ -463,6 +472,12 @@ export interface QRCodeItem {
   bgColor: string;
   showName?: boolean;
   sendLocation?: boolean;
+  /** Identifier used at hardyapp.co.uk/l/:slug when this is a URL-type code — either a
+   *  random one assigned automatically, or a friendly one the user claimed. Only ever
+   *  set for `contentType === "url"` (not `sendLocation`) codes; irrelevant otherwise. */
+  slug?: string;
+  /** True once the user has explicitly claimed a friendly slug (vs the auto-generated default). */
+  slugIsCustom?: boolean;
   labelDesign?: LabelDesign;
   createdAt?: any;
   updatedAt?: any;
@@ -567,3 +582,54 @@ export interface CalendarSettings {
   };
   updatedAt?: any;
 }
+
+// ─── Annual Leave (NHS trainee/resident doctor tracker) ────────────────────────
+
+export type AnnualLeaveStatus = "planned" | "requested" | "approved" | "rejected" | "taken";
+export type AnnualLeavePool = "annual" | "bank_holiday";
+export type NhsServiceBand = "under5" | "5plus";
+
+// Entitlement, LTFT %, carry-over etc. are all scoped to a user-defined rotation
+// period rather than a fixed leave year, since trainee rotations change dates.
+export interface AnnualLeavePeriod {
+  id?: string;
+  label?: string;                 // e.g. "ST4 Cardiology — Aug 2025"
+  startDate: string;              // ISO date
+  endDate: string;                // ISO date
+  yearsOfService: NhsServiceBand; // drives 27 vs 32 day base (England 2016 TCS), unless overridden
+  baseDaysOverride?: number;      // skip band calc entirely if set
+  ltftPercentage: number;         // 1-100, 100 = full time
+  bankHolidayDaysPerYear: number; // default 8
+  includeBankHolidays: boolean;   // default true
+  carriedForwardDays: number;     // brought over from the previous period, set when this one starts
+  daysInLieu: number;             // TOIL-style days owed, editable any time
+  isActive: boolean;              // exactly one active period at a time
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface AnnualLeaveEntry {
+  id?: string;
+  periodId: string;
+  startDate: string;              // ISO date
+  endDate: string;                // ISO date
+  days: number;                   // leave days consumed; defaults to weekday count, editable
+  pool: AnnualLeavePool;
+  status: AnnualLeaveStatus;
+  requestedDate?: string;         // when the request was made
+  requestMethod?: string;         // free text, e.g. "Email", "e-Roster"
+  notes?: string;
+  calendarEventId?: string;       // linked calendar/{uid}/events doc, present when status is requested/approved/taken
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export const DEFAULT_ANNUAL_LEAVE_PERIOD: Omit<AnnualLeavePeriod, "startDate" | "endDate"> = {
+  yearsOfService: "under5",
+  ltftPercentage: 100,
+  bankHolidayDaysPerYear: 8,
+  includeBankHolidays: true,
+  carriedForwardDays: 0,
+  daysInLieu: 0,
+  isActive: true,
+};

@@ -223,6 +223,18 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
 
+    // QR code friendly/auto-generated links (hardyapp.co.uk/l/{slug}). Same
+    // first-write-wins uniqueness pattern as dogTagSlugs above, but public
+    // read: unlike dog tags, resolution happens client-side (no Cloud
+    // Function) by reading this doc directly from an anonymous scanner, and
+    // the only data exposed is the redirect target — no more sensitive than
+    // the QR code itself.
+    match /qrLinkSlugs/{slug} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
     // Finance - each user's personal accounts, shareable via pageShares
     match /finance/{userId}/accounts/{accountId} {
       allow read: if canViewPage(userId, "finance");
@@ -382,6 +394,16 @@ service cloud.firestore {
     match /calendar/{userId}/meta/{doc} {
       allow read: if canViewPage(userId, "calendar");
       allow write: if canEditPage(userId, "calendar");
+    }
+
+    // Annual leave - per user rotation periods & leave entries, shareable via pageShares
+    match /annualLeave/{userId}/periods/{periodId} {
+      allow read: if canViewPage(userId, "annual_leave");
+      allow write: if canEditPage(userId, "annual_leave");
+    }
+    match /annualLeave/{userId}/entries/{entryId} {
+      allow read: if canViewPage(userId, "annual_leave");
+      allow write: if canEditPage(userId, "annual_leave");
     }
 
     // Substances config - TOTP setup per user - strictly private, never shared

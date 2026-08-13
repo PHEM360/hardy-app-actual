@@ -56,7 +56,7 @@ export default function RichTextEditor({
     }`;
 
   return (
-    <div className="rounded-xl border border-input bg-background overflow-hidden">
+    <div className="rounded-xl border-2 border-border bg-input overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50 bg-muted/20 flex-wrap">
         <button

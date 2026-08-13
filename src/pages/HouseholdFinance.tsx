@@ -168,7 +168,7 @@ const HouseholdFinance = () => {
       <div className="relative flex p-0.5 bg-primary/10 rounded-full mb-5 border border-primary/15">
         <motion.div
           className="absolute top-0.5 bottom-0.5 rounded-full"
-          style={{ width: "calc(50% - 2px)", background: "linear-gradient(135deg, hsl(190, 29%, 35%) 0%, hsl(191, 33%, 50%) 100%)" }}
+          style={{ width: "calc(50% - 2px)", background: "var(--gradient-primary)" }}
           animate={{ x: tab === "balances" ? 0 : "calc(100% + 2px)" }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
@@ -324,7 +324,7 @@ const HouseholdFinance = () => {
       {tab === "analysis" && (
         <>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="p-5 rounded-2xl text-white" style={{ background: "linear-gradient(135deg, hsl(190, 29%, 35%) 0%, hsl(191, 33%, 50%) 100%)" }}>
+            <div className="p-5 rounded-2xl text-white bg-gradient-primary">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="w-4 h-4" />
                 <p className="text-sm font-semibold font-display">AI Statement Analysis</p>

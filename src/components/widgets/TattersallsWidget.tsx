@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { Building2, TrendingUp, TrendingDown } from "lucide-react";
+import { Building2, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { useTattersalls } from "@/hooks/useTattersalls";
+import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
@@ -9,6 +10,7 @@ function fmt(n: number) {
 export function TattersallsWidget() {
   const navigate = useNavigate();
   const { balanceHistory, expenses, loading } = useTattersalls();
+  const accent = WIDGET_ACCENT.tattersalls;
 
   const latest = balanceHistory.length > 0
     ? [...balanceHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
@@ -26,12 +28,18 @@ export function TattersallsWidget() {
 
   return (
     <button
-      className="w-full h-full p-3 flex flex-col text-left overflow-hidden"
+      className="w-full h-full p-3 pb-3.5 flex flex-col text-left overflow-y-auto group"
       onClick={() => navigate("/tattersalls")}
     >
-      <div className="flex items-center gap-1.5 mb-2 flex-shrink-0">
-        <Building2 className="w-3.5 h-3.5 text-teal-500" />
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Tattersalls</span>
+      <div
+        className="flex items-center gap-2 -mx-3 -mt-3 mb-2 px-3 py-2.5 flex-shrink-0"
+        style={{ background: accentGradient(accent) }}
+      >
+        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
+          <Building2 className="w-3.5 h-3.5" />
+        </span>
+        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Tattersalls</span>
+        <ChevronRight className="w-3 h-3 text-white/50 ml-auto group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" />
       </div>
 
       {loading ? (
@@ -43,18 +51,18 @@ export function TattersallsWidget() {
               {latest ? fmt(latest.balance) : "—"}
             </p>
             {diff !== 0 && (
-              <div className={`flex items-center gap-0.5 mt-0.5 ${diff >= 0 ? "text-green-600" : "text-red-500"}`}>
+              <div className={`flex items-center gap-0.5 mt-1 ${diff >= 0 ? "text-success" : "text-destructive"}`}>
                 {diff >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                <span className="text-[10px]">{diff >= 0 ? "+" : ""}{fmt(diff)}</span>
+                <span className="text-[10px] font-semibold">{diff >= 0 ? "+" : ""}{fmt(diff)}</span>
               </div>
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden space-y-1">
+          <div className="flex-1 min-h-0 space-y-1">
             {recentExpenses.map((e, i) => (
-              <div key={i} className="flex items-center justify-between">
+              <div key={i} className="flex items-center justify-between gap-2 py-0.5">
                 <span className="text-[10px] text-foreground truncate flex-1">{e.desc}</span>
-                <span className="text-[10px] font-medium text-red-500 flex-shrink-0 ml-1">-{fmt(e.amount)}</span>
+                <span className="text-[10px] font-semibold text-destructive flex-shrink-0">-{fmt(e.amount)}</span>
               </div>
             ))}
           </div>

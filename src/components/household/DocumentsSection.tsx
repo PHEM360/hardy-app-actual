@@ -318,7 +318,7 @@ function AddEditSheet({
           <div className="space-y-1.5">
             <Label>Notes</Label>
             <textarea
-              className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+              className="w-full rounded-xl border-2 border-border bg-input px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
               rows={3}
               placeholder="Optional notes…"
               value={form.notes}

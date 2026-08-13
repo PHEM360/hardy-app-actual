@@ -42,8 +42,9 @@ const SNAP_COLS   = 2;
 const SNAP_ROW_PX = 20;
 const MIN_H       = 100;
 const MIN_W_FRAC  = 0.5;
-const GAP         = 8;
-const PADDING     = 12;
+const GAP         = 18;
+const PADDING     = 16;
+const TILE_GAP    = 14;
 
 function TodayWidgetShell({
   item,
@@ -61,6 +62,8 @@ function TodayWidgetShell({
   const colW = containerWidth / SNAP_COLS;
   const x = item.xFrac * containerWidth;
   const w = item.wFrac * containerWidth;
+  const leftInset = item.xFrac > 0 ? TILE_GAP / 2 : 0;
+  const rightInset = item.xFrac + item.wFrac < 1 ? TILE_GAP / 2 : 0;
 
   return (
     <Rnd
@@ -89,9 +92,12 @@ function TodayWidgetShell({
       style={{ zIndex: editMode ? 10 : 1 }}
     >
       <div
-        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col bg-card border shadow-soft transition-shadow ${
-          editMode ? "border-amber-400/40 ring-2 ring-amber-300/20 shadow-md" : "border-border/50"
+        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col bg-card border shadow-card transition-all duration-200 ${
+          editMode
+            ? "border-amber-400/40 ring-2 ring-amber-300/20 shadow-md"
+            : "border-border hover:shadow-elevated hover:-translate-y-0.5 cursor-pointer"
         }`}
+        style={{ marginLeft: leftInset, width: `calc(100% - ${leftInset + rightInset}px)` }}
       >
         {/* Edit drag handle bar */}
         {editMode && (

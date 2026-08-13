@@ -31,8 +31,8 @@ import {
 // Validated categorical palette (dataviz skill reference instance) — fixed order,
 // never cycled per filtered selection, so an account keeps its color regardless
 // of what else is currently shown.
-const ACCOUNT_COLORS_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
-const ACCOUNT_COLORS_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const ACCOUNT_COLORS_LIGHT = ["#1f6f78", "#c8961e", "#3d5a80", "#3c6e47", "#8a4a5c", "#5c4a7d", "#a34c3f", "#2f7d8c"];
+const ACCOUNT_COLORS_DARK = ["#4ea3ac", "#d9ac3f", "#7fa0c9", "#6fae7d", "#c07f92", "#9884b8", "#d1786a", "#5fb0bf"];
 
 const TAX_YEARS = [
   { label: "22/23", start: "2022-04-06", end: "2023-04-05" },
@@ -401,7 +401,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       }
     >
       {/* Total Balance */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl border border-primary/15 shadow-card mb-5" style={{ background: "linear-gradient(135deg, hsl(190, 29%, 35%) 0%, hsl(191, 33%, 50%) 100%)" }}>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl border border-primary/15 shadow-card mb-5 bg-gradient-primary">
         <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total Balance</p>
         <p className="text-2xl font-bold font-display text-white mt-1">
           {formatGBP(totalBalance)}
@@ -464,45 +464,43 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               animate={{ opacity: 1, scale: 1 }}
               whileHover={{ y: -2 }}
               transition={{ delay: 0.03 * i }}
-              className={`p-3 rounded-2xl border-2 text-left transition-all relative group overflow-hidden ${
-                isSelected ? "shadow-card" : "hover:shadow-soft"
+              className={`rounded-2xl border-2 bg-card text-left transition-all relative group overflow-hidden ${
+                isSelected ? "shadow-card" : "shadow-soft hover:shadow-card"
               } ${!acc.active ? "opacity-40" : ""}`}
-              style={{
-                borderColor: isSelected ? `${color}55` : `${color}25`,
-                background: isSelected
-                  ? `linear-gradient(160deg, ${color}2e 0%, ${color}12 100%)`
-                  : `${color}0d`,
-              }}
+              style={{ borderColor: isSelected ? color : "hsl(var(--border))" }}
             >
-              <button onClick={() => toggleAccount(acc.id)} className="w-full text-left relative">
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm"
-                    style={{ backgroundColor: color }}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-white/90" />
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider truncate px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground">
-                    {acc.type}
-                  </span>
-                </div>
-                <p className="text-base font-bold font-display text-card-foreground">
-                  {formatGBP(acc.latestBalance)}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{acc.name}</p>
-              </button>
-              <button
-                onClick={() => {
-                  setManageAccountId(acc.id);
-                  setRenameValue(acc.name);
-                  setAssumptionGrowth(acc.growthAssumptionPct !== undefined ? String(acc.growthAssumptionPct) : "");
-                  setAssumptionContribution(acc.monthlyContribution !== undefined ? String(acc.monthlyContribution) : "");
-                  setAssumptionFee(acc.feePct !== undefined ? String(acc.feePct) : "");
-                }}
-                className="absolute top-1.5 right-1.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted transition-all text-muted-foreground"
-              >
-                <Settings2 className="w-3 h-3" />
-              </button>
+              <div className="h-1 w-full" style={{ background: color }} />
+              <div className="p-3 relative">
+                <button onClick={() => toggleAccount(acc.id)} className="w-full text-left relative">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm"
+                      style={{ backgroundColor: color }}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-white/90" />
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider truncate px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
+                      {acc.type}
+                    </span>
+                  </div>
+                  <p className="text-base font-bold font-display text-card-foreground">
+                    {formatGBP(acc.latestBalance)}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{acc.name}</p>
+                </button>
+                <button
+                  onClick={() => {
+                    setManageAccountId(acc.id);
+                    setRenameValue(acc.name);
+                    setAssumptionGrowth(acc.growthAssumptionPct !== undefined ? String(acc.growthAssumptionPct) : "");
+                    setAssumptionContribution(acc.monthlyContribution !== undefined ? String(acc.monthlyContribution) : "");
+                    setAssumptionFee(acc.feePct !== undefined ? String(acc.feePct) : "");
+                  }}
+                  className="absolute top-1.5 right-1.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted transition-all text-muted-foreground"
+                >
+                  <Settings2 className="w-3 h-3" />
+                </button>
+              </div>
             </motion.div>
           );
         })}
@@ -695,14 +693,14 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   return (
                     <Area
                       key={acc.id}
-                      type="linear"
+                      type="monotone"
                       dataKey={acc.id}
                       name={acc.name}
                       stroke={color}
-                      strokeWidth={2}
+                      strokeWidth={2.25}
                       fill={`url(#fin-grad-${acc.id})`}
-                      dot={{ r: 4, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb", fill: color }}
-                      activeDot={{ r: 6, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb" }}
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb", fill: color }}
                       connectNulls
                       isAnimationActive={false}
                     />
@@ -710,7 +708,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 })}
                 {showTotalLine && selectedAccounts.length > 1 && (
                   <Line
-                    type="linear"
+                    type="monotone"
                     dataKey="total"
                     name="Total"
                     stroke={isDark ? "#ffffff" : "#0b0b0b"}
@@ -726,7 +724,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   return (
                     <Line
                       key={`${acc.id}_proj`}
-                      type="linear"
+                      type="monotone"
                       dataKey={`${acc.id}_proj`}
                       name={`${acc.name} (projected)`}
                       stroke={color}
@@ -869,7 +867,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             })}
           </div>
 
-          <div className="p-5 rounded-2xl shadow-card" style={{ background: "linear-gradient(135deg, hsl(190, 29%, 35%) 0%, hsl(191, 33%, 50%) 100%)" }}>
+          <div className="p-5 rounded-2xl shadow-card bg-gradient-primary">
             <p className="text-xs text-white/70 uppercase tracking-wider font-medium mb-1">Overall Net Change</p>
             {overallSummary.netChange !== null ? (
               <div className="flex items-baseline gap-3">

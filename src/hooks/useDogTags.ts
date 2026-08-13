@@ -11,6 +11,9 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { normalizeSlug } from "@/lib/slug";
+
+export { normalizeSlug };
 
 export type DogTagShape = "circle" | "rounded" | "oval" | "heart";
 
@@ -93,16 +96,6 @@ function genCode(): string {
 
 export function genFieldId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/** Lowercase letters, numbers, hyphens only — keeps /p/:slug URLs clean and predictable. */
-export function normalizeSlug(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 type TagInput = Partial<Omit<DogTag, "id" | "petId" | "ownerId" | "code" | "slug" | "lastScanLocation">>;

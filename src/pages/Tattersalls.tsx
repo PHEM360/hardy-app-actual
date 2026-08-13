@@ -377,7 +377,7 @@ const Tattersalls = () => {
               <select
                 value={newNoteAuthor}
                 onChange={(e) => setNewNoteAuthor(e.target.value)}
-                className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+                className="w-full h-9 rounded-xl border-2 border-border bg-input px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
               >
                 <option value="">Who? (optional)</option>
                 {appUsers.map((u) => (
@@ -404,7 +404,7 @@ const Tattersalls = () => {
                   <div>
                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Reminder</label>
                     <select value={newNoteReminder} onChange={(e) => setNewNoteReminder(e.target.value)}
-                      className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50">
+                      className="w-full h-9 rounded-xl border-2 border-border bg-input px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50">
                       <option value="none">None</option>
                       <option value="onDay">On the day at 9am</option>
                       <option value="dayBefore">1 day before</option>
@@ -512,7 +512,7 @@ const Tattersalls = () => {
                         onKeyDown={(e) => e.key === "Enter" && handleAddComment(note.id)}
                         placeholder="Add a comment…" className="h-8 rounded-lg text-xs flex-1" />
                       <select value={newCommentAuthor} onChange={(e) => setNewCommentAuthor(e.target.value)}
-                        className="h-8 rounded-lg border border-input bg-background px-2 text-xs text-foreground focus:outline-none w-28">
+                        className="h-8 rounded-lg border-2 border-border bg-input px-2 text-xs text-foreground focus:outline-none w-28">
                         <option value="">Who?</option>
                         {appUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
                       </select>
@@ -827,7 +827,7 @@ const Tattersalls = () => {
               <div className="space-y-1.5">
                 <Label>Notes</Label>
                 <textarea
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                  className="w-full rounded-xl border-2 border-border bg-input px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
                   rows={3}
                   placeholder="Add notes about this document…"
                   value={editNotes}

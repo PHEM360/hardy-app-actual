@@ -63,7 +63,7 @@ export function CreatableMultiSelect({
   return (
     <div ref={containerRef} className={`relative ${className ?? ""}`}>
       <div
-        className="min-h-10 w-full rounded-xl border border-input bg-background px-2 py-1.5 flex flex-wrap gap-1.5 cursor-text focus-within:ring-2 focus-within:ring-ring/50 transition-all"
+        className="min-h-10 w-full rounded-xl border-2 border-border bg-input px-2 py-1.5 flex flex-wrap gap-1.5 cursor-text focus-within:ring-2 focus-within:ring-ring/50 transition-all"
         onClick={() => { inputRef.current?.focus(); setOpen(true); }}
       >
         {value.map((v) => (

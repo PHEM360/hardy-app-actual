@@ -752,7 +752,7 @@ function DatePicker({
           onChange={(e) => handleTextChange(e.target.value)}
           onBlur={handleTextBlur}
           placeholder="dd/mm/yyyy"
-          className="flex-1 rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 transition-colors"
+          className="flex-1 rounded-xl border-2 border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 transition-colors"
         />
         {/* Calendar picker button */}
         <Popover open={open} onOpenChange={setOpen}>
@@ -760,7 +760,7 @@ function DatePicker({
             <button
               type="button"
               title="Pick from calendar"
-              className={`flex items-center justify-center w-10 h-10 rounded-xl border border-input bg-background hover:bg-accent transition-colors shrink-0 ${valid ? "text-primary" : "text-muted-foreground"}`}
+              className={`flex items-center justify-center w-10 h-10 rounded-xl border-2 border-border bg-input hover:bg-accent transition-colors shrink-0 ${valid ? "text-primary" : "text-muted-foreground"}`}
             >
               <CalendarIcon className="w-4 h-4" />
             </button>
