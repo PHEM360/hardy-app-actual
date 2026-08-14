@@ -28,7 +28,7 @@ import {
   useMultiCompanyFinance,
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
-import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company } from "@/types/app";
+import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company, sortCategoriesOtherLast } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -991,7 +991,10 @@ function SettingsTab({ companyId }: { companyId: string }) {
   const addItem = (field: "incomeCategories" | "expenseCategories", value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    setLocal((l) => ({ ...l, [field]: [...l[field].filter((x) => x !== trimmed), trimmed] }));
+    setLocal((l) => ({
+      ...l,
+      [field]: sortCategoriesOtherLast([...l[field].filter((x) => x !== trimmed), trimmed]),
+    }));
     if (field === "incomeCategories") setNewIncome(""); else setNewExpense("");
   };
 

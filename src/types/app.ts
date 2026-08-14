@@ -347,6 +347,16 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   corporateTaxRate: 19,
 };
 
+// Keeps category lists in the order the user set, but "Other" always sorts last.
+export function sortCategoriesOtherLast(categories: string[]): string[] {
+  return [...categories].sort((a, b) => {
+    const aOther = a.trim().toLowerCase() === "other";
+    const bOther = b.trim().toLowerCase() === "other";
+    if (aOther === bOther) return 0;
+    return aOther ? 1 : -1;
+  });
+}
+
 export interface Company {
   id?: string;
   name: string;

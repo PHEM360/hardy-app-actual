@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { CompanySettings, DEFAULT_COMPANY_SETTINGS } from "@/types/app";
+import { CompanySettings, DEFAULT_COMPANY_SETTINGS, sortCategoriesOtherLast } from "@/types/app";
+
+function normalize(settings: CompanySettings): CompanySettings {
+  return {
+    ...settings,
+    incomeCategories: sortCategoriesOtherLast(settings.incomeCategories),
+    expenseCategories: sortCategoriesOtherLast(settings.expenseCategories),
+  };
+}
 
 export function useCompanySettings(companyId: string) {
   const [settings, setSettings] = useState<CompanySettings>(DEFAULT_COMPANY_SETTINGS);
@@ -13,7 +21,7 @@ export function useCompanySettings(companyId: string) {
     const ref = doc(db, "companySettings", companyId);
     getDoc(ref).then((snap) => {
       if (snap.exists()) {
-        setSettings({ ...DEFAULT_COMPANY_SETTINGS, ...(snap.data() as CompanySettings) });
+        setSettings(normalize({ ...DEFAULT_COMPANY_SETTINGS, ...(snap.data() as CompanySettings) }));
       } else {
         setSettings(DEFAULT_COMPANY_SETTINGS);
       }
@@ -21,9 +29,10 @@ export function useCompanySettings(companyId: string) {
   }, [companyId]);
 
   async function saveSettings(updated: CompanySettings) {
+    const normalized = normalize(updated);
     const ref = doc(db, "companySettings", companyId);
-    await setDoc(ref, updated);
-    setSettings(updated);
+    await setDoc(ref, normalized);
+    setSettings(normalized);
   }
 
   return { settings, loading, saveSettings };
