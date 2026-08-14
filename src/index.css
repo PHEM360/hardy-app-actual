@@ -17,6 +17,17 @@
 /* Tiptap editor focus ring */
 .ProseMirror:focus { outline: none; }
 
+/* Native date inputs render taller than sibling inputs of the same height
+   because the built-in calendar icon carries its own padding. Zero it out
+   so date fields match text/number fields exactly. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  padding: 0;
+  margin: 0;
+}
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
 @layer base {
   :root {
     --background: 186 22% 88%;
