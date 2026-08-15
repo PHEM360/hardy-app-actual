@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, X, FileUp, Zap } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
-import DocumentScannerSheet from "@/components/DocumentScannerSheet";
+import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
@@ -31,8 +31,42 @@ export function QuickLinksWidget() {
   });
   const { settings: companySettings } = useCompanySettings(expForm.companyId);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string>("");
   const [scanCapture, setScanCapture] = useState<File | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  // Chosen up front for the camera path (asked before the camera opens). Left
+  // null for uploads, so DocumentScannerSheet asks its own post-hoc question
+  // once the picked file's type is known (could be a photo already on the
+  // phone, no way to know in advance).
+  const [chosenMode, setChosenMode] = useState<"scan" | "picture" | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Thumbnail for whatever receipt is currently attached
+  useEffect(() => {
+    if (!receiptFile) { setReceiptPreviewUrl(""); return; }
+    const url = URL.createObjectURL(receiptFile);
+    setReceiptPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [receiptFile]);
+
+  const openUpload = () => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.removeAttribute("capture");
+    setChosenMode(null);
+    input.click();
+  };
+
+  const openCameraChooser = () => setChooserOpen(true);
+
+  const handleChooseMode = (mode: "scan" | "picture") => {
+    setChosenMode(mode);
+    setChooserOpen(false);
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.setAttribute("capture", "environment");
+    input.click();
+  };
 
   const saveExpense = async () => {
     if (!expForm.companyId || !expForm.description || !expForm.amount || !user) return;
@@ -51,6 +85,7 @@ export function QuickLinksWidget() {
       setExpenseOpen(false);
       setReceiptFile(null);
       setExpForm({ companyId: "", description: "", amount: "", date: new Date().toISOString().split("T")[0], category: "Other" });
+      toast.success("Expense saved");
     } catch (err) {
       console.error("Failed to save expense", err);
       toast.error("Couldn't save expense. Please try again.");
@@ -143,7 +178,6 @@ export function QuickLinksWidget() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
@@ -153,16 +187,20 @@ export function QuickLinksWidget() {
               />
               {receiptFile ? (
                 <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
-                  <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  {receiptPreviewUrl ? (
+                    <img src={receiptPreviewUrl} alt="Receipt preview" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/40" />
+                  ) : (
+                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  )}
                   <span className="text-[11px] text-foreground flex-1 truncate">{receiptFile.name}</span>
                   <button onClick={() => setReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button onClick={() => { if (fileInputRef.current) { fileInputRef.current.removeAttribute("capture"); fileInputRef.current.click(); } }} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                  <button onClick={openUpload} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
                     <Paperclip className="w-3.5 h-3.5" /> Upload file
                   </button>
-                  <button onClick={() => { if (fileInputRef.current) { fileInputRef.current.setAttribute("capture", "environment"); fileInputRef.current.click(); } }} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                  <button onClick={openCameraChooser} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
                     <Camera className="w-3.5 h-3.5" /> Take photo
                   </button>
                 </div>
@@ -178,11 +216,19 @@ export function QuickLinksWidget() {
         </DialogContent>
       </Dialog>
 
-      {/* Scan & crop the receipt before attaching it */}
+      {/* Ask scan vs picture before the camera/file picker opens */}
+      <ScanModeChooser
+        open={chooserOpen}
+        onChoose={handleChooseMode}
+        onCancel={() => setChooserOpen(false)}
+      />
+
+      {/* Scan & crop (or just confirm + rename) the receipt before attaching it */}
       <DocumentScannerSheet
         imageFile={scanCapture}
-        onConfirm={(scannedFile) => { setReceiptFile(scannedFile); setScanCapture(null); }}
-        onCancel={() => setScanCapture(null)}
+        initialMode={chosenMode ?? undefined}
+        onConfirm={(scannedFile) => { setReceiptFile(scannedFile); setScanCapture(null); setChosenMode(null); }}
+        onCancel={() => { setScanCapture(null); setChosenMode(null); }}
       />
     </div>
   );

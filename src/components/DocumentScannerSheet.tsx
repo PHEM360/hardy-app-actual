@@ -247,10 +247,15 @@ const CORNER_COLORS = ["#3b82f6", "#22c55e", "#f97316", "#a855f7"] as const;
 
 export default function DocumentScannerSheet({
   imageFile,
+  initialMode,
   onConfirm,
   onCancel,
 }: {
   imageFile: File | null;
+  /** When set, skips the in-sheet "Scan or Picture?" choice and goes straight
+   *  to that mode — use this when the caller already asked the user before
+   *  opening the camera/file picker (see ScanModeChooser below). */
+  initialMode?: "scan" | "picture";
   onConfirm: (file: File) => void;
   onCancel: () => void;
 }) {
@@ -281,14 +286,27 @@ export default function DocumentScannerSheet({
     if (!imageFile) return;
     setImgReady(false);
     setQuad(null);
-    setStage("choose");
-    setMode(null);
     setPreviewSrc("");
     warpedBlobRef.current = null;
     setFileName((imageFile.name || "Scan").replace(/\.[^.]+$/, ""));
 
     const url = URL.createObjectURL(imageFile);
     setImgSrc(url);
+
+    if (initialMode === "picture") {
+      // Caller already asked "scan or picture?" before opening the camera/
+      // file picker — skip the in-sheet choice and use the photo as-is.
+      setMode("picture");
+      warpedBlobRef.current = imageFile;
+      setPreviewSrc(url);
+      setStage("preview");
+    } else if (initialMode === "scan") {
+      setMode("scan");
+      setStage("edit");
+    } else {
+      setMode(null);
+      setStage("choose");
+    }
 
     const img = new Image();
     img.onload = () => {
@@ -308,7 +326,7 @@ export default function DocumentScannerSheet({
     img.src = url;
 
     return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+  }, [imageFile, initialMode]);
 
   // ── Drag: map screen → SVG/image coordinates ─────────────────────────────────
   const getSVGPt = useCallback(
@@ -655,6 +673,60 @@ export default function DocumentScannerSheet({
             <Loader2 className="w-5 h-5 text-white animate-spin" />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Scan/Picture pre-choice ────────────────────────────────────────────────
+// Asks "scan or picture?" up front, before the camera/file picker even opens,
+// so the caller knows which mode to pass as DocumentScannerSheet's
+// initialMode once a file comes back. Render this first; open the native
+// input from onChoose.
+export function ScanModeChooser({
+  open,
+  onChoose,
+  onCancel,
+}: {
+  open: boolean;
+  onChoose: (mode: "scan" | "picture") => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm bg-card rounded-2xl p-4 space-y-3 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-card-foreground text-center">Add receipt as…</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onChoose("scan")}
+            className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+          >
+            <ScanLine className="w-6 h-6" />
+            <span className="text-sm font-semibold">Scan Document</span>
+            <span className="text-[10px] text-white/70 px-2 text-center">Auto-crop &amp; enhance</span>
+          </button>
+          <button
+            onClick={() => onChoose("picture")}
+            className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/70 text-card-foreground transition-colors"
+          >
+            <ImageIcon className="w-6 h-6" />
+            <span className="text-sm font-semibold">Just a Picture</span>
+            <span className="text-[10px] text-muted-foreground px-2 text-center">Use as taken</span>
+          </button>
+        </div>
+        <button
+          onClick={onCancel}
+          className="w-full h-9 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

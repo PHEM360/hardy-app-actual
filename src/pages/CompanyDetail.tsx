@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
-  TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp,
+  TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
 } from "lucide-react";
-import DocumentScannerSheet from "@/components/DocumentScannerSheet";
+import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import { toast } from "sonner";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -250,9 +250,22 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   // Receipt attached to the expense currently being created/edited
   const [newReceiptCapture, setNewReceiptCapture] = useState<File | null>(null);
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null);
+  const [newReceiptPreviewUrl, setNewReceiptPreviewUrl] = useState<string>("");
+  // Chosen up front for the camera path; left null for uploads so the scanner
+  // asks its own post-hoc question once the picked file's type is known.
+  const [chosenMode, setChosenMode] = useState<"scan" | "picture" | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
   // Scanner state: which existing expense receipt we're adding to
   const [scannerCtx, setScannerCtx] = useState<{ expId: string; receipts: string[]; file: File } | null>(null);
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
+
+  // Thumbnail for whatever new receipt is currently attached
+  useEffect(() => {
+    if (!newReceiptFile || !newReceiptFile.type.startsWith("image/")) { setNewReceiptPreviewUrl(""); return; }
+    const url = URL.createObjectURL(newReceiptFile);
+    setNewReceiptPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [newReceiptFile]);
 
   const openAdd = () => {
     setEditingId(null);
@@ -284,7 +297,33 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const handleNewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (f) setNewReceiptCapture(f);
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      setNewReceiptFile(f); // PDF etc — attach as-is, scanning doesn't apply
+      return;
+    }
+    setNewReceiptCapture(f); // image — goes through DocumentScannerSheet
+  };
+
+  const openUpload = () => {
+    const input = newFileRef.current;
+    if (!input) return;
+    input.removeAttribute("capture");
+    input.setAttribute("accept", "image/*,application/pdf");
+    setChosenMode(null);
+    input.click();
+  };
+
+  const openCameraChooser = () => setChooserOpen(true);
+
+  const handleChooseMode = (mode: "scan" | "picture") => {
+    setChosenMode(mode);
+    setChooserOpen(false);
+    const input = newFileRef.current;
+    if (!input) return;
+    input.setAttribute("capture", "environment");
+    input.setAttribute("accept", "image/*");
+    input.click();
   };
 
   const save = async () => {
@@ -305,6 +344,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       setEditingId(null);
       setForm(emptyForm);
       setNewReceiptFile(null);
+      toast.success("Expense saved");
     } catch (err) {
       console.error("Failed to save expense", err);
       toast.error("Couldn't save expense. Please try again.");
@@ -441,18 +481,26 @@ function ExpensesTab({ companyId }: { companyId: string }) {
             </div>
             <div className="space-y-1">
               <Label>{editingId ? "Attach another receipt (optional)" : "Attach receipt (optional)"}</Label>
+              <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
               {newReceiptFile ? (
                 <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
-                  <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  {newReceiptPreviewUrl ? (
+                    <img src={newReceiptPreviewUrl} alt="Receipt preview" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/40" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  )}
                   <span className="text-[11px] text-foreground flex-1 truncate">{newReceiptFile.name}</span>
                   <button onClick={() => setNewReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                 </div>
               ) : (
-                <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer border border-dashed border-border rounded-xl px-3 py-2 hover:bg-muted/40 transition-colors w-fit">
-                  <Upload className="w-3.5 h-3.5" />
-                  Scan or choose file
-                  <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
-                </label>
+                <div className="flex gap-2">
+                  <button onClick={openUpload} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Upload className="w-3.5 h-3.5" /> Upload file
+                  </button>
+                  <button onClick={openCameraChooser} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Camera className="w-3.5 h-3.5" /> Take photo
+                  </button>
+                </div>
               )}
             </div>
             <div className="flex gap-2 pt-1">
@@ -463,11 +511,19 @@ function ExpensesTab({ companyId }: { companyId: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Scan & crop a receipt for the expense currently being created */}
+      {/* Ask scan vs picture before the camera opens */}
+      <ScanModeChooser
+        open={chooserOpen}
+        onChoose={handleChooseMode}
+        onCancel={() => setChooserOpen(false)}
+      />
+
+      {/* Scan & crop (or just confirm + rename) a receipt for the expense currently being created */}
       <DocumentScannerSheet
         imageFile={newReceiptCapture}
-        onConfirm={(scannedFile) => { setNewReceiptFile(scannedFile); setNewReceiptCapture(null); }}
-        onCancel={() => setNewReceiptCapture(null)}
+        initialMode={chosenMode ?? undefined}
+        onConfirm={(scannedFile) => { setNewReceiptFile(scannedFile); setNewReceiptCapture(null); setChosenMode(null); }}
+        onCancel={() => { setNewReceiptCapture(null); setChosenMode(null); }}
       />
 
       {/* Document scanner for receipt images on already-saved expenses */}
