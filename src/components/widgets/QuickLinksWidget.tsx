@@ -59,13 +59,10 @@ export function QuickLinksWidget() {
 
   const openCameraChooser = () => setChooserOpen(true);
 
-  const handleChooseMode = (mode: "scan" | "picture") => {
+  const handlePick = (file: File, mode: "scan" | "picture") => {
     setChosenMode(mode);
     setChooserOpen(false);
-    const input = fileInputRef.current;
-    if (!input) return;
-    input.setAttribute("capture", "environment");
-    input.click();
+    setScanCapture(file);
   };
 
   const saveExpense = async () => {
@@ -216,10 +213,10 @@ export function QuickLinksWidget() {
         </DialogContent>
       </Dialog>
 
-      {/* Ask scan vs picture before the camera/file picker opens */}
+      {/* Ask scan vs picture before the camera opens */}
       <ScanModeChooser
         open={chooserOpen}
-        onChoose={handleChooseMode}
+        onPick={handlePick}
         onCancel={() => setChooserOpen(false)}
       />
 

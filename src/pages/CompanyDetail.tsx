@@ -316,14 +316,10 @@ function ExpensesTab({ companyId }: { companyId: string }) {
 
   const openCameraChooser = () => setChooserOpen(true);
 
-  const handleChooseMode = (mode: "scan" | "picture") => {
+  const handlePick = (file: File, mode: "scan" | "picture") => {
     setChosenMode(mode);
     setChooserOpen(false);
-    const input = newFileRef.current;
-    if (!input) return;
-    input.setAttribute("capture", "environment");
-    input.setAttribute("accept", "image/*");
-    input.click();
+    setNewReceiptCapture(file);
   };
 
   const save = async () => {
@@ -514,7 +510,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       {/* Ask scan vs picture before the camera opens */}
       <ScanModeChooser
         open={chooserOpen}
-        onChoose={handleChooseMode}
+        onPick={handlePick}
         onCancel={() => setChooserOpen(false)}
       />
 

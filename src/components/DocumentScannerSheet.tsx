@@ -686,20 +686,31 @@ export default function DocumentScannerSheet({
 }
 
 // ─── Scan/Picture pre-choice ────────────────────────────────────────────────
-// Asks "scan or picture?" up front, before the camera/file picker even opens,
-// so the caller knows which mode to pass as DocumentScannerSheet's
-// initialMode once a file comes back. Render this first; open the native
-// input from onChoose.
+// Asks "scan or picture?" up front, before the camera opens. Each choice is
+// a native <label> wrapping its own hidden camera <input> — tapping the
+// label *is* the browser-native trigger for the picker, so there's no JS
+// .click() proxy in the middle. That indirection (call a handler, which
+// calls .click() on a ref'd input elsewhere in the tree) is exactly the
+// pattern mobile Safari can silently drop the camera launch for, since it
+// no longer sees an unbroken, single-element user gesture on the input
+// itself.
 export function ScanModeChooser({
   open,
-  onChoose,
+  onPick,
   onCancel,
 }: {
   open: boolean;
-  onChoose: (mode: "scan" | "picture") => void;
+  onPick: (file: File, mode: "scan" | "picture") => void;
   onCancel: () => void;
 }) {
   if (!open) return null;
+
+  const handleFile = (mode: "scan" | "picture") => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) onPick(f, mode);
+  };
+
   return createPortal(
     <div
       className="fixed inset-0 z-[410] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
@@ -711,22 +722,18 @@ export function ScanModeChooser({
       >
         <p className="text-sm font-semibold text-card-foreground text-center">Add receipt as…</p>
         <div className="flex gap-2">
-          <button
-            onClick={() => onChoose("scan")}
-            className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white transition-colors"
-          >
+          <label className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white transition-colors cursor-pointer">
             <ScanLine className="w-6 h-6" />
             <span className="text-sm font-semibold">Scan Document</span>
             <span className="text-[10px] text-white/70 px-2 text-center">Auto-crop &amp; enhance</span>
-          </button>
-          <button
-            onClick={() => onChoose("picture")}
-            className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/70 text-card-foreground transition-colors"
-          >
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile("scan")} />
+          </label>
+          <label className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted hover:bg-muted/70 text-card-foreground transition-colors cursor-pointer">
             <ImageIcon className="w-6 h-6" />
             <span className="text-sm font-semibold">Just a Picture</span>
             <span className="text-[10px] text-muted-foreground px-2 text-center">Use as taken</span>
-          </button>
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile("picture")} />
+          </label>
         </div>
         <button
           onClick={onCancel}
