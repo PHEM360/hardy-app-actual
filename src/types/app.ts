@@ -281,6 +281,17 @@ export interface CompanyService {
   category?: string;
 }
 
+// Snapshot of a CompanyExpense's fields immediately before an edit overwrote
+// them — same pattern as HouseholdHistoryEntry below.
+export interface CompanyExpenseHistoryEntry {
+  editedAt: string;         // ISO date string
+  description: string;
+  amount: number;
+  date: string;
+  category: string;
+  receipts?: string[];
+}
+
 export interface CompanyExpense {
   id?: string;
   date: string;
@@ -289,6 +300,8 @@ export interface CompanyExpense {
   category: string;        // e.g. "Software", "Marketing", "Payroll"
   receipts?: string[];     // Storage download URLs
   createdAt?: any;
+  updatedAt?: any;
+  history?: CompanyExpenseHistoryEntry[];
 }
 
 export interface CompanyInsurance {

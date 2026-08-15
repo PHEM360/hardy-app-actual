@@ -27,6 +27,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-datetime-edit-fields-wrapper {
   padding: 0;
 }
+/* iOS Safari ignores the padding reset above — it renders type=date with its
+   own fixed-height native chrome regardless of CSS height/padding on those
+   pseudo-elements. Turning off the native appearance hands full box-model
+   control back to our own height/padding (the tap-to-open picker still
+   works; only the drawn chrome changes), so it matches sibling inputs. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 @layer base {
   :root {

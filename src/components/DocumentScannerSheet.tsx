@@ -17,7 +17,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, RotateCcw, Loader2, CheckCheck } from "lucide-react";
+import { X, RotateCcw, Loader2, CheckCheck, ScanLine, Image as ImageIcon } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -201,6 +201,43 @@ function warpPerspective(srcCanvas: HTMLCanvasElement, quad: Quad, outW: number,
   return out;
 }
 
+/**
+ * Auto-contrast: stretches the luminance histogram between its 1st and 99th
+ * percentile so the page reads as bright white / dark ink, similar to the
+ * "auto" scan mode in Dropbox / Google Drive. Mutates and returns the same
+ * canvas.
+ */
+function enhanceScan(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+    hist[lum]++;
+  }
+
+  const totalPx = d.length / 4;
+  const cutoff = totalPx * 0.01;
+  let lo = 0, hi = 255, count = 0;
+  for (let i = 0; i < 256; i++) { count += hist[i]; if (count > cutoff) { lo = i; break; } }
+  count = 0;
+  for (let i = 255; i >= 0; i--) { count += hist[i]; if (count > cutoff) { hi = i; break; } }
+
+  const range = hi - lo;
+  if (range < 10) return canvas; // Already flat / low-contrast source — leave as-is
+
+  for (let i = 0; i < d.length; i += 4) {
+    d[i]     = clamp(Math.round((d[i]     - lo) * 255 / range), 0, 255);
+    d[i + 1] = clamp(Math.round((d[i + 1] - lo) * 255 / range), 0, 255);
+    d[i + 2] = clamp(Math.round((d[i + 2] - lo) * 255 / range), 0, 255);
+  }
+
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
 // ─── Corner labels ────────────────────────────────────────────────────────────
 
 const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
@@ -229,8 +266,9 @@ export default function DocumentScannerSheet({
   const [dragging, setDragging] = useState<number | null>(null);
 
   // ── Warp result state ────────────────────────────────────────────────────────
-  type Stage = "edit" | "warping" | "preview";
-  const [stage, setStage] = useState<Stage>("edit");
+  type Stage = "choose" | "edit" | "warping" | "preview";
+  const [stage, setStage] = useState<Stage>("choose");
+  const [mode, setMode] = useState<"scan" | "picture" | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string>("");
   const warpedBlobRef = useRef<Blob | null>(null);
   const [fileName, setFileName] = useState("Scan");
@@ -243,7 +281,8 @@ export default function DocumentScannerSheet({
     if (!imageFile) return;
     setImgReady(false);
     setQuad(null);
-    setStage("edit");
+    setStage("choose");
+    setMode(null);
     setPreviewSrc("");
     warpedBlobRef.current = null;
     setFileName((imageFile.name || "Scan").replace(/\.[^.]+$/, ""));
@@ -318,6 +357,20 @@ export default function DocumentScannerSheet({
     setPreviewSrc("");
   }, []);
 
+  // ── Choose: scan (crop + enhance) or plain picture (as-is) ──────────────────
+  const chooseScan = useCallback(() => {
+    setMode("scan");
+    setStage("edit");
+  }, []);
+
+  const choosePicture = useCallback(() => {
+    if (!imageFile) return;
+    setMode("picture");
+    warpedBlobRef.current = imageFile;
+    setPreviewSrc(imgSrc);
+    setStage("preview");
+  }, [imageFile, imgSrc]);
+
   // ── Apply perspective warp ────────────────────────────────────────────────────
   const handleWarp = useCallback(async () => {
     if (!quad || !offscreenRef.current) return;
@@ -335,7 +388,7 @@ export default function DocumentScannerSheet({
       const outW = Math.max(1, Math.round(Math.max(topW, botW)));
       const outH = Math.max(1, Math.round(Math.max(leftH, rightH)));
 
-      const warped = warpPerspective(offscreenRef.current, quad, outW, outH);
+      const warped = enhanceScan(warpPerspective(offscreenRef.current, quad, outW, outH));
 
       // Convert to blob
       await new Promise<void>((resolve) => {
@@ -361,7 +414,9 @@ export default function DocumentScannerSheet({
     const blob = warpedBlobRef.current;
     if (!blob) return;
     const baseName = fileName.trim() || "Scan";
-    const file = new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+    const mime = blob.type || "image/jpeg";
+    const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+    const file = new File([blob], `${baseName}.${ext}`, { type: mime });
     onConfirm(file);
   }, [fileName, onConfirm]);
 
@@ -391,6 +446,12 @@ export default function DocumentScannerSheet({
         </button>
 
         <div className="text-center">
+          {stage === "choose" && (
+            <>
+              <p className="text-white text-sm font-semibold">Save as…</p>
+              <p className="text-white/50 text-[10px]">Choose how to process this image</p>
+            </>
+          )}
           {stage === "edit" && (
             <>
               <p className="text-white text-sm font-semibold">Adjust edges</p>
@@ -401,7 +462,7 @@ export default function DocumentScannerSheet({
           {stage === "preview" && (
             <>
               <p className="text-white text-sm font-semibold">Preview</p>
-              <p className="text-white/50 text-[10px]">Happy with the scan?</p>
+              <p className="text-white/50 text-[10px]">{mode === "scan" ? "Happy with the scan?" : "Happy with the photo?"}</p>
             </>
           )}
         </div>
@@ -421,7 +482,13 @@ export default function DocumentScannerSheet({
 
       {/* ── Image area ── */}
       <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden px-2 py-2">
-        {stage === "edit" && imgReady && quad ? (
+        {stage === "choose" && imgSrc ? (
+          <img
+            src={imgSrc}
+            alt="Captured"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl opacity-90"
+          />
+        ) : stage === "edit" && imgReady && quad ? (
           /* SVG overlay for handles */
           <div className="relative max-w-full max-h-full" style={{ aspectRatio: `${naturalW}/${naturalH}`, maxHeight: "100%", maxWidth: "100%" }}>
             <img
@@ -521,11 +588,33 @@ export default function DocumentScannerSheet({
 
       {/* ── Bottom action bar ── */}
       <div className="flex-shrink-0 px-4 pb-8 pt-3 bg-black/80 backdrop-blur-sm space-y-2">
+        {stage === "choose" && (
+          <div className="flex gap-2">
+            <button
+              onClick={chooseScan}
+              disabled={!imgReady}
+              className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500 text-white transition-colors"
+            >
+              <ScanLine className="w-6 h-6" />
+              <span className="text-sm font-semibold">Scan Document</span>
+              <span className="text-[10px] text-white/70 px-2 text-center">Auto-crop &amp; enhance</span>
+            </button>
+            <button
+              onClick={choosePicture}
+              className="flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <ImageIcon className="w-6 h-6" />
+              <span className="text-sm font-semibold">Just a Picture</span>
+              <span className="text-[10px] text-white/70 px-2 text-center">Use as taken</span>
+            </button>
+          </div>
+        )}
+
         {stage === "preview" && (
           <Input
             value={fileName}
             onChange={(e) => setFileName(e.target.value)}
-            placeholder="Name this scan"
+            placeholder="Name this file"
             className="h-10 rounded-xl bg-white/10 border-white/20 text-white placeholder:text-white/40"
           />
         )}
@@ -547,15 +636,17 @@ export default function DocumentScannerSheet({
               className="w-full h-12 rounded-2xl text-sm font-semibold bg-green-500 hover:bg-green-600 text-white gap-2"
             >
               <CheckCheck className="w-4 h-4" />
-              Use this Scan
+              {mode === "scan" ? "Use this Scan" : "Use this Photo"}
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => setStage("edit")}
-              className="w-full h-10 rounded-2xl text-sm text-white/70 hover:text-white hover:bg-white/10"
-            >
-              Re-adjust corners
-            </Button>
+            {mode === "scan" && (
+              <Button
+                variant="ghost"
+                onClick={() => setStage("edit")}
+                className="w-full h-10 rounded-2xl text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                Re-adjust corners
+              </Button>
+            )}
           </>
         )}
 

@@ -23,6 +23,7 @@ import {
   CompanyLogin,
   CompanyService,
   CompanyExpense,
+  CompanyExpenseHistoryEntry,
   CompanyInsurance,
   CompanyIncome,
   CompanyTaxReturn,
@@ -179,8 +180,23 @@ export function useCompanyExpenses(companyId: string | undefined) {
 
   const updateExpense = useCallback(async (id: string, updates: Partial<CompanyExpense>) => {
     if (!companyId) return;
-    await updateDoc(doc(db, "companies", companyId, "expenses", id), updates);
-  }, [companyId]);
+    const current = expenses.find((e) => e.id === id);
+    const historyEntry: CompanyExpenseHistoryEntry | null = current
+      ? {
+          editedAt: new Date().toISOString(),
+          description: current.description,
+          amount: current.amount,
+          date: current.date,
+          category: current.category,
+          receipts: current.receipts,
+        }
+      : null;
+    await updateDoc(doc(db, "companies", companyId, "expenses", id), {
+      ...updates,
+      updatedAt: serverTimestamp(),
+      ...(historyEntry ? { history: [...(current?.history ?? []), historyEntry] } : {}),
+    });
+  }, [companyId, expenses]);
 
   const deleteExpense = useCallback(async (id: string) => {
     if (!companyId) return;

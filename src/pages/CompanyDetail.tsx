@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
-  TrendingUp, FileText, Pencil, Download, ChevronRight,
+  TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp,
 } from "lucide-react";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import { toast } from "sonner";
@@ -232,23 +232,41 @@ function ServicesTab({ companyId }: { companyId: string }) {
 // ─── Expenses Tab ─────────────────────────────────────────────────────────────
 
 function ExpensesTab({ companyId }: { companyId: string }) {
-  const { expenses, uploadingReceipt, addExpense, deleteExpense, uploadReceipt } = useCompanyExpenses(companyId);
+  const { expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense, uploadReceipt } = useCompanyExpenses(companyId);
   const { settings } = useCompanySettings(companyId);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Omit<CompanyExpense, "id" | "createdAt">>({
+  const emptyForm: Omit<CompanyExpense, "id" | "createdAt"> = {
     date: new Date().toISOString().split("T")[0],
     description: "",
     amount: 0,
     category: "Other",
     receipts: [],
-  });
+  };
+  const [form, setForm] = useState(emptyForm);
+  // Set while editing an existing expense; null while adding a new one
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const newFileRef = useRef<HTMLInputElement>(null);
-  // Receipt attached to the expense currently being created (before it has an id)
+  // Receipt attached to the expense currently being created/edited
   const [newReceiptCapture, setNewReceiptCapture] = useState<File | null>(null);
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null);
   // Scanner state: which existing expense receipt we're adding to
   const [scannerCtx, setScannerCtx] = useState<{ expId: string; receipts: string[]; file: File } | null>(null);
+  const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setNewReceiptFile(null);
+    setOpen(true);
+  };
+
+  const openEdit = (exp: CompanyExpense) => {
+    setEditingId(exp.id ?? null);
+    setForm({ date: exp.date, description: exp.description, amount: exp.amount, category: exp.category, receipts: exp.receipts ?? [] });
+    setNewReceiptFile(null);
+    setOpen(true);
+  };
 
   const totalThisYear = useMemo(() => {
     const now = new Date();
@@ -272,12 +290,20 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      const id = await addExpense({ ...form, receipts: [] });
-      if (id && newReceiptFile) {
-        await uploadReceipt(id, newReceiptFile, []);
+      if (editingId) {
+        await updateExpense(editingId, { date: form.date, description: form.description, amount: form.amount, category: form.category });
+        if (newReceiptFile) {
+          await uploadReceipt(editingId, newReceiptFile, form.receipts ?? []);
+        }
+      } else {
+        const id = await addExpense({ ...form, receipts: [] });
+        if (id && newReceiptFile) {
+          await uploadReceipt(id, newReceiptFile, []);
+        }
       }
       setOpen(false);
-      setForm({ date: new Date().toISOString().split("T")[0], description: "", amount: 0, category: "Other", receipts: [] });
+      setEditingId(null);
+      setForm(emptyForm);
       setNewReceiptFile(null);
     } catch (err) {
       console.error("Failed to save expense", err);
@@ -311,7 +337,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       )}
 
       <div className="flex justify-end">
-        <button onClick={() => setOpen(true)} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Expense</button>
+        <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Expense</button>
       </div>
 
       <div className="space-y-2">
@@ -368,16 +394,39 @@ function ExpensesTab({ companyId }: { companyId: string }) {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                 <p className="text-sm font-bold font-display text-destructive">£{exp.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>
+                <button onClick={() => openEdit(exp)} className="p-1 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
                 <button onClick={() => exp.id && deleteExpense(exp.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
+
+            {(exp.history?.length ?? 0) > 0 && (
+              <div className="mt-2 -mx-3.5 -mb-3.5 border-t border-border/50">
+                <button
+                  onClick={() => setHistoryOpenId((cur) => (cur === exp.id ? null : exp.id ?? null))}
+                  className="w-full flex items-center justify-between px-3.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5"><History className="w-3 h-3" /> Edited ({exp.history!.length})</span>
+                  {historyOpenId === exp.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {historyOpenId === exp.id && (
+                  <div className="divide-y divide-border/40 text-[10px] bg-muted/20">
+                    {[...exp.history!].reverse().map((h, i) => (
+                      <div key={i} className="px-3.5 py-2 space-y-0.5">
+                        <div className="font-medium text-muted-foreground">Before edit on {new Date(h.editedAt).toLocaleString("en-GB")}</div>
+                        <div>{h.description} · £{h.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} · {h.date} · {h.category}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
-          <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display">{editingId ? "Edit Expense" : "Add Expense"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Description *</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="grid grid-cols-2 gap-2">
@@ -391,7 +440,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Attach receipt (optional)</Label>
+              <Label>{editingId ? "Attach another receipt (optional)" : "Attach receipt (optional)"}</Label>
               {newReceiptFile ? (
                 <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
                   <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
@@ -407,7 +456,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
               )}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => { setOpen(false); setNewReceiptFile(null); }} className="flex-1 h-9 rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => { setOpen(false); setEditingId(null); setNewReceiptFile(null); }} className="flex-1 h-9 rounded-xl">Cancel</Button>
               <Button onClick={save} disabled={!form.description || saving} className="flex-1 h-9 rounded-xl bg-gradient-primary">{saving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
