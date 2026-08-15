@@ -459,7 +459,7 @@ export default function DocumentScannerSheet({
   // viewport — without the portal this full-screen sheet renders trapped
   // inside whichever small widget box it was opened from.
   return createPortal(
-    <div className="fixed inset-0 z-[200] bg-black flex flex-col">
+    <div className="fixed inset-0 z-[400] bg-black flex flex-col">
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
         <button
@@ -702,7 +702,7 @@ export function ScanModeChooser({
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-[410] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
       onClick={onCancel}
     >
       <div
