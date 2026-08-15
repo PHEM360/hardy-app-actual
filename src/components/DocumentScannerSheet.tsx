@@ -15,6 +15,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, RotateCcw, Loader2, CheckCheck, ScanLine, Image as ImageIcon } from "lucide-react";
@@ -452,7 +453,12 @@ export default function DocumentScannerSheet({
   const handleR = Math.round(Math.min(naturalW, naturalH) * 0.03);
   const strokeW = Math.round(handleR * 0.25);
 
-  return (
+  // Portal to document.body: the dashboard's draggable widgets (react-rnd)
+  // position themselves with CSS transform, which makes any position:fixed
+  // descendant relative to that transformed ancestor instead of the
+  // viewport — without the portal this full-screen sheet renders trapped
+  // inside whichever small widget box it was opened from.
+  return createPortal(
     <div className="fixed inset-0 z-[200] bg-black flex flex-col">
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
@@ -674,7 +680,8 @@ export default function DocumentScannerSheet({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -693,7 +700,7 @@ export function ScanModeChooser({
   onCancel: () => void;
 }) {
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
       onClick={onCancel}
@@ -728,6 +735,7 @@ export function ScanModeChooser({
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
