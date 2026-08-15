@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, X, FileUp, Zap } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
+import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export function QuickLinksWidget() {
   });
   const { settings: companySettings } = useCompanySettings(expForm.companyId);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [scanCapture, setScanCapture] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const saveExpense = async () => {
@@ -143,7 +145,11 @@ export function QuickLinksWidget() {
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  e.target.value = "";
+                  if (f) setScanCapture(f);
+                }}
               />
               {receiptFile ? (
                 <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
@@ -171,6 +177,13 @@ export function QuickLinksWidget() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Scan & crop the receipt before attaching it */}
+      <DocumentScannerSheet
+        imageFile={scanCapture}
+        onConfirm={(scannedFile) => { setReceiptFile(scannedFile); setScanCapture(null); }}
+        onCancel={() => setScanCapture(null)}
+      />
     </div>
   );
 }

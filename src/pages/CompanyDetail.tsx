@@ -7,6 +7,7 @@ import {
   TrendingUp, FileText, Pencil, Download, ChevronRight,
 } from "lucide-react";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
+import { toast } from "sonner";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend,
@@ -122,7 +123,7 @@ function LoginsTab({ companyId }: { companyId: string }) {
         </div>
       ))}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Login" : "Add Login"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Xero, Companies House" className="h-9 rounded-xl" /></div>
@@ -196,7 +197,7 @@ function ServicesTab({ companyId }: { companyId: string }) {
         </div>
       ))}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Service" : "Add Service"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Service Name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="h-9 rounded-xl" /></div>
@@ -243,7 +244,9 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   });
   const [saving, setSaving] = useState(false);
   const newFileRef = useRef<HTMLInputElement>(null);
-  const [newFiles, setNewFiles] = useState<File[]>([]);
+  // Receipt attached to the expense currently being created (before it has an id)
+  const [newReceiptCapture, setNewReceiptCapture] = useState<File | null>(null);
+  const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null);
   // Scanner state: which existing expense receipt we're adding to
   const [scannerCtx, setScannerCtx] = useState<{ expId: string; receipts: string[]; file: File } | null>(null);
 
@@ -262,17 +265,23 @@ function ExpensesTab({ companyId }: { companyId: string }) {
 
   const handleNewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setNewFiles((prev) => [...prev, f]);
     e.target.value = "";
+    if (f) setNewReceiptCapture(f);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      await addExpense({ ...form, receipts: [] });
+      const id = await addExpense({ ...form, receipts: [] });
+      if (id && newReceiptFile) {
+        await uploadReceipt(id, newReceiptFile, []);
+      }
       setOpen(false);
       setForm({ date: new Date().toISOString().split("T")[0], description: "", amount: 0, category: "Other", receipts: [] });
-      setNewFiles([]);
+      setNewReceiptFile(null);
+    } catch (err) {
+      console.error("Failed to save expense", err);
+      toast.error("Couldn't save expense. Please try again.");
     } finally { setSaving(false); }
   };
 
@@ -367,7 +376,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4" aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Description *</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9 rounded-xl" /></div>
@@ -383,24 +392,36 @@ function ExpensesTab({ companyId }: { companyId: string }) {
             </div>
             <div className="space-y-1">
               <Label>Attach receipt (optional)</Label>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer border border-dashed border-border rounded-xl px-3 py-2 hover:bg-muted/40 transition-colors">
+              {newReceiptFile ? (
+                <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
+                  <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-[11px] text-foreground flex-1 truncate">{newReceiptFile.name}</span>
+                  <button onClick={() => setNewReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer border border-dashed border-border rounded-xl px-3 py-2 hover:bg-muted/40 transition-colors w-fit">
                   <Upload className="w-3.5 h-3.5" />
-                  {newFiles.length > 0 ? `${newFiles.length} file(s) selected` : "Choose file"}
+                  Scan or choose file
                   <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
                 </label>
-                {newFiles.length > 0 && <button onClick={() => setNewFiles([])} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>}
-              </div>
+              )}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => { setOpen(false); setNewFiles([]); }} className="flex-1 h-9 rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => { setOpen(false); setNewReceiptFile(null); }} className="flex-1 h-9 rounded-xl">Cancel</Button>
               <Button onClick={save} disabled={!form.description || saving} className="flex-1 h-9 rounded-xl bg-gradient-primary">{saving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Document scanner for receipt images */}
+      {/* Scan & crop a receipt for the expense currently being created */}
+      <DocumentScannerSheet
+        imageFile={newReceiptCapture}
+        onConfirm={(scannedFile) => { setNewReceiptFile(scannedFile); setNewReceiptCapture(null); }}
+        onCancel={() => setNewReceiptCapture(null)}
+      />
+
+      {/* Document scanner for receipt images on already-saved expenses */}
       <DocumentScannerSheet
         imageFile={scannerCtx?.file ?? null}
         onConfirm={(scannedFile) => {

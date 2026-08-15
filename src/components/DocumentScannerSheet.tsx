@@ -16,6 +16,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { X, RotateCcw, Loader2, CheckCheck } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -232,6 +233,7 @@ export default function DocumentScannerSheet({
   const [stage, setStage] = useState<Stage>("edit");
   const [previewSrc, setPreviewSrc] = useState<string>("");
   const warpedBlobRef = useRef<Blob | null>(null);
+  const [fileName, setFileName] = useState("Scan");
 
   // ── SVG ref for coordinate transforms ────────────────────────────────────────
   const svgRef = useRef<SVGSVGElement>(null);
@@ -244,6 +246,7 @@ export default function DocumentScannerSheet({
     setStage("edit");
     setPreviewSrc("");
     warpedBlobRef.current = null;
+    setFileName((imageFile.name || "Scan").replace(/\.[^.]+$/, ""));
 
     const url = URL.createObjectURL(imageFile);
     setImgSrc(url);
@@ -357,10 +360,10 @@ export default function DocumentScannerSheet({
   const handleConfirm = useCallback(() => {
     const blob = warpedBlobRef.current;
     if (!blob) return;
-    const baseName = (imageFile?.name ?? "scan").replace(/\.[^.]+$/, "");
-    const file = new File([blob], `${baseName}_scanned.jpg`, { type: "image/jpeg" });
+    const baseName = fileName.trim() || "Scan";
+    const file = new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
     onConfirm(file);
-  }, [imageFile, onConfirm]);
+  }, [fileName, onConfirm]);
 
   // ── Cleanup preview URL ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -518,6 +521,15 @@ export default function DocumentScannerSheet({
 
       {/* ── Bottom action bar ── */}
       <div className="flex-shrink-0 px-4 pb-8 pt-3 bg-black/80 backdrop-blur-sm space-y-2">
+        {stage === "preview" && (
+          <Input
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            placeholder="Name this scan"
+            className="h-10 rounded-xl bg-white/10 border-white/20 text-white placeholder:text-white/40"
+          />
+        )}
+
         {stage === "edit" && imgReady && (
           <Button
             onClick={handleWarp}

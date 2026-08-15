@@ -169,11 +169,12 @@ export function useCompanyExpenses(companyId: string | undefined) {
   }, [companyId]);
 
   const addExpense = useCallback(async (expense: Omit<CompanyExpense, "id" | "createdAt">) => {
-    if (!companyId) return;
-    await addDoc(collection(db, "companies", companyId, "expenses"), {
+    if (!companyId) return undefined;
+    const docRef = await addDoc(collection(db, "companies", companyId, "expenses"), {
       ...expense,
       createdAt: serverTimestamp(),
     });
+    return docRef.id;
   }, [companyId]);
 
   const updateExpense = useCallback(async (id: string, updates: Partial<CompanyExpense>) => {
