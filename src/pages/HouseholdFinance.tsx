@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ACCOUNT_TYPES } from "@/lib/financeAccounts";
+import { ACCOUNT_TYPES, resolveAccountType } from "@/lib/financeAccounts";
+import { AccountTypeFields } from "@/components/finance/AccountTypeFields";
 import { useNavigate } from "react-router-dom";
 
 const COLORS = [
@@ -68,9 +69,11 @@ const HouseholdFinance = () => {
   const [newBalanceDate, setNewBalanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState("Current");
+  const [newAccountCustomType, setNewAccountCustomType] = useState("");
   const [manageAccountId, setManageAccountId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [manageType, setManageType] = useState("Current");
+  const [manageCustomType, setManageCustomType] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
@@ -144,9 +147,10 @@ const HouseholdFinance = () => {
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) return;
-    await addAccount(newAccountName, newAccountType);
+    await addAccount(newAccountName, resolveAccountType(newAccountType, newAccountCustomType));
     setNewAccountName("");
     setNewAccountType("Current");
+    setNewAccountCustomType("");
     setAddAccountOpen(false);
   };
 
@@ -316,17 +320,13 @@ const HouseholdFinance = () => {
                       <Label>Account Name</Label>
                       <Input placeholder="e.g. Joint Savings" value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="h-11 rounded-xl" />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Type</Label>
-                      <Select value={newAccountType} onValueChange={setNewAccountType}>
-                        <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ACCOUNT_TYPES.map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <AccountTypeFields
+                      types={[...ACCOUNT_TYPES]}
+                      value={newAccountType}
+                      onChange={setNewAccountType}
+                      customValue={newAccountCustomType}
+                      onCustomChange={setNewAccountCustomType}
+                    />
                     <Button onClick={handleAddAccount} disabled={!newAccountName.trim()} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
                   </div>
                 </DialogContent>
@@ -375,7 +375,13 @@ const HouseholdFinance = () => {
                       onClick={() => {
                         setManageAccountId(acc.id);
                         setRenameValue(acc.name);
-                        setManageType(acc.type || "Current");
+                        if ((ACCOUNT_TYPES as readonly string[]).includes(acc.type) || acc.type === "Other") {
+                          setManageType(acc.type || "Current");
+                          setManageCustomType("");
+                        } else {
+                          setManageType("Other");
+                          setManageCustomType(acc.type || "");
+                        }
                       }}
                       className="absolute top-2 right-2 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
                       title="Manage account"
@@ -396,17 +402,13 @@ const HouseholdFinance = () => {
                   <Label>Name</Label>
                   <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="h-11 rounded-xl" />
                 </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={manageType} onValueChange={setManageType}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <AccountTypeFields
+                  types={[...ACCOUNT_TYPES]}
+                  value={manageType}
+                  onChange={setManageType}
+                  customValue={manageCustomType}
+                  onCustomChange={setManageCustomType}
+                />
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -425,7 +427,10 @@ const HouseholdFinance = () => {
                     disabled={!renameValue.trim()}
                     onClick={async () => {
                       if (!manageAccountId) return;
-                      await updateAccount(manageAccountId, { name: renameValue.trim(), type: manageType });
+                      await updateAccount(manageAccountId, {
+                        name: renameValue.trim(),
+                        type: resolveAccountType(manageType, manageCustomType),
+                      });
                       setManageAccountId(null);
                     }}
                   >

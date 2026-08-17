@@ -267,6 +267,25 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "finance");
     }
 
+    match /finance/{userId}/settings/{doc} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
+    // Bank-link metadata (TrueLayer). Tokens live in bankSecrets and are
+    // Functions/Admin SDK only — clients can see connection status & mappings.
+    match /finance/{userId}/bankConnections/{connId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if false;
+    }
+    match /finance/{userId}/bankSecrets/{connId} {
+      allow read, write: if false;
+    }
+
+    match /trueLayerOAuth/{stateId} {
+      allow read, write: if false;
+    }
+
     // Weight tracking - per user, bundled into the "health" page share
     // (weight, medications, health profile & health documents share one grant)
     match /weightTracker/{userId}/entries/{entryId} {

@@ -24,6 +24,10 @@ export interface Account {
   growthAssumptionPct?: number; // assumed annual growth rate, e.g. 5 for 5%/yr
   monthlyContribution?: number; // assumed regular monthly deposit
   feePct?: number; // assumed annual platform/fund fee, e.g. 0.5 for 0.5%/yr
+  bankProvider?: "truelayer";
+  bankConnectionId?: string;
+  bankAccountId?: string;
+  bankLastSyncedAt?: { toDate?: () => Date } | null;
 }
 
 export interface BalanceEntry {

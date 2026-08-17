@@ -17,6 +17,49 @@
 /* Tiptap editor focus ring */
 .ProseMirror:focus { outline: none; }
 
+/* Dashboard greeting weather animations */
+@keyframes greeting-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@keyframes greeting-fall {
+  0% { transform: translate3d(0, -12px, 0); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate3d(12px, 110px, 0); opacity: 0.4; }
+}
+@keyframes greeting-rain {
+  0% { transform: translate3d(0, -16px, 0); opacity: 0; }
+  15% { opacity: 0.7; }
+  100% { transform: translate3d(-10px, 110px, 0); opacity: 0; }
+}
+@keyframes greeting-drift {
+  0% { transform: translateX(-20%); }
+  100% { transform: translateX(120%); }
+}
+@keyframes greeting-fog {
+  0%, 100% { transform: translateX(-8%) scale(1); opacity: 0.18; }
+  50% { transform: translateX(10%) scale(1.08); opacity: 0.32; }
+}
+@keyframes greeting-spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes greeting-pulse-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.95; transform: scale(1.08); }
+}
+@keyframes greeting-flash {
+  0%, 88%, 100% { opacity: 0; }
+  90% { opacity: 0.45; }
+  92% { opacity: 0.08; }
+  94% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .greeting-weather * {
+    animation: none !important;
+  }
+}
+
 /* Native date inputs render taller than sibling inputs of the same height
    because the built-in calendar icon carries its own padding. Zero it out
    so date fields match text/number fields exactly. */

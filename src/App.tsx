@@ -7,6 +7,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
 import Finance from "@/pages/Finance";
+import FinanceBankCallback from "@/pages/FinanceBankCallback";
 import Pets from "@/pages/Pets";
 import Admin from "@/pages/Admin";
 import HouseholdFinance from "@/pages/HouseholdFinance";
@@ -81,6 +82,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="finance_personal">
                   <Finance />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/finance/bank-callback"
+              element={
+                <RequireFeature featureKey="finance_personal">
+                  <FinanceBankCallback />
                 </RequireFeature>
               }
             />

@@ -8,6 +8,12 @@
     ],
     "rewrites": [
       {
+        "source": "/api/truelayer/callback",
+        "function": {
+          "functionId": "trueLayerCallback"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

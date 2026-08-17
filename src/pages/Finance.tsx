@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, TrendingUp, TrendingDown, Minus, Upload, Sparkles,
+  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -14,13 +14,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { useFinance, type Account, type BalanceEntry } from "@/hooks/useFinance";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import { ACCOUNT_TYPES } from "@/lib/financeAccounts";
+import { useFinanceSettings } from "@/hooks/useFinanceSettings";
+import { resolveAccountType } from "@/lib/financeAccounts";
+import { AccountTypeFields } from "@/components/finance/AccountTypeFields";
+import AccountTypesSettings from "@/components/finance/AccountTypesSettings";
+import BankSyncSettings from "@/components/finance/BankSyncSettings";
+import DisplayStatsSettings from "@/components/finance/DisplayStatsSettings";
+import FinanceSummary from "@/components/finance/FinanceSummary";
 import {
-  buildPivotTable, computeAccountSummary, computeTaxYearSummary, computeChartYDomain, formatGBP,
+  buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
+import { buildFinanceInsights, formatPct, formatSignedGBP } from "@/lib/financeInsights";
+import type { FinanceStatId } from "@/lib/financeDisplay";
 import ImportBalancesDialog from "@/components/finance/ImportBalancesDialog";
 import {
   type ScenarioId, SCENARIO_LABELS, resolveGrowthPct, defaultMonthlyContribution, projectAccountBalance,
@@ -68,7 +77,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         {payload.map((p: any) => (
           <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-card" style={{ backgroundColor: p.color ?? p.stroke }} />
-            <span className="text-xs text-muted-foreground">{p.name}</span>
+            <span className="text-xs font-semibold" style={{ color: p.color ?? p.stroke }}>{p.name}</span>
             <span className="text-xs font-bold text-card-foreground ml-auto">{formatGBP(p.value ?? 0)}</span>
           </div>
         ))}
@@ -78,44 +87,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-function DeltaBadge({ value, pct }: { value: number | null; pct: number | null }) {
-  if (value === null) return <span className="text-xs text-muted-foreground">No entries in this period</span>;
-  const isUp = value > 0;
-  const isFlat = value === 0;
-  const colorClass = isFlat
-    ? "text-muted-foreground"
-    : isUp
-    ? "text-[#006300] dark:text-[#0ca30c]"
-    : "text-[#d03b3b] dark:text-[#e66767]";
-  const Icon = isFlat ? Minus : isUp ? TrendingUp : TrendingDown;
-  return (
-    <span className={`inline-flex items-center gap-1 text-sm font-bold ${colorClass}`}>
-      <Icon className="w-3.5 h-3.5" />
-      {isUp ? "+" : ""}
-      {formatGBP(value)}
-      {pct !== null && (
-        <span className="font-medium opacity-80">
-          ({isUp ? "+" : ""}
-          {pct.toFixed(1)}%)
-        </span>
-      )}
-    </span>
-  );
-}
-
-function TaxYearCell({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-muted-foreground/40">—</span>;
-  if (value === 0) return <span className="text-muted-foreground">£0</span>;
-  const isUp = value > 0;
-  return (
-    <span className={`font-semibold ${isUp ? "text-[#006300] dark:text-[#0ca30c]" : "text-[#d03b3b] dark:text-[#e66767]"}`}>
-      {isUp ? "+" : ""}
-      {formatGBP(value, { compact: true })}
-    </span>
-  );
-}
-
-function TaxYearLabel({ viewBox, value, isDark }: any) {
+function TaxYearLabel({ viewBox, value, isDark }: { viewBox?: { x: number; y: number; width: number }; value: string; isDark: boolean }) {
   if (!viewBox) return null;
   const { x, y, width } = viewBox;
   const cx = x + width / 2;
@@ -140,19 +112,36 @@ function TaxYearLabel({ viewBox, value, isDark }: any) {
 }
 
 function pillClass(active: boolean) {
-  return `h-9 px-3.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
+  return `h-9 px-3.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors border-2 ${
     active
-      ? "bg-primary/10 text-primary border-primary/25"
-      : "bg-transparent border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
+      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+      : "bg-card border-border text-foreground hover:border-primary/50"
   }`;
 }
 
-type ViewMode = "chart" | "table" | "summary";
+function HeroDelta({ label, change, pct }: { label: string; change: number | null; pct: number | null }) {
+  return (
+    <div className="rounded-xl bg-black/15 border border-white/15 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">{label}</p>
+      {change === null ? (
+        <p className="text-sm text-white/70 mt-0.5">Not enough history</p>
+      ) : (
+        <p className="text-sm font-bold font-display text-white mt-0.5">
+          {formatSignedGBP(change)}
+          {formatPct(pct) && <span className="text-white/75 font-medium ml-1.5">{formatPct(pct)}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+type ViewMode = "chart" | "table" | "summary" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
   { id: "table", label: "Table", Icon: Table2 },
   { id: "summary", label: "Summary", Icon: BarChart3 },
+  { id: "settings", label: "Settings", Icon: Settings2 },
 ];
 
 interface FinanceProps {
@@ -162,12 +151,14 @@ interface FinanceProps {
 
 const Finance = ({ mockData }: FinanceProps = {}) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isDark = useIsDarkMode();
   const palette = isDark ? ACCOUNT_COLORS_DARK : ACCOUNT_COLORS_LIGHT;
 
   const { scopeUserId, permission: scopePermission, pageTitle, isOwnScope } = useSharedScope("finance");
   const canEdit = mockData ? false : scopePermission === "edit";
   const live = useFinance(scopeUserId ?? undefined);
+  const { accountTypes, displayStats, saveAccountTypes, saveDisplayStats, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
   const { loading, addAccount, updateAccount, addBalanceEntry, deleteEntry, importEntries } = live;
@@ -187,6 +178,9 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [manageAccountId, setManageAccountId] = useState<string | null>(null);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState("Savings");
+  const [newAccountCustomType, setNewAccountCustomType] = useState("");
+  const [manageType, setManageType] = useState("Savings");
+  const [manageCustomType, setManageCustomType] = useState("");
   const [newBalanceAccountId, setNewBalanceAccountId] = useState("");
   const [newBalanceAmount, setNewBalanceAmount] = useState("");
   const [newBalanceDate, setNewBalanceDate] = useState(new Date().toISOString().split("T")[0]);
@@ -201,13 +195,29 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [assumptionContribution, setAssumptionContribution] = useState("");
   const [assumptionFee, setAssumptionFee] = useState("");
 
-  const visibleAccounts = accounts.filter((a) => showHidden || !a.hidden);
-  const colorFor = (acc: Account) => palette[accounts.indexOf(acc) % palette.length];
+  useEffect(() => {
+    const bank = searchParams.get("bank");
+    if (!bank) return;
+    if (bank === "connected") {
+      toast.success("Bank connected. Link each account below — we’ll copy today’s balance and past month-ends.");
+      setViewMode("settings");
+    } else if (bank === "cancelled") {
+      toast.info("Bank connection cancelled.");
+    } else {
+      toast.error("Could not connect the bank. Try again from Settings.");
+      setViewMode("settings");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("bank");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  const periodStartISO = useMemo(() => {
-    if (timePeriod <= 0) return undefined;
-    return new Date(Date.now() - timePeriod * 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  }, [timePeriod]);
+  const visibleAccounts = accounts.filter((a) => showHidden || !a.hidden);
+  const colorFor = (acc: Account) => {
+    const idx = Math.max(0, accounts.findIndex((a) => a.id === acc.id));
+    return palette[idx % palette.length];
+  };
+  const showStat = (id: FinanceStatId) => displayStats[id] !== false;
 
   const chartData = useMemo(() => {
     const cutoff = timePeriod > 0
@@ -302,31 +312,15 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   }, [accounts, entries]);
 
   const totalBalance = latestBalances.filter((a) => a.active && !a.hidden).reduce((s, a) => s + a.latestBalance, 0);
+  const portfolio = useMemo(
+    () => buildFinanceInsights(accounts.filter((a) => a.active && !a.hidden), entries).portfolio,
+    [accounts, entries]
+  );
 
   const pivot = useMemo(() => buildPivotTable(entries), [entries]);
   const sortedPivotDates = useMemo(
     () => (tableSortDesc ? [...pivot.dates].reverse() : pivot.dates),
     [pivot.dates, tableSortDesc]
-  );
-
-  const accountSummaries = useMemo(
-    () => visibleAccounts.map((acc) => computeAccountSummary(acc.id, entries, periodStartISO)),
-    [visibleAccounts, entries, periodStartISO]
-  );
-
-  const overallSummary = useMemo(() => {
-    const withData = accountSummaries.filter((s) => s.hasData);
-    if (withData.length === 0) return { netChange: null as number | null, netChangePct: null as number | null };
-    const opening = withData.reduce((s, a) => s + (a.opening ?? 0), 0);
-    const closing = withData.reduce((s, a) => s + (a.closing ?? 0), 0);
-    const netChange = closing - opening;
-    const netChangePct = opening !== 0 ? (netChange / Math.abs(opening)) * 100 : null;
-    return { netChange, netChangePct };
-  }, [accountSummaries]);
-
-  const taxYearRows = useMemo(
-    () => computeTaxYearSummary(visibleAccounts, entries, TAX_YEARS),
-    [visibleAccounts, entries]
   );
 
   const toggleAccount = (id: string) => {
@@ -337,8 +331,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) return;
-    await addAccount(newAccountName, newAccountType);
+    const type = resolveAccountType(newAccountType, newAccountCustomType);
+    await addAccount(newAccountName, type);
+    await ensureType(type);
     setNewAccountName("");
+    setNewAccountType("Savings");
+    setNewAccountCustomType("");
     setAddAccountOpen(false);
   };
 
@@ -399,7 +397,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       {isOwnScope && (
         <button
           onClick={() => navigate("/household-finance")}
-          className="w-full text-left rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 px-3.5 py-2.5 mb-4 transition-colors"
+          className="w-full text-left rounded-xl border-2 border-border bg-card hover:border-primary/40 px-3.5 py-2.5 mb-4 transition-colors shadow-soft"
         >
           <p className="text-xs font-semibold text-foreground">This page is your personal finances</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -408,15 +406,27 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </button>
       )}
 
-      {/* Total Balance */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl border border-primary/15 shadow-card mb-5 bg-gradient-primary">
-        <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total Balance</p>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl shadow-card mb-5 bg-gradient-primary">
+        <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total balance</p>
         <p className="text-2xl font-bold font-display text-white mt-1">
           {formatGBP(totalBalance)}
         </p>
-        <p className="text-xs text-white/60 mt-1">
+        <p className="text-xs text-white/70 mt-1">
           Across {latestBalances.filter((a) => a.active && !a.hidden).length} active accounts
         </p>
+        {(showStat("heroMonth") || showStat("heroTaxYear") || showStat("heroOpened")) && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+            {showStat("heroMonth") && (
+              <HeroDelta label="Since last month" change={portfolio.month.change} pct={portfolio.month.changePct} />
+            )}
+            {showStat("heroTaxYear") && (
+              <HeroDelta label="This tax year" change={portfolio.taxYear.change} pct={portfolio.taxYear.changePct} />
+            )}
+            {showStat("heroOpened") && (
+              <HeroDelta label="Since opened" change={portfolio.opened.change} pct={portfolio.opened.changePct} />
+            )}
+          </div>
+        )}
       </motion.div>
 
       {/* Account Summary Cards — click to select in graph, gear to manage */}
@@ -439,17 +449,13 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   <Label>Account Name</Label>
                   <Input placeholder="e.g. Stocks & Shares ISA" value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="h-11 rounded-xl" />
                 </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={newAccountType} onValueChange={setNewAccountType}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                          {ACCOUNT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <AccountTypeFields
+                  types={accountTypes}
+                  value={newAccountType}
+                  onChange={setNewAccountType}
+                  customValue={newAccountCustomType}
+                  onCustomChange={setNewAccountCustomType}
+                />
                 <Button onClick={handleAddAccount} disabled={!newAccountName.trim()} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
               </div>
             </DialogContent>
@@ -472,12 +478,17 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               animate={{ opacity: 1, scale: 1 }}
               whileHover={{ y: -2 }}
               transition={{ delay: 0.03 * i }}
-              className={`rounded-2xl border-2 bg-card text-left transition-all relative group overflow-hidden ${
-                isSelected ? "shadow-card" : "shadow-soft hover:shadow-card"
-              } ${!acc.active ? "opacity-40" : ""}`}
-              style={{ borderColor: isSelected ? color : "hsl(var(--border))" }}
+              className={`rounded-2xl border-2 text-left transition-all relative group overflow-hidden shadow-card ${
+                !acc.active ? "opacity-45" : ""
+              }`}
+              style={{
+                borderColor: color,
+                background: `color-mix(in srgb, ${color} ${isSelected ? 22 : 10}%, hsl(var(--card)))`,
+                outline: isSelected ? `2px solid ${color}` : undefined,
+                outlineOffset: 0,
+              }}
             >
-              <div className="h-1 w-full" style={{ background: color }} />
+              <div className="h-1.5 w-full" style={{ background: color }} />
               <div className="p-3 relative">
                 <button onClick={() => toggleAccount(acc.id)} className="w-full text-left relative">
                   <div className="flex items-center gap-2 mb-2">
@@ -487,19 +498,34 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     >
                       <span className="w-2 h-2 rounded-full bg-white/90" />
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider truncate px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider truncate px-1.5 py-0.5 rounded-md text-white"
+                      style={{ backgroundColor: color }}
+                    >
                       {acc.type}
                     </span>
+                    {acc.bankAccountId && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-600 text-white">
+                        Linked
+                      </span>
+                    )}
                   </div>
-                  <p className="text-base font-bold font-display text-card-foreground">
+                  <p className="text-base font-bold font-display text-foreground">
                     {formatGBP(acc.latestBalance)}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">{acc.name}</p>
+                  <p className="text-xs font-medium truncate" style={{ color }}>{acc.name}</p>
                 </button>
                 <button
                   onClick={() => {
                     setManageAccountId(acc.id);
                     setRenameValue(acc.name);
+                    if (accountTypes.includes(acc.type) || acc.type === "Other") {
+                      setManageType(acc.type);
+                      setManageCustomType("");
+                    } else {
+                      setManageType("Other");
+                      setManageCustomType(acc.type);
+                    }
                     setAssumptionGrowth(acc.growthAssumptionPct !== undefined ? String(acc.growthAssumptionPct) : "");
                     setAssumptionContribution(acc.monthlyContribution !== undefined ? String(acc.monthlyContribution) : "");
                     setAssumptionFee(acc.feePct !== undefined ? String(acc.feePct) : "");
@@ -516,19 +542,19 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
       {/* Controls Row */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex items-center gap-0.5 p-1 bg-muted/30 border border-border/40 rounded-2xl relative">
+        <div className="flex items-center gap-1 p-1 bg-card border-2 border-border rounded-2xl relative shadow-soft">
           {VIEW_MODES.map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setViewMode(id)}
-              className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors z-10 ${
-                viewMode === id ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors z-10 ${
+                viewMode === id ? "text-primary-foreground" : "text-foreground/80 hover:text-foreground"
               }`}
             >
               {viewMode === id && (
                 <motion.span
                   layoutId="finance-view-tab"
-                  className="absolute inset-0 bg-primary/12 rounded-xl shadow-sm ring-1 ring-primary/25 -z-10"
+                  className="absolute inset-0 bg-gradient-primary rounded-xl shadow-sm -z-10"
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
@@ -537,21 +563,18 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
           ))}
         </div>
 
-        {(viewMode === "chart" || viewMode === "summary") && (
-          <Select value={String(timePeriod)} onValueChange={(v) => setTimePeriod(Number(v))}>
-            <SelectTrigger className="h-9 rounded-xl text-xs w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TIME_PERIODS.map((tp) => (
-                <SelectItem key={tp.months} value={String(tp.months)}>{tp.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
         {viewMode === "chart" && (
           <>
+            <Select value={String(timePeriod)} onValueChange={(v) => setTimePeriod(Number(v))}>
+              <SelectTrigger className="h-9 rounded-xl text-xs w-28 bg-card border-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_PERIODS.map((tp) => (
+                  <SelectItem key={tp.months} value={String(tp.months)}>{tp.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <button onClick={() => setShowTaxYears(!showTaxYears)} className={pillClass(showTaxYears)}>
               <CalendarRange className="w-3.5 h-3.5" />
               Tax years
@@ -571,7 +594,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
         <div className="flex-1" />
 
-        {canEdit && (
+        {viewMode !== "settings" && canEdit && (
           <Button
             onClick={() => setImportOpen(true)}
             variant="outline"
@@ -580,7 +603,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             <Upload className="w-4 h-4" /> Import
           </Button>
         )}
-        {canEdit && (
+        {viewMode !== "settings" && canEdit && (
           <Button
             onClick={() => setAddBalanceOpen(true)}
             className="h-9 px-4 rounded-xl gap-1.5 bg-gradient-primary text-white font-semibold shadow-sm hover:shadow-md transition-shadow"
@@ -619,7 +642,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
       {/* Chart View */}
       {viewMode === "chart" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-5 rounded-3xl bg-card border border-border/50 shadow-soft mb-5">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-5 rounded-3xl bg-card border-2 border-border shadow-card mb-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
@@ -705,7 +728,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                       dataKey={acc.id}
                       name={acc.name}
                       stroke={color}
-                      strokeWidth={2.25}
+                      strokeWidth={2.75}
                       fill={`url(#fin-grad-${acc.id})`}
                       dot={false}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb", fill: color }}
@@ -749,38 +772,41 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             </ResponsiveContainer>
           </div>
           {/* Custom legend */}
-          {(accountsForChart.length > 1 || (showTotalLine && selectedAccounts.length > 1) || showProjection) && (
-            <div className="flex flex-wrap gap-1.5 mt-4 px-0.5">
+          <div className="flex flex-wrap gap-2 mt-4 px-0.5">
               {accountsForChart.map((acc) => (
                 <span
                   key={acc.id}
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1"
+                  className="flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2.5 py-1 border"
+                  style={{
+                    color: colorFor(acc),
+                    borderColor: colorFor(acc),
+                    background: `color-mix(in srgb, ${colorFor(acc)} 16%, hsl(var(--card)))`,
+                  }}
                 >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorFor(acc) }} />
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: colorFor(acc) }} />
                   {acc.name}
                 </span>
               ))}
               {showTotalLine && selectedAccounts.length > 1 && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground bg-muted rounded-full px-2.5 py-1 border border-border">
                   <span className="w-3.5 h-0.5 rounded-full flex-shrink-0" style={{ background: isDark ? "#ffffff" : "#0b0b0b" }} />
                   Total
                 </span>
               )}
               {showProjection && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground bg-muted/40 rounded-full px-2.5 py-1">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-foreground bg-muted rounded-full px-2.5 py-1 border border-border">
                   <svg width="14" height="2" className="flex-shrink-0"><line x1="0" y1="1" x2="14" y2="1" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" /></svg>
                   Projected ({SCENARIO_LABELS[scenario]})
                 </span>
               )}
             </div>
-          )}
         </motion.div>
       )}
 
       {/* Table View — spreadsheet-style pivot: dates down, accounts across */}
       {viewMode === "table" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl bg-card border border-border/50 shadow-soft mb-5 overflow-hidden">
-          <div className="p-3 border-b border-border/30 flex items-center justify-between">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl bg-card border-2 border-border shadow-card mb-5 overflow-hidden">
+          <div className="p-3 border-b border-border flex items-center justify-between bg-muted/40">
             <p className="text-xs text-muted-foreground">{sortedPivotDates.length} logged date{sortedPivotDates.length === 1 ? "" : "s"}</p>
             <button onClick={() => setTableSortDesc((v) => !v)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
               <ArrowUpDown className="w-3.5 h-3.5" />
@@ -793,7 +819,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="sticky left-0 z-10 bg-muted/50 text-left p-3 font-semibold text-muted-foreground whitespace-nowrap">Date</th>
                   {visibleAccounts.map((acc) => (
-                    <th key={acc.id} className="text-right p-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th key={acc.id} className="text-right p-3 font-semibold whitespace-nowrap" style={{ color: colorFor(acc) }}>
                       <span className="inline-flex items-center gap-1.5 justify-end">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorFor(acc) }} />
                         {acc.name}
@@ -847,85 +873,38 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </motion.div>
       )}
 
-      {/* Summary View — per-account growth/loss + tax-year breakdown */}
       {viewMode === "summary" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {visibleAccounts.map((acc) => {
-              const summary = accountSummaries.find((s) => s.accountId === acc.id)!;
-              return (
-                <div
-                  key={acc.id}
-                  className="p-4 rounded-xl bg-card border border-border/50 shadow-soft"
-                  style={{ borderLeftWidth: 4, borderLeftColor: colorFor(acc) }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-card-foreground truncate">{acc.name}</p>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider flex-shrink-0 ml-2">{acc.type}</span>
-                  </div>
-                  {summary.hasData && (
-                    <div className="flex items-center gap-3 mb-2 text-xs text-muted-foreground">
-                      <span>Opening <span className="font-semibold text-card-foreground">{formatGBP(summary.opening!)}</span></span>
-                      <span>Closing <span className="font-semibold text-card-foreground">{formatGBP(summary.closing!)}</span></span>
-                    </div>
-                  )}
-                  <DeltaBadge value={summary.netChange} pct={summary.netChangePct} />
-                </div>
-              );
-            })}
-          </div>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <FinanceSummary
+            accounts={visibleAccounts}
+            entries={entries}
+            taxYears={TAX_YEARS}
+            colorFor={colorFor}
+            show={showStat}
+          />
+        </motion.div>
+      )}
 
-          <div className="p-5 rounded-2xl shadow-card bg-gradient-primary">
-            <p className="text-xs text-white/70 uppercase tracking-wider font-medium mb-1">Overall Net Change</p>
-            {overallSummary.netChange !== null ? (
-              <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-bold font-display text-white">
-                  {overallSummary.netChange >= 0 ? "+" : ""}
-                  {formatGBP(overallSummary.netChange)}
-                </span>
-                {overallSummary.netChangePct !== null && (
-                  <span className="text-sm text-white/80 font-medium">
-                    {overallSummary.netChangePct >= 0 ? "+" : ""}
-                    {overallSummary.netChangePct.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-white/70">No entries in this period</p>
-            )}
-          </div>
-
-          <div className="rounded-3xl bg-card border border-border/50 shadow-soft overflow-hidden">
-            <div className="p-3 border-b border-border/30">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <CalendarRange className="w-3.5 h-3.5" /> Tax Year Breakdown
-              </h3>
-            </div>
-            <div className="overflow-auto max-h-96">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="sticky left-0 z-10 bg-muted/50 text-left p-3 font-semibold text-muted-foreground whitespace-nowrap">Tax Year</th>
-                    {visibleAccounts.map((acc) => (
-                      <th key={acc.id} className="text-right p-3 font-semibold text-muted-foreground whitespace-nowrap">{acc.name}</th>
-                    ))}
-                    <th className="text-right p-3 font-semibold text-muted-foreground whitespace-nowrap">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {taxYearRows.map((row) => (
-                    <tr key={row.label} className="border-b border-border/30 hover:bg-muted/30">
-                      <td className="sticky left-0 z-10 bg-card p-3 font-medium text-card-foreground whitespace-nowrap">{row.label}</td>
-                      {visibleAccounts.map((acc) => (
-                        <td key={acc.id} className="p-3 text-right whitespace-nowrap"><TaxYearCell value={row.perAccount[acc.id] ?? null} /></td>
-                      ))}
-                      <td className="p-3 text-right whitespace-nowrap"><TaxYearCell value={row.total} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {viewMode === "settings" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <DisplayStatsSettings
+            values={displayStats}
+            canEdit={canEdit}
+            onChange={(next) => void saveDisplayStats(next)}
+          />
+          <BankSyncSettings
+            scopeUserId={scopeUserId}
+            canEdit={canEdit && isOwnScope}
+            accounts={accounts}
+          />
+          <AccountTypesSettings
+            types={accountTypes}
+            canEdit={canEdit}
+            onSave={saveAccountTypes}
+            onRenameType={(from, to) => {
+              accounts.filter((a) => a.type === from).forEach((a) => updateAccount(a.id, { type: to }));
+            }}
+          />
         </motion.div>
       )}
 
@@ -950,6 +929,28 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   <Button onClick={() => manageAccountId && renameAccount(manageAccountId)} size="sm" className="h-10 rounded-xl bg-gradient-primary">Rename</Button>
                 </div>
               </div>
+              <AccountTypeFields
+                types={accountTypes}
+                value={manageType}
+                onChange={setManageType}
+                customValue={manageCustomType}
+                onCustomChange={setManageCustomType}
+              />
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full h-9 rounded-lg text-xs"
+                  onClick={async () => {
+                    if (!manageAccountId) return;
+                    const type = resolveAccountType(manageType, manageCustomType);
+                    await updateAccount(manageAccountId, { type });
+                    await ensureType(type);
+                  }}
+                >
+                  Save type
+                </Button>
+              )}
               {/* Status actions */}
               <div className="flex gap-2">
                 <Button onClick={() => { toggleActive(manageAccountId!); }} variant="outline" size="sm" className="flex-1 h-9 rounded-lg gap-1.5 text-xs">

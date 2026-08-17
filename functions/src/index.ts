@@ -70,6 +70,18 @@ async function requireSuperAdmin(uid: string, authEmail?: string) {
 export { onTaskWrite } from "./notifications/scheduler";
 export { processScheduledNotifications, scheduleDailyDigests } from "./notifications/processor";
 
+export {
+	startTrueLayerConnect,
+	completeTrueLayerConnect,
+	listTrueLayerAccounts,
+	linkTrueLayerAccount,
+	unlinkTrueLayerAccount,
+	syncTrueLayerBalances,
+	disconnectTrueLayer,
+	trueLayerCallback,
+	syncAllTrueLayerBalances,
+} from "./truelayer";
+
 // ── /display kiosk pairing ──
 export {
 	createDevicePairing,
