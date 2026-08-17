@@ -22,6 +22,7 @@ export function formatGBP(value: number, opts?: { compact?: boolean; decimals?: 
 export interface PivotCell {
   balance: number;
   entryId: string;
+  note?: string;
 }
 
 export interface PivotTable {
@@ -35,7 +36,7 @@ export function buildPivotTable(entries: BalanceEntry[]): PivotTable {
   const cellsByDate: Record<string, Record<string, PivotCell>> = {};
   for (const e of entries) {
     if (!cellsByDate[e.date]) cellsByDate[e.date] = {};
-    cellsByDate[e.date][e.accountId] = { balance: e.balance, entryId: e.id };
+    cellsByDate[e.date][e.accountId] = { balance: e.balance, entryId: e.id, note: e.note };
   }
   const dates = Object.keys(cellsByDate).sort();
   return { dates, cellsByDate };
@@ -137,10 +138,13 @@ export function computeTaxYearSummary(
 // ─── Chart Y-axis domain ────────────────────────────────────────────────────────
 
 function niceStep(range: number): number {
-  if (range >= 100000) return 1000;
-  if (range >= 10000) return 100;
-  if (range >= 1000) return 10;
-  return 1;
+  if (!Number.isFinite(range) || range <= 0) return 1;
+  const rough = range / 5;
+  const exp = Math.floor(Math.log10(rough));
+  const pow = 10 ** exp;
+  const frac = rough / pow;
+  const nice = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
+  return nice * pow;
 }
 
 /** Computes a padded [min, max] domain from only the series actually being plotted,
@@ -154,7 +158,7 @@ export function computeChartYDomain(
   for (const row of chartData) {
     for (const key of visibleKeys) {
       const v = row[key];
-      if (typeof v === "number") {
+      if (typeof v === "number" && Number.isFinite(v)) {
         if (v < min) min = v;
         if (v > max) max = v;
       }
@@ -164,19 +168,19 @@ export function computeChartYDomain(
 
   const rawMin = min;
   if (min === max) {
-    const pad = Math.max(Math.abs(min) * 0.1, 10);
+    const pad = Math.max(Math.abs(min) * 0.08, 50);
     min -= pad;
     max += pad;
   } else {
-    const pad = (max - min) * 0.12;
+    const pad = (max - min) * 0.1;
     min -= pad;
     max += pad;
   }
 
-  // Balances are never negative in practice — don't let padding push the
-  // floor below zero when nothing in the series actually does.
   if (rawMin >= 0) min = Math.max(0, min);
 
   const step = niceStep(max - min);
-  return [Math.floor(min / step) * step, Math.ceil(max / step) * step];
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  return [rawMin >= 0 ? Math.max(0, niceMin) : niceMin, niceMax === niceMin ? niceMin + step : niceMax];
 }

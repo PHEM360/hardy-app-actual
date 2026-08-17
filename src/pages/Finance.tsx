@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles,
+  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -71,21 +72,45 @@ function useIsDarkMode() {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const notes = payload
+      .map((p: any) => {
+        const note = p.payload?.[`${p.dataKey}_note`];
+        if (!note || String(p.dataKey).endsWith("_proj")) return null;
+        return { name: p.name, color: p.color ?? p.stroke, note };
+      })
+      .filter(Boolean) as { name: string; color: string; note: string }[];
     return (
-      <div className="rounded-lg bg-card border border-border shadow-elevated p-3 max-w-[220px]">
+      <div className="rounded-lg bg-card border-2 border-border shadow-elevated p-3 max-w-[260px]">
         <p className="text-xs text-muted-foreground font-medium mb-1.5">{label}</p>
-        {payload.map((p: any) => (
+        {payload.filter((p: any) => !String(p.dataKey).endsWith("_note")).map((p: any) => (
           <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-card" style={{ backgroundColor: p.color ?? p.stroke }} />
             <span className="text-xs font-semibold" style={{ color: p.color ?? p.stroke }}>{p.name}</span>
             <span className="text-xs font-bold text-card-foreground ml-auto">{formatGBP(p.value ?? 0)}</span>
           </div>
         ))}
+        {notes.map((n) => (
+          <p key={n.name} className="text-[11px] text-foreground mt-2 pt-2 border-t border-border leading-snug">
+            <span className="font-semibold" style={{ color: n.color }}>{n.name}: </span>
+            {n.note}
+          </p>
+        ))}
       </div>
     );
   }
   return null;
 };
+
+function NoteDot({ cx, cy, payload, dataKey, stroke }: { cx?: number; cy?: number; payload?: Record<string, unknown>; dataKey?: string; stroke?: string }) {
+  const note = dataKey ? payload?.[`${dataKey}_note`] : undefined;
+  if (!note || cx == null || cy == null) return <g />;
+  return (
+    <g transform={`translate(${cx},${cy})`} style={{ pointerEvents: "none" }}>
+      <circle r={8} fill={stroke || "#1f6f78"} stroke="#fff" strokeWidth={1.5} />
+      <text textAnchor="middle" dy={3.5} fontSize={9} fontWeight={800} fill="#fff">i</text>
+    </g>
+  );
+}
 
 function TaxYearLabel({ viewBox, value, isDark }: { viewBox?: { x: number; y: number; width: number }; value: string; isDark: boolean }) {
   if (!viewBox) return null;
@@ -161,7 +186,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const { accountTypes, displayStats, saveAccountTypes, saveDisplayStats, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
-  const { loading, addAccount, updateAccount, addBalanceEntry, deleteEntry, importEntries } = live;
+  const { loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries } = live;
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   // Keep selectedAccounts in sync when accounts load
   useMemo(() => {
@@ -184,6 +209,8 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [newBalanceAccountId, setNewBalanceAccountId] = useState("");
   const [newBalanceAmount, setNewBalanceAmount] = useState("");
   const [newBalanceDate, setNewBalanceDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newBalanceNote, setNewBalanceNote] = useState("");
+  const [noteEditor, setNoteEditor] = useState<{ entryId: string; accountName: string; date: string; note: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showTaxYears, setShowTaxYears] = useState(true);
   const [showTotalLine, setShowTotalLine] = useState(false);
@@ -224,17 +251,23 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       ? new Date(Date.now() - timePeriod * 30 * 24 * 60 * 60 * 1000)
       : new Date(0);
 
-    const relevantEntries = entries.filter((e) => new Date(e.date) >= cutoff);
+    const selected = new Set(selectedAccounts);
+    const relevantEntries = entries.filter((e) => new Date(e.date) >= cutoff && selected.has(e.accountId));
     const dates = [...new Set(relevantEntries.map((e) => e.date))].sort();
 
     return dates.map((date) => {
-      const row: any = { date: new Date(date as string).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), rawDate: date };
+      const row: Record<string, unknown> = {
+        date: new Date(date).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+        rawDate: date,
+      };
       let total = 0;
       accounts.forEach((acc) => {
+        if (!selected.has(acc.id)) return;
         const entry = relevantEntries.find((e) => e.accountId === acc.id && e.date === date);
         if (entry) {
           row[acc.id] = entry.balance;
-          if (selectedAccounts.includes(acc.id)) total += entry.balance;
+          total += entry.balance;
+          if (entry.note?.trim()) row[`${acc.id}_note`] = entry.note.trim();
         }
       });
       row.total = total;
@@ -343,9 +376,21 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const handleAddBalance = async () => {
     const amount = parseFloat(newBalanceAmount);
     if (!newBalanceAccountId || isNaN(amount)) return;
-    await addBalanceEntry(newBalanceAccountId, newBalanceDate, amount);
+    const existing = entries.find((e) => e.accountId === newBalanceAccountId && e.date === newBalanceDate);
+    if (existing) {
+      await updateEntry(existing.id, { balance: amount, note: newBalanceNote });
+    } else {
+      await addBalanceEntry(newBalanceAccountId, newBalanceDate, amount, newBalanceNote);
+    }
     setNewBalanceAmount("");
+    setNewBalanceNote("");
     setAddBalanceOpen(false);
+  };
+
+  const saveNoteEditor = async () => {
+    if (!noteEditor) return;
+    await updateEntry(noteEditor.entryId, { note: noteEditor.note });
+    setNoteEditor(null);
   };
 
   const toggleHide = (id: string) => {
@@ -605,7 +650,10 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         )}
         {viewMode !== "settings" && canEdit && (
           <Button
-            onClick={() => setAddBalanceOpen(true)}
+            onClick={() => {
+              setNewBalanceNote("");
+              setAddBalanceOpen(true);
+            }}
             className="h-9 px-4 rounded-xl gap-1.5 bg-gradient-primary text-white font-semibold shadow-sm hover:shadow-md transition-shadow"
           >
             <Plus className="w-4 h-4" /> Log Balance
@@ -633,6 +681,15 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               <div className="space-y-2">
                 <Label>Balance (£)</Label>
                 <Input type="number" step="0.01" placeholder="e.g. 12500.00" value={newBalanceAmount} onChange={(e) => setNewBalanceAmount(e.target.value)} className="h-11 rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label>Note <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Textarea
+                  value={newBalanceNote}
+                  onChange={(e) => setNewBalanceNote(e.target.value)}
+                  placeholder="e.g. £12k transferred in from bike sale"
+                  className="min-h-[72px] rounded-xl text-sm"
+                />
               </div>
               <Button onClick={handleAddBalance} disabled={!newBalanceAccountId || !newBalanceAmount} className="w-full h-11 rounded-xl bg-gradient-primary">Save</Button>
             </div>
@@ -682,6 +739,9 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             </div>
           )}
 
+          {accountsForChart.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-16">Tap an account name below to show it on the chart.</p>
+          ) : (
           <div className="h-64 sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={combinedChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -711,12 +771,14 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 ))}
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: isDark ? "#c3c2b7" : "#52514e" }} axisLine={false} tickLine={false} />
                 <YAxis
-                  domain={yDomain ?? ["auto", "auto"]}
+                  type="number"
+                  domain={yDomain ?? [0, 1]}
+                  allowDataOverflow
                   tick={{ fontSize: 10, fill: isDark ? "#c3c2b7" : "#52514e" }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v) => formatGBP(v, { compact: true, decimals: 0 })}
-                  width={52}
+                  width={56}
                 />
                 <Tooltip content={<CustomTooltip />} />
                 {accountsForChart.map((acc) => {
@@ -730,7 +792,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                       stroke={color}
                       strokeWidth={2.75}
                       fill={`url(#fin-grad-${acc.id})`}
-                      dot={false}
+                      dot={(props) => <NoteDot {...props} dataKey={acc.id} stroke={color} />}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb", fill: color }}
                       connectNulls
                       isAnimationActive={false}
@@ -771,22 +833,31 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          )}
           {/* Custom legend */}
           <div className="flex flex-wrap gap-2 mt-4 px-0.5">
-              {accountsForChart.map((acc) => (
-                <span
-                  key={acc.id}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2.5 py-1 border"
-                  style={{
-                    color: colorFor(acc),
-                    borderColor: colorFor(acc),
-                    background: `color-mix(in srgb, ${colorFor(acc)} 16%, hsl(var(--card)))`,
-                  }}
-                >
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: colorFor(acc) }} />
-                  {acc.name}
-                </span>
-              ))}
+              {visibleAccounts.map((acc) => {
+                const on = selectedAccounts.includes(acc.id);
+                const color = colorFor(acc);
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => toggleAccount(acc.id)}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2.5 py-1 border transition-opacity"
+                    style={{
+                      color: on ? color : undefined,
+                      borderColor: on ? color : "hsl(var(--border))",
+                      background: on ? `color-mix(in srgb, ${color} 16%, hsl(var(--card)))` : "hsl(var(--muted))",
+                      opacity: on ? 1 : 0.45,
+                    }}
+                    title={on ? `Hide ${acc.name}` : `Show ${acc.name}`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                    {acc.name}
+                  </button>
+                );
+              })}
               {showTotalLine && selectedAccounts.length > 1 && (
                 <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground bg-muted rounded-full px-2.5 py-1 border border-border">
                   <span className="w-3.5 h-0.5 rounded-full flex-shrink-0" style={{ background: isDark ? "#ffffff" : "#0b0b0b" }} />
@@ -845,8 +916,28 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                         return (
                           <td key={acc.id} className="p-3 text-right font-medium text-card-foreground whitespace-nowrap">
                             {cell ? (
-                              <span className="inline-flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1.5 justify-end">
+                                {cell.note && (
+                                  <button
+                                    type="button"
+                                    title={cell.note}
+                                    onClick={() => setNoteEditor({ entryId: cell.entryId, accountName: acc.name, date, note: cell.note || "" })}
+                                    className="text-primary hover:text-foreground"
+                                  >
+                                    <StickyNote className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 {formatGBP(cell.balance)}
+                                {canEdit && !cell.note && (
+                                  <button
+                                    type="button"
+                                    title="Add note"
+                                    onClick={() => setNoteEditor({ entryId: cell.entryId, accountName: acc.name, date, note: "" })}
+                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary"
+                                  >
+                                    <StickyNote className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 {canEdit && (
                                   <button
                                     onClick={() => deleteEntry(cell.entryId)}
@@ -1001,6 +1092,21 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                         <tr key={entry.id} className="border-b border-border/30 last:border-0 group">
                           <td className="p-2 text-muted-foreground">{new Date(entry.date).toLocaleDateString("en-GB")}</td>
                           <td className="p-2 text-right font-bold font-display text-card-foreground">{formatGBP(entry.balance)}</td>
+                          <td className="p-2 text-right">
+                            <button
+                              type="button"
+                              title={entry.note || "Add note"}
+                              onClick={() => setNoteEditor({
+                                entryId: entry.id,
+                                accountName: managingAccount.name,
+                                date: entry.date,
+                                note: entry.note || "",
+                              })}
+                              className={entry.note ? "text-primary" : "text-muted-foreground opacity-0 group-hover:opacity-100"}
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
                           <td className="p-2 text-right w-8">
                             {canEdit && (
                               <button onClick={() => deleteEntry(entry.id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
@@ -1013,6 +1119,44 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!noteEditor} onOpenChange={(open) => !open && setNoteEditor(null)}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="font-display">Balance note</DialogTitle>
+          </DialogHeader>
+          {noteEditor && (
+            <div className="space-y-3 pt-1">
+              <p className="text-xs text-muted-foreground">
+                {noteEditor.accountName} · {new Date(noteEditor.date).toLocaleDateString("en-GB")}
+              </p>
+              <Textarea
+                value={noteEditor.note}
+                onChange={(e) => setNoteEditor({ ...noteEditor, note: e.target.value })}
+                placeholder="e.g. £12k transferred in from bike sale"
+                className="min-h-[88px] rounded-xl text-sm"
+              />
+              <div className="flex gap-2">
+                {noteEditor.note.trim() && (
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={async () => {
+                      await updateEntry(noteEditor.entryId, { note: "" });
+                      setNoteEditor(null);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+                <Button className="flex-1 h-10 rounded-xl bg-gradient-primary" onClick={() => void saveNoteEditor()}>
+                  Save note
+                </Button>
               </div>
             </div>
           )}

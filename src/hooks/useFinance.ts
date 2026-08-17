@@ -10,6 +10,7 @@ import {
   orderBy,
   serverTimestamp,
   writeBatch,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -35,6 +36,7 @@ export interface BalanceEntry {
   accountId: string;
   date: string;
   balance: number;
+  note?: string;
 }
 
 export function useFinance(scopeUserId?: string) {
@@ -121,14 +123,32 @@ export function useFinance(scopeUserId?: string) {
   );
 
   const addBalanceEntry = useCallback(
-    async (accountId: string, date: string, balance: number) => {
+    async (accountId: string, date: string, balance: number, note?: string) => {
       if (!uid) return;
-      await addDoc(collection(db, "finance", uid, "entries"), {
+      const payload: Record<string, unknown> = {
         accountId,
         date,
         balance,
         createdAt: serverTimestamp(),
-      });
+      };
+      const trimmed = note?.trim();
+      if (trimmed) payload.note = trimmed;
+      await addDoc(collection(db, "finance", uid, "entries"), payload);
+    },
+    [uid]
+  );
+
+  const updateEntry = useCallback(
+    async (entryId: string, updates: { balance?: number; date?: string; note?: string | null }) => {
+      if (!uid) return;
+      const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      if (updates.balance !== undefined) payload.balance = updates.balance;
+      if (updates.date !== undefined) payload.date = updates.date;
+      if (updates.note !== undefined) {
+        const trimmed = updates.note?.trim() ?? "";
+        payload.note = trimmed ? trimmed : deleteField();
+      }
+      await updateDoc(doc(db, "finance", uid, "entries", entryId), payload);
     },
     [uid]
   );
@@ -170,5 +190,5 @@ export function useFinance(scopeUserId?: string) {
     [uid]
   );
 
-  return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, deleteEntry, importEntries };
+  return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries };
 }
