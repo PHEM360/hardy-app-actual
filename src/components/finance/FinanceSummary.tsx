@@ -6,6 +6,8 @@ import type { FinanceStatId } from "@/lib/financeDisplay";
 import {
   ASSET_CLASS_COLORS,
   ASSET_CLASS_LABELS,
+  CONTRIBUTIONS_HINT,
+  CONTRIBUTIONS_NOTE,
   buildFinanceInsights,
   formatPct,
   formatSignedGBP,
@@ -69,7 +71,7 @@ function StatChip({
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="text-sm font-bold font-display text-foreground mt-0.5 truncate">{value}</p>
       {(pct || hint) && (
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
           {pct}
           {pct && hint ? " · " : ""}
           {hint}
@@ -95,6 +97,7 @@ function ChangeChip({ label, delta }: { label: string; delta: PeriodDelta }) {
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {formatPct(delta.changePct) ?? "—"}
             {delta.from !== null && ` · from ${formatGBP(delta.from)}`}
+            {" · incl. money in"}
           </p>
         </>
       )}
@@ -237,13 +240,7 @@ function AccountDetailTile({
     : "Est. growth";
   const feePctOfBalance =
     insight.annualFee != null && insight.latest > 0 ? (insight.annualFee / insight.latest) * 100 : null;
-  const feeHint = [
-    insight.feePct != null ? `platform ${insight.feePct}%` : null,
-    insight.ocfPct != null ? `OCF ${insight.ocfPct}%` : null,
-    insight.annualFeeGbp != null ? `${formatGBP(insight.annualFeeGbp)}/yr flat` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const feeHint = insight.feeLines.join(" · ");
 
   return (
     <div
@@ -262,6 +259,9 @@ function AccountDetailTile({
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {kindLabel(insight.kind)}
               {insight.openedOn ? ` · opened ${new Date(insight.openedOn).toLocaleDateString("en-GB")}` : ""}
+              {insight.currentRate
+                ? ` · ${insight.currentRate.ratePct}% from ${new Date(insight.currentRate.from).toLocaleDateString("en-GB")}`
+                : ""}
             </p>
           </div>
           <p className="text-lg font-bold font-display text-foreground flex-shrink-0">{formatGBP(insight.latest)}</p>
@@ -287,11 +287,7 @@ function AccountDetailTile({
               label={growthLabel}
               value={insight.estimatedGrowth == null ? "—" : formatSignedGBP(insight.estimatedGrowth)}
               pct={formatPct(insight.opened.changePct)}
-              hint={
-                insight.estimatedContributions != null
-                  ? `after ${formatGBP(insight.estimatedContributions)} estimated deposits`
-                  : "net change on logged balances"
-              }
+              hint={CONTRIBUTIONS_HINT}
             />
           )}
           {show("fees") && (
@@ -316,7 +312,11 @@ function AccountDetailTile({
             <StatChip
               label="Annualised"
               value={formatPct(insight.cagrPct) ?? "—"}
-              hint={insight.years != null ? `over ${insight.years.toFixed(1)} years` : "Need more history"}
+              hint={
+                insight.years != null
+                  ? `${CONTRIBUTIONS_HINT} · ${insight.years.toFixed(1)} years`
+                  : CONTRIBUTIONS_HINT
+              }
             />
           )}
         </div>
@@ -400,7 +400,7 @@ export default function FinanceSummary({
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {insights.accountsMissingFees > 0
                 ? `${insights.accountsMissingFees} account${insights.accountsMissingFees === 1 ? "" : "s"} with no fee set`
-                : "From platform, OCF and flat fees"}
+                : "Platform, OCF, advice and other fees"}
             </p>
           </div>
         </Panel>
@@ -411,6 +411,10 @@ export default function FinanceSummary({
             <p className="text-[11px] text-muted-foreground mt-0.5">{isaPct.toFixed(0)}% held in an ISA</p>
           </div>
         </Panel>
+      </div>
+
+      <div className="rounded-2xl border-2 border-border bg-muted/70 px-4 py-3">
+        <p className="text-xs text-foreground leading-relaxed">{CONTRIBUTIONS_NOTE}</p>
       </div>
 
       {focus && (
@@ -500,13 +504,8 @@ export default function FinanceSummary({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate">{row.account.name}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {[
-                      row.feePct != null ? `Platform ${row.feePct}%` : null,
-                      row.ocfPct != null ? `OCF ${row.ocfPct}%` : null,
-                      row.annualFeeGbp != null ? `${formatGBP(row.annualFeeGbp)} flat` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "No fee set"}
+                    {row.feeLines.join(" · ") || "No fee set"}
+                    {row.currentRate ? ` · Rate ${row.currentRate.ratePct}%` : ""}
                   </p>
                 </div>
                 <p className="text-sm font-bold font-display flex-shrink-0">

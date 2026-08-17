@@ -7,21 +7,26 @@ import type { Account, BalanceEntry } from "@/hooks/useFinance";
  */
 export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceEntry[] } {
   const accounts: Account[] = [
-    { id: "acc-current", name: "Joint Current Account", type: "Current", active: true, hidden: false },
-    { id: "acc-isa", name: "Stocks & Shares ISA", type: "ISA", active: true, hidden: false, growthAssumptionPct: 6, feePct: 0.25, ocfPct: 0.2, allocations: [
+    { id: "acc-current", name: "Joint Current Account", type: "Current", active: true, hidden: false, openedOn: "2021-03-12" },
+    { id: "acc-isa", name: "Stocks & Shares ISA", type: "ISA", active: true, hidden: false, openedOn: "2020-05-18", growthAssumptionPct: 6, feePct: 0.25, ocfPct: 0.2, adviceFeeKind: "percent", adviceFeeAmount: 0.5, allocations: [
       { id: "isa-eq", name: "Global equity", pct: 80, assetClass: "equity" },
       { id: "isa-bd", name: "Global bonds", pct: 20, assetClass: "bond" },
     ] },
-    { id: "acc-lisa", name: "Lifetime ISA", type: "LISA", active: true, hidden: false, feePct: 0.3, allocations: [
+    { id: "acc-lisa", name: "Lifetime ISA", type: "LISA", active: true, hidden: false, openedOn: "2022-04-06", feePct: 0.3, allocations: [
       { id: "lisa-eq", name: "Target date", pct: 100, assetClass: "equity" },
     ] },
-    { id: "acc-savings", name: "Easy Access Savings", type: "Savings", active: true, hidden: false },
-    { id: "acc-pension", name: "Workplace Pension", type: "Pension", active: true, hidden: false, growthAssumptionPct: 5, feePct: 0.2, ocfPct: 0.18, annualFeeGbp: 0, allocations: [
+    { id: "acc-savings", name: "Easy Access Savings", type: "Savings", active: true, hidden: false, openedOn: "2019-11-01", interestRates: [
+      { id: "sav-1", ratePct: 3.2, from: "2023-06-01" },
+      { id: "sav-2", ratePct: 4.5, from: "2024-08-01" },
+    ] },
+    { id: "acc-pension", name: "Workplace Pension", type: "Pension", active: true, hidden: false, openedOn: "2018-09-01", growthAssumptionPct: 5, feePct: 0.2, ocfPct: 0.18, extraFees: [
+      { id: "pen-plat", name: "Scheme levy", kind: "gbp", amount: 24 },
+    ], allocations: [
       { id: "pen-eq", name: "Global equity", pct: 70, assetClass: "equity" },
       { id: "pen-bd", name: "Bonds", pct: 20, assetClass: "bond" },
       { id: "pen-cash", name: "Cash", pct: 10, assetClass: "cash" },
     ] },
-    { id: "acc-old-isa", name: "Cash ISA (closed)", type: "ISA", active: false, hidden: false },
+    { id: "acc-old-isa", name: "Cash ISA (closed)", type: "ISA", active: false, hidden: false, openedOn: "2016-04-06" },
   ];
 
   // Monthly entries from 2023-06 to 2026-06 — spans tax years 23/24, 24/25, 25/26.

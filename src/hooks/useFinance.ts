@@ -24,18 +24,38 @@ export interface FundAllocation {
   assetClass: AssetClass;
 }
 
+export type FeeKind = "percent" | "gbp";
+
+export interface AccountFee {
+  id: string;
+  name: string;
+  kind: FeeKind;
+  amount: number;
+}
+
+export interface InterestRatePeriod {
+  id: string;
+  ratePct: number;
+  from: string;
+}
+
 export interface Account {
   id: string;
   name: string;
   type: string;
   active: boolean;
   hidden: boolean;
+  openedOn?: string; // ISO date the account was opened
   // Optional predictive-modelling assumptions, set per account for the "Custom" scenario.
   growthAssumptionPct?: number; // assumed annual growth rate, e.g. 5 for 5%/yr
   monthlyContribution?: number; // assumed regular monthly deposit
   feePct?: number; // assumed annual platform fee, e.g. 0.25 for 0.25%/yr
   ocfPct?: number; // ongoing charges / fund OCF, e.g. 0.2 for 0.2%/yr
   annualFeeGbp?: number; // flat annual account fee in £
+  adviceFeeKind?: FeeKind;
+  adviceFeeAmount?: number;
+  extraFees?: AccountFee[];
+  interestRates?: InterestRatePeriod[];
   allocations?: FundAllocation[];
   bankProvider?: "truelayer";
   bankConnectionId?: string;
@@ -113,15 +133,18 @@ export function useFinance(scopeUserId?: string) {
   }, [uid]);
 
   const addAccount = useCallback(
-    async (name: string, type: string) => {
+    async (name: string, type: string, extras?: { openedOn?: string }) => {
       if (!uid) return;
-      await addDoc(collection(db, "finance", uid, "accounts"), {
+      const payload: Record<string, unknown> = {
         name,
         type,
         active: true,
         hidden: false,
         createdAt: serverTimestamp(),
-      });
+      };
+      const openedOn = extras?.openedOn?.trim();
+      if (openedOn) payload.openedOn = openedOn;
+      await addDoc(collection(db, "finance", uid, "accounts"), payload);
     },
     [uid]
   );

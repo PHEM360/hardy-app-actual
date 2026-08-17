@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { useFinance, type Account, type BalanceEntry, type FundAllocation } from "@/hooks/useFinance";
+import { useFinance, type Account, type AccountFee, type BalanceEntry, type FeeKind, type FundAllocation, type InterestRatePeriod } from "@/hooks/useFinance";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useFinanceSettings } from "@/hooks/useFinanceSettings";
 import { resolveAccountType } from "@/lib/financeAccounts";
@@ -30,7 +30,7 @@ import FinanceSummary from "@/components/finance/FinanceSummary";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
-import { buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
+import { accountFeeTotals, buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
 import type { FinanceStatId } from "@/lib/financeDisplay";
 import ImportBalancesDialog from "@/components/finance/ImportBalancesDialog";
 import {
@@ -223,6 +223,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState("Savings");
   const [newAccountCustomType, setNewAccountCustomType] = useState("");
+  const [newAccountOpenedOn, setNewAccountOpenedOn] = useState("");
   const [manageType, setManageType] = useState("Savings");
   const [manageCustomType, setManageCustomType] = useState("");
   const [newBalanceAccountId, setNewBalanceAccountId] = useState("");
@@ -242,6 +243,11 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [assumptionFee, setAssumptionFee] = useState("");
   const [assumptionOcf, setAssumptionOcf] = useState("");
   const [assumptionAnnualFee, setAssumptionAnnualFee] = useState("");
+  const [assumptionAdviceFee, setAssumptionAdviceFee] = useState("");
+  const [assumptionAdviceKind, setAssumptionAdviceKind] = useState<FeeKind>("percent");
+  const [assumptionExtraFees, setAssumptionExtraFees] = useState<AccountFee[]>([]);
+  const [assumptionInterestRates, setAssumptionInterestRates] = useState<InterestRatePeriod[]>([]);
+  const [assumptionOpenedOn, setAssumptionOpenedOn] = useState("");
   const [assumptionAllocations, setAssumptionAllocations] = useState<FundAllocation[]>([]);
 
   useEffect(() => {
@@ -336,7 +342,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         const accEntries = entries.filter((e) => e.accountId === acc.id);
         const growthPct = resolveGrowthPct(scenario, acc, accEntries);
         const monthlyContribution = scenario === "custom" ? defaultMonthlyContribution(acc) : (acc.monthlyContribution ?? (acc.type === "LISA" ? 4000 / 12 : 0));
-        const feePct = (acc.feePct ?? 0) + (acc.ocfPct ?? 0);
+        const feePct = accountFeeTotals(acc).pct ?? 0;
         const points = projectAccountBalance({
           startingBalance,
           annualGrowthPct: growthPct,
@@ -392,11 +398,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) return;
     const type = resolveAccountType(newAccountType, newAccountCustomType);
-    await addAccount(newAccountName, type);
+    await addAccount(newAccountName, type, { openedOn: newAccountOpenedOn });
     await ensureType(type);
     setNewAccountName("");
     setNewAccountType("Savings");
     setNewAccountCustomType("");
+    setNewAccountOpenedOn("");
     setAddAccountOpen(false);
   };
 
@@ -446,12 +453,33 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         assetClass: row.assetClass,
       }))
       .filter((row) => row.name || row.pct > 0);
+    const cleanedFees = assumptionExtraFees
+      .map((row) => ({
+        id: row.id,
+        name: row.name.trim(),
+        kind: row.kind,
+        amount: Number(row.amount) || 0,
+      }))
+      .filter((row) => row.name || row.amount > 0);
+    const cleanedRates = assumptionInterestRates
+      .map((row) => ({
+        id: row.id,
+        ratePct: Number(row.ratePct) || 0,
+        from: row.from,
+      }))
+      .filter((row) => row.from && row.ratePct > 0)
+      .sort((a, b) => a.from.localeCompare(b.from));
     const updates = {
+      openedOn: assumptionOpenedOn.trim() ? assumptionOpenedOn : deleteField(),
       growthAssumptionPct: assumptionGrowth.trim() ? parseFloat(assumptionGrowth) : deleteField(),
       monthlyContribution: assumptionContribution.trim() ? parseFloat(assumptionContribution) : deleteField(),
       feePct: assumptionFee.trim() ? parseFloat(assumptionFee) : deleteField(),
       ocfPct: assumptionOcf.trim() ? parseFloat(assumptionOcf) : deleteField(),
       annualFeeGbp: assumptionAnnualFee.trim() ? parseFloat(assumptionAnnualFee) : deleteField(),
+      adviceFeeAmount: assumptionAdviceFee.trim() ? parseFloat(assumptionAdviceFee) : deleteField(),
+      adviceFeeKind: assumptionAdviceFee.trim() ? assumptionAdviceKind : deleteField(),
+      extraFees: cleanedFees.length ? cleanedFees : deleteField(),
+      interestRates: cleanedRates.length ? cleanedRates : deleteField(),
       allocations: cleanedAllocations.length ? cleanedAllocations : deleteField(),
     };
     updateAccount(id, updates as Partial<Account>);
@@ -511,6 +539,9 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             )}
           </div>
         )}
+        <p className="text-[11px] text-white/75 mt-3 leading-snug">
+          These changes include money paid in. Individual deposits and withdrawals aren’t recorded, so this isn’t a pure return.
+        </p>
       </motion.div>
 
       {/* Account Summary Cards — click to select in graph, gear to manage */}
@@ -540,6 +571,10 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   customValue={newAccountCustomType}
                   onCustomChange={setNewAccountCustomType}
                 />
+                <div className="space-y-2">
+                  <Label>Date opened <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input type="date" value={newAccountOpenedOn} onChange={(e) => setNewAccountOpenedOn(e.target.value)} className="h-11 rounded-xl" />
+                </div>
                 <Button onClick={handleAddAccount} disabled={!newAccountName.trim()} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
               </div>
             </DialogContent>
@@ -603,6 +638,16 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     {formatGBP(acc.latestBalance)}
                   </p>
                   <p className="text-xs font-medium truncate" style={{ color }}>{acc.name}</p>
+                  {(acc.openedOn || insight?.openedOn) && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Opened {new Date(acc.openedOn || insight.openedOn!).toLocaleDateString("en-GB")}
+                    </p>
+                  )}
+                  {insight?.currentRate && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {insight.currentRate.ratePct}% from {new Date(insight.currentRate.from).toLocaleDateString("en-GB")}
+                    </p>
+                  )}
                   {insight && (showStat("tileMonth") || showStat("tileTaxYear") || showStat("tileOpened")) && (
                     <div className="mt-2 rounded-lg bg-muted/90 border border-border/70 px-2 py-1.5">
                       {showStat("tileMonth") && <TileDelta label="1 month" delta={insight.month} />}
@@ -627,6 +672,11 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     setAssumptionFee(acc.feePct !== undefined ? String(acc.feePct) : "");
                     setAssumptionOcf(acc.ocfPct !== undefined ? String(acc.ocfPct) : "");
                     setAssumptionAnnualFee(acc.annualFeeGbp !== undefined ? String(acc.annualFeeGbp) : "");
+                    setAssumptionAdviceFee(acc.adviceFeeAmount !== undefined ? String(acc.adviceFeeAmount) : "");
+                    setAssumptionAdviceKind(acc.adviceFeeKind ?? "percent");
+                    setAssumptionExtraFees(acc.extraFees ?? []);
+                    setAssumptionInterestRates(acc.interestRates ?? []);
+                    setAssumptionOpenedOn(acc.openedOn ?? "");
                     setAssumptionAllocations(acc.allocations ?? []);
                   }}
                   className="absolute top-1.5 right-1.5 p-1 rounded-md opacity-70 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-muted transition-all text-muted-foreground"
@@ -1081,6 +1131,10 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 customValue={manageCustomType}
                 onCustomChange={setManageCustomType}
               />
+              <div className="space-y-2">
+                <Label className="text-xs">Date opened</Label>
+                <Input type="date" value={assumptionOpenedOn} onChange={(e) => setAssumptionOpenedOn(e.target.value)} className="h-10 rounded-xl" />
+              </div>
               {canEdit && (
                 <Button
                   size="sm"
@@ -1134,10 +1188,18 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   feePct={assumptionFee}
                   ocfPct={assumptionOcf}
                   annualFeeGbp={assumptionAnnualFee}
+                  adviceFeeAmount={assumptionAdviceFee}
+                  adviceFeeKind={assumptionAdviceKind}
+                  extraFees={assumptionExtraFees}
+                  interestRates={assumptionInterestRates}
                   allocations={assumptionAllocations}
                   onFeePct={setAssumptionFee}
                   onOcfPct={setAssumptionOcf}
                   onAnnualFeeGbp={setAssumptionAnnualFee}
+                  onAdviceFeeAmount={setAssumptionAdviceFee}
+                  onAdviceFeeKind={setAssumptionAdviceKind}
+                  onExtraFees={setAssumptionExtraFees}
+                  onInterestRates={setAssumptionInterestRates}
                   onAllocations={setAssumptionAllocations}
                 />
               )}

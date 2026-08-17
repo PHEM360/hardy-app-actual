@@ -1,4 +1,4 @@
-import type { Account, AssetClass, BalanceEntry, FundAllocation } from "@/hooks/useFinance";
+import type { Account, AssetClass, BalanceEntry, FundAllocation, InterestRatePeriod } from "@/hooks/useFinance";
 import { computeHistoricalGrowthRate } from "@/lib/financeProjection";
 
 export const ASSET_CLASS_LABELS: Record<AssetClass | "unallocated", string> = {
@@ -9,6 +9,11 @@ export const ASSET_CLASS_LABELS: Record<AssetClass | "unallocated", string> = {
   other: "Other",
   unallocated: "Not allocated",
 };
+
+export const CONTRIBUTIONS_NOTE =
+  "Balance changes and return figures include money paid in. Individual deposits and withdrawals aren’t recorded, so this isn’t a pure investment return.";
+
+export const CONTRIBUTIONS_HINT = "Includes contributions — transactions aren’t logged separately";
 
 export const ASSET_CLASS_COLORS: Record<AssetClass | "unallocated", string> = {
   equity: "#3d5a80",
@@ -59,6 +64,9 @@ export interface AccountInsight {
   ocfPct: number | null;
   annualFeeGbp: number | null;
   combinedFeePct: number | null;
+  annualFeeGbpTotal: number | null;
+  feeLines: string[];
+  currentRate: InterestRatePeriod | null;
   allocations: FundAllocation[];
   allocationSource: "manual" | "cash" | "none";
 }
@@ -220,9 +228,70 @@ export function resolvedAllocations(account: Account, kind: AccountKind): {
   return { allocations: [], source: "none" };
 }
 
+export function accountFeeTotals(account: Account): { pct: number | null; gbp: number | null; hasAny: boolean; lines: string[] } {
+  let pct = 0;
+  let gbp = 0;
+  let hasPct = false;
+  let hasGbp = false;
+  const lines: string[] = [];
+
+  if (account.feePct != null) {
+    pct += account.feePct;
+    hasPct = true;
+    lines.push(`Platform ${account.feePct}%`);
+  }
+  if (account.ocfPct != null) {
+    pct += account.ocfPct;
+    hasPct = true;
+    lines.push(`OCF ${account.ocfPct}%`);
+  }
+  if (account.annualFeeGbp != null) {
+    gbp += account.annualFeeGbp;
+    hasGbp = true;
+    lines.push(`£${account.annualFeeGbp.toLocaleString("en-GB")}/yr flat`);
+  }
+  if (account.adviceFeeAmount != null) {
+    if (account.adviceFeeKind === "gbp") {
+      gbp += account.adviceFeeAmount;
+      hasGbp = true;
+      lines.push(`Advice £${account.adviceFeeAmount.toLocaleString("en-GB")}/yr`);
+    } else {
+      pct += account.adviceFeeAmount;
+      hasPct = true;
+      lines.push(`Advice ${account.adviceFeeAmount}%`);
+    }
+  }
+  for (const fee of account.extraFees ?? []) {
+    if (!fee.amount) continue;
+    if (fee.kind === "gbp") {
+      gbp += fee.amount;
+      hasGbp = true;
+      lines.push(`${fee.name || "Fee"} £${fee.amount.toLocaleString("en-GB")}/yr`);
+    } else {
+      pct += fee.amount;
+      hasPct = true;
+      lines.push(`${fee.name || "Fee"} ${fee.amount}%`);
+    }
+  }
+
+  return {
+    pct: hasPct ? pct : null,
+    gbp: hasGbp ? gbp : null,
+    hasAny: hasPct || hasGbp,
+    lines,
+  };
+}
+
+export function currentInterestRate(account: Account, onDate?: string): InterestRatePeriod | null {
+  const asOf = onDate ?? new Date().toISOString().split("T")[0];
+  const rates = [...(account.interestRates ?? [])]
+    .filter((row) => row.from && row.from <= asOf && Number.isFinite(row.ratePct))
+    .sort((a, b) => a.from.localeCompare(b.from));
+  return rates[rates.length - 1] ?? null;
+}
+
 export function accountCombinedFeePct(account: Account): number | null {
-  if (account.feePct == null && account.ocfPct == null) return null;
-  return (account.feePct ?? 0) + (account.ocfPct ?? 0);
+  return accountFeeTotals(account).pct;
 }
 
 function insightFor(account: Account, entries: BalanceEntry[], today: string): AccountInsight {
@@ -256,22 +325,25 @@ function insightFor(account: Account, entries: BalanceEntry[], today: string): A
   const feePct = account.feePct ?? null;
   const ocfPct = account.ocfPct ?? null;
   const annualFeeGbp = account.annualFeeGbp ?? null;
-  const pctFees = accountCombinedFeePct(account);
+  const feeTotals = accountFeeTotals(account);
+  const pctFees = feeTotals.pct;
+  const gbpFees = feeTotals.gbp;
   const avg = first && latestEntry ? (first.balance + latestEntry.balance) / 2 : latest;
-  const hasFeeInput = pctFees != null || annualFeeGbp != null;
+  const hasFeeInput = feeTotals.hasAny;
   const estimatedFees =
     hasFeeInput && years != null
-      ? (avg * ((pctFees ?? 0) / 100) + (annualFeeGbp ?? 0)) * Math.max(years, 0)
+      ? (avg * ((pctFees ?? 0) / 100) + (gbpFees ?? 0)) * Math.max(years, 0)
       : null;
-  const annualFee = hasFeeInput ? latest * ((pctFees ?? 0) / 100) + (annualFeeGbp ?? 0) : null;
+  const annualFee = hasFeeInput ? latest * ((pctFees ?? 0) / 100) + (gbpFees ?? 0) : null;
   const { allocations, source: allocationSource } = resolvedAllocations(account, kind);
+  const openedOn = account.openedOn || first?.date || null;
 
   return {
     account,
     kind,
     latest,
     latestDate,
-    openedOn: first?.date ?? null,
+    openedOn,
     starting: first?.balance ?? null,
     opened,
     month,
@@ -288,6 +360,9 @@ function insightFor(account: Account, entries: BalanceEntry[], today: string): A
     ocfPct,
     annualFeeGbp,
     combinedFeePct: pctFees,
+    annualFeeGbpTotal: gbpFees,
+    feeLines: feeTotals.lines,
+    currentRate: currentInterestRate(account, today),
     allocations,
     allocationSource,
   };
