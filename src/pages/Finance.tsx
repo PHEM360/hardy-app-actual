@@ -17,11 +17,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { useFinance, type Account, type BalanceEntry } from "@/hooks/useFinance";
+import { useFinance, type Account, type BalanceEntry, type FundAllocation } from "@/hooks/useFinance";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useFinanceSettings } from "@/hooks/useFinanceSettings";
 import { resolveAccountType } from "@/lib/financeAccounts";
 import { AccountTypeFields } from "@/components/finance/AccountTypeFields";
+import AccountHoldingsFields from "@/components/finance/AccountHoldingsFields";
 import AccountTypesSettings from "@/components/finance/AccountTypesSettings";
 import BankSyncSettings from "@/components/finance/BankSyncSettings";
 import DisplayStatsSettings from "@/components/finance/DisplayStatsSettings";
@@ -29,7 +30,7 @@ import FinanceSummary from "@/components/finance/FinanceSummary";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
-import { buildFinanceInsights, formatPct, formatSignedGBP } from "@/lib/financeInsights";
+import { buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
 import type { FinanceStatId } from "@/lib/financeDisplay";
 import ImportBalancesDialog from "@/components/finance/ImportBalancesDialog";
 import {
@@ -146,16 +147,34 @@ function pillClass(active: boolean) {
 
 function HeroDelta({ label, change, pct }: { label: string; change: number | null; pct: number | null }) {
   return (
-    <div className="rounded-xl bg-black/15 border border-white/15 px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">{label}</p>
+    <div className="rounded-xl bg-white/25 border border-white/45 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-white/80">{label}</p>
       {change === null ? (
-        <p className="text-sm text-white/70 mt-0.5">Not enough history</p>
+        <p className="text-sm text-white/75 mt-0.5">Not enough history</p>
       ) : (
         <p className="text-sm font-bold font-display text-white mt-0.5">
           {formatSignedGBP(change)}
-          {formatPct(pct) && <span className="text-white/75 font-medium ml-1.5">{formatPct(pct)}</span>}
+          {formatPct(pct) && <span className="text-white/85 font-medium ml-1.5">{formatPct(pct)}</span>}
         </p>
       )}
+    </div>
+  );
+}
+
+function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
+  const value = delta.change;
+  const tone =
+    value == null || value === 0
+      ? "text-muted-foreground"
+      : value > 0
+        ? "text-emerald-700 dark:text-emerald-400"
+        : "text-rose-600 dark:text-rose-400";
+  return (
+    <div className="flex items-center justify-between gap-1 mt-1 text-[10px] leading-tight">
+      <span className="text-muted-foreground uppercase tracking-wide font-semibold">{label}</span>
+      <span className={`font-bold tabular-nums ${tone}`}>
+        {value == null ? "—" : formatSignedGBP(value, true)}
+      </span>
     </div>
   );
 }
@@ -221,6 +240,9 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [assumptionGrowth, setAssumptionGrowth] = useState("");
   const [assumptionContribution, setAssumptionContribution] = useState("");
   const [assumptionFee, setAssumptionFee] = useState("");
+  const [assumptionOcf, setAssumptionOcf] = useState("");
+  const [assumptionAnnualFee, setAssumptionAnnualFee] = useState("");
+  const [assumptionAllocations, setAssumptionAllocations] = useState<FundAllocation[]>([]);
 
   useEffect(() => {
     const bank = searchParams.get("bank");
@@ -314,7 +336,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         const accEntries = entries.filter((e) => e.accountId === acc.id);
         const growthPct = resolveGrowthPct(scenario, acc, accEntries);
         const monthlyContribution = scenario === "custom" ? defaultMonthlyContribution(acc) : (acc.monthlyContribution ?? (acc.type === "LISA" ? 4000 / 12 : 0));
-        const feePct = acc.feePct ?? 0;
+        const feePct = (acc.feePct ?? 0) + (acc.ocfPct ?? 0);
         const points = projectAccountBalance({
           startingBalance,
           annualGrowthPct: growthPct,
@@ -345,9 +367,14 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   }, [accounts, entries]);
 
   const totalBalance = latestBalances.filter((a) => a.active && !a.hidden).reduce((s, a) => s + a.latestBalance, 0);
-  const portfolio = useMemo(
-    () => buildFinanceInsights(accounts.filter((a) => a.active && !a.hidden), entries).portfolio,
+  const insights = useMemo(
+    () => buildFinanceInsights(accounts.filter((a) => a.active && !a.hidden), entries),
     [accounts, entries]
+  );
+  const portfolio = insights.portfolio;
+  const insightById = useMemo(
+    () => Object.fromEntries(insights.accounts.map((row) => [row.account.id, row])),
+    [insights]
   );
 
   const pivot = useMemo(() => buildPivotTable(entries), [entries]);
@@ -411,12 +438,24 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const saveAssumptions = (id: string) => {
     // Firestore's updateDoc rejects literal `undefined` — deleteField() clears a
     // previously-set assumption when the input is left blank.
+    const cleanedAllocations = assumptionAllocations
+      .map((row) => ({
+        id: row.id,
+        name: row.name.trim(),
+        pct: Number(row.pct) || 0,
+        assetClass: row.assetClass,
+      }))
+      .filter((row) => row.name || row.pct > 0);
     const updates = {
       growthAssumptionPct: assumptionGrowth.trim() ? parseFloat(assumptionGrowth) : deleteField(),
       monthlyContribution: assumptionContribution.trim() ? parseFloat(assumptionContribution) : deleteField(),
       feePct: assumptionFee.trim() ? parseFloat(assumptionFee) : deleteField(),
+      ocfPct: assumptionOcf.trim() ? parseFloat(assumptionOcf) : deleteField(),
+      annualFeeGbp: assumptionAnnualFee.trim() ? parseFloat(assumptionAnnualFee) : deleteField(),
+      allocations: cleanedAllocations.length ? cleanedAllocations : deleteField(),
     };
     updateAccount(id, updates as Partial<Account>);
+    toast.success("Account details saved");
   };
 
   const managingAccount = manageAccountId ? accounts.find(a => a.id === manageAccountId) : null;
@@ -512,10 +551,15 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-5">
+      <div className={`grid gap-2 mb-5 ${
+        showStat("tileMonth") || showStat("tileTaxYear") || showStat("tileOpened")
+          ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+          : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+      }`}>
         {latestBalances.filter((a) => showHidden || !a.hidden).map((acc, i) => {
           const color = colorFor(acc);
           const isSelected = selectedAccounts.includes(acc.id);
+          const insight = insightById[acc.id];
           return (
             <motion.div
               key={acc.id}
@@ -559,6 +603,13 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     {formatGBP(acc.latestBalance)}
                   </p>
                   <p className="text-xs font-medium truncate" style={{ color }}>{acc.name}</p>
+                  {insight && (showStat("tileMonth") || showStat("tileTaxYear") || showStat("tileOpened")) && (
+                    <div className="mt-2 rounded-lg bg-muted/90 border border-border/70 px-2 py-1.5">
+                      {showStat("tileMonth") && <TileDelta label="1 month" delta={insight.month} />}
+                      {showStat("tileTaxYear") && <TileDelta label="Tax year" delta={insight.taxYear} />}
+                      {showStat("tileOpened") && <TileDelta label="Opened" delta={insight.opened} />}
+                    </div>
+                  )}
                 </button>
                 <button
                   onClick={() => {
@@ -574,8 +625,11 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     setAssumptionGrowth(acc.growthAssumptionPct !== undefined ? String(acc.growthAssumptionPct) : "");
                     setAssumptionContribution(acc.monthlyContribution !== undefined ? String(acc.monthlyContribution) : "");
                     setAssumptionFee(acc.feePct !== undefined ? String(acc.feePct) : "");
+                    setAssumptionOcf(acc.ocfPct !== undefined ? String(acc.ocfPct) : "");
+                    setAssumptionAnnualFee(acc.annualFeeGbp !== undefined ? String(acc.annualFeeGbp) : "");
+                    setAssumptionAllocations(acc.allocations ?? []);
                   }}
-                  className="absolute top-1.5 right-1.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted transition-all text-muted-foreground"
+                  className="absolute top-1.5 right-1.5 p-1 rounded-md opacity-70 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-muted transition-all text-muted-foreground"
                 >
                   <Settings2 className="w-3 h-3" />
                 </button>
@@ -1001,7 +1055,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
       {/* Account Management Dialog — click on account card gear icon */}
       <Dialog open={!!manageAccountId} onOpenChange={(o) => !o && setManageAccountId(null)}>
-        <DialogContent aria-describedby={undefined} className="max-w-md mx-4">
+        <DialogContent aria-describedby={undefined} className="max-w-md mx-4 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
               {managingAccount && (
@@ -1054,12 +1108,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 </Button>
               </div>
               {/* Projection assumptions (used by the "Custom" scenario) */}
-              <div className="space-y-2 p-3 rounded-xl bg-muted/30">
+              <div className="space-y-2 p-3 rounded-xl bg-muted/50 border border-border">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-                  <Label className="text-xs">Projection Assumptions (Custom scenario)</Label>
+                  <Label className="text-xs">Projection assumptions</Label>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Growth %/yr</Label>
                     <Input type="number" step="0.1" placeholder="4" value={assumptionGrowth} onChange={(e) => setAssumptionGrowth(e.target.value)} className="h-9 rounded-lg text-xs" />
@@ -1068,20 +1122,30 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     <Label className="text-[10px] text-muted-foreground">Monthly £</Label>
                     <Input type="number" step="1" placeholder="0" value={assumptionContribution} onChange={(e) => setAssumptionContribution(e.target.value)} className="h-9 rounded-lg text-xs" />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">Fee %/yr</Label>
-                    <Input type="number" step="0.1" placeholder="0" value={assumptionFee} onChange={(e) => setAssumptionFee(e.target.value)} className="h-9 rounded-lg text-xs" />
-                  </div>
                 </div>
                 {managingAccount.type === "LISA" && (
                   <p className="text-[10px] text-muted-foreground">
                     LISA rules apply automatically under every scenario: contributions capped at £4,000/yr with a 25% government bonus added on top.
                   </p>
                 )}
-                <Button onClick={() => manageAccountId && saveAssumptions(manageAccountId)} size="sm" variant="outline" className="w-full h-8 rounded-lg text-xs">
-                  Save Assumptions
-                </Button>
               </div>
+              {canEdit && (
+                <AccountHoldingsFields
+                  feePct={assumptionFee}
+                  ocfPct={assumptionOcf}
+                  annualFeeGbp={assumptionAnnualFee}
+                  allocations={assumptionAllocations}
+                  onFeePct={setAssumptionFee}
+                  onOcfPct={setAssumptionOcf}
+                  onAnnualFeeGbp={setAssumptionAnnualFee}
+                  onAllocations={setAssumptionAllocations}
+                />
+              )}
+              {canEdit && (
+                <Button onClick={() => manageAccountId && saveAssumptions(manageAccountId)} size="sm" className="w-full h-9 rounded-lg text-xs bg-gradient-primary">
+                  Save account details
+                </Button>
+              )}
               {/* History for this account */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Balance History</p>

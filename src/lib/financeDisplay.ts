@@ -2,14 +2,19 @@ export const FINANCE_STATS = [
   { id: "heroMonth", group: "Total tile", label: "Change since last month" },
   { id: "heroTaxYear", group: "Total tile", label: "Change this tax year" },
   { id: "heroOpened", group: "Total tile", label: "Change since accounts opened" },
-  { id: "startingBalance", group: "Account tiles", label: "Starting balance" },
-  { id: "changeMonth", group: "Account tiles", label: "Change since last month" },
-  { id: "changeTaxYear", group: "Account tiles", label: "Change this tax year" },
-  { id: "changeOpened", group: "Account tiles", label: "Change since opened" },
-  { id: "fees", group: "Account tiles", label: "Fees (estimated)" },
-  { id: "interest", group: "Account tiles", label: "Estimated interest / growth" },
-  { id: "highLow", group: "Account tiles", label: "High and low" },
-  { id: "cagr", group: "Account tiles", label: "Annualised return" },
+  { id: "tileMonth", group: "Top account tiles", label: "Change since last month" },
+  { id: "tileTaxYear", group: "Top account tiles", label: "Change this tax year" },
+  { id: "tileOpened", group: "Top account tiles", label: "Change since opened", defaultOn: false },
+  { id: "startingBalance", group: "Summary accounts", label: "Starting balance" },
+  { id: "changeMonth", group: "Summary accounts", label: "Change since last month" },
+  { id: "changeTaxYear", group: "Summary accounts", label: "Change this tax year" },
+  { id: "changeOpened", group: "Summary accounts", label: "Change since opened" },
+  { id: "fees", group: "Summary accounts", label: "Fees (estimated)" },
+  { id: "interest", group: "Summary accounts", label: "Estimated interest / growth" },
+  { id: "highLow", group: "Summary accounts", label: "High and low" },
+  { id: "cagr", group: "Summary accounts", label: "Annualised return" },
+  { id: "allocation", group: "Insights", label: "Asset allocation" },
+  { id: "feesOverview", group: "Insights", label: "Fees overview" },
   { id: "isaSplit", group: "Insights", label: "ISA vs not in an ISA" },
   { id: "isaMix", group: "Insights", label: "Cash ISA vs stocks & shares ISA" },
   { id: "liquidity", group: "Insights", label: "Cash & easy-access vs invested" },
@@ -20,10 +25,12 @@ export const FINANCE_STATS = [
 
 export type FinanceStatId = (typeof FINANCE_STATS)[number]["id"];
 
-export const FINANCE_STAT_GROUPS = ["Total tile", "Account tiles", "Insights"] as const;
+export const FINANCE_STAT_GROUPS = ["Total tile", "Top account tiles", "Summary accounts", "Insights"] as const;
 
 export function defaultDisplayStats(): Record<FinanceStatId, boolean> {
-  return Object.fromEntries(FINANCE_STATS.map((s) => [s.id, true])) as Record<FinanceStatId, boolean>;
+  return Object.fromEntries(
+    FINANCE_STATS.map((s) => [s.id, "defaultOn" in s ? s.defaultOn !== false : true])
+  ) as Record<FinanceStatId, boolean>;
 }
 
 export function mergeDisplayStats(raw?: unknown): Record<FinanceStatId, boolean> {

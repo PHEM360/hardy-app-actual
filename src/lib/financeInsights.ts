@@ -1,5 +1,23 @@
-import type { Account, BalanceEntry } from "@/hooks/useFinance";
+import type { Account, AssetClass, BalanceEntry, FundAllocation } from "@/hooks/useFinance";
 import { computeHistoricalGrowthRate } from "@/lib/financeProjection";
+
+export const ASSET_CLASS_LABELS: Record<AssetClass | "unallocated", string> = {
+  equity: "Equities",
+  bond: "Bonds",
+  cash: "Cash",
+  property: "Property",
+  other: "Other",
+  unallocated: "Not allocated",
+};
+
+export const ASSET_CLASS_COLORS: Record<AssetClass | "unallocated", string> = {
+  equity: "#3d5a80",
+  bond: "#c8961e",
+  cash: "#3c6e47",
+  property: "#5c4a7d",
+  other: "#8a4a5c",
+  unallocated: "#7a7a74",
+};
 
 export type AccountKind =
   | "current"
@@ -38,6 +56,11 @@ export interface AccountInsight {
   estimatedFees: number | null;
   annualFee: number | null;
   feePct: number | null;
+  ocfPct: number | null;
+  annualFeeGbp: number | null;
+  combinedFeePct: number | null;
+  allocations: FundAllocation[];
+  allocationSource: "manual" | "cash" | "none";
 }
 
 export interface MixSlice {
@@ -45,6 +68,7 @@ export interface MixSlice {
   label: string;
   amount: number;
   pct: number;
+  accountIds: string[];
 }
 
 export interface FinanceInsights {
@@ -59,7 +83,11 @@ export interface FinanceInsights {
   isaMix: MixSlice[];
   liquidity: MixSlice[];
   typeMix: MixSlice[];
+  allocation: MixSlice[];
   movers: AccountInsight[];
+  totalAnnualFees: number | null;
+  accountsMissingFees: number;
+  accountsMissingAllocations: number;
 }
 
 export function classifyAccount(acc: Account): AccountKind {
@@ -163,15 +191,38 @@ function sumDelta(rows: PeriodDelta[]): PeriodDelta {
   return delta(from, to);
 }
 
-function mix(rows: { key: string; label: string; amount: number }[]): MixSlice[] {
+function mix(rows: { key: string; label: string; amount: number; accountIds?: string[] }[]): MixSlice[] {
   const total = rows.reduce((sum, row) => sum + Math.max(0, row.amount), 0);
   return rows
     .filter((row) => row.amount > 0)
     .map((row) => ({
-      ...row,
+      key: row.key,
+      label: row.label,
+      amount: row.amount,
+      accountIds: row.accountIds ?? [],
       pct: total > 0 ? (row.amount / total) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
+}
+
+export function resolvedAllocations(account: Account, kind: AccountKind): {
+  allocations: FundAllocation[];
+  source: AccountInsight["allocationSource"];
+} {
+  const manual = (account.allocations ?? []).filter((row) => row.pct > 0);
+  if (manual.length > 0) return { allocations: manual, source: "manual" };
+  if (isLiquidKind(kind)) {
+    return {
+      allocations: [{ id: "cash", name: "Cash", pct: 100, assetClass: "cash" }],
+      source: "cash",
+    };
+  }
+  return { allocations: [], source: "none" };
+}
+
+export function accountCombinedFeePct(account: Account): number | null {
+  if (account.feePct == null && account.ocfPct == null) return null;
+  return (account.feePct ?? 0) + (account.ocfPct ?? 0);
 }
 
 function insightFor(account: Account, entries: BalanceEntry[], today: string): AccountInsight {
@@ -201,14 +252,23 @@ function insightFor(account: Account, entries: BalanceEntry[], today: string): A
     account.monthlyContribution != null && years != null ? account.monthlyContribution * years * 12 : null;
   const estimatedGrowth =
     opened.change == null ? null : estimatedContributions != null ? opened.change - estimatedContributions : opened.change;
+  const kind = classifyAccount(account);
   const feePct = account.feePct ?? null;
+  const ocfPct = account.ocfPct ?? null;
+  const annualFeeGbp = account.annualFeeGbp ?? null;
+  const pctFees = accountCombinedFeePct(account);
   const avg = first && latestEntry ? (first.balance + latestEntry.balance) / 2 : latest;
-  const estimatedFees = feePct != null && years != null ? avg * (feePct / 100) * Math.max(years, 0) : null;
-  const annualFee = feePct != null ? latest * (feePct / 100) : null;
+  const hasFeeInput = pctFees != null || annualFeeGbp != null;
+  const estimatedFees =
+    hasFeeInput && years != null
+      ? (avg * ((pctFees ?? 0) / 100) + (annualFeeGbp ?? 0)) * Math.max(years, 0)
+      : null;
+  const annualFee = hasFeeInput ? latest * ((pctFees ?? 0) / 100) + (annualFeeGbp ?? 0) : null;
+  const { allocations, source: allocationSource } = resolvedAllocations(account, kind);
 
   return {
     account,
-    kind: classifyAccount(account),
+    kind,
     latest,
     latestDate,
     openedOn: first?.date ?? null,
@@ -225,6 +285,11 @@ function insightFor(account: Account, entries: BalanceEntry[], today: string): A
     estimatedFees,
     annualFee,
     feePct,
+    ocfPct,
+    annualFeeGbp,
+    combinedFeePct: pctFees,
+    allocations,
+    allocationSource,
   };
 }
 
@@ -234,16 +299,52 @@ export function buildFinanceInsights(accounts: Account[], entries: BalanceEntry[
   const accountInsights = visible.map((acc) => insightFor(acc, entries, today));
   const latest = accountInsights.reduce((sum, row) => sum + row.latest, 0);
 
-  const isaAmount = accountInsights.filter((row) => isIsaKind(row.kind)).reduce((sum, row) => sum + row.latest, 0);
-  const cashIsa = accountInsights.filter((row) => row.kind === "cash_isa").reduce((sum, row) => sum + row.latest, 0);
-  const ssIsa = accountInsights.filter((row) => row.kind === "ss_isa").reduce((sum, row) => sum + row.latest, 0);
-  const lisa = accountInsights.filter((row) => row.kind === "lisa").reduce((sum, row) => sum + row.latest, 0);
-  const liquid = accountInsights.filter((row) => isLiquidKind(row.kind)).reduce((sum, row) => sum + row.latest, 0);
+  const isaRows = accountInsights.filter((row) => isIsaKind(row.kind));
+  const nonIsaRows = accountInsights.filter((row) => !isIsaKind(row.kind));
+  const cashIsaRows = accountInsights.filter((row) => row.kind === "cash_isa");
+  const ssIsaRows = accountInsights.filter((row) => row.kind === "ss_isa");
+  const lisaRows = accountInsights.filter((row) => row.kind === "lisa");
+  const liquidRows = accountInsights.filter((row) => isLiquidKind(row.kind));
+  const investedRows = accountInsights.filter((row) => !isLiquidKind(row.kind));
 
-  const byType = new Map<string, number>();
+  const byType = new Map<string, { amount: number; accountIds: string[] }>();
   for (const row of accountInsights) {
-    byType.set(row.account.type, (byType.get(row.account.type) || 0) + row.latest);
+    const current = byType.get(row.account.type) ?? { amount: 0, accountIds: [] };
+    current.amount += row.latest;
+    current.accountIds.push(row.account.id);
+    byType.set(row.account.type, current);
   }
+
+  const byAsset = new Map<string, { amount: number; accountIds: Set<string>; label: string }>();
+  for (const row of accountInsights) {
+    if (row.allocations.length === 0) {
+      const current = byAsset.get("unallocated") ?? {
+        amount: 0,
+        accountIds: new Set<string>(),
+        label: ASSET_CLASS_LABELS.unallocated,
+      };
+      current.amount += row.latest;
+      current.accountIds.add(row.account.id);
+      byAsset.set("unallocated", current);
+      continue;
+    }
+    const weightSum = row.allocations.reduce((sum, alloc) => sum + alloc.pct, 0) || 100;
+    for (const alloc of row.allocations) {
+      const current = byAsset.get(alloc.assetClass) ?? {
+        amount: 0,
+        accountIds: new Set<string>(),
+        label: ASSET_CLASS_LABELS[alloc.assetClass],
+      };
+      current.amount += row.latest * (alloc.pct / weightSum);
+      current.accountIds.add(row.account.id);
+      byAsset.set(alloc.assetClass, current);
+    }
+  }
+
+  const annualFees = accountInsights
+    .map((row) => row.annualFee)
+    .filter((value): value is number => value != null);
+  const totalAnnualFees = annualFees.length ? annualFees.reduce((sum, value) => sum + value, 0) : null;
 
   return {
     accounts: accountInsights,
@@ -254,25 +355,36 @@ export function buildFinanceInsights(accounts: Account[], entries: BalanceEntry[
       opened: sumDelta(accountInsights.map((row) => row.opened)),
     },
     isaSplit: mix([
-      { key: "isa", label: "In an ISA", amount: isaAmount },
-      { key: "other", label: "Not in an ISA", amount: latest - isaAmount },
+      { key: "isa", label: "In an ISA", amount: isaRows.reduce((sum, row) => sum + row.latest, 0), accountIds: isaRows.map((row) => row.account.id) },
+      { key: "other", label: "Not in an ISA", amount: nonIsaRows.reduce((sum, row) => sum + row.latest, 0), accountIds: nonIsaRows.map((row) => row.account.id) },
     ]),
     isaMix: mix([
-      { key: "ss", label: "Stocks & shares ISA", amount: ssIsa },
-      { key: "cash", label: "Cash ISA", amount: cashIsa },
-      { key: "lisa", label: "LISA", amount: lisa },
+      { key: "ss", label: "Stocks & shares ISA", amount: ssIsaRows.reduce((sum, row) => sum + row.latest, 0), accountIds: ssIsaRows.map((row) => row.account.id) },
+      { key: "cash", label: "Cash ISA", amount: cashIsaRows.reduce((sum, row) => sum + row.latest, 0), accountIds: cashIsaRows.map((row) => row.account.id) },
+      { key: "lisa", label: "LISA", amount: lisaRows.reduce((sum, row) => sum + row.latest, 0), accountIds: lisaRows.map((row) => row.account.id) },
     ]),
     liquidity: mix([
-      { key: "liquid", label: "Cash & easy access", amount: liquid },
-      { key: "invested", label: "Invested", amount: latest - liquid },
+      { key: "liquid", label: "Cash & easy access", amount: liquidRows.reduce((sum, row) => sum + row.latest, 0), accountIds: liquidRows.map((row) => row.account.id) },
+      { key: "invested", label: "Invested", amount: investedRows.reduce((sum, row) => sum + row.latest, 0), accountIds: investedRows.map((row) => row.account.id) },
     ]),
     typeMix: mix(
-      [...byType.entries()].map(([key, amount]) => ({ key, label: key, amount }))
+      [...byType.entries()].map(([key, value]) => ({ key, label: key, amount: value.amount, accountIds: value.accountIds }))
+    ),
+    allocation: mix(
+      [...byAsset.entries()].map(([key, value]) => ({
+        key,
+        label: value.label,
+        amount: value.amount,
+        accountIds: [...value.accountIds],
+      }))
     ),
     movers: [...accountInsights]
       .filter((row) => row.taxYear.change !== null)
       .sort((a, b) => Math.abs(b.taxYear.change ?? 0) - Math.abs(a.taxYear.change ?? 0))
       .slice(0, 4),
+    totalAnnualFees,
+    accountsMissingFees: accountInsights.filter((row) => row.annualFee == null).length,
+    accountsMissingAllocations: accountInsights.filter((row) => row.allocationSource === "none").length,
   };
 }
 

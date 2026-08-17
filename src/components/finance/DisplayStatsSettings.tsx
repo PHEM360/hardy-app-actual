@@ -14,7 +14,7 @@ export default function DisplayStatsSettings({
     <div className="p-4 sm:p-5 rounded-3xl bg-card border-2 border-border shadow-card mb-5">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What’s on screen</h3>
       <p className="text-xs text-muted-foreground mt-1 mb-4">
-        Turn off anything you don’t want. The total tile sits at the top of the page; the rest appears on Summary.
+        Turn off anything you don’t want. Total and top tiles sit at the top of the page; Summary accounts and insights appear on the Summary tab.
       </p>
       <div className="space-y-5">
         {FINANCE_STAT_GROUPS.map((group) => (

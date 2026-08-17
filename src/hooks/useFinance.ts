@@ -15,6 +15,15 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 
+export type AssetClass = "equity" | "bond" | "cash" | "property" | "other";
+
+export interface FundAllocation {
+  id: string;
+  name: string;
+  pct: number;
+  assetClass: AssetClass;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -24,7 +33,10 @@ export interface Account {
   // Optional predictive-modelling assumptions, set per account for the "Custom" scenario.
   growthAssumptionPct?: number; // assumed annual growth rate, e.g. 5 for 5%/yr
   monthlyContribution?: number; // assumed regular monthly deposit
-  feePct?: number; // assumed annual platform/fund fee, e.g. 0.5 for 0.5%/yr
+  feePct?: number; // assumed annual platform fee, e.g. 0.25 for 0.25%/yr
+  ocfPct?: number; // ongoing charges / fund OCF, e.g. 0.2 for 0.2%/yr
+  annualFeeGbp?: number; // flat annual account fee in £
+  allocations?: FundAllocation[];
   bankProvider?: "truelayer";
   bankConnectionId?: string;
   bankAccountId?: string;
