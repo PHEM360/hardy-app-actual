@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import * as functionsV1 from "firebase-functions/v1";
 import { PDFParse } from "pdf-parse";
 import { postmarkKey } from "./notifications/scheduler";
 import { sendTransactionalEmail } from "./notifications/sender";
@@ -47,7 +48,7 @@ function requireAuth(context: { auth?: { uid: string; token: any } }) {
 
 const OWNER_EMAIL = "chris.hardy.07@googlemail.com";
 
-async function requireSuperAdmin(uid: string) {
+async function requireSuperAdmin(uid: string, authEmail?: string) {
 	const snap = await admin.firestore().doc(`users/${uid}`).get();
 	const data = snap.data() || {};
 	const rawRole = String(data.role || "").toLowerCase();
@@ -56,7 +57,9 @@ async function requireSuperAdmin(uid: string) {
 	const normalizedRole = rawRole.replace(/\s+/g, "").replace(/-/g, "");
 	const role = (normalizedRole as UserRole | "") || "member";
 	const isSuperAdminLegacy = data.isSuperAdmin === true;
-	const isOwnerEmail = String(data.email || "").toLowerCase() === OWNER_EMAIL;
+	const profileEmail = String(data.email || "").toLowerCase();
+	const tokenEmail = String(authEmail || "").toLowerCase();
+	const isOwnerEmail = profileEmail === OWNER_EMAIL || tokenEmail === OWNER_EMAIL;
 	// Allow superadmin, admin, or the owner email account
 	if (role !== "superadmin" && role !== "admin" && !isSuperAdminLegacy && !isOwnerEmail) {
 		throw new HttpsError("permission-denied", "Admin privileges required.");
@@ -82,7 +85,7 @@ export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients,
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
-	await requireSuperAdmin(uid);
+	await requireSuperAdmin(uid, request.auth?.token?.email);
 
 	const firstName = String(request.data?.firstName || "").trim();
 	const surname = String(request.data?.surname || "").trim();
@@ -106,34 +109,184 @@ export const inviteUser = onCall(async (request) => {
 		throw new HttpsError("invalid-argument", "Email address is invalid.");
 	}
 
+	const displayName = surname ? `${firstName} ${surname}` : firstName;
+	const profile = {
+		email,
+		firstName,
+		surname,
+		displayName,
+		role,
+		enabled: true,
+		createdAt: admin.firestore.FieldValue.serverTimestamp(),
+		createdBy: uid,
+	};
+
 	logger.info("inviteUser creating auth user", { email, role });
 
-	// Create Auth user
-	const created = await admin.auth().createUser({
-		email,
-		password,
-		displayName: surname ? `${firstName} ${surname}` : firstName,
+	try {
+		const created = await admin.auth().createUser({ email, password, displayName });
+		await admin.firestore().doc(`users/${created.uid}`).set(profile, { merge: true });
+		return { uid: created.uid };
+	} catch (err: any) {
+		if (err?.code === "auth/email-already-exists") {
+			const existing = await admin.auth().getUserByEmail(email);
+			const profileSnap = await admin.firestore().doc(`users/${existing.uid}`).get();
+			if (profileSnap.exists) {
+				throw new HttpsError("already-exists", "This email already has an account.");
+			}
+			// Auth user leftover after a Firestore-only delete — restore the profile
+			// and set the new temporary password so they can sign in.
+			await admin.auth().updateUser(existing.uid, { password, displayName });
+			await admin.firestore().doc(`users/${existing.uid}`).set(profile, { merge: true });
+			logger.info("inviteUser restored leftover auth account", { email, uid: existing.uid });
+			return { uid: existing.uid, restored: true };
+		}
+		logger.error("inviteUser failed", { email, code: err?.code, error: err?.message });
+		if (err instanceof HttpsError) throw err;
+		throw new HttpsError("internal", err?.message || "Failed to create user.");
+	}
+});
+
+export const deleteUserAccount = onCall(async (request) => {
+	const uid = requireAuth(request);
+	await requireSuperAdmin(uid, request.auth?.token?.email);
+
+	const targetUid = String(request.data?.uid || "").trim();
+	if (!targetUid) {
+		throw new HttpsError("invalid-argument", "uid is required.");
+	}
+	if (targetUid === uid) {
+		throw new HttpsError("failed-precondition", "You can't delete your own account.");
+	}
+
+	try {
+		await admin.auth().deleteUser(targetUid);
+	} catch (err: any) {
+		if (err?.code !== "auth/user-not-found") {
+			logger.error("deleteUserAccount: auth delete failed", { targetUid, code: err?.code, error: err?.message });
+			throw new HttpsError("internal", err?.message || "Failed to delete the login for this account.");
+		}
+	}
+
+	await admin.firestore().doc(`users/${targetUid}`).delete().catch(() => undefined);
+	logger.info("deleteUserAccount: deleted", { targetUid, by: uid });
+	return { success: true };
+});
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
+
+function formatAdminRole(role: unknown, data?: admin.firestore.DocumentData): "Superadmin" | "Admin" | "Member" {
+	const raw = String(role || (data?.isSuperAdmin ? "superadmin" : data?.isAdmin ? "admin" : "member"));
+	const normalized = raw.toLowerCase().replace(/\s+/g, "").replace(/-/g, "");
+	if (normalized === "superadmin") return "Superadmin";
+	if (normalized === "admin") return "Admin";
+	return "Member";
+}
+
+/** Admin user list is Auth accounts, with Firestore profile fields merged on top. */
+export const listAppUsers = onCall(async (request) => {
+	const uid = requireAuth(request);
+	await requireSuperAdmin(uid, request.auth?.token?.email);
+
+	const authUsers: admin.auth.UserRecord[] = [];
+	let pageToken: string | undefined;
+	do {
+		const page = await admin.auth().listUsers(1000, pageToken);
+		authUsers.push(...page.users);
+		pageToken = page.pageToken;
+	} while (pageToken);
+
+	const db = admin.firestore();
+	const refs = authUsers.map((u) => db.doc(`users/${u.uid}`));
+	const snaps: admin.firestore.DocumentSnapshot[] = [];
+	for (const group of chunk(refs, 100)) {
+		snaps.push(...(await db.getAll(...group)));
+	}
+	const profileByUid = new Map(snaps.map((snap) => [snap.id, snap.exists ? snap.data() : null]));
+
+	const missing = authUsers.filter((record) => !profileByUid.get(record.uid));
+	await Promise.all(
+		missing.map((record) => {
+			const displayName = String(record.displayName || "").trim();
+			const parts = displayName.split(/\s+/).filter(Boolean);
+			return db.doc(`users/${record.uid}`).set(
+				{
+					email: record.email || "",
+					firstName: parts[0] || "",
+					surname: parts.slice(1).join(" ") || "",
+					displayName,
+					role: "member",
+					enabled: !record.disabled,
+					createdAt: admin.firestore.FieldValue.serverTimestamp(),
+					createdBy: "listAppUsers-backfill",
+				},
+				{ merge: true }
+			);
+		})
+	);
+
+	const users = authUsers.map((record) => {
+		const data = profileByUid.get(record.uid) as admin.firestore.DocumentData | null;
+		const email = String(record.email || data?.email || "");
+		const displayName = String(
+			data?.displayName ||
+			`${data?.firstName || ""} ${data?.surname || ""}`.trim() ||
+			record.displayName ||
+			email ||
+			record.uid
+		).trim();
+		const lastLoginAt = record.metadata.lastSignInTime ? new Date(record.metadata.lastSignInTime) : null;
+		return {
+			id: record.uid,
+			name: displayName,
+			email,
+			role: formatAdminRole(data?.role, data || undefined),
+			status: record.disabled || data?.enabled === false ? "suspended" : "active",
+			lastLogin: lastLoginAt ? lastLoginAt.toLocaleString("en-GB") : "—",
+			permissions: Array.isArray(data?.permissions) ? data.permissions : [],
+			enabledFeatures: Array.isArray(data?.enabledFeatures) ? data.enabledFeatures : [],
+			householdId: data?.householdId ?? undefined,
+			householdIds: Array.isArray(data?.householdIds)
+				? data.householdIds
+				: (data?.householdId ? [data.householdId] : []),
+		};
 	});
 
-	// Store profile in Firestore
-	await admin.firestore().doc(`users/${created.uid}`).set(
+	users.sort((a, b) => a.name.localeCompare(b.name));
+	return { users };
+});
+
+/** If an Auth account is created outside Admin (console, etc.), give it a Firestore profile. */
+export const onAuthUserCreated = functionsV1.auth.user().onCreate(async (user) => {
+	const ref = admin.firestore().doc(`users/${user.uid}`);
+	const snap = await ref.get();
+	if (snap.exists) return;
+	const displayName = String(user.displayName || "").trim();
+	const parts = displayName.split(/\s+/).filter(Boolean);
+	await ref.set(
 		{
-			email,
-			firstName,
-			surname,
-			displayName: surname ? `${firstName} ${surname}` : firstName,
-			role,
-			enabled: true,
+			email: user.email || "",
+			firstName: parts[0] || "",
+			surname: parts.slice(1).join(" ") || "",
+			displayName,
+			role: "member",
+			enabled: !user.disabled,
 			createdAt: admin.firestore.FieldValue.serverTimestamp(),
-			createdBy: uid,
+			createdBy: "auth-onCreate",
 		},
 		{ merge: true }
 	);
+	logger.info("onAuthUserCreated: profile created", { uid: user.uid, email: user.email });
+});
 
-	// Optional: force password change on first login could be enforced by UI.
-	// Firebase Auth doesn't support an explicit "must change password" flag.
-
-	return { uid: created.uid };
+/** Deleting an Auth account (Admin or Firebase console) also removes the Firestore profile. */
+export const onAuthUserDeleted = functionsV1.auth.user().onDelete(async (user) => {
+	await admin.firestore().doc(`users/${user.uid}`).delete().catch(() => undefined);
+	logger.info("onAuthUserDeleted: profile removed", { uid: user.uid, email: user.email });
 });
 
 function validatePasswordStrength(password: string) {
@@ -153,7 +306,7 @@ function validatePasswordStrength(password: string) {
 // password change.
 export const resetUserPassword = onCall(async (request) => {
 	const uid = requireAuth(request);
-	await requireSuperAdmin(uid);
+	await requireSuperAdmin(uid, request.auth?.token?.email);
 
 	const targetUid = String(request.data?.uid || "");
 	const newPassword = String(request.data?.newPassword || "");
@@ -180,7 +333,7 @@ export const sendPasswordResetLink = onCall(
 	{ secrets: [postmarkKey] },
 	async (request) => {
 		const uid = requireAuth(request);
-		await requireSuperAdmin(uid);
+		await requireSuperAdmin(uid, request.auth?.token?.email);
 
 		const targetUid = String(request.data?.uid || "");
 		if (!targetUid) {
@@ -236,7 +389,7 @@ function isValidHouseholdId(id: string): boolean {
 // metadata layer on top of ids that already exist. Safe to re-run at any time.
 export const backfillHouseholds = onCall(async (request) => {
 	const uid = requireAuth(request);
-	await requireSuperAdmin(uid);
+	await requireSuperAdmin(uid, request.auth?.token?.email);
 
 	const usersSnap = await admin.firestore().collection("users").get();
 

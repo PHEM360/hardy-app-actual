@@ -13,23 +13,27 @@ export function useAppUsers(): AppUser[] {
   const [users, setUsers] = useState<AppUser[]>([]);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "users"), (snap) => {
-      setUsers(
-        snap.docs
-          .map((d) => {
-            const data = d.data() as any;
-            const name = (
-              data.displayName ||
-              `${data.firstName || ""} ${data.surname || ""}`.trim() ||
-              data.email ||
-              d.id
-            ).trim();
-            return { id: d.id, name, email: data.email || "" };
-          })
-          .filter((u) => u.name)
-          .sort((a, b) => a.name.localeCompare(b.name))
-      );
-    });
+    return onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        setUsers(
+          snap.docs
+            .map((d) => {
+              const data = d.data() as any;
+              const name = (
+                data.displayName ||
+                `${data.firstName || ""} ${data.surname || ""}`.trim() ||
+                data.email ||
+                d.id
+              ).trim();
+              return { id: d.id, name, email: data.email || "" };
+            })
+            .filter((u) => u.name)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+      },
+      () => setUsers([])
+    );
   }, []);
 
   return users;

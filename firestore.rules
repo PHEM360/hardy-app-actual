@@ -21,12 +21,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    function isOwnerAccount() {
+      return isAuthenticated() && request.auth.token.email == "chris.hardy.07@googlemail.com";
+    }
+
     function isSuperAdmin() {
-      return isAuthenticated() && (
+      return isOwnerAccount() || (isAuthenticated() && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin" ||
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Superadmin" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "super_admin" ||
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true
-      );
+      ));
     }
     
     function isAdmin() {

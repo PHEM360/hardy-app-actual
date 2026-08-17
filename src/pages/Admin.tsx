@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
-import { collection, onSnapshot, query, doc, updateDoc, deleteDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { useAllHouseholds, useHouseholds } from "@/hooks/useHouseholds";
@@ -102,46 +102,22 @@ const Admin = () => {
   }
 
   useEffect(() => {
-    // Live list of all users from Firestore.
-    // Security note: Firestore rules must allow authenticated reads of /users.
-    setUsersLoading(true);
-    const q = query(collection(db, "users"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next = snap.docs.map((d) => {
-          const data = d.data() as any;
-          const displayName = String(data.displayName || `${data.firstName || ""} ${data.surname || ""}`.trim() || "Unknown").trim();
-          const email = String(data.email || "");
-          const role = String(data.role || (data.isSuperAdmin ? "superadmin" : data.isAdmin ? "admin" : "member"));
-          const normalizedRole = role.toLowerCase().replace(/\s+/g, "").replace(/-/g, "");
-          const lastLoginAt = data.lastLoginAt?.toDate?.() ? data.lastLoginAt.toDate() : null;
-
-          return {
-            id: d.id,
-            name: displayName || email || d.id,
-            email,
-            role: normalizedRole === "superadmin" ? "Superadmin" : normalizedRole === "admin" ? "Admin" : "Member",
-            status: data.enabled === false ? "suspended" : "active",
-            lastLogin: lastLoginAt ? lastLoginAt.toLocaleString("en-GB") : "—",
-            permissions: Array.isArray(data.permissions) ? data.permissions : [],
-            enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
-            householdId: data.householdId ?? undefined,
-            householdIds: Array.isArray(data.householdIds) ? data.householdIds : (data.householdId ? [data.householdId] : []),
-          } as MockUser;
-        });
-
-        setUsers(next);
-        setUsersLoading(false);
-      },
-      () => {
-        // If we can't read (rules), keep empty list but stop spinner.
-        setUsers([]);
-        setUsersLoading(false);
+    let cancelled = false;
+    const loadUsers = async () => {
+      setUsersLoading(true);
+      try {
+        const call = httpsCallable(functions, "listAppUsers");
+        const result = await call();
+        const next = Array.isArray((result.data as any)?.users) ? (result.data as any).users : [];
+        if (!cancelled) setUsers(next as MockUser[]);
+      } catch {
+        if (!cancelled) setUsers([]);
+      } finally {
+        if (!cancelled) setUsersLoading(false);
       }
-    );
-
-    return () => unsub();
+    };
+    void loadUsers();
+    return () => { cancelled = true; };
   }, []);
 
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -241,7 +217,7 @@ const Admin = () => {
   const changeRole = async (userId: string, newRole: "member" | "admin" | "superadmin") => {
     setActionLoading(true);
     try {
-      await updateDoc(doc(db, "users", userId), { role: newRole });
+      await setDoc(doc(db, "users", userId), { role: newRole }, { merge: true });
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         role: newRole === "superadmin" ? "Superadmin" : newRole === "admin" ? "Admin" : "Member",
@@ -255,7 +231,7 @@ const Admin = () => {
     const newEnabled = currentStatus === "suspended"; // reinstate → enabled:true; suspend → enabled:false
     setActionLoading(true);
     try {
-      await updateDoc(doc(db, "users", userId), { enabled: newEnabled });
+      await setDoc(doc(db, "users", userId), { enabled: newEnabled }, { merge: true });
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         status: newEnabled ? "active" : "suspended",
@@ -291,14 +267,16 @@ const Admin = () => {
     setActionLoading(true);
     setDeleteError(null);
     try {
-      await deleteDoc(doc(db, "users", deleteTarget.id));
+      const call = httpsCallable(functions, "deleteUserAccount");
+      await call({ uid: deleteTarget.id });
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setSelectedUser(null);
       setDeleteTarget(null);
       setDeleteStep("ask");
       setDeleteNameInput("");
     } catch (err: any) {
-      setDeleteError(err?.message ?? "Couldn't delete this account. Please try again.");
+      const msg = String(err?.message ?? "").replace(/^.*HttpsError:\s*/i, "").replace(/\s*\(.*\)$/, "").trim();
+      setDeleteError(msg || "Couldn't delete this account. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -325,7 +303,7 @@ const Admin = () => {
       }
     }
 
-    await updateDoc(doc(db, "users", userId), payload);
+    await setDoc(doc(db, "users", userId), payload, { merge: true });
     setUsers((prevUsers) => prevUsers.map((u) => (u.id === userId ? { ...u, enabledFeatures: features } : u)));
   };
 
@@ -599,7 +577,7 @@ const Admin = () => {
     <FeaturePageShell title="Admin" subtitle="Users & system management" icon={<Shield className="w-5 h-5" />}>
       {/* Invite User */}
       <div className="mb-5">
-        <div className="flex items-center justify-between px-1 mb-2">
+        <div className="flex items-center justify-between px-1 mb-1">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Users</h3>
           <Button
             size="sm"
@@ -610,6 +588,7 @@ const Admin = () => {
             Invite user
           </Button>
         </div>
+        <p className="text-[10px] text-muted-foreground px-1 mb-2">Everyone with a Firebase login. Deleting here also removes that login.</p>
 
         <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
           <DialogContent className="max-w-md mx-4">
@@ -618,7 +597,13 @@ const Admin = () => {
               <DialogDescription>Fill in the details below to create a new account and send an invitation.</DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 pt-2">
+            <form
+              className="space-y-4 pt-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void doInvite();
+              }}
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="inviteFirstName">First name</Label>
@@ -627,6 +612,7 @@ const Admin = () => {
                     value={inviteFirstName}
                     onChange={(e) => setInviteFirstName(e.target.value)}
                     placeholder="Chris"
+                    autoComplete="given-name"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -636,6 +622,7 @@ const Admin = () => {
                     value={inviteSurname}
                     onChange={(e) => setInviteSurname(e.target.value)}
                     placeholder="Hardy"
+                    autoComplete="family-name"
                   />
                 </div>
               </div>
@@ -650,6 +637,7 @@ const Admin = () => {
                   type="email"
                   autoCapitalize="none"
                   autoCorrect="off"
+                  autoComplete="off"
                 />
               </div>
 
@@ -661,6 +649,7 @@ const Admin = () => {
                   onChange={(e) => setInvitePassword(e.target.value)}
                   placeholder="Min 8 chars, 1 number, 1 special char"
                   type="password"
+                  autoComplete="new-password"
                 />
                 <p className="text-[10px] text-muted-foreground">
                   Must be 8+ characters, include a number (0–9) and a special character (e.g. ! @ # $). The user can change this after logging in.
@@ -695,9 +684,8 @@ const Admin = () => {
                   Cancel
                 </Button>
                 <Button
-                  type="button"
+                  type="submit"
                   className="h-9 rounded-lg text-xs"
-                  onClick={doInvite}
                   disabled={
                     inviteLoading ||
                     !inviteEmail.trim() ||
@@ -708,7 +696,7 @@ const Admin = () => {
                   {inviteLoading ? "Inviting…" : "Invite"}
                 </Button>
               </div>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
 
