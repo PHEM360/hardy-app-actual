@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { canAccessRoute, DEFAULT_BOTTOM_NAV } from "@/lib/features";
+import { useIncomingPageShares } from "@/hooks/usePageShares";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { useAiConfig } from "@/hooks/useAiConfig";
@@ -71,6 +72,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const { profile, saveProfile, loading: profileLoading } = useUserProfile();
   const { role, loading: roleLoading } = useEffectiveRole();
+  const { pages: sharedPages, loading: sharesLoading } = useIncomingPageShares();
   const existingHouseholdNames = useHouseholdNames();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [firstName, setFirstName] = useState(user?.displayName || "");
@@ -203,8 +205,8 @@ const Settings = () => {
   };
 
   const navOptions = ALL_NAV_OPTIONS.filter((item) => {
-    if (roleLoading || profileLoading) return item.path === "/dashboard";
-    return canAccessRoute(role, profile?.enabledFeatures ?? [], item.path);
+    if (roleLoading || profileLoading || sharesLoading) return item.path === "/dashboard";
+    return canAccessRoute(role, profile?.enabledFeatures ?? [], item.path, sharedPages);
   });
 
   // Dark mode effect

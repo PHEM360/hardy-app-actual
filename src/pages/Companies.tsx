@@ -18,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { useCompanies } from "@/hooks/useCompanies";
+import { useSharedScope } from "@/hooks/useSharedScope";
 import { Company } from "@/types/app";
 
 const PALETTE = [
@@ -394,11 +395,12 @@ function CompanyTile({ co, index, children: tradingNameChildren, currentUid, app
 
 // ─── Action Panel ─────────────────────────────────────────────────────────────
 
-function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany: () => void; onQRCodes: () => void }) {
+function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany?: () => void; onQRCodes: () => void }) {
   return (
     <div className="rounded-2xl border border-border/50 bg-card shadow-soft p-4 space-y-3">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Actions</p>
       <div className="space-y-2">
+        {onAddCompany && (
         <button
           onClick={onAddCompany}
           className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary transition-colors text-left"
@@ -409,6 +411,7 @@ function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany: () => void; on
             <p className="text-[11px] opacity-70 leading-tight mt-0.5">Register a new business</p>
           </div>
         </button>
+        )}
         <button
           onClick={onQRCodes}
           className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 text-violet-600 dark:text-violet-400 transition-colors text-left"
@@ -427,7 +430,9 @@ function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany: () => void; on
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Companies = () => {
-  const { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany } = useCompanies();
+  const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("companies");
+  const canEdit = permission === "edit";
+  const { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany } = useCompanies(scopeUserId ?? undefined);
   const { user } = useAuth();
   const appUsers = useAppUsers();
   const navigate = useNavigate();
@@ -516,7 +521,7 @@ const Companies = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="Companies" subtitle="Business management" icon={<Building2 className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Business management" icon={<Building2 className="w-5 h-5" />} sharePage="companies">
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -526,23 +531,28 @@ const Companies = () => {
 
   return (
     <FeaturePageShell
-      title="Companies"
-      subtitle="Business management"
+      title={pageTitle}
+      subtitle={isOwnScope ? "Business management" : "Shared with you"}
       icon={<Building2 className="w-5 h-5" />}
+      sharePage="companies"
       action={
-        <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-semibold">
-          <Plus className="w-4 h-4" /> Add
-        </button>
+        canEdit ? (
+          <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-semibold">
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        ) : undefined
       }
     >
       {/* Mobile quick actions — shown above list on small screens */}
       <div className="flex gap-2 mb-4 md:hidden">
-        <button
-          onClick={openAdd}
-          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
-        >
-          <Plus className="w-4 h-4 text-primary" /> Add Company
-        </button>
+        {canEdit && (
+          <button
+            onClick={openAdd}
+            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
+          >
+            <Plus className="w-4 h-4 text-primary" /> Add Company
+          </button>
+        )}
         <button
           onClick={() => navigate("/qr-codes")}
           className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
@@ -563,9 +573,11 @@ const Companies = () => {
                   <p className="text-base font-bold text-card-foreground">No companies yet</p>
                   <p className="text-sm text-muted-foreground mt-1 max-w-xs">Add your first company to start managing your business portfolio.</p>
                 </div>
-                <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5 bg-gradient-primary text-white shadow-glow">
-                  <Plus className="w-3.5 h-3.5" /> Add First Company
-                </Button>
+                {canEdit && (
+                  <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5 bg-gradient-primary text-white shadow-glow">
+                    <Plus className="w-3.5 h-3.5" /> Add First Company
+                  </Button>
+                )}
               </motion.div>
             ) : (
               <div className="space-y-4">
@@ -602,7 +614,7 @@ const Companies = () => {
 
         {/* Right — action panel (desktop only) */}
         <div className="hidden md:block sticky top-4">
-          <ActionPanel onAddCompany={openAdd} onQRCodes={() => navigate("/qr-codes")} />
+          <ActionPanel onAddCompany={canEdit ? openAdd : undefined} onQRCodes={() => navigate("/qr-codes")} />
         </div>
       </div>
 

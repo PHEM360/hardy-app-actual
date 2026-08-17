@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAiAnalysis, type UploadedDoc } from "@/hooks/useAiAnalysis";
+import { useSharedScope } from "@/hooks/useSharedScope";
 
 const MAX_DOCUMENTS = 5;
 
@@ -71,7 +72,9 @@ function AnswerRenderer({ text }: { text: string }) {
 }
 
 export default function AiAnalysis() {
-  const { sessions, uploadDocument, analyze } = useAiAnalysis();
+  const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("ai_analysis");
+  const canEdit = permission === "edit";
+  const { sessions, uploadDocument, analyze } = useAiAnalysis(scopeUserId ?? undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingDocs, setPendingDocs] = useState<UploadedDoc[]>([]);
@@ -124,7 +127,14 @@ export default function AiAnalysis() {
   };
 
   return (
-    <FeaturePageShell title="AI Analysis" subtitle="Upload a document and ask questions about it" icon={<Sparkles className="w-5 h-5" />}>
+    <FeaturePageShell
+      title={pageTitle}
+      subtitle={isOwnScope ? "Upload a document and ask questions about it" : "Shared with you"}
+      icon={<Sparkles className="w-5 h-5" />}
+      sharePage="ai_analysis"
+    >
+      {canEdit && (
+      <>
       {/* Upload */}
       <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -219,6 +229,8 @@ export default function AiAnalysis() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Answer */}
       <AnimatePresence>

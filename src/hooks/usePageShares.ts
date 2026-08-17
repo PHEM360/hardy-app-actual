@@ -91,15 +91,9 @@ export function usePageShares(page: string) {
     };
   }, [dataUid, page]);
 
-  const share = useCallback(
-    async (email: string, permission: SharePermission) => {
+  const shareWith = useCallback(
+    async (targetUid: string, permission: SharePermission) => {
       if (!dataUid) return;
-      const usersQ = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()));
-      const snap = await getDocs(usersQ);
-      if (snap.empty) {
-        throw new Error("No app user found with that email.");
-      }
-      const targetUid = snap.docs[0].id;
       if (targetUid === dataUid) {
         throw new Error("You already have access to your own page.");
       }
@@ -111,9 +105,21 @@ export function usePageShares(page: string) {
         permission,
         createdAt: serverTimestamp(),
       });
-      return targetUid;
     },
     [dataUid, page]
+  );
+
+  const share = useCallback(
+    async (email: string, permission: SharePermission) => {
+      if (!dataUid) return;
+      const usersQ = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()));
+      const snap = await getDocs(usersQ);
+      if (snap.empty) {
+        throw new Error("No app user found with that email.");
+      }
+      await shareWith(snap.docs[0].id, permission);
+    },
+    [dataUid, shareWith]
   );
 
   const updatePermission = useCallback(
@@ -133,7 +139,37 @@ export function usePageShares(page: string) {
     [dataUid, page]
   );
 
-  return { mine, sharedWithMe, loading, share, updatePermission, revoke };
+  return { mine, sharedWithMe, loading, share, shareWith, updatePermission, revoke };
+}
+
+/** Every page currently shared with the signed-in user (any owner). */
+export function useIncomingPageShares() {
+  const { dataUid } = useAuth();
+  const [pages, setPages] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!dataUid) {
+      setPages(new Set());
+      setLoading(false);
+      return;
+    }
+    const q = query(collection(db, "pageShares"), where("targetUid", "==", dataUid));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setPages(new Set(snap.docs.map((d) => String(d.data().page || ""))));
+        setLoading(false);
+      },
+      () => {
+        setPages(new Set());
+        setLoading(false);
+      }
+    );
+    return unsub;
+  }, [dataUid]);
+
+  return { pages, loading };
 }
 
 /** Admin-only: revoke any page share by its doc id, regardless of owner. */

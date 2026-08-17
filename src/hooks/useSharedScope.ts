@@ -13,6 +13,12 @@ export const PAGE_NOUNS: Record<string, string> = {
   freezer: "Freezer",
   qrcodes: "QR Codes",
   pets: "Pets",
+  companies: "Companies",
+  login_details: "Log Ins",
+  annual_leave: "Annual Leave",
+  ai_analysis: "AI Analysis",
+  tattersalls: "Tattersalls",
+  inheritance: "IHT Planner",
 };
 
 export interface ScopeOption {

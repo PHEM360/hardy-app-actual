@@ -28,16 +28,51 @@ export const ROUTE_FEATURE_KEY: Record<string, FeatureKey> = {
   "/health": "weight_tracking", // Health page is also served at /weight
 };
 
+/** FeatureKey -> pageShares.page value. Invitees can open the route even without the feature enabled. */
+export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
+  finance_personal: "finance",
+  pets: "pets",
+  inheritance_tax: "inheritance",
+  weight_tracking: "health",
+  tattersalls: "tattersalls",
+  tasks: "tasks",
+  companies: "companies",
+  ai_analysis: "ai_analysis",
+  calendar: "calendar",
+  annual_leave: "annual_leave",
+};
+
+/** Route path -> pageShares.page value (includes ungated pages like freezer). */
+export const ROUTE_PAGE_SHARE: Record<string, string> = {
+  "/finance": "finance",
+  "/pets": "pets",
+  "/inheritance": "inheritance",
+  "/weight": "health",
+  "/health": "health",
+  "/tattersalls": "tattersalls",
+  "/tasks": "tasks",
+  "/companies": "companies",
+  "/ai-analysis": "ai_analysis",
+  "/calendar": "calendar",
+  "/annual-leave": "annual_leave",
+  "/freezer": "freezer",
+  "/login-details": "login_details",
+  "/qr-codes": "qrcodes",
+};
+
 /** Whether this signed-in (or viewed-as) user may open a route. */
 export function canAccessRoute(
   role: AppRole,
   enabledFeatures: FeatureKey[],
   path: string,
+  sharedPages?: Set<string>,
 ): boolean {
   if (path === "/admin") return role === "admin" || role === "superadmin";
   const key = ROUTE_FEATURE_KEY[path];
   if (!key) return true;
-  return hasFeatureAccess(role, enabledFeatures, key);
+  if (hasFeatureAccess(role, enabledFeatures, key)) return true;
+  const page = FEATURE_PAGE_SHARE[key] ?? ROUTE_PAGE_SHARE[path];
+  return !!page && !!sharedPages?.has(page);
 }
 
 /** Dashboard widget type -> the FeatureKey that gates it. */

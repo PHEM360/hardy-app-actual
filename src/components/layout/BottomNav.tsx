@@ -9,6 +9,7 @@ import { auth } from "@/lib/firebase";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { canAccessRoute, DEFAULT_BOTTOM_NAV, MAX_BOTTOM_NAV_ITEMS } from "@/lib/features";
+import { useIncomingPageShares } from "@/hooks/usePageShares";
 
 type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
 
@@ -84,7 +85,8 @@ const BottomNav = () => {
   const navigate = useNavigate();
   const { role, loading: roleLoading, isViewAs } = useEffectiveRole();
   const { profile, loading: profileLoading } = useUserProfile();
-  const loading = roleLoading || profileLoading;
+  const { pages: sharedPages, loading: sharesLoading } = useIncomingPageShares();
+  const loading = roleLoading || profileLoading || sharesLoading;
 
   const features = profile?.enabledFeatures ?? [];
   const usingCustomNav = Boolean(profile?.navItems && profile.navItems.length > 0);
@@ -97,7 +99,7 @@ const BottomNav = () => {
       // toggle doesn't actually grant the admin role, so it can't gate this.
       if (path === "/admin") return !isViewAs && !loading && (role === "admin" || role === "superadmin");
       if (loading) return path === "/dashboard" || path === "/today";
-      return canAccessRoute(role, features, path);
+      return canAccessRoute(role, features, path, sharedPages);
     })
     .slice(0, usingCustomNav ? undefined : MAX_BOTTOM_NAV_ITEMS)
     .map((path) => ({ path, ...ALL_NAV_ITEMS[path] }))

@@ -43,41 +43,6 @@ service cloud.firestore {
       );
     }
 
-    // Shared-ownership helper for companies (and their subcollections/settings):
-    // legacy (ownerless) companies stay visible to everyone during migration.
-    function canAccessCompany(companyId) {
-      let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
-      return isAdmin() ||
-        !('ownerId' in c) ||
-        c.ownerId == "" ||
-        request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith;
-    }
-
-    // Shared-ownership helper for pets (and their subcollections, e.g. dog
-    // tags) — same model as canAccessCompany: legacy (ownerless) pets stay
-    // visible to everyone during migration.
-    function canAccessPet(petId) {
-      let p = get(/databases/$(database)/documents/pets/$(petId)).data;
-      return isAdmin() ||
-        !('ownerId' in p) ||
-        p.ownerId == "" ||
-        request.auth.uid == p.ownerId ||
-        request.auth.uid in p.sharedWith;
-    }
-
-    function canAccessHousehold(householdId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return isAuthenticated() && (
-        isAdmin() ||
-        request.auth.uid == householdId ||
-        userDoc.householdId == householdId ||
-        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
-        (exists(/databases/$(database)/documents/households/$(householdId)) &&
-          request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds)
-      );
-    }
-
     // Generic per-page individual sharing: pageShares/{ownerId}_{page}_{targetUid}
     // grants the target user "view" or "edit" access to one of the owner's
     // pages (finance, tasks, etc.) without touching household membership.
@@ -99,6 +64,53 @@ service cloud.firestore {
         isAdmin() ||
         (exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))) &&
           get(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))).data.permission == "edit")
+      );
+    }
+
+    // Shared-ownership helper for companies (and their subcollections/settings):
+    // legacy (ownerless) companies stay visible to everyone during migration.
+    function canAccessCompany(companyId) {
+      let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
+      return isAdmin() ||
+        !('ownerId' in c) ||
+        c.ownerId == "" ||
+        request.auth.uid == c.ownerId ||
+        request.auth.uid in c.sharedWith ||
+        canViewPage(c.ownerId, "companies");
+    }
+
+    function canEditCompany(companyId) {
+      let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
+      return isAdmin() ||
+        !('ownerId' in c) ||
+        c.ownerId == "" ||
+        request.auth.uid == c.ownerId ||
+        request.auth.uid in c.sharedWith ||
+        canEditPage(c.ownerId, "companies");
+    }
+
+    // Shared-ownership helper for pets (and their subcollections, e.g. dog
+    // tags) — same model as canAccessCompany: legacy (ownerless) pets stay
+    // visible to everyone during migration.
+    function canAccessPet(petId) {
+      let p = get(/databases/$(database)/documents/pets/$(petId)).data;
+      return isAdmin() ||
+        !('ownerId' in p) ||
+        p.ownerId == "" ||
+        request.auth.uid == p.ownerId ||
+        request.auth.uid in p.sharedWith ||
+        canViewPage(p.ownerId, "pets");
+    }
+
+    function canAccessHousehold(householdId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == householdId ||
+        userDoc.householdId == householdId ||
+        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
+        (exists(/databases/$(database)/documents/households/$(householdId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds)
       );
     }
 
@@ -201,7 +213,8 @@ service cloud.firestore {
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith
+        request.auth.uid in resource.data.sharedWith ||
+        canEditPage(resource.data.ownerId, "pets")
       );
       allow delete: if isAuthenticated() && (
         !('ownerId' in resource.data) ||
@@ -316,20 +329,30 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // Credentials (login details vault) - strictly per user only
+    // Credentials (login details vault) - shareable via pageShares
     match /users/{userId}/credentials/{credId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "login_details");
+      allow write: if canEditPage(userId, "login_details");
     }
 
-    // Companies - shared via ownerId + sharedWith, same model as pets.
+    // Companies - shared via ownerId + sharedWith, or a companies pageShare.
     // Legacy companies (no ownerId) remain readable by all authenticated users during migration.
     match /companies/{companyId} {
-      allow read, update: if isAuthenticated() && (
+      allow read: if isAuthenticated() && (
         isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith
+        request.auth.uid in resource.data.sharedWith ||
+        canViewPage(resource.data.ownerId, "companies")
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == "" ||
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid in resource.data.sharedWith ||
+        canEditPage(resource.data.ownerId, "companies")
       );
       allow create: if isAuthenticated();
       allow delete: if isAuthenticated() && (
@@ -340,28 +363,35 @@ service cloud.firestore {
       );
 
       match /logins/{loginId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /services/{serviceId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /expenses/{expenseId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /insurance/{policyId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /income/{incomeId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /taxReturns/{returnId} {
-        allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
       }
     }
 
     // Company settings (income/expense categories, tax rate) - same sharing model as companies
     match /companySettings/{companyId} {
-      allow read, write: if isAuthenticated() && canAccessCompany(companyId);
+      allow read: if isAuthenticated() && canAccessCompany(companyId);
+      allow write: if isAuthenticated() && canEditCompany(companyId);
     }
 
     // Household items - shared by household membership, with owner-uid fallback for legacy data
@@ -430,19 +460,23 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Custom health tabs - per user (previously had no rule at all, denying all access)
+    // Custom health tabs - per user, bundled into the "health" page share
     match /healthTabs/{userId}/tabs/{tabId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
     match /healthTabs/{userId}/entries/{entryId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
     }
 
-    // Substance logs - per user
+    // Substance logs - per user, bundled into the "health" page share
     match /substanceLogs/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "health");
+      allow write: if canEditPage(userId, "health");
       match /logs/{logId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read: if canViewPage(userId, "health");
+        allow write: if canEditPage(userId, "health");
       }
     }
 
@@ -489,9 +523,10 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "documents");
     }
 
-    // AI Analysis session history - strictly per user (uploaded documents can be sensitive)
+    // AI Analysis session history - shareable via pageShares
     match /aiAnalysis/{userId}/sessions/{sessionId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if canViewPage(userId, "ai_analysis");
+      allow write: if canEditPage(userId, "ai_analysis");
     }
 
     // Always-on display devices — a device authenticates as the real account

@@ -22,7 +22,20 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
 
-    // Company receipts & tax return PDFs — owner or shared users only.
+    function canViewPageStorage(ownerId, page) {
+      return request.auth != null && (
+        request.auth.uid == ownerId ||
+        firestore.exists(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid))
+      );
+    }
+
+    function canEditPageStorage(ownerId, page) {
+      return request.auth != null && (
+        request.auth.uid == ownerId ||
+        (firestore.exists(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid)).data.permission == "edit")
+      );
+    }
     // Mirrors firestore.rules' canAccessCompany: legacy (ownerless) companies
     // stay accessible to everyone during migration, otherwise a missing
     // ownerId field denied every write (this broke receipt uploads on
@@ -35,12 +48,27 @@ service firebase.storage {
         !('ownerId' in c) ||
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith
+        request.auth.uid in c.sharedWith ||
+        canViewPageStorage(c.ownerId, "companies")
+      );
+    }
+
+    function canEditCompanyStorage(companyId) {
+      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      let c = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
+      return request.auth != null && (
+        isHouseholdAdmin(userDoc) ||
+        !('ownerId' in c) ||
+        c.ownerId == "" ||
+        request.auth.uid == c.ownerId ||
+        request.auth.uid in c.sharedWith ||
+        canEditPageStorage(c.ownerId, "companies")
       );
     }
 
     match /companies/{companyId}/{allPaths=**} {
-      allow read, write: if canAccessCompanyStorage(companyId);
+      allow read: if canAccessCompanyStorage(companyId);
+      allow write: if canEditCompanyStorage(companyId);
     }
 
     // Household item documents — shared by household membership, with owner-uid fallback for legacy data
@@ -48,9 +76,10 @@ service firebase.storage {
       allow read, write: if canAccessHousehold(householdId);
     }
 
-    // AI Analysis uploads — strictly per user
+    // AI Analysis uploads — shareable via pageShares
     match /aiAnalysis/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if canViewPageStorage(userId, "ai_analysis");
+      allow write: if canEditPageStorage(userId, "ai_analysis");
     }
 
     // Default: deny everything else

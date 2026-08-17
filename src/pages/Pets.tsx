@@ -18,8 +18,6 @@ import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting, Vaccin
 import { usePetDocuments } from "@/hooks/usePetDocuments";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { EmojiPick } from "@/components/EmojiPick";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -416,7 +414,7 @@ const Pets = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />} sharePage="pets">
         <div className="flex flex-col items-center justify-center py-20">
           <DogLoader text="Loading pets…" />
         </div>
@@ -429,12 +427,7 @@ const Pets = () => {
       title={pageTitle}
       subtitle="Health, weight & care"
       icon={<Heart className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="pets" />
-          {canEdit && <ShareAccessButton page="pets" />}
-        </div>
-      }
+      sharePage="pets"
     >
       {pets.length > 0 && (
         <DogEntrance

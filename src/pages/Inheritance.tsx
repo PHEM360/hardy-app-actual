@@ -53,7 +53,7 @@ const Inheritance = () => {
   const finalEstate = selected.data[selected.data.length - 1];
 
   return (
-    <FeaturePageShell title="IHT Planner" subtitle="Inheritance tax scenario modelling" icon={<Calculator className="w-5 h-5" />}>
+    <FeaturePageShell title="IHT Planner" subtitle="Inheritance tax scenario modelling" icon={<Calculator className="w-5 h-5" />} sharePage="inheritance">
       {/* Summary */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl bg-gradient-primary mb-5 shadow-elevated">
         <p className="text-xs text-primary-foreground/70 uppercase tracking-wider font-medium">Projected Estate ({projectionYears}yr)</p>

@@ -18,10 +18,12 @@ import {
   PiggyBank,
   Heart,
   Sparkles,
+  KeyRound,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { canAccessRoute } from "@/lib/features";
+import { useIncomingPageShares } from "@/hooks/usePageShares";
 
 type MoreItem = {
   label: string;
@@ -56,6 +58,13 @@ const SECTIONS: Section[] = [
         icon: CalendarDays,
         route: "/calendar",
         gradient: "linear-gradient(135deg, hsl(218,60%,55%), hsl(230,55%,48%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Log Ins",
+        icon: KeyRound,
+        route: "/login-details",
+        gradient: "linear-gradient(135deg, hsl(265,55%,55%), hsl(275,53%,48%))",
         iconColor: "#fff",
       },
     ],
@@ -184,7 +193,8 @@ const More = () => {
   const navigate = useNavigate();
   const { role, loading: roleLoading } = useEffectiveRole();
   const { profile, loading: profileLoading } = useUserProfile();
-  const loading = roleLoading || profileLoading;
+  const { pages: sharedPages, loading: sharesLoading } = useIncomingPageShares();
+  const loading = roleLoading || profileLoading || sharesLoading;
 
   let delay = 0;
 
@@ -192,7 +202,7 @@ const More = () => {
     ...section,
     items: section.items.filter((item) => {
       if (loading) return false;
-      return canAccessRoute(role, profile?.enabledFeatures ?? [], item.route);
+      return canAccessRoute(role, profile?.enabledFeatures ?? [], item.route, sharedPages);
     }),
   })).filter((section) => section.items.length > 0);
 

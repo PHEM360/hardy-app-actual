@@ -19,8 +19,6 @@ import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1858,7 +1856,7 @@ const Tasks = () => {
 
   if (tasksLoading || settingsLoading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Track everything" icon={<CheckSquare className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Track everything" icon={<CheckSquare className="w-5 h-5" />} sharePage="tasks">
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -1871,12 +1869,7 @@ const Tasks = () => {
       title={pageTitle}
       subtitle={isOwnScope ? "Track everything" : "Shared with you"}
       icon={<CheckSquare className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="tasks" />
-          <ShareAccessButton page="tasks" />
-        </div>
-      }
+      sharePage="tasks"
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 mb-3">

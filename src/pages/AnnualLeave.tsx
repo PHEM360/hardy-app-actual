@@ -18,6 +18,7 @@ import {
   weekdayCount,
   type EntitlementBreakdown,
 } from "@/hooks/useAnnualLeave";
+import { useSharedScope } from "@/hooks/useSharedScope";
 import type {
   AnnualLeaveEntry,
   AnnualLeavePeriod,
@@ -373,7 +374,9 @@ function StatTile({ label, remaining, total, pending }: { label: string; remaini
 // ── Main page ───────────────────────────────────────────────────────────────
 
 const AnnualLeave = () => {
-  const { periods, entries, loading, error, activePeriod, startNewPeriod, updatePeriod, addEntry, updateEntry, deleteEntry } = useAnnualLeave();
+  const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("annual_leave");
+  const canEdit = permission === "edit";
+  const { periods, entries, loading, error, activePeriod, startNewPeriod, updatePeriod, addEntry, updateEntry, deleteEntry } = useAnnualLeave(scopeUserId ?? undefined);
 
   const [newPeriodOpen, setNewPeriodOpen] = useState(false);
   const [editPeriodOpen, setEditPeriodOpen] = useState(false);
@@ -394,7 +397,7 @@ const AnnualLeave = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="Annual Leave" subtitle="NHS entitlement tracker & calculator" icon={<Plane className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="NHS entitlement tracker & calculator" icon={<Plane className="w-5 h-5" />} sharePage="annual_leave">
         <DogLoader text="Loading your leave…" />
       </FeaturePageShell>
     );
@@ -402,7 +405,7 @@ const AnnualLeave = () => {
 
   if (error) {
     return (
-      <FeaturePageShell title="Annual Leave" subtitle="NHS entitlement tracker & calculator" icon={<Plane className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="NHS entitlement tracker & calculator" icon={<Plane className="w-5 h-5" />} sharePage="annual_leave">
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center">
           <p className="text-sm font-medium text-destructive">Couldn't load your annual leave data.</p>
           <p className="text-xs text-muted-foreground mt-1">{error}</p>
@@ -413,22 +416,27 @@ const AnnualLeave = () => {
 
   return (
     <FeaturePageShell
-      title="Annual Leave"
-      subtitle="NHS entitlement tracker & calculator"
+      title={pageTitle}
+      subtitle={isOwnScope ? "NHS entitlement tracker & calculator" : "Shared with you"}
       icon={<Plane className="w-5 h-5" />}
+      sharePage="annual_leave"
       action={
-        <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1.5" onClick={() => setNewPeriodOpen(true)}>
-          <RotateCcw className="w-3.5 h-3.5" /> New period
-        </Button>
+        canEdit ? (
+          <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1.5" onClick={() => setNewPeriodOpen(true)}>
+            <RotateCcw className="w-3.5 h-3.5" /> New period
+          </Button>
+        ) : undefined
       }
     >
       {!activePeriod ? (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border bg-card p-8 text-center space-y-3">
           <CalendarClock className="w-8 h-8 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Set up your current rotation to start tracking annual leave.</p>
-          <Button onClick={() => setNewPeriodOpen(true)} className="rounded-xl bg-gradient-primary">
-            <Plus className="w-4 h-4 mr-1.5" /> Set up rotation
-          </Button>
+          {canEdit && (
+            <Button onClick={() => setNewPeriodOpen(true)} className="rounded-xl bg-gradient-primary">
+              <Plus className="w-4 h-4 mr-1.5" /> Set up rotation
+            </Button>
+          )}
         </motion.div>
       ) : (
         <>
@@ -447,7 +455,7 @@ const AnnualLeave = () => {
                   {viewedPeriod && ` · ${viewedPeriod.ltftPercentage}% WTE`}
                 </p>
               </div>
-              {!isHistoryView && (
+              {!isHistoryView && canEdit && (
                 <button onClick={() => setEditPeriodOpen(true)} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex-shrink-0">
                   <Pencil className="w-3.5 h-3.5 text-primary-foreground" />
                 </button>
@@ -485,7 +493,7 @@ const AnnualLeave = () => {
               <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
               Leave entries
             </h3>
-            {!isHistoryView && (
+            {!isHistoryView && canEdit && (
               <Button size="sm" className="h-7 rounded-lg text-xs gap-1 bg-gradient-primary" onClick={() => { setEditingEntry(null); setEntryDialogOpen(true); }}>
                 <Plus className="w-3.5 h-3.5" /> Add leave
               </Button>
@@ -503,8 +511,8 @@ const AnnualLeave = () => {
                 return (
                   <button
                     key={entry.id}
-                    onClick={() => { if (!isHistoryView) { setEditingEntry(entry); setEntryDialogOpen(true); } }}
-                    disabled={isHistoryView}
+                    onClick={() => { if (!isHistoryView && canEdit) { setEditingEntry(entry); setEntryDialogOpen(true); } }}
+                    disabled={isHistoryView || !canEdit}
                     className="w-full text-left p-3 rounded-2xl border border-border/50 bg-card shadow-soft hover:shadow-md transition-shadow disabled:hover:shadow-soft"
                   >
                     <div className="flex items-start justify-between gap-2">

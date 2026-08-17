@@ -14,29 +14,25 @@ export default function SharedScopeSwitcher({ page }: { page: string }) {
   const current = availableScopes.find((s) => s.uid === scopeUserId);
   const isOwn = !scopeUserId || scopeUserId === dataUid;
 
-  const triggerLabel = sharedScopes.length === 0
-    ? "Nothing shared with you"
-    : formatViewLabel(page, current?.name ?? "Me", isOwn);
+  if (sharedScopes.length === 0) return null;
+
+  const triggerLabel = formatViewLabel(page, current?.name ?? "Me", isOwn);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          disabled={sharedScopes.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-xs font-semibold text-foreground max-w-[14rem] disabled:opacity-60 disabled:cursor-default"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-xs font-semibold text-foreground max-w-[14rem]"
         >
-          {sharedScopes.length > 0 && (
-            current?.permission === "view" && !isOwn
-              ? <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-              : <Pencil className="w-3.5 h-3.5 flex-shrink-0" />
-          )}
+          {current?.permission === "view" && !isOwn
+            ? <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+            : <Pencil className="w-3.5 h-3.5 flex-shrink-0" />}
           <span className="truncate">{triggerLabel}</span>
-          {sharedScopes.length > 0 && <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />}
+          <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
         </button>
       </PopoverTrigger>
-      {sharedScopes.length > 0 && (
-        <PopoverContent align="start" className="w-64 p-1.5">
+      <PopoverContent align="start" className="w-64 p-1.5">
           {availableScopes.map((s) => {
             const own = s.uid === dataUid;
             return (
@@ -56,7 +52,6 @@ export default function SharedScopeSwitcher({ page }: { page: string }) {
             );
           })}
         </PopoverContent>
-      )}
     </Popover>
   );
 }

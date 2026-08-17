@@ -87,8 +87,9 @@ function leaveEventTitle(status: AnnualLeaveEntry["status"], pool: AnnualLeavePo
 
 const CALENDAR_VISIBLE_STATUSES: AnnualLeaveEntry["status"][] = ["requested", "approved", "taken"];
 
-export function useAnnualLeave() {
-  const { dataUid: uid } = useAuth();
+export function useAnnualLeave(scopeUserId?: string) {
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [periods, setPeriods] = useState<AnnualLeavePeriod[]>([]);
   const [entries, setEntries] = useState<AnnualLeaveEntry[]>([]);
   const [loading, setLoading] = useState(true);

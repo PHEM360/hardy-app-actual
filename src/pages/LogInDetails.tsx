@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useSharedScope } from "@/hooks/useSharedScope";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,10 +57,12 @@ function CredentialCard({
   cred,
   onEdit,
   onDelete,
+  canEdit = true,
 }: {
   cred: Credential;
   onEdit: () => void;
   onDelete: () => void;
+  canEdit?: boolean;
 }) {
   const [showPw, setShowPw] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -171,15 +174,16 @@ function CredentialCard({
                 <p className="text-[10px] text-muted-foreground bg-muted/50 rounded-xl px-3 py-2 leading-relaxed">{cred.notes}</p>
               )}
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-1">
-                <button onClick={onEdit} className="flex-1 text-xs font-semibold py-1.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors text-card-foreground">
-                  Edit
-                </button>
-                <button onClick={onDelete} className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {canEdit && (
+                <div className="flex gap-2 pt-1">
+                  <button onClick={onEdit} className="flex-1 text-xs font-semibold py-1.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors text-card-foreground">
+                    Edit
+                  </button>
+                  <button onClick={onDelete} className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -192,6 +196,9 @@ function CredentialCard({
 
 const LogInDetails = () => {
   const { dataUid } = useAuth();
+  const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("login_details");
+  const canEdit = permission === "edit";
+  const uid = scopeUserId ?? dataUid;
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -202,9 +209,9 @@ const LogInDetails = () => {
   const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
-    if (!dataUid) return;
+    if (!uid) return;
     const q = query(
-      collection(db, "users", dataUid, "credentials"),
+      collection(db, "users", uid, "credentials"),
       orderBy("name")
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -212,7 +219,7 @@ const LogInDetails = () => {
       setLoading(false);
     });
     return unsub;
-  }, [dataUid]);
+  }, [uid]);
 
   const openAdd = () => {
     setEditCred(null);
@@ -237,7 +244,7 @@ const LogInDetails = () => {
   };
 
   const handleSave = async () => {
-    if (!dataUid || !form.name.trim() || !form.password.trim()) return;
+    if (!uid || !form.name.trim() || !form.password.trim()) return;
     setSaving(true);
     try {
       const data = {
@@ -251,9 +258,9 @@ const LogInDetails = () => {
         updatedAt: serverTimestamp(),
       };
       if (editCred?.id) {
-        await updateDoc(doc(db, "users", dataUid, "credentials", editCred.id), data);
+        await updateDoc(doc(db, "users", uid, "credentials", editCred.id), data);
       } else {
-        await addDoc(collection(db, "users", dataUid, "credentials"), {
+        await addDoc(collection(db, "users", uid, "credentials"), {
           ...data,
           createdAt: serverTimestamp(),
         });
@@ -265,8 +272,8 @@ const LogInDetails = () => {
   };
 
   const handleDelete = async (cred: Credential) => {
-    if (!dataUid || !cred.id) return;
-    await deleteDoc(doc(db, "users", dataUid, "credentials", cred.id));
+    if (!uid || !cred.id) return;
+    await deleteDoc(doc(db, "users", uid, "credentials", cred.id));
   };
 
   const usedCategories = [...new Set(credentials.map((c) => c.category).filter(Boolean))] as string[];
@@ -278,9 +285,10 @@ const LogInDetails = () => {
 
   return (
     <FeaturePageShell
-      title="Log In Details"
-      subtitle="Your saved credentials"
+      title={pageTitle}
+      subtitle={isOwnScope ? "Your saved credentials" : "Shared with you"}
       icon={<KeyRound className="w-5 h-5" />}
+      sharePage="login_details"
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -294,10 +302,12 @@ const LogInDetails = () => {
             </button>
           ))}
         </div>
-        <button onClick={openAdd} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0">
-          <Plus className="w-3.5 h-3.5" />
-          New
-        </button>
+        {canEdit && (
+          <button onClick={openAdd} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0">
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
+        )}
       </div>
 
       {/* Credentials list */}
@@ -316,6 +326,7 @@ const LogInDetails = () => {
               <CredentialCard
                 key={cred.id}
                 cred={cred}
+                canEdit={canEdit}
                 onEdit={() => openEdit(cred)}
                 onDelete={() => handleDelete(cred)}
               />

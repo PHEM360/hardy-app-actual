@@ -23,8 +23,6 @@ import { APP_BASE_URL } from "@/lib/appUrl";
 import { normalizeSlug } from "@/lib/slug";
 import { qrCodeValue } from "@/lib/qrCodeValue";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { QRCodeItem, LabelDesign } from "@/types/app";
 
 type View = "library" | "generator" | "settings";
@@ -1170,17 +1168,14 @@ const QRCodes = () => {
       title={pageTitle}
       subtitle="Generate & manage"
       icon={<QrCode className="w-5 h-5" />}
+      sharePage="qrcodes"
       action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="qrcodes" />
-          <ShareAccessButton page="qrcodes" />
-          <button
-            onClick={() => navigate("/companies")}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </button>
-        </div>
+        <button
+          onClick={() => navigate("/companies")}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
+        </button>
       }
     >
       <AnimatePresence mode="wait">

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import PageShareBar from "@/components/sharing/PageShareBar";
 
 interface FeaturePageShellProps {
   title: string;
@@ -8,9 +9,11 @@ interface FeaturePageShellProps {
   children?: React.ReactNode;
   icon?: React.ReactNode;
   action?: React.ReactNode;
+  /** Enables page sharing + "view as" for this page key. Omit on household pages. */
+  sharePage?: string;
 }
 
-const FeaturePageShell = ({ title, subtitle, children, icon, action }: FeaturePageShellProps) => {
+const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage }: FeaturePageShellProps) => {
   const navigate = useNavigate();
 
   return (
@@ -39,7 +42,11 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action }: FeaturePa
               <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
             )}
           </div>
-          {action && <div className="flex-shrink-0">{action}</div>}
+          {(sharePage || action) && (
+            <div className="flex-shrink-0">
+              {sharePage ? <PageShareBar page={sharePage} extra={action} /> : action}
+            </div>
+          )}
         </div>
       </motion.div>
       {children || (

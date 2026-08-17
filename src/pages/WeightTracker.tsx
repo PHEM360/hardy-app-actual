@@ -18,8 +18,6 @@ import { format, subMonths, subYears, parseISO, differenceInDays } from "date-fn
 import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { type BPEntry } from "@/hooks/useWeightTracker";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import DogLoader from "@/components/DogLoader";
 
 // ── Period filter ──────────────────────────────────────────────────────────────
@@ -278,7 +276,7 @@ const HealthTracker = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Weight, BP & treatments" icon={<HeartPulse className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Weight, BP & treatments" icon={<HeartPulse className="w-5 h-5" />} sharePage="health">
         <div className="flex items-center justify-center py-20"><DogLoader text="Loading…" /></div>
       </FeaturePageShell>
     );
@@ -289,12 +287,7 @@ const HealthTracker = () => {
       title={pageTitle}
       subtitle="Weight, BP & treatments"
       icon={<HeartPulse className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="health" />
-          <ShareAccessButton page="health" />
-        </div>
-      }
+      sharePage="health"
     >
 
       {/* ── Summary Cards ── */}

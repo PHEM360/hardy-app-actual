@@ -18,8 +18,6 @@ import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
 import { useHealthProfile } from "@/hooks/useHealthProfile";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { format, parseISO } from "date-fns";
 
@@ -125,7 +123,7 @@ export default function Health() {
   const { scopeUserId, pageTitle, isOwnScope } = useSharedScope("health");
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker(scopeUserId ?? undefined);
   const { medications } = useMeds(scopeUserId ?? undefined);
-  const { tabs, addTab, deleteTab } = useHealthTabs();
+  const { tabs, addTab, deleteTab } = useHealthTabs(scopeUserId ?? undefined);
   const { profile, saveProfile } = useHealthProfile(scopeUserId ?? undefined);
 
   // Documents aren't part of the "health" share grain (the same collection is
@@ -204,12 +202,7 @@ export default function Health() {
       title={pageTitle}
       subtitle={isOwnScope ? "Your personal health dashboard" : "Shared with you"}
       icon={<HeartPulse className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="health" />
-          <ShareAccessButton page="health" />
-        </div>
-      }
+      sharePage="health"
     >
       {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none -mx-1 px-1">

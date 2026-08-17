@@ -275,7 +275,7 @@ const Tattersalls = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="Tattersalls" subtitle="Flat management & expenses" icon={<Building className="w-5 h-5" />}>
+      <FeaturePageShell title="Tattersalls" subtitle="Flat management & expenses" icon={<Building className="w-5 h-5" />} sharePage="tattersalls">
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -288,6 +288,7 @@ const Tattersalls = () => {
       title="Tattersalls"
       subtitle="Flat management & expenses"
       icon={<Building className="w-5 h-5" />}
+      sharePage="tattersalls"
       action={
         <button
           onClick={openSettings}

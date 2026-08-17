@@ -30,10 +30,11 @@ import {
   CompanyTaxReturn,
 } from "@/types/app";
 
-export function useCompanies() {
+export function useCompanies(scopeUserId?: string) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const { dataUid: uid } = useAuth();
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
     if (!uid) return;
@@ -43,16 +44,18 @@ export function useCompanies() {
     const unsub = onSnapshot(q, (snap) => {
       const next = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Company))
-        .filter((c) =>
-          !c.ownerId ||
-          c.ownerId === uid ||
-          (c.sharedWith ?? []).includes(uid)
-        );
+        .filter((c) => {
+          const viewingOwn = !scopeUserId || scopeUserId === dataUid;
+          if (!c.ownerId) return viewingOwn;
+          if (c.ownerId === uid) return true;
+          if (viewingOwn && dataUid && (c.sharedWith ?? []).includes(dataUid)) return true;
+          return false;
+        });
       setCompanies(next);
       setLoading(false);
     });
     return unsub;
-  }, [uid]);
+  }, [uid, dataUid, scopeUserId]);
 
   const addCompany = useCallback(async (company: Omit<Company, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;

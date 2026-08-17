@@ -29,6 +29,7 @@ import {
   useMultiCompanyFinance,
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
+import { useSharedScope } from "@/hooks/useSharedScope";
 import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company, sortCategoriesOtherLast } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
@@ -1945,7 +1946,8 @@ function TaxTab({ companyId, company, allCompanies }: {
 const CompanyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { companies, loading, updateCompany } = useCompanies();
+  const { scopeUserId } = useSharedScope("companies");
+  const { companies, loading, updateCompany } = useCompanies(scopeUserId ?? undefined);
   const [activeTab, setActiveTab] = useState("overview");
 
   const company = companies.find((c) => c.id === id);

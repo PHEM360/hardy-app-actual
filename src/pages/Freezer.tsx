@@ -9,8 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFreezer } from "@/hooks/useFreezer";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 
 type BarcodeDetectorInstance = { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> };
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance;
@@ -139,14 +137,11 @@ const Freezer = () => {
       title={pageTitle}
       subtitle={`${total} ${total === 1 ? "item" : "items"} currently in stock`}
       icon={<Snowflake className="h-5 w-5" />}
+      sharePage="freezer"
       action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="freezer" />
-          <ShareAccessButton page="freezer" />
-          {canEdit && (
-            <Button size="sm" className="rounded-xl" onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Add item</Button>
-          )}
-        </div>
+        canEdit ? (
+          <Button size="sm" className="rounded-xl" onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Add item</Button>
+        ) : undefined
       }
     >
       <div className="space-y-4 pb-8">

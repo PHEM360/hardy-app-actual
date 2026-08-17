@@ -24,8 +24,6 @@ import {
 } from "@/components/ui/select";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -476,12 +474,7 @@ const CalendarPage = () => {
     <FeaturePageShell
       title={pageTitle}
       icon={<CalendarDays className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="calendar" />
-          <ShareAccessButton page="calendar" />
-        </div>
-      }
+      sharePage="calendar"
     >
 
       {/* ── Top navigation bar ── */}

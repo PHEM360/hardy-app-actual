@@ -17,8 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useNavigate } from "react-router-dom";
 import { useFinance, type Account, type BalanceEntry } from "@/hooks/useFinance";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import ShareAccessButton from "@/components/sharing/ShareAccessButton";
-import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { ACCOUNT_TYPES } from "@/lib/financeAccounts";
 import {
   buildPivotTable, computeAccountSummary, computeTaxYearSummary, computeChartYDomain, formatGBP,
@@ -383,7 +381,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
   if (loading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />} sharePage="finance">
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -396,12 +394,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       title={pageTitle}
       subtitle={isOwnScope ? "Account balances over time" : "Shared with you"}
       icon={<Wallet className="w-5 h-5" />}
-      action={
-        <div className="flex items-center gap-1.5">
-          <SharedScopeSwitcher page="finance" />
-          <ShareAccessButton page="finance" />
-        </div>
-      }
+      sharePage="finance"
     >
       {isOwnScope && (
         <button
