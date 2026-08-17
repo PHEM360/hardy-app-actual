@@ -202,6 +202,10 @@ const Admin = () => {
   // ── User management actions (write to Firestore) ──────────────────────────
 
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MockUser | null>(null);
+  const [deleteStep, setDeleteStep] = useState<"ask" | "type">("ask");
+  const [deleteNameInput, setDeleteNameInput] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ── Password reset ─────────────────────────────────────────────────────────
   const [resetPwOpen, setResetPwOpen] = useState(false);
@@ -261,12 +265,40 @@ const Admin = () => {
     }
   };
 
-  const doDeleteUser = async (userId: string) => {
+  const closeDeleteDialog = () => {
+    if (actionLoading) return;
+    setDeleteTarget(null);
+    setDeleteStep("ask");
+    setDeleteNameInput("");
+    setDeleteError(null);
+  };
+
+  const normalizeConfirmText = (value: string) =>
+    value.trim().toLowerCase().replace(/\s+/g, " ");
+
+  const deleteConfirmMatches = (target: MockUser, typed: string) => {
+    const entered = normalizeConfirmText(typed);
+    if (!entered) return false;
+    const name = normalizeConfirmText(target.name);
+    const email = normalizeConfirmText(target.email);
+    return (name && entered === name) || (email && entered === email);
+  };
+
+  const doDeleteUser = async () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.id === user?.uid) return;
+    if (!deleteConfirmMatches(deleteTarget, deleteNameInput)) return;
     setActionLoading(true);
+    setDeleteError(null);
     try {
-      await deleteDoc(doc(db, "users", userId));
-      setUsers(prev => prev.filter(u => u.id !== userId));
+      await deleteDoc(doc(db, "users", deleteTarget.id));
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setSelectedUser(null);
+      setDeleteTarget(null);
+      setDeleteStep("ask");
+      setDeleteNameInput("");
+    } catch (err: any) {
+      setDeleteError(err?.message ?? "Couldn't delete this account. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -933,8 +965,14 @@ const Admin = () => {
                   <Button
                     variant="outline"
                     className="w-full h-9 rounded-lg text-xs justify-start gap-2 text-destructive hover:text-destructive"
-                    disabled={actionLoading}
-                    onClick={() => doDeleteUser(currentUser.id)}
+                    disabled={actionLoading || currentUser.id === user?.uid}
+                    onClick={() => {
+                      setDeleteTarget(currentUser);
+                      setDeleteStep("ask");
+                      setDeleteNameInput("");
+                      setDeleteError(null);
+                      setSelectedUser(null);
+                    }}
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete Account
                   </Button>
@@ -999,6 +1037,78 @@ const Admin = () => {
               {actionLoading ? "Saving…" : "Save and enable feature"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) closeDeleteDialog(); }}>
+        <DialogContent className="max-w-sm mx-4" aria-describedby={undefined}>
+          {deleteTarget && deleteStep === "ask" && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display flex items-center gap-2 text-destructive">
+                  <Trash2 className="w-4 h-4" /> Delete this account?
+                </DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <span className="font-semibold text-foreground">{deleteTarget.name}</span>
+                  {deleteTarget.email ? <> ({deleteTarget.email})</> : null}? This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1 h-10 rounded-xl" onClick={closeDeleteDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 h-10 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => setDeleteStep("type")}
+                >
+                  Yes, continue
+                </Button>
+              </div>
+            </>
+          )}
+          {deleteTarget && deleteStep === "type" && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display">Type the name to confirm</DialogTitle>
+                <DialogDescription>
+                  Type <span className="font-semibold text-foreground">{deleteTarget.name}</span> to permanently delete this account.
+                  {deleteTarget.email ? <> You can also type their email.</> : null}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Confirmation</Label>
+                  <Input
+                    autoFocus
+                    value={deleteNameInput}
+                    onChange={(e) => setDeleteNameInput(e.target.value)}
+                    placeholder={deleteTarget.name}
+                    className="h-10 rounded-xl"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && deleteConfirmMatches(deleteTarget, deleteNameInput)) {
+                        void doDeleteUser();
+                      }
+                    }}
+                  />
+                </div>
+                {deleteError && (
+                  <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{deleteError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 h-10 rounded-xl" disabled={actionLoading} onClick={closeDeleteDialog}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 h-10 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={actionLoading || !deleteConfirmMatches(deleteTarget, deleteNameInput)}
+                    onClick={() => void doDeleteUser()}
+                  >
+                    {actionLoading ? "Deleting…" : "Delete account"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
