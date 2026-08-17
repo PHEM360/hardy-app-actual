@@ -35,16 +35,16 @@ interface SubstanceConfig {
 }
 
 export function useSubstances() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [logs, setLogs] = useState<SubstanceLog[]>([]);
   const [config, setConfig] = useState<SubstanceConfig>({});
   const [loading, setLoading] = useState(true);
 
   // Subscribe to logs
   useEffect(() => {
-    if (!user) { setLogs([]); setLoading(false); return; }
+    if (!dataUid) { setLogs([]); setLoading(false); return; }
     const q = query(
-      collection(db, "substanceLogs", user.uid, "logs"),
+      collection(db, "substanceLogs", dataUid, "logs"),
       orderBy("date", "desc"),
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -52,21 +52,21 @@ export function useSubstances() {
       setLoading(false);
     }, () => setLoading(false));
     return unsub;
-  }, [user?.uid]);
+  }, [dataUid]);
 
   // Subscribe to config (TOTP secret + substance names)
   useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(doc(db, "substancesConfig", user.uid), (snap) => {
+    if (!dataUid) return;
+    const unsub = onSnapshot(doc(db, "substancesConfig", dataUid), (snap) => {
       if (snap.exists()) setConfig(snap.data() as SubstanceConfig);
       else setConfig({});
     });
     return unsub;
-  }, [user?.uid]);
+  }, [dataUid]);
 
   /** Generate a new TOTP secret, store it, return QR code URI */
   const setupTotp = useCallback(async (email: string): Promise<{ secret: string; uri: string }> => {
-    if (!user) throw new Error("Not authenticated");
+    if (!dataUid) throw new Error("Not authenticated");
     const totp = new OTPAuth.TOTP({
       issuer: "Hardy Hub",
       label: email,
@@ -77,18 +77,18 @@ export function useSubstances() {
     });
     const secret = totp.secret.base32;
     const uri = totp.toString();
-    await setDoc(doc(db, "substancesConfig", user.uid), {
+    await setDoc(doc(db, "substancesConfig", dataUid), {
       totpSecret: secret,
       totpSetupComplete: false,
     }, { merge: true });
     return { secret, uri };
-  }, [user]);
+  }, [dataUid]);
 
   /** Mark TOTP setup as complete */
   const confirmTotpSetup = useCallback(async () => {
-    if (!user) return;
-    await setDoc(doc(db, "substancesConfig", user.uid), { totpSetupComplete: true }, { merge: true });
-  }, [user]);
+    if (!dataUid) return;
+    await setDoc(doc(db, "substancesConfig", dataUid), { totpSetupComplete: true }, { merge: true });
+  }, [dataUid]);
 
   /** Verify a user-entered 6-digit code against the stored secret */
   const verifyTotp = useCallback((code: string): boolean => {
@@ -105,72 +105,72 @@ export function useSubstances() {
 
   /** Reset TOTP (delete config) */
   const resetTotp = useCallback(async () => {
-    if (!user) return;
-    await deleteDoc(doc(db, "substancesConfig", user.uid));
-  }, [user]);
+    if (!dataUid) return;
+    await deleteDoc(doc(db, "substancesConfig", dataUid));
+  }, [dataUid]);
 
   /** Add a substance name to the tracked list */
   const addSubstanceName = useCallback(async (name: string) => {
-    if (!user) return;
+    if (!dataUid) return;
     const current = config.substanceNames ?? [];
     if (current.includes(name)) return;
-    await setDoc(doc(db, "substancesConfig", user.uid), {
+    await setDoc(doc(db, "substancesConfig", dataUid), {
       substanceNames: [...current, name],
     }, { merge: true });
-  }, [user, config.substanceNames]);
+  }, [dataUid, config.substanceNames]);
 
   /** Remove a substance name from the tracked list */
   const removeSubstanceName = useCallback(async (name: string) => {
-    if (!user) return;
+    if (!dataUid) return;
     const current = config.substanceNames ?? [];
-    await setDoc(doc(db, "substancesConfig", user.uid), {
+    await setDoc(doc(db, "substancesConfig", dataUid), {
       substanceNames: current.filter((n) => n !== name),
     }, { merge: true });
-  }, [user, config.substanceNames]);
+  }, [dataUid, config.substanceNames]);
 
   /** Log a substance use */
   const addLog = useCallback(async (entry: Omit<SubstanceLog, "id" | "createdAt">) => {
-    if (!user) return;
+    if (!dataUid) return;
     // Strip undefined — Firestore rejects them and causes "invalid data" error
     const clean: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(entry)) {
       if (v !== undefined) clean[k] = v;
     }
-    await addDoc(collection(db, "substanceLogs", user.uid, "logs"), {
+    await addDoc(collection(db, "substanceLogs", dataUid, "logs"), {
       ...clean,
       createdAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [dataUid]);
 
   /** Delete a log entry */
   const deleteLog = useCallback(async (id: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, "substanceLogs", user.uid, "logs", id));
-  }, [user]);
+    if (!dataUid) return;
+    await deleteDoc(doc(db, "substanceLogs", dataUid, "logs", id));
+  }, [dataUid]);
 
   /** Save the entire weaning schedule */
   const saveWeaningSchedule = useCallback(async (entries: WeaningEntry[]) => {
-    if (!user) return;
+    if (!dataUid) return;
     // Strip id fields before writing to Firestore
     const clean = entries.map(({ id: _id, ...rest }) => rest);
-    await setDoc(doc(db, "substancesConfig", user.uid), {
+    await setDoc(doc(db, "substancesConfig", dataUid), {
       weaningSchedule: clean,
     }, { merge: true });
-  }, [user]);
+  }, [dataUid]);
 
   /** Set or clear a manual calendar colour override for a date */
   const setCalendarOverride = useCallback(async (date: string, status: "green" | "amber" | "red" | null) => {
-    if (!user) return;
+    if (!dataUid) return;
     const overrides = { ...(config.calendarOverrides ?? {}) };
     if (status === null) {
       delete overrides[date];
     } else {
       overrides[date] = status;
     }
-    await setDoc(doc(db, "substancesConfig", user.uid), {
+    await setDoc(doc(db, "substancesConfig", dataUid), {
       calendarOverrides: overrides,
     }, { merge: true });
-  }, [user, config.calendarOverrides]);
+  }, [dataUid, config.calendarOverrides]);
 
   const isTotpConfigured = Boolean(config.totpSecret && config.totpSetupComplete);
   const latestLog = logs[0] ?? null;

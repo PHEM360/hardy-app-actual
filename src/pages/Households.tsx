@@ -129,7 +129,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { useMyHouseholds } from "@/hooks/useHouseholds";
 import HouseholdManagerSheet from "@/components/household/HouseholdManagerSheet";
+import HouseholdSetupCard from "@/components/household/HouseholdSetupCard";
 
 // ─── Tile background catalogue ────────────────────────────────────────────────
 
@@ -1912,26 +1914,54 @@ export default function Households() {
   const { items, loading, addItem, updateItem, deleteItem } = useHouseholdItems();
   const { settings, saveSettings } = useHouseholdSettings();
   const { permission, requestPermission, checkAndScheduleAll, scheduleReminder } = usePushNotifications();
-  const { user } = useAuth();
+  const { user, dataUid } = useAuth();
   const { profile } = useUserProfile();
-  const { activeHouseholdId, availableHouseholds } = useActiveHousehold();
+  const { activeHouseholdId, availableHouseholds, setActiveHouseholdId, hasExplicitHouseholds, loading: householdLoading } = useActiveHousehold();
+  const { households } = useMyHouseholds();
   const appUsers = useAppUsers();
 
-  // Auto-include the logged-in user in the members list if not already present
+  // Formal household members (who can view/edit this page) plus any extra
+  // people added in household settings for item assignment.
   const effectiveMembers: HouseholdMember[] = (() => {
-    if (!user) return settings.members;
-    const userName = profile?.displayName || profile?.firstName || user.displayName || user.email?.split("@")[0] || "Me";
-    const alreadyIn = settings.members.some(
-      (m) => m.name.toLowerCase() === userName.toLowerCase()
-    );
-    if (alreadyIn) return settings.members;
-    const selfMember: HouseholdMember = {
-      id: user.uid,
-      name: userName,
-      emoji: profile?.avatarType === "emoji" ? (profile?.avatarEmoji ?? "👤") : "👤",
-      role: "member",
-    };
-    return [selfMember, ...settings.members];
+    const byId = new Map<string, HouseholdMember>();
+    const formal = households.find((h) => h.id === activeHouseholdId);
+
+    for (const uid of formal?.memberIds ?? []) {
+      const u = appUsers.find((a) => a.id === uid);
+      const fromSettings = settings.members.find((m) => m.id === uid || m.userId === uid);
+      if (fromSettings) {
+        byId.set(uid, { ...fromSettings, id: uid, userId: uid });
+        continue;
+      }
+      const isSelf = uid === dataUid;
+      const name = isSelf
+        ? (profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "Me")
+        : (u?.name || u?.email || "Member");
+      byId.set(uid, {
+        id: uid,
+        userId: uid,
+        name,
+        emoji: isSelf && profile?.avatarType === "emoji" ? (profile?.avatarEmoji ?? "👤") : "👤",
+        role: uid === formal?.createdBy ? "admin" : "member",
+      });
+    }
+
+    for (const m of settings.members) {
+      if (!byId.has(m.id)) byId.set(m.id, m);
+    }
+
+    if (dataUid && ![...byId.values()].some((m) => m.id === dataUid || m.userId === dataUid)) {
+      const userName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "Me";
+      byId.set(dataUid, {
+        id: dataUid,
+        userId: dataUid,
+        name: userName,
+        emoji: profile?.avatarType === "emoji" ? (profile?.avatarEmoji ?? "👤") : "👤",
+        role: "member",
+      });
+    }
+
+    return Array.from(byId.values());
   })();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2036,11 +2066,56 @@ export default function Households() {
   const shared = items.filter((i) => !i.assignedTo);
   const memberItems = (id: string) => items.filter((i) => i.assignedTo === id);
 
+  if (householdLoading) {
+    return (
+      <FeaturePageShell title="Household" subtitle="Bills, documents and shared records">
+        <div className="flex items-center justify-center py-20">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </FeaturePageShell>
+    );
+  }
+
+  if (!hasExplicitHouseholds) {
+    return (
+      <FeaturePageShell title="Household" subtitle="Bills, documents and shared records">
+        <HouseholdSetupCard
+          title="Name this household"
+          description="Household bills need a real name (not a random ID). Create one here, or ask an admin to add you to an existing household."
+        />
+      </FeaturePageShell>
+    );
+  }
+
   return (
     <FeaturePageShell
       title={availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household"}
-      subtitle="Manage household items, policies & renewals"
+      subtitle="Shared with everyone in this household"
     >
+      {availableHouseholds.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {availableHouseholds.map((h) => (
+            <button
+              key={h.id}
+              onClick={() => setActiveHouseholdId(h.id)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                h.id === activeHouseholdId
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {h.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {effectiveMembers.length > 0 && (
+        <div className="rounded-xl border border-border/50 bg-muted/30 px-3.5 py-2.5 mb-4 text-xs text-muted-foreground">
+          Shared with <span className="font-semibold text-foreground">{effectiveMembers.map((m) => m.name).join(", ")}</span>. Anyone listed can view and edit this household.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         {activeTab === "items" ? (

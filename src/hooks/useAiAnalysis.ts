@@ -22,17 +22,17 @@ export interface UploadedDoc {
 }
 
 export function useAiAnalysis() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [sessions, setSessions] = useState<AiSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!dataUid) {
       setSessions([]);
       setLoading(false);
       return;
     }
-    const q = query(collection(db, "aiAnalysis", user.uid, "sessions"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "aiAnalysis", dataUid, "sessions"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -42,18 +42,18 @@ export function useAiAnalysis() {
       () => setLoading(false)
     );
     return unsub;
-  }, [user?.uid]);
+  }, [dataUid]);
 
   const uploadDocument = useCallback(
     async (file: File): Promise<UploadedDoc> => {
-      if (!user) throw new Error("You must be signed in.");
-      const storagePath = `aiAnalysis/${user.uid}/${Date.now()}_${file.name}`;
+      if (!dataUid) throw new Error("You must be signed in.");
+      const storagePath = `aiAnalysis/${dataUid}/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, storagePath);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       return { storagePath, mimeType: file.type, name: file.name, url };
     },
-    [user]
+    [dataUid]
   );
 
   const analyze = useCallback(
@@ -65,8 +65,8 @@ export function useAiAnalysis() {
       });
       const answer = (result.data as { answer: string }).answer;
 
-      if (user) {
-        await addDoc(collection(db, "aiAnalysis", user.uid, "sessions"), {
+      if (dataUid) {
+        await addDoc(collection(db, "aiAnalysis", dataUid, "sessions"), {
           documentNames: documents.map((d) => d.name),
           documentUrls: documents.map((d) => d.url),
           question,
@@ -76,7 +76,7 @@ export function useAiAnalysis() {
       }
       return answer;
     },
-    [user]
+    [dataUid]
   );
 
   return { sessions, loading, uploadDocument, analyze };

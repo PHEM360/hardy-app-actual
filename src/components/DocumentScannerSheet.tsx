@@ -244,6 +244,11 @@ function enhanceScan(canvas: HTMLCanvasElement): HTMLCanvasElement {
 const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
 const CORNER_COLORS = ["#3b82f6", "#22c55e", "#f97316", "#a855f7"] as const;
 
+// ─── Magnifier loupe (corner-drag zoom) ────────────────────────────────────────
+const LOUPE_SIZE = 128;        // px diameter on screen
+const LOUPE_ZOOM = 2.5;        // how much more zoomed-in than the base image
+const LOUPE_FINGER_GAP = 24;   // px gap above the finger, so the touch doesn't cover it
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DocumentScannerSheet({
@@ -270,6 +275,10 @@ export default function DocumentScannerSheet({
   // ── Quad state ───────────────────────────────────────────────────────────────
   const [quad, setQuad] = useState<Quad | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+  // Screen-space (clientX/Y) position of the finger while dragging a corner —
+  // drives the magnifier loupe, positioned in viewport coordinates so it
+  // doesn't need to account for the SVG's own scale/pan.
+  const [dragScreenPt, setDragScreenPt] = useState<{ x: number; y: number } | null>(null);
 
   // ── Warp result state ────────────────────────────────────────────────────────
   type Stage = "choose" | "edit" | "warping" | "preview";
@@ -349,6 +358,7 @@ export default function DocumentScannerSheet({
     e.currentTarget.setPointerCapture(e.pointerId);
     e.stopPropagation();
     setDragging(idx);
+    setDragScreenPt({ x: e.clientX, y: e.clientY });
   };
 
   const onPointerMove = useCallback(
@@ -362,11 +372,12 @@ export default function DocumentScannerSheet({
         next[dragging] = pt;
         return next;
       });
+      setDragScreenPt({ x: e.clientX, y: e.clientY });
     },
     [dragging, quad, getSVGPt]
   );
 
-  const onPointerUp = useCallback(() => setDragging(null), []);
+  const onPointerUp = useCallback(() => { setDragging(null); setDragScreenPt(null); }, []);
 
   // ── Reset to auto-detected corners ───────────────────────────────────────────
   const handleReset = useCallback(() => {
@@ -639,7 +650,7 @@ export default function DocumentScannerSheet({
             value={fileName}
             onChange={(e) => setFileName(e.target.value)}
             placeholder="Name this file"
-            className="h-10 rounded-xl bg-white/10 border-white/20 text-white placeholder:text-white/40"
+            className="h-10 rounded-xl bg-white/10 border-white/20 text-white placeholder:text-white/40 focus-visible:bg-white/10 focus-visible:border-white/40 focus-visible:text-white"
           />
         )}
 
@@ -680,6 +691,39 @@ export default function DocumentScannerSheet({
           </div>
         )}
       </div>
+
+      {/* Magnifier loupe: zoomed view of the corner being dragged, offset
+          above the finger (or below, if there's no room above) so the touch
+          point itself doesn't block the view. */}
+      {stage === "edit" && dragging !== null && dragScreenPt && quad && (
+        <div
+          className="fixed rounded-full border-4 shadow-2xl pointer-events-none overflow-hidden"
+          style={{
+            left: dragScreenPt.x,
+            top: dragScreenPt.y,
+            width: LOUPE_SIZE,
+            height: LOUPE_SIZE,
+            transform:
+              dragScreenPt.y - LOUPE_SIZE - LOUPE_FINGER_GAP > 0
+                ? `translate(-50%, calc(-100% - ${LOUPE_FINGER_GAP}px))`
+                : `translate(-50%, ${LOUPE_FINGER_GAP}px)`,
+            borderColor: CORNER_COLORS[dragging],
+            backgroundColor: "#000",
+            backgroundImage: `url(${imgSrc})`,
+            backgroundRepeat: "no-repeat",
+            backgroundSize: `${naturalW * LOUPE_ZOOM}px ${naturalH * LOUPE_ZOOM}px`,
+            backgroundPosition: `${-(quad[dragging].x * LOUPE_ZOOM - LOUPE_SIZE / 2)}px ${-(quad[dragging].y * LOUPE_ZOOM - LOUPE_SIZE / 2)}px`,
+          }}
+        >
+          {/* Crosshair pinpointing the exact corner position */}
+          <div
+            className="absolute top-1/2 left-1/2 rounded-full border-2 border-white"
+            style={{ width: 10, height: 10, transform: "translate(-50%, -50%)", backgroundColor: CORNER_COLORS[dragging] }}
+          />
+          <div className="absolute top-1/2 left-0 right-0 h-px bg-white/50" style={{ transform: "translateY(-50%)" }} />
+          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/50" style={{ transform: "translateX(-50%)" }} />
+        </div>
+      )}
     </div>,
     document.body
   );

@@ -13,9 +13,10 @@ import {
   serverTimestamp,
   deleteField,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { QRCodeItem, QRCodeSettings, DEFAULT_QR_SETTINGS } from "@/types/app";
 import { normalizeSlug, randomSlug } from "@/lib/slug";
+import { useAuth } from "@/auth/AuthContext";
 
 // ─── Friendly-link slugs (URL-type QR codes only) ──────────────────────────────
 //
@@ -68,7 +69,8 @@ async function syncLinkSlugForItem(
 export function useQRCodes(scopeUserId?: string) {
   const [qrCodes, setQrCodes] = useState<QRCodeItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const uid = scopeUserId ?? auth.currentUser?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
     if (!uid) return;
@@ -170,7 +172,8 @@ export function useQRCodes(scopeUserId?: string) {
 
 export function useQRCodeSettings(scopeUserId?: string) {
   const [settings, setSettings] = useState<QRCodeSettings>(DEFAULT_QR_SETTINGS);
-  const uid = scopeUserId ?? auth.currentUser?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
     if (!uid) return;

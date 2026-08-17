@@ -63,7 +63,7 @@ export interface FeatureModule {
 export const FEATURE_MODULES: FeatureModule[] = [
   {
     key: "finance_personal",
-    label: "My Finances",
+    label: "My Finance",
     description: "Track accounts, balances & spending",
     icon: "wallet",
     route: "/finance",
@@ -96,7 +96,7 @@ export const FEATURE_MODULES: FeatureModule[] = [
   {
     key: "pets",
     label: "Pets",
-    description: "Billy & Milo — health, weight & care",
+    description: "Pets, health, weight & care",
     icon: "heart",
     route: "/pets",
     color: "warning",

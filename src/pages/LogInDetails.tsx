@@ -191,7 +191,7 @@ function CredentialCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const LogInDetails = () => {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -202,9 +202,9 @@ const LogInDetails = () => {
   const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
-    if (!user) return;
+    if (!dataUid) return;
     const q = query(
-      collection(db, "users", user.uid, "credentials"),
+      collection(db, "users", dataUid, "credentials"),
       orderBy("name")
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -212,7 +212,7 @@ const LogInDetails = () => {
       setLoading(false);
     });
     return unsub;
-  }, [user]);
+  }, [dataUid]);
 
   const openAdd = () => {
     setEditCred(null);
@@ -237,7 +237,7 @@ const LogInDetails = () => {
   };
 
   const handleSave = async () => {
-    if (!user || !form.name.trim() || !form.password.trim()) return;
+    if (!dataUid || !form.name.trim() || !form.password.trim()) return;
     setSaving(true);
     try {
       const data = {
@@ -251,9 +251,9 @@ const LogInDetails = () => {
         updatedAt: serverTimestamp(),
       };
       if (editCred?.id) {
-        await updateDoc(doc(db, "users", user.uid, "credentials", editCred.id), data);
+        await updateDoc(doc(db, "users", dataUid, "credentials", editCred.id), data);
       } else {
-        await addDoc(collection(db, "users", user.uid, "credentials"), {
+        await addDoc(collection(db, "users", dataUid, "credentials"), {
           ...data,
           createdAt: serverTimestamp(),
         });
@@ -265,8 +265,8 @@ const LogInDetails = () => {
   };
 
   const handleDelete = async (cred: Credential) => {
-    if (!user || !cred.id) return;
-    await deleteDoc(doc(db, "users", user.uid, "credentials", cred.id));
+    if (!dataUid || !cred.id) return;
+    await deleteDoc(doc(db, "users", dataUid, "credentials", cred.id));
   };
 
   const usedCategories = [...new Set(credentials.map((c) => c.category).filter(Boolean))] as string[];

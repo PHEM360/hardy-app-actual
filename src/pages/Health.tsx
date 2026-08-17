@@ -122,7 +122,7 @@ function MiniSparkline({
 type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai" | "documents";
 
 export default function Health() {
-  const { scopeUserId } = useSharedScope("health");
+  const { scopeUserId, pageTitle, isOwnScope } = useSharedScope("health");
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker(scopeUserId ?? undefined);
   const { medications } = useMeds(scopeUserId ?? undefined);
   const { tabs, addTab, deleteTab } = useHealthTabs();
@@ -201,8 +201,8 @@ export default function Health() {
 
   return (
     <FeaturePageShell
-      title="Health"
-      subtitle="Your personal health dashboard"
+      title={pageTitle}
+      subtitle={isOwnScope ? "Your personal health dashboard" : "Shared with you"}
       icon={<HeartPulse className="w-5 h-5" />}
       action={
         <div className="flex items-center gap-1.5">

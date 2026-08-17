@@ -9,6 +9,8 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  writeBatch,
+  setDoc,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
@@ -25,18 +27,18 @@ export interface Household {
 
 /** Live list of every household the current user belongs to. */
 export function useMyHouseholds() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [households, setHouseholds] = useState<Household[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!dataUid) {
       setHouseholds([]);
       setLoading(false);
       return;
     }
 
-    const q = query(collection(db, "households"), where("memberIds", "array-contains", user.uid));
+    const q = query(collection(db, "households"), where("memberIds", "array-contains", dataUid));
     const unsub = onSnapshot(q, (snap) => {
       setHouseholds(
         snap.docs.map((d) => ({
@@ -53,7 +55,7 @@ export function useMyHouseholds() {
     });
 
     return unsub;
-  }, [user]);
+  }, [dataUid]);
 
   return { households, loading };
 }
@@ -84,21 +86,95 @@ export function useAllHouseholds() {
   return { households, loading };
 }
 
+const HOUSEHOLD_DATA_SUBCOLS = [
+  "items",
+  "settings",
+  "documents",
+  "photos",
+  "financeAccounts",
+  "financeEntries",
+] as const;
+
+async function copySubcollection(fromCol: ReturnType<typeof collection>, toCol: ReturnType<typeof collection>) {
+  const snap = await getDocs(fromCol);
+  if (snap.empty) return;
+  const CHUNK = 400;
+  for (let i = 0; i < snap.docs.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const d of snap.docs.slice(i, i + CHUNK)) {
+      batch.set(doc(toCol, d.id), d.data());
+    }
+    await batch.commit();
+  }
+}
+
+/** Move solo/legacy household data onto a newly created shared household. */
+async function migrateHouseholdData(fromId: string, toId: string) {
+  if (!fromId || fromId === toId) return;
+  for (const sub of HOUSEHOLD_DATA_SUBCOLS) {
+    await copySubcollection(
+      collection(db, "household", fromId, sub),
+      collection(db, "household", toId, sub)
+    );
+  }
+  await copySubcollection(
+    collection(db, "cameras", fromId, "list"),
+    collection(db, "cameras", toId, "list")
+  );
+}
+
+async function findUserIdByEmail(email: string): Promise<string> {
+  const trimmed = email.trim();
+  const lower = trimmed.toLowerCase();
+  const candidates = Array.from(new Set([lower, trimmed]));
+  for (const value of candidates) {
+    const snap = await getDocs(query(collection(db, "users"), where("email", "==", value)));
+    if (!snap.empty) return snap.docs[0].id;
+  }
+  throw new Error("No app user found with that email. They need to sign up first.");
+}
+
 export function useHouseholds() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
 
   const createHousehold = useCallback(
     async (name: string) => {
-      if (!user || !name.trim()) return;
+      if (!dataUid || !name.trim()) return;
+      const existing = await getDocs(
+        query(collection(db, "households"), where("memberIds", "array-contains", dataUid))
+      );
+      const isFirstHousehold = existing.empty;
+
       const ref = await addDoc(collection(db, "households"), {
         name: name.trim(),
-        createdBy: user.uid,
-        memberIds: [user.uid],
+        createdBy: dataUid,
+        memberIds: [dataUid],
         createdAt: serverTimestamp(),
       });
+
+      // Own profile — so rules + Settings stay in sync with membership
+      await setDoc(doc(db, "users", dataUid), {
+        householdIds: arrayUnion(ref.id),
+        householdId: ref.id,
+      }, { merge: true }).catch(() => undefined);
+
+      // First shared household: bring across data that was stored under the
+      // user's uid (or a matching legacy name path) so the partner sees it.
+      if (isFirstHousehold) {
+        const sources = [dataUid];
+        if (name.trim() && name.trim() !== dataUid) sources.push(name.trim());
+        for (const src of sources) {
+          try {
+            await migrateHouseholdData(src, ref.id);
+          } catch {
+            // Ignore missing/unreadable legacy paths
+          }
+        }
+      }
+
       return ref.id;
     },
-    [user]
+    [dataUid]
   );
 
   const renameHousehold = useCallback(async (householdId: string, name: string) => {
@@ -107,15 +183,13 @@ export function useHouseholds() {
   }, []);
 
   const addHouseholdMember = useCallback(async (householdId: string, email: string) => {
-    const usersQ = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()));
-    const snap = await getDocs(usersQ);
-    if (snap.empty) {
-      throw new Error("No app user found with that email.");
-    }
-    const targetUid = snap.docs[0].id;
+    const targetUid = await findUserIdByEmail(email);
     await updateDoc(doc(db, "households", householdId), {
       memberIds: arrayUnion(targetUid),
     });
+    await setDoc(doc(db, "users", targetUid), {
+      householdIds: arrayUnion(householdId),
+    }, { merge: true }).catch(() => undefined);
     return targetUid;
   }, []);
 
@@ -130,6 +204,9 @@ export function useHouseholds() {
     await updateDoc(doc(db, "households", householdId), {
       memberIds: arrayUnion(targetUid),
     });
+    await setDoc(doc(db, "users", targetUid), {
+      householdIds: arrayUnion(householdId),
+    }, { merge: true }).catch(() => undefined);
   }, []);
 
   /** Admin-only: create a household on behalf of a user who isn't the caller. */
@@ -141,6 +218,10 @@ export function useHouseholds() {
       memberIds: [targetUid],
       createdAt: serverTimestamp(),
     });
+    await setDoc(doc(db, "users", targetUid), {
+      householdIds: arrayUnion(ref.id),
+      householdId: ref.id,
+    }, { merge: true }).catch(() => undefined);
     return ref.id;
   }, []);
 

@@ -19,8 +19,8 @@ export interface UserDocument {
 }
 
 export function useDocuments(scopeUserId?: string) {
-  const { user } = useAuth();
-  const uid = scopeUserId ?? user?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [documents, setDocuments] = useState<UserDocument[]>([]);
   const [loading, setLoading] = useState(true);
 

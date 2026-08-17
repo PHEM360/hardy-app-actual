@@ -16,13 +16,13 @@ const DEFAULT_SETTINGS: TaskSettings = {
 };
 
 export function useTaskSettings() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [settings, setSettings] = useState<TaskSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, "taskSettings", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "taskSettings", dataUid);
     getDoc(ref).then((snap) => {
       if (snap.exists()) {
         const data = snap.data() as Partial<TaskSettings>;
@@ -36,11 +36,11 @@ export function useTaskSettings() {
         });
       }
     }).finally(() => setLoading(false));
-  }, [user]);
+  }, [dataUid]);
 
   const saveSettings = async (next: TaskSettings) => {
-    if (!user) return;
-    const ref = doc(db, "taskSettings", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "taskSettings", dataUid);
     await setDoc(ref, next);
     setSettings(next);
   };

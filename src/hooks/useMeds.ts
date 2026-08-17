@@ -34,8 +34,8 @@ export interface MedLog {
 }
 
 export function useMeds(scopeUserId?: string) {
-  const { user } = useAuth();
-  const uid = scopeUserId ?? user?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [medications, setMedications] = useState<Medication[]>([]);
   const [logs, setLogs] = useState<MedLog[]>([]);
   const [loading, setLoading] = useState(true);

@@ -5,7 +5,7 @@ import { useDashboardLayout, WIDGET_LABELS, WIDGET_ICONS } from "@/hooks/useDash
 import type { WidgetLayoutItem } from "@/hooks/useDashboardLayout";
 import { WidgetShell } from "@/components/widgets/WidgetShell";
 import { WidgetContent } from "@/components/widgets/WidgetContent";
-import { useUserRole } from "@/auth/useUserRole";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
 
@@ -23,7 +23,7 @@ const Dashboard = () => {
   const [showHiddenPanel, setShowHiddenPanel] = useState(false);
 
   const { layout: fullLayout, updateWidget, resetLayout } = useDashboardLayout();
-  const { role, loading: roleLoading } = useUserRole();
+  const { role, loading: roleLoading } = useEffectiveRole();
   const { profile } = useUserProfile();
 
   const layout = fullLayout.filter((w) => {

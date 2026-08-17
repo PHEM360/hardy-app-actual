@@ -16,7 +16,7 @@ import {
   Snowflake,
   Plane,
 } from "lucide-react";
-import { useUserRole } from "@/auth/useUserRole";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
 
@@ -158,7 +158,7 @@ const SECTIONS: Section[] = [
 
 const More = () => {
   const navigate = useNavigate();
-  const { role, loading } = useUserRole();
+  const { role, loading } = useEffectiveRole();
   const { profile } = useUserProfile();
 
   let delay = 0;

@@ -13,6 +13,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { is35PfpHousehold } from "@/lib/householdIds";
 
 export interface TreatmentOption {
   id: string;
@@ -80,13 +82,16 @@ const DEFAULT_INSURANCE: PetInsurance = {
   excess: 0,
 };
 
-export function usePets() {
-  const { user } = useAuth();
+export function usePets(scopeUserId?: string) {
+  const { dataUid } = useAuth();
+  const { availableHouseholds } = useActiveHousehold();
+  const uid = scopeUserId ?? dataUid;
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
+  const allowLegacy35Pfp = availableHouseholds.some((h) => is35PfpHousehold(h.name));
 
   useEffect(() => {
-    if (!user) {
+    if (!uid) {
       setPets([]);
       setLoading(false);
       return;
@@ -120,14 +125,13 @@ export function usePets() {
     const unsub = onSnapshot(allQ, (snap) => {
       const next = snap.docs
         .map(toTyped)
-        .filter((p) =>
-          // Legacy pet (no ownerId) — visible to all authenticated users during migration
-          !p.ownerId ||
-          // Owned by current user
-          p.ownerId === user.uid ||
-          // Shared with current user
-          p.sharedWith.includes(user.uid)
-        );
+        .filter((p) => {
+          const viewingOwn = !scopeUserId || scopeUserId === dataUid;
+          if (!p.ownerId) return viewingOwn && allowLegacy35Pfp;
+          if (p.ownerId === uid) return true;
+          if (viewingOwn && dataUid && p.sharedWith.includes(dataUid)) return true;
+          return false;
+        });
       setPets(next);
       setLoading(false);
     }, () => {
@@ -136,19 +140,19 @@ export function usePets() {
     });
 
     return () => unsub();
-  }, [user]);
+  }, [uid, dataUid, allowLegacy35Pfp, scopeUserId]);
 
   const addPet = useCallback(
     async (pet: Omit<Pet, "id" | "ownerId" | "sharedWith">) => {
-      if (!user) return;
+      if (!dataUid) return;
       await addDoc(collection(db, "pets"), {
         ...pet,
-        ownerId: user.uid,
+        ownerId: dataUid,
         sharedWith: [],
         createdAt: serverTimestamp(),
       });
     },
-    [user]
+    [dataUid]
   );
 
   const sharePet = useCallback(

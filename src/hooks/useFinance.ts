@@ -34,8 +34,8 @@ export interface BalanceEntry {
 }
 
 export function useFinance(scopeUserId?: string) {
-  const { user } = useAuth();
-  const uid = scopeUserId ?? user?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<BalanceEntry[]>([]);
   const [loading, setLoading] = useState(true);

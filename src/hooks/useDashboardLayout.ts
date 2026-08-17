@@ -116,13 +116,13 @@ function resolveOverlaps(items: WidgetLayoutItem[]): WidgetLayoutItem[] {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useDashboardLayout() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [layout, setLayout] = useState<WidgetLayoutItem[]>(DEFAULT_LAYOUT);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, "dashboardLayouts", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "dashboardLayouts", dataUid);
     const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -155,36 +155,36 @@ export function useDashboardLayout() {
       setLayout(DEFAULT_LAYOUT);
     });
     return unsub;
-  }, [user?.uid]);
+  }, [dataUid]);
 
   const saveLayout = useCallback(async (newLayout: WidgetLayoutItem[]) => {
-    if (!user) return;
+    if (!dataUid) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "dashboardLayouts", user.uid), { layout: newLayout, layoutVersion: LAYOUT_VERSION }, { merge: true });
+      await setDoc(doc(db, "dashboardLayouts", dataUid), { layout: newLayout, layoutVersion: LAYOUT_VERSION }, { merge: true });
     } finally {
       setSaving(false);
     }
-  }, [user]);
+  }, [dataUid]);
 
   const updateWidget = useCallback((id: string, patch: Partial<WidgetLayoutItem>) => {
     setLayout((prev) => {
       const patched = prev.map((w) => w.id === id ? { ...w, ...patch } : w);
       const next = resolveOverlaps(patched);
       // Fire-and-forget save
-      if (user) {
-        setDoc(doc(db, "dashboardLayouts", user.uid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
+      if (dataUid) {
+        setDoc(doc(db, "dashboardLayouts", dataUid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
       }
       return next;
     });
-  }, [user]);
+  }, [dataUid]);
 
   const resetLayout = useCallback(() => {
     setLayout(DEFAULT_LAYOUT);
-    if (user) {
-      setDoc(doc(db, "dashboardLayouts", user.uid), { layout: DEFAULT_LAYOUT, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
+    if (dataUid) {
+      setDoc(doc(db, "dashboardLayouts", dataUid), { layout: DEFAULT_LAYOUT, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
     }
-  }, [user]);
+  }, [dataUid]);
 
   return { layout, saveLayout, updateWidget, resetLayout, saving };
 }

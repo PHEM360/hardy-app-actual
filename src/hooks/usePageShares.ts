@@ -44,13 +44,13 @@ function toShare(d: { id: string; data: () => any }): PageShare {
  * `sharedWithMe` = grants other owners have made to me on this page.
  */
 export function usePageShares(page: string) {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [mine, setMine] = useState<PageShare[]>([]);
   const [sharedWithMe, setSharedWithMe] = useState<PageShare[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!dataUid) {
       setMine([]);
       setSharedWithMe([]);
       setLoading(false);
@@ -65,7 +65,7 @@ export function usePageShares(page: string) {
 
     const mineQ = query(
       collection(db, "pageShares"),
-      where("ownerId", "==", user.uid),
+      where("ownerId", "==", dataUid),
       where("page", "==", page)
     );
     const unsubMine = onSnapshot(mineQ, (snap) => {
@@ -76,7 +76,7 @@ export function usePageShares(page: string) {
 
     const sharedQ = query(
       collection(db, "pageShares"),
-      where("targetUid", "==", user.uid),
+      where("targetUid", "==", dataUid),
       where("page", "==", page)
     );
     const unsubShared = onSnapshot(sharedQ, (snap) => {
@@ -89,23 +89,23 @@ export function usePageShares(page: string) {
       unsubMine();
       unsubShared();
     };
-  }, [user, page]);
+  }, [dataUid, page]);
 
   const share = useCallback(
     async (email: string, permission: SharePermission) => {
-      if (!user) return;
+      if (!dataUid) return;
       const usersQ = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()));
       const snap = await getDocs(usersQ);
       if (snap.empty) {
         throw new Error("No app user found with that email.");
       }
       const targetUid = snap.docs[0].id;
-      if (targetUid === user.uid) {
+      if (targetUid === dataUid) {
         throw new Error("You already have access to your own page.");
       }
-      const id = shareDocId(user.uid, page, targetUid);
+      const id = shareDocId(dataUid, page, targetUid);
       await setDoc(doc(db, "pageShares", id), {
-        ownerId: user.uid,
+        ownerId: dataUid,
         targetUid,
         page,
         permission,
@@ -113,24 +113,24 @@ export function usePageShares(page: string) {
       });
       return targetUid;
     },
-    [user, page]
+    [dataUid, page]
   );
 
   const updatePermission = useCallback(
     async (targetUid: string, permission: SharePermission) => {
-      if (!user) return;
-      const id = shareDocId(user.uid, page, targetUid);
+      if (!dataUid) return;
+      const id = shareDocId(dataUid, page, targetUid);
       await setDoc(doc(db, "pageShares", id), { permission }, { merge: true });
     },
-    [user, page]
+    [dataUid, page]
   );
 
   const revoke = useCallback(
     async (targetUid: string) => {
-      if (!user) return;
-      await deleteDoc(doc(db, "pageShares", shareDocId(user.uid, page, targetUid)));
+      if (!dataUid) return;
+      await deleteDoc(doc(db, "pageShares", shareDocId(dataUid, page, targetUid)));
     },
-    [user, page]
+    [dataUid, page]
   );
 
   return { mine, sharedWithMe, loading, share, updatePermission, revoke };

@@ -181,12 +181,15 @@ service cloud.firestore {
     
     // Pets collection - per-user with optional sharing
     // Legacy pets (no ownerId) remain readable by all authenticated users during migration
+    // Pets collection - owner + sharedWith, or a pets pageShare, or 35PFP legacy (no ownerId)
     match /pets/{petId} {
       allow read: if isAuthenticated() && (
+        isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith
+        request.auth.uid in resource.data.sharedWith ||
+        canViewPage(resource.data.ownerId, "pets")
       );
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
@@ -310,7 +313,7 @@ service cloud.firestore {
 
     // Credentials (login details vault) - strictly per user only
     match /users/{userId}/credentials/{credId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || isAdmin();
     }
 
     // Companies - shared via ownerId + sharedWith, same model as pets.
@@ -453,6 +456,14 @@ service cloud.firestore {
 
     // /display photo frame library - shared by household membership, same as household items/documents
     match /household/{householdId}/photos/{photoId} {
+      allow read, write: if canAccessHousehold(householdId);
+    }
+
+    // Joint household finance — shared with every household member (not personal finance/{uid})
+    match /household/{householdId}/financeAccounts/{accountId} {
+      allow read, write: if canAccessHousehold(householdId);
+    }
+    match /household/{householdId}/financeEntries/{entryId} {
       allow read, write: if canAccessHousehold(householdId);
     }
 

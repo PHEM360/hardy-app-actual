@@ -75,13 +75,13 @@ const LAYOUT_VERSION = 2;
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTodayLayout() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [layout, setLayout] = useState<TodayWidgetItem[]>(DEFAULT_TODAY_LAYOUT);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, "todayLayouts", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "todayLayouts", dataUid);
     const unsub = onSnapshot(ref, (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
@@ -107,17 +107,17 @@ export function useTodayLayout() {
       setLayout(merged);
     });
     return unsub;
-  }, [user]);
+  }, [dataUid]);
 
   const saveLayout = useCallback(async (next: TodayWidgetItem[]) => {
-    if (!user) return;
+    if (!dataUid) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "todayLayouts", user.uid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true });
+      await setDoc(doc(db, "todayLayouts", dataUid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true });
     } finally {
       setSaving(false);
     }
-  }, [user]);
+  }, [dataUid]);
 
   const updateWidget = useCallback((id: string, patch: Partial<TodayWidgetItem>) => {
     setLayout((prev) => {

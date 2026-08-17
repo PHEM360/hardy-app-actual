@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 
 export interface FreezerItem {
   id: string;
@@ -15,13 +15,8 @@ export interface FreezerItem {
 export function useFreezer(scopeUserId?: string) {
   const [items, setItems] = useState<FreezerItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ownUid, setOwnUid] = useState<string | null>(auth.currentUser?.uid ?? null);
-  const uid = scopeUserId ?? ownUid;
-
-  useEffect(() => onAuthStateChanged(auth, (user) => {
-    setOwnUid(user?.uid ?? null);
-    if (!user) setLoading(false);
-  }), []);
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
     if (!uid) return;

@@ -16,7 +16,7 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
   const isSuperAdmin = profile?.role === "superadmin" || profile?.role === "admin";
   const appUsers = useAppUsers();
   const { households } = useMyHouseholds();
-  const { createHousehold, renameHousehold, addHouseholdMember, removeHouseholdMember, deleteHousehold } = useHouseholds();
+  const { createHousehold, renameHousehold, addHouseholdMember, addHouseholdMemberById, removeHouseholdMember, deleteHousehold } = useHouseholds();
   const { activeHouseholdId, setActiveHouseholdId } = useActiveHousehold();
 
   const [newName, setNewName] = useState("");
@@ -47,7 +47,12 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
     setInviteBusy((p) => ({ ...p, [householdId]: true }));
     setInviteError((p) => ({ ...p, [householdId]: "" }));
     try {
-      await addHouseholdMember(householdId, email);
+      const match = appUsers.find((u) => u.email.trim().toLowerCase() === email.toLowerCase());
+      if (match) {
+        await addHouseholdMemberById(householdId, match.id);
+      } else {
+        await addHouseholdMember(householdId, email);
+      }
       setInviteEmail((p) => ({ ...p, [householdId]: "" }));
     } catch (err: any) {
       setInviteError((p) => ({ ...p, [householdId]: err.message || "Could not add that user." }));
@@ -66,8 +71,11 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
       <SheetContent side="right" className="w-full max-w-md overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Users className="w-4 h-4" /> Households
+            <Users className="w-4 h-4" /> Share household
           </SheetTitle>
+          <p className="text-xs text-muted-foreground text-left">
+            Invite someone with an account to this household. They’ll be able to view and edit household pages, including household finance.
+          </p>
         </SheetHeader>
 
         <div className="mt-4 space-y-5">
@@ -164,6 +172,9 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
                   </Button>
                 </div>
                 {inviteError[h.id] && <p className="text-[11px] text-destructive">{inviteError[h.id]}</p>}
+                <p className="text-[11px] text-muted-foreground">
+                  Add someone who already has an account. They’ll share this household’s page, documents, and household finances.
+                </p>
               </div>
             );
           })}

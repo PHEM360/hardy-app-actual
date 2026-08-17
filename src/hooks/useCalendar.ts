@@ -9,8 +9,8 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 import type { CalendarEvent, CalendarSettings } from "@/types/app";
 
 const DEFAULT_SETTINGS: CalendarSettings = { defaultView: "month" };
@@ -19,13 +19,8 @@ export function useCalendar(scopeUserId?: string) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
-  const [ownUid, setOwnUid] = useState<string | null>(auth.currentUser?.uid ?? null);
-  const uid = scopeUserId ?? ownUid;
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => setOwnUid(user?.uid ?? null));
-    return unsub;
-  }, []);
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
 
   // Subscribe to events
   useEffect(() => {
@@ -54,7 +49,7 @@ export function useCalendar(scopeUserId?: string) {
     if (!uid) return;
     await addDoc(collection(db, "calendar", uid, "events"), {
       ...event,
-      createdBy: auth.currentUser?.uid,
+      createdBy: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

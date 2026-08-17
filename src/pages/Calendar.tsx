@@ -27,7 +27,7 @@ import { useSharedScope } from "@/hooks/useSharedScope";
 import ShareAccessButton from "@/components/sharing/ShareAccessButton";
 import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
 import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
-import { useUserRole } from "@/auth/useUserRole";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePets } from "@/hooks/usePets";
 import { useTasks } from "@/hooks/useTasks";
@@ -112,7 +112,7 @@ function defaultForm(prefillDate?: Date): EventForm {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const CalendarPage = () => {
-  const { scopeUserId, permission: sharePermission } = useSharedScope("calendar");
+  const { scopeUserId, permission: sharePermission, pageTitle, isOwnScope } = useSharedScope("calendar");
   const canEdit = sharePermission === "edit";
   const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar(scopeUserId ?? undefined);
   const { settings: hSettings } = useHouseholdSettings();
@@ -120,7 +120,7 @@ const CalendarPage = () => {
   const { pets } = usePets();
   const { tasks } = useTasks();
   const { companies } = useCompanies();
-  const { role } = useUserRole();
+  const { role } = useEffectiveRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
 
   const isAdmin = role === "admin" || role === "superadmin";
@@ -474,7 +474,7 @@ const CalendarPage = () => {
 
   return (
     <FeaturePageShell
-      title="Calendar"
+      title={pageTitle}
       icon={<CalendarDays className="w-5 h-5" />}
       action={
         <div className="flex items-center gap-1.5">

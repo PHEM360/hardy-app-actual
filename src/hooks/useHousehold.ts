@@ -6,7 +6,6 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  getDoc,
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -34,6 +33,7 @@ export function useHouseholdItems() {
       return;
     }
 
+    setItems([]);
     setLoading(true);
     const col = collection(db, "household", activeHouseholdId, "items");
     const unsub = onSnapshot(col, (snap) => {
@@ -91,9 +91,10 @@ export function useHouseholdSettings() {
       return;
     }
 
+    setSettings(DEFAULT_HOUSEHOLD_SETTINGS);
     setLoading(true);
     const ref = doc(db, "household", activeHouseholdId, "settings", "main");
-    getDoc(ref).then((snap) => {
+    const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         setSettings(snap.data() as HouseholdSettings);
       } else {
@@ -101,6 +102,7 @@ export function useHouseholdSettings() {
       }
       setLoading(false);
     });
+    return unsub;
   }, [activeHouseholdId]);
 
   const saveSettings = useCallback(
@@ -130,6 +132,7 @@ export function useHouseholdDocuments() {
       return;
     }
 
+    setDocuments([]);
     setLoading(true);
     const col = collection(db, "household", activeHouseholdId, "documents");
     const unsub = onSnapshot(col, (snap) => {

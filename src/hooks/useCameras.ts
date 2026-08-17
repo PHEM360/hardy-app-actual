@@ -33,6 +33,7 @@ export function useCameras() {
       return;
     }
 
+    setCameras([]);
     setLoading(true);
     const col = collection(db, "cameras", activeHouseholdId, "list");
     const unsub = onSnapshot(col, (snap) => {

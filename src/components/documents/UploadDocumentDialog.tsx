@@ -100,7 +100,7 @@ export function UploadDocumentDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const { addDocument } = useDocuments();
 
   // State
@@ -161,7 +161,7 @@ export function UploadDocumentDialog({
   // ── Upload ────────────────────────────────────────────────────────────────
 
   const handleUpload = useCallback(async () => {
-    if (!user || !selectedDest || pages.length === 0) return;
+    if (!dataUid || !selectedDest || pages.length === 0) return;
     setStep("uploading");
     setErrorMsg(null);
 
@@ -175,7 +175,7 @@ export function UploadDocumentDialog({
         const timestamp = Date.now();
         const pageSuffix = total > 1 ? `_page${i + 1}` : "";
         const storageName = `${timestamp}${pageSuffix}_${file.name}`;
-        const path = `documents/${user.uid}/${dest}/${storageName}`;
+        const path = `documents/${dataUid}/${dest}/${storageName}`;
 
         const sRef = storageRef(storage, path);
         await uploadBytes(sRef, file);
@@ -201,11 +201,11 @@ export function UploadDocumentDialog({
       setErrorMsg(err?.message ?? "Upload failed. Please try again.");
       setStep("preview");
     }
-  }, [user, selectedDest, pages, addDocument]);
+  }, [dataUid, selectedDest, pages, addDocument]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (!user) {
+  if (!dataUid) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">

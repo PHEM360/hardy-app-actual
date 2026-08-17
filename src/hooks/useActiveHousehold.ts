@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useMyHouseholds } from "@/hooks/useHouseholds";
+import { looksLikeGeneratedId } from "@/lib/householdIds";
 
 const STORAGE_KEY_PREFIX = "active-household:";
 
@@ -9,6 +10,16 @@ export interface HouseholdOption {
   id: string;
   name: string;
 }
+
+interface ActiveHouseholdState {
+  activeHouseholdId: string | null;
+  availableHouseholds: HouseholdOption[];
+  loading: boolean;
+  hasExplicitHouseholds: boolean;
+  setActiveHouseholdId: (householdId: string) => void;
+}
+
+const ActiveHouseholdContext = createContext<ActiveHouseholdState | null>(null);
 
 function normaliseHouseholdIds(ids: string[] | undefined, fallbackId?: string): string[] {
   const next = (ids ?? []).map((id) => id.trim()).filter(Boolean);
@@ -18,8 +29,8 @@ function normaliseHouseholdIds(ids: string[] | undefined, fallbackId?: string): 
   return Array.from(new Set(next));
 }
 
-export function useActiveHousehold() {
-  const { user } = useAuth();
+export function ActiveHouseholdProvider({ children }: { children: ReactNode }) {
+  const { dataUid } = useAuth();
   const { profile, loading: profileLoading } = useUserProfile();
   const { households, loading: householdsLoading } = useMyHouseholds();
   const [activeHouseholdId, setActiveHouseholdIdState] = useState<string | null>(null);
@@ -34,15 +45,17 @@ export function useActiveHousehold() {
 
   const availableHouseholds = useMemo<HouseholdOption[]>(() => {
     const byId = new Map<string, HouseholdOption>();
-    households.forEach((h) => byId.set(h.id, { id: h.id, name: h.name || h.id }));
-    legacyIds.forEach((id) => {
-      if (!byId.has(id)) byId.set(id, { id, name: id });
+    households.forEach((h) => {
+      const name = h.name?.trim() || h.id;
+      if (looksLikeGeneratedId(name)) return;
+      byId.set(h.id, { id: h.id, name });
     });
-    if (byId.size === 0 && user?.uid) {
-      byId.set(user.uid, { id: user.uid, name: user.uid });
-    }
+    legacyIds.forEach((id) => {
+      if (byId.has(id) || looksLikeGeneratedId(id) || id === dataUid) return;
+      byId.set(id, { id, name: id });
+    });
     return Array.from(byId.values());
-  }, [households, legacyIds, user?.uid]);
+  }, [households, legacyIds, dataUid]);
 
   const availableHouseholdIds = useMemo(
     () => availableHouseholds.map((h) => h.id),
@@ -50,37 +63,49 @@ export function useActiveHousehold() {
   );
 
   useEffect(() => {
-    if (!user) {
+    if (!dataUid) {
       setActiveHouseholdIdState(null);
       return;
     }
 
-    const storageKey = `${STORAGE_KEY_PREFIX}${user.uid}`;
+    const storageKey = `${STORAGE_KEY_PREFIX}${dataUid}`;
     const stored = typeof window === "undefined" ? null : window.localStorage.getItem(storageKey);
     const next = stored && availableHouseholdIds.includes(stored)
       ? stored
-      : (availableHouseholdIds[0] ?? user.uid);
+      : (availableHouseholdIds[0] ?? null);
 
-    setActiveHouseholdIdState(next);
+    setActiveHouseholdIdState((current) => {
+      const resolved = current && availableHouseholdIds.includes(current) ? current : next;
+      if (resolved && typeof window !== "undefined") {
+        window.localStorage.setItem(storageKey, resolved);
+      }
+      return resolved;
+    });
+  }, [availableHouseholdIds, dataUid]);
 
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(storageKey, next);
-    }
-  }, [availableHouseholdIds, user]);
-
-  const setActiveHouseholdId = (householdId: string) => {
-    if (!user || !availableHouseholdIds.includes(householdId)) return;
+  const setActiveHouseholdId = useCallback((householdId: string) => {
+    if (!dataUid || !availableHouseholdIds.includes(householdId)) return;
     setActiveHouseholdIdState(householdId);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${user.uid}`, householdId);
+      window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${dataUid}`, householdId);
     }
-  };
+  }, [dataUid, availableHouseholdIds]);
 
-  return {
+  const value = useMemo<ActiveHouseholdState>(() => ({
     activeHouseholdId,
     availableHouseholds,
     loading: profileLoading || householdsLoading,
-    hasExplicitHouseholds: availableHouseholds.length > 0 && (legacyIds.length > 0 || households.length > 0),
+    hasExplicitHouseholds: availableHouseholds.length > 0,
     setActiveHouseholdId,
-  };
+  }), [activeHouseholdId, availableHouseholds, profileLoading, householdsLoading, legacyIds.length, households.length, setActiveHouseholdId]);
+
+  return createElement(ActiveHouseholdContext.Provider, { value }, children);
+}
+
+export function useActiveHousehold() {
+  const ctx = useContext(ActiveHouseholdContext);
+  if (!ctx) {
+    throw new Error("useActiveHousehold must be used within ActiveHouseholdProvider");
+  }
+  return ctx;
 }

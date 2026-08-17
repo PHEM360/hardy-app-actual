@@ -17,8 +17,10 @@ import { usePets } from "@/hooks/usePets";
 import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting, VaccinationOption } from "@/hooks/usePets";
 import { usePetDocuments } from "@/hooks/usePetDocuments";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import DogLoader from "@/components/DogLoader";
-import { useAuth } from "@/auth/AuthContext";
+import { useSharedScope } from "@/hooks/useSharedScope";
+import ShareAccessButton from "@/components/sharing/ShareAccessButton";
+import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
+import { EmojiPick } from "@/components/EmojiPick";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -98,23 +100,23 @@ const WeightTooltip = ({ active, payload, label }: any) => {
 };
 
 // Dog entrance animation
-const DogEntrance = () => {
+const DogEntrance = ({ names, left, right }: { names: string; left: string; right: string }) => {
   const [show, setShow] = useState(true);
   if (!show) return null;
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm pointer-events-none"
       initial={{ opacity: 1 }}
       animate={{ opacity: 0 }}
       transition={{ delay: 1.8, duration: 0.5 }}
       onAnimationComplete={() => setShow(false)}
     >
       <div className="flex items-end gap-4">
-        <motion.span className="text-6xl" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1, rotate: [0, -10, 10, -5, 0] }} transition={{ duration: 0.8, ease: "backOut" }}>🐕</motion.span>
-        <motion.span className="text-5xl" initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1, rotate: [0, 10, -10, 5, 0] }} transition={{ duration: 0.8, delay: 0.3, ease: "backOut" }}>🐶</motion.span>
+        <motion.span className="text-6xl" initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1, rotate: [0, -10, 10, -5, 0] }} transition={{ duration: 0.8, ease: "backOut" }}>{left}</motion.span>
+        <motion.span className="text-5xl" initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1, rotate: [0, 10, -10, 5, 0] }} transition={{ duration: 0.8, delay: 0.3, ease: "backOut" }}>{right}</motion.span>
       </div>
       <motion.div className="absolute bottom-1/3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-        <p className="text-sm font-display font-bold text-foreground">Billy & Milo</p>
+        <p className="text-sm font-display font-bold text-foreground text-center">{names}</p>
         <motion.div className="flex justify-center gap-1 mt-2" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: 2 }}>
           {["🐾", "🐾", "🐾"].map((p, i) => (
             <motion.span key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.8 + i * 0.15 }}>{p}</motion.span>
@@ -126,10 +128,13 @@ const DogEntrance = () => {
 };
 
 const Pets = () => {
-  const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet } = usePets();
+  const { scopeUserId, pageTitle, permission, isOwnScope } = useSharedScope("pets");
+  const canEdit = permission === "edit";
+  const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet } = usePets(scopeUserId ?? undefined);
   const { documents, uploadDocument, deleteDocument } = usePetDocuments();
   const { schedulePetReminders } = usePushNotifications();
   const { user } = useAuth();
+  const { loader } = useAppearance();
   const docFileRef = useRef<HTMLInputElement>(null);
   const [visiblePets, setVisiblePets] = useState<Set<string>>(new Set());
   const [insuranceExpanded, setInsuranceExpanded] = useState<string | null>(null);
@@ -411,7 +416,7 @@ const Pets = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="Pets" subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />}>
         <div className="flex flex-col items-center justify-center py-20">
           <DogLoader text="Loading pets…" />
         </div>
@@ -421,17 +426,31 @@ const Pets = () => {
 
   return (
     <FeaturePageShell
-      title="Pets"
+      title={pageTitle}
       subtitle="Health, weight & care"
       icon={<Heart className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <SharedScopeSwitcher page="pets" />
+          {canEdit && <ShareAccessButton page="pets" />}
+        </div>
+      }
     >
-      {pets.length > 0 && <DogEntrance />}
+      {pets.length > 0 && (
+        <DogEntrance
+          names={pets.map((p) => p.name).filter(Boolean).slice(0, 3).join(" & ") || "Welcome"}
+          left={loader.left}
+          right={loader.right}
+        />
+      )}
 
       {/* Header Buttons */}
       <div className="flex justify-end gap-2 mb-3">
+        {canEdit && isOwnScope && (
         <button onClick={() => setAddPetOpen(true)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border text-primary hover:bg-muted/30 transition-all text-xs font-semibold shadow-soft">
           <Plus className="w-4 h-4" /> Add Pet
         </button>
+        )}
         <Dialog open={addPetOpen} onOpenChange={(o) => { setAddPetOpen(o); if (!o) setAddPetError(null); }}>
           <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
             <DialogHeader><DialogTitle className="font-display">Add a Pet</DialogTitle></DialogHeader>
@@ -439,7 +458,7 @@ const Pets = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5 col-span-2">
                   <Label>Name</Label>
-                  <Input value={newPetName} onChange={(e) => setNewPetName(e.target.value)} placeholder="e.g. Billy" className="h-11 rounded-xl" />
+                  <Input value={newPetName} onChange={(e) => setNewPetName(e.target.value)} placeholder="e.g. Luna" className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5 col-span-2">
                   <Label>Breed</Label>
@@ -449,9 +468,9 @@ const Pets = () => {
                   <Label>Date of Birth</Label>
                   <Input type="date" value={newPetBirthday} onChange={(e) => setNewPetBirthday(e.target.value)} className="h-11 rounded-xl" />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Avatar Emoji</Label>
-                  <Input value={newPetAvatar} onChange={(e) => setNewPetAvatar(e.target.value)} placeholder="🐶" className="h-11 rounded-xl text-2xl" maxLength={2} />
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Avatar</Label>
+                  <EmojiPick value={newPetAvatar} onChange={setNewPetAvatar} />
                 </div>
               </div>
               <Button onClick={handleAddPet} disabled={!newPetName.trim() || !newPetBirthday || addPetLoading} className="w-full h-11 rounded-xl bg-gradient-primary">
@@ -517,9 +536,11 @@ const Pets = () => {
           <div className="w-20 h-20 rounded-3xl bg-gradient-warm flex items-center justify-center text-4xl mb-5 shadow-elevated">🐾</div>
           <p className="text-base font-bold text-card-foreground mb-1">No pets yet</p>
           <p className="text-sm text-muted-foreground mb-5 max-w-xs">Add your first furry family member to start tracking their health, treatments and more.</p>
+          {canEdit && isOwnScope && (
           <button onClick={() => setAddPetOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-primary text-white text-sm font-semibold shadow-glow">
             <Plus className="w-4 h-4" /> Add First Pet
           </button>
+          )}
         </div>
       )}
 
@@ -1099,7 +1120,7 @@ const Pets = () => {
         <DialogContent aria-describedby={undefined} className="max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display flex items-center gap-2">
-              <span className="text-xl">🐾</span> Dog Settings
+              <span className="text-xl">🐾</span> Pet Settings
             </DialogTitle>
           </DialogHeader>
 
@@ -1118,6 +1139,14 @@ const Pets = () => {
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</p>
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5 col-span-2">
+                      <Label className="text-xs">Name</Label>
+                      <Input value={pet.name} onChange={(e) => patchLocal(pet.id, { name: e.target.value })} className="h-10 rounded-xl" />
+                    </div>
+                    <div className="space-y-1.5 col-span-2">
+                      <Label className="text-xs">Avatar</Label>
+                      <EmojiPick value={pet.avatar || "🐶"} onChange={(emoji) => patchLocal(pet.id, { avatar: emoji })} />
+                    </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Date of Birth</Label>
                       <Input type="date" value={pet.birthday} onChange={(e) => patchLocal(pet.id, { birthday: e.target.value })} className="h-10 rounded-xl" />

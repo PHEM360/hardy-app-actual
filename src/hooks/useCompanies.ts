@@ -17,7 +17,8 @@ import {
   uploadBytes,
   getDownloadURL,
 } from "firebase/storage";
-import { auth, db, storage } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 import {
   Company,
   CompanyLogin,
@@ -32,7 +33,7 @@ import {
 export function useCompanies() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const uid = auth.currentUser?.uid;
+  const { dataUid: uid } = useAuth();
 
   useEffect(() => {
     if (!uid) return;

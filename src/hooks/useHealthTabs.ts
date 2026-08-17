@@ -36,19 +36,19 @@ export interface TabEntry {
 }
 
 export function useHealthTabs() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [tabs, setTabs] = useState<HealthTab[]>([]);
   const [entries, setEntries] = useState<TabEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { setTabs([]); setEntries([]); setLoading(false); return; }
+    if (!dataUid) { setTabs([]); setEntries([]); setLoading(false); return; }
 
     let tabsLoaded = false, entriesLoaded = false;
     const checkDone = () => { if (tabsLoaded && entriesLoaded) setLoading(false); };
 
     const unsubTabs = onSnapshot(
-      query(collection(db, "healthTabs", user.uid, "tabs"), orderBy("order")),
+      query(collection(db, "healthTabs", dataUid, "tabs"), orderBy("order")),
       (snap) => {
         setTabs(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<HealthTab, "id">) })));
         tabsLoaded = true; checkDone();
@@ -57,7 +57,7 @@ export function useHealthTabs() {
     );
 
     const unsubEntries = onSnapshot(
-      query(collection(db, "healthTabs", user.uid, "entries"), orderBy("date", "desc")),
+      query(collection(db, "healthTabs", dataUid, "entries"), orderBy("date", "desc")),
       (snap) => {
         setEntries(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TabEntry, "id">) })));
         entriesLoaded = true; checkDone();
@@ -66,32 +66,32 @@ export function useHealthTabs() {
     );
 
     return () => { unsubTabs(); unsubEntries(); };
-  }, [user?.uid]);
+  }, [dataUid]);
 
   const addTab = useCallback(async (tab: Omit<HealthTab, "id">) => {
-    if (!user) return;
-    const ref = await addDoc(collection(db, "healthTabs", user.uid, "tabs"), {
+    if (!dataUid) return;
+    const ref = await addDoc(collection(db, "healthTabs", dataUid, "tabs"), {
       ...tab, createdAt: serverTimestamp(),
     });
     return ref.id;
-  }, [user]);
+  }, [dataUid]);
 
   const updateTab = useCallback(async (id: string, updates: Partial<Omit<HealthTab, "id">>) => {
-    if (!user) return;
-    await updateDoc(doc(db, "healthTabs", user.uid, "tabs", id), updates as any);
-  }, [user]);
+    if (!dataUid) return;
+    await updateDoc(doc(db, "healthTabs", dataUid, "tabs", id), updates as any);
+  }, [dataUid]);
 
   const deleteTab = useCallback(async (id: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, "healthTabs", user.uid, "tabs", id));
-  }, [user]);
+    if (!dataUid) return;
+    await deleteDoc(doc(db, "healthTabs", dataUid, "tabs", id));
+  }, [dataUid]);
 
   const saveEntry = useCallback(async (entry: Omit<TabEntry, "id">) => {
-    if (!user) return;
-    await addDoc(collection(db, "healthTabs", user.uid, "entries"), {
+    if (!dataUid) return;
+    await addDoc(collection(db, "healthTabs", dataUid, "entries"), {
       ...entry, createdAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [dataUid]);
 
   const getTodayEntry = useCallback((tabId: string): TabEntry | null => {
     const today = new Date().toISOString().split("T")[0];

@@ -91,6 +91,8 @@ input[type="date"] {
     --gradient-primary: linear-gradient(135deg, hsl(178, 62%, 26%), hsl(178, 55%, 38%));
     --gradient-warm: linear-gradient(135deg, hsl(36, 85%, 50%), hsl(25, 80%, 55%));
     --gradient-hero: linear-gradient(160deg, hsl(178, 60%, 22%) 0%, hsl(195, 45%, 24%) 50%, hsl(215, 35%, 18%) 100%);
+    --chrome-header: linear-gradient(135deg, hsl(178, 60%, 22%) 0%, hsl(195, 45%, 24%) 40%, hsl(215, 35%, 18%) 100%);
+    --chrome-nav: linear-gradient(135deg, hsl(215, 32%, 18%) 0%, hsl(200, 30%, 25%) 45%, hsl(178, 55%, 38%) 100%);
     --gradient-card: linear-gradient(145deg, hsl(0, 0%, 100%) 0%, hsl(186, 20%, 97%) 100%);
     --gradient-accent: linear-gradient(135deg, hsl(178, 55%, 38%), hsl(36, 85%, 54%));
     --gradient-success: linear-gradient(135deg, hsl(152, 55%, 34%), hsl(168, 50%, 30%));

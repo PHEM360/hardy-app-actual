@@ -21,21 +21,30 @@ export interface UserProfile {
   avatarBgColor?: string;
   avatarTextColor?: string;
   navItems?: string[];   // ordered list of route paths for bottom nav
+  appearance?: {
+    themeId?: string;
+    customPrimary?: string; // HSL components, e.g. "178 62% 30%"
+    customAccent?: string;
+    loaderPreset?: string;
+    loaderLeft?: string;
+    loaderRight?: string;
+  };
+  quickLinks?: string[];
 }
 
 export function useUserProfile() {
-  const { user } = useAuth();
+  const { dataUid, user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!dataUid) {
       setProfile(null);
       setLoading(false);
       return;
     }
 
-    const ref = doc(db, "users", user.uid);
+    const ref = doc(db, "users", dataUid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
@@ -52,11 +61,11 @@ export function useUserProfile() {
         else if (rawRole === "admin" || data.isAdmin === true) role = "admin";
 
         setProfile({
-          uid: user.uid,
+          uid: dataUid,
           firstName: data.firstName ?? "",
           surname: data.surname ?? "",
           displayName: data.displayName,
-          email: data.email ?? user.email ?? "",
+          email: data.email ?? (dataUid === user?.uid ? (user?.email ?? "") : ""),
           role,
           enabledFeatures: Array.isArray(data.enabledFeatures) ? data.enabledFeatures : [],
           householdId: data.householdId,
@@ -68,6 +77,8 @@ export function useUserProfile() {
           avatarBgColor: data.avatarBgColor,
           avatarTextColor: data.avatarTextColor,
           navItems: Array.isArray(data.navItems) ? data.navItems : undefined,
+          appearance: data.appearance && typeof data.appearance === "object" ? data.appearance : undefined,
+          quickLinks: Array.isArray(data.quickLinks) ? data.quickLinks : undefined,
         });
         setLoading(false);
       },
@@ -78,11 +89,11 @@ export function useUserProfile() {
     );
 
     return () => unsub();
-  }, [user?.uid]);
+  }, [dataUid, user?.uid, user?.email]);
 
   const saveProfile = async (updates: Partial<Omit<UserProfile, "uid" | "role" | "enabledFeatures" | "suspended">>) => {
-    if (!user) return;
-    const ref = doc(db, "users", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "users", dataUid);
     await setDoc(ref, updates, { merge: true });
   };
 

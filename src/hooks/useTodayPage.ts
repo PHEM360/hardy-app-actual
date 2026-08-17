@@ -90,7 +90,7 @@ const EMPTY_DAILY: DailyData = {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTodayPage() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const todayKey = format(new Date(), "yyyy-MM-dd");
 
   const [config, setConfig] = useState<TodayConfig>(DEFAULT_CONFIG);
@@ -99,8 +99,8 @@ export function useTodayPage() {
 
   // Listen to config
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, "todayConfig", user.uid);
+    if (!dataUid) return;
+    const ref = doc(db, "todayConfig", dataUid);
     return onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         const data = snap.data() as Partial<TodayConfig>;
@@ -116,12 +116,12 @@ export function useTodayPage() {
         setConfig(DEFAULT_CONFIG);
       }
     });
-  }, [user?.uid]);
+  }, [dataUid]);
 
   // Listen to today's daily data
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, "todayData", user.uid, "days", todayKey);
+    if (!dataUid) return;
+    const ref = doc(db, "todayData", dataUid, "days", todayKey);
     return onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         setDaily({ ...EMPTY_DAILY, ...(snap.data() as Partial<DailyData>) });
@@ -130,21 +130,21 @@ export function useTodayPage() {
       }
       setLoading(false);
     });
-  }, [user?.uid, todayKey]);
+  }, [dataUid, todayKey]);
 
   const saveConfig = useCallback(async (updates: Partial<TodayConfig>) => {
-    if (!user) return;
+    if (!dataUid) return;
     const next = { ...config, ...updates };
     setConfig(next);
-    await setDoc(doc(db, "todayConfig", user.uid), next, { merge: true });
-  }, [user, config]);
+    await setDoc(doc(db, "todayConfig", dataUid), next, { merge: true });
+  }, [dataUid, config]);
 
   const saveDaily = useCallback(async (updates: Partial<DailyData>) => {
-    if (!user) return;
+    if (!dataUid) return;
     const next = { ...daily, ...updates };
     setDaily(next);
-    await setDoc(doc(db, "todayData", user.uid, "days", todayKey), next, { merge: true });
-  }, [user, daily, todayKey]);
+    await setDoc(doc(db, "todayData", dataUid, "days", todayKey), next, { merge: true });
+  }, [dataUid, daily, todayKey]);
 
   // Block management helpers
   const setBlockEnabled = useCallback((id: string, enabled: boolean) => {

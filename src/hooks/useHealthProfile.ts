@@ -54,8 +54,8 @@ const DEFAULT_PROFILE: HealthProfile = {
 };
 
 export function useHealthProfile(scopeUserId?: string) {
-  const { user } = useAuth();
-  const uid = scopeUserId ?? user?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [profile, setProfile] = useState<HealthProfile>(DEFAULT_PROFILE);
   const [loading, setLoading] = useState(true);
 

@@ -5,14 +5,14 @@ import { useAuth } from "@/auth/AuthContext";
 import { NotificationPrefs, DEFAULT_NOTIF_PREFS } from "@/types/notifications";
 
 export function useNotificationPrefs() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIF_PREFS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user?.uid) { setLoading(false); return; }
-    const ref = doc(db, "notificationPrefs", user.uid);
+    if (!dataUid) { setLoading(false); return; }
+    const ref = doc(db, "notificationPrefs", dataUid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
@@ -27,18 +27,18 @@ export function useNotificationPrefs() {
       }
     );
     return unsub;
-  }, [user?.uid]);
+  }, [dataUid]);
 
   const savePrefs = useCallback(async (updated: NotificationPrefs) => {
-    if (!user?.uid) return;
+    if (!dataUid) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "notificationPrefs", user.uid), updated, { merge: true });
+      await setDoc(doc(db, "notificationPrefs", dataUid), updated, { merge: true });
       setPrefs(updated);
     } finally {
       setSaving(false);
     }
-  }, [user?.uid]);
+  }, [dataUid]);
 
   return { prefs, loading, saving, savePrefs };
 }

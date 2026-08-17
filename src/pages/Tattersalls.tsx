@@ -59,7 +59,7 @@ const ROW_TINT_PALETTE = [
 ];
 
 const Tattersalls = () => {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const { balanceHistory, expenses, expenseCategories, documents, notes, loading, uploadingDoc, addBalance, addExpense, saveExpenseCategories, uploadDocument, updateDocument, addNote, updateNote, addComment, toggleNote, deleteNote } = useTattersalls();
 
   // App users for "Who?" dropdown
@@ -214,9 +214,9 @@ const Tattersalls = () => {
         resolvedAuthor,
         newNoteType,
         newNoteType === 'task' ? (newNoteDueDate || undefined) : undefined,
-        user?.uid,
+        dataUid,
       );
-      if (newNoteType === 'task' && newNoteAddToTasks && user?.uid) {
+      if (newNoteType === 'task' && newNoteAddToTasks && dataUid) {
         const taskData: Record<string, unknown> = {
           title: newNoteText.trim(),
           status: "todo",
@@ -228,7 +228,7 @@ const Tattersalls = () => {
         } else if (newNoteReminder === "dayBefore") {
           taskData.reminder = { mode: "relative", relativeAmount: 1, relativeUnit: "days", relativeDirection: "before", timeOfDay: "09:00", channels: ["email"] };
         }
-        await addDoc(collection(db, "tasks", user.uid, "items"), taskData);
+        await addDoc(collection(db, "tasks", dataUid, "items"), taskData);
       }
       setNewNoteText(""); setNewNoteAuthor(""); setNewNoteAuthorOther("");
       setNewNoteDueDate(""); setNewNoteAddToTasks(false); setNewNoteReminder("none");
@@ -244,7 +244,7 @@ const Tattersalls = () => {
 
   const handleAddComment = async (noteId: string) => {
     if (!newCommentText.trim()) return;
-    const name = newCommentAuthor.trim() || (appUsers.find(u => u.id === user?.uid)?.name ?? "Someone");
+    const name = newCommentAuthor.trim() || (appUsers.find(u => u.id === dataUid)?.name ?? "Someone");
     await addComment(noteId, newCommentText.trim(), name);
     setNewCommentText(""); setNewCommentAuthor("");
   };
@@ -433,7 +433,7 @@ const Tattersalls = () => {
             const isEditing = editingNoteId === note.id;
             const isCommentsOpen = expandedCommentId === note.id;
             const commentCount = note.comments?.length ?? 0;
-            const canEdit = !note.authorId || note.authorId === user?.uid;
+            const canEdit = !note.authorId || note.authorId === dataUid;
             return (
               <div key={note.id} className={`transition-colors ${isNoteType ? "bg-amber-50/40 dark:bg-amber-950/15" : note.done ? "bg-muted/15" : ""}`}>
                 <div className="flex items-start gap-3 px-3 py-2.5">

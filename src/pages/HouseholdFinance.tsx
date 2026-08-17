@@ -1,6 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Home, Upload, Plus, Sparkles, Eye, EyeOff, Edit2, Archive, RotateCcw, Settings2, CalendarRange } from "lucide-react";
+import { Home, Upload, Plus, Sparkles, CalendarRange, Users, Share2, Settings2, Eye, EyeOff } from "lucide-react";
+import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { useMyHouseholds } from "@/hooks/useHouseholds";
+import { useHouseholdFinance } from "@/hooks/useHouseholdFinance";
+import { useAppUsers } from "@/hooks/useAppUsers";
+import HouseholdManagerSheet from "@/components/household/HouseholdManagerSheet";
+import HouseholdSetupCard from "@/components/household/HouseholdSetupCard";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceArea } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -9,30 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-interface HHAccount {
-  id: string;
-  name: string;
-  active: boolean;
-  hidden: boolean;
-}
-
-interface HHEntry {
-  id: string;
-  accountId: string;
-  date: string;
-  balance: number;
-}
+import { ACCOUNT_TYPES } from "@/lib/financeAccounts";
+import { useNavigate } from "react-router-dom";
 
 const COLORS = [
   "hsl(36, 85%, 54%)", "hsl(168, 55%, 36%)", "hsl(215, 75%, 50%)",
   "hsl(280, 45%, 55%)", "hsl(152, 60%, 38%)",
 ];
-
-// Mock data removed. Real household finance data should be added via the app and stored in Firestore.
-const INITIAL_ACCOUNTS: HHAccount[] = [];
-
-const INITIAL_ENTRIES: HHEntry[] = [];
 
 const TAX_YEARS = [
   { label: "22/23", start: "2022-04-06", end: "2023-04-05" },
@@ -63,20 +52,47 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 type Tab = "balances" | "analysis";
 
 const HouseholdFinance = () => {
+  const { activeHouseholdId, availableHouseholds, setActiveHouseholdId, hasExplicitHouseholds, loading: householdLoading } = useActiveHousehold();
+  const { households } = useMyHouseholds();
+  const appUsers = useAppUsers();
+  const { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry } = useHouseholdFinance();
+  const [householdsOpen, setHouseholdsOpen] = useState(false);
+  const navigate = useNavigate();
+
   const [tab, setTab] = useState<Tab>("balances");
-  const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
-  const [entries, setEntries] = useState(INITIAL_ENTRIES);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(accounts.map(a => a.id));
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [addBalanceOpen, setAddBalanceOpen] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [newBalanceAccountId, setNewBalanceAccountId] = useState("");
   const [newBalanceAmount, setNewBalanceAmount] = useState("");
   const [newBalanceDate, setNewBalanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountType, setNewAccountType] = useState("Current");
+  const [manageAccountId, setManageAccountId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [manageType, setManageType] = useState("Current");
+  const [showHidden, setShowHidden] = useState(false);
   const [csvText, setCsvText] = useState("");
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [showTaxYears, setShowTaxYears] = useState(true);
+
+  useEffect(() => {
+    setSelectedAccounts((prev) => {
+      const ids = accounts.map((a) => a.id);
+      if (prev.length === 0) return ids;
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !prev.includes(id));
+      return [...kept, ...added];
+    });
+  }, [accounts]);
+
+  const activeHousehold = households.find((h) => h.id === activeHouseholdId);
+  const householdName = availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household";
+  const memberNames = (activeHousehold?.memberIds ?? []).map((uid) => {
+    const u = appUsers.find((a) => a.id === uid);
+    return u?.name || u?.email || "Member";
+  });
 
   const latestBalances = useMemo(() => {
     return accounts.map(acc => {
@@ -118,20 +134,19 @@ const HouseholdFinance = () => {
     setSelectedAccounts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const handleAddBalance = () => {
+  const handleAddBalance = async () => {
     const amount = parseFloat(newBalanceAmount);
     if (!newBalanceAccountId || isNaN(amount)) return;
-    setEntries(prev => [...prev, { id: `he${Date.now()}`, accountId: newBalanceAccountId, date: newBalanceDate, balance: amount }]);
+    await addBalanceEntry(newBalanceAccountId, newBalanceDate, amount);
     setNewBalanceAmount("");
     setAddBalanceOpen(false);
   };
 
-  const handleAddAccount = () => {
+  const handleAddAccount = async () => {
     if (!newAccountName.trim()) return;
-    const id = `h${Date.now()}`;
-    setAccounts(prev => [...prev, { id, name: newAccountName, active: true, hidden: false }]);
-    setSelectedAccounts(prev => [...prev, id]);
+    await addAccount(newAccountName, newAccountType);
     setNewAccountName("");
+    setNewAccountType("Current");
     setAddAccountOpen(false);
   };
 
@@ -162,8 +177,97 @@ const HouseholdFinance = () => {
     }, 2000);
   };
 
+  if (householdLoading) {
+    return (
+      <FeaturePageShell title="Household Finance" subtitle="Shared with your household" icon={<Home className="w-5 h-5" />}>
+        <div className="flex items-center justify-center py-20">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </FeaturePageShell>
+    );
+  }
+
+  if (!hasExplicitHouseholds) {
+    return (
+      <FeaturePageShell title="Household Finance" subtitle="Shared with your household" icon={<Home className="w-5 h-5" />}>
+        <HouseholdSetupCard
+          title="Set up household finance"
+          description="Name this household (or you’ll see a random ID). Then you can add accounts and invite the people who share it."
+        />
+      </FeaturePageShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <FeaturePageShell title="Household Finance" subtitle="Shared with your household" icon={<Home className="w-5 h-5" />}>
+        <div className="flex items-center justify-center py-20">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </FeaturePageShell>
+    );
+  }
+
   return (
-    <FeaturePageShell title="Household Finance" subtitle="Joint accounts & spending analysis" icon={<Home className="w-5 h-5" />}>
+    <FeaturePageShell
+      title="Household Finance"
+      subtitle={`${householdName} · shared with everyone in this household`}
+      icon={<Home className="w-5 h-5" />}
+      action={
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setHouseholdsOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full bg-muted/70 hover:bg-muted transition-colors"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share
+          </button>
+          <button
+            onClick={() => setHouseholdsOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full bg-muted/70 hover:bg-muted transition-colors"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Households
+          </button>
+        </div>
+      }
+    >
+      {availableHouseholds.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {availableHouseholds.map((h) => (
+            <button
+              key={h.id}
+              onClick={() => setActiveHouseholdId(h.id)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                h.id === activeHouseholdId
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {h.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => navigate("/finance")}
+        className="w-full text-left rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 px-3.5 py-2.5 mb-4 transition-colors"
+      >
+        <p className="text-xs font-semibold text-foreground">This page is joint household finances</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Your personal accounts live on My Finances →
+        </p>
+      </button>
+
+      <div className="rounded-xl border border-border/50 bg-muted/30 px-3.5 py-2.5 mb-4 text-xs text-muted-foreground">
+        {memberNames.length > 0 ? (
+          <>Shared with <span className="font-semibold text-foreground">{memberNames.join(", ")}</span>. Anyone in this household can view and edit these accounts.</>
+        ) : (
+          <>These accounts belong to this household. Add a partner from Households so they can view and edit them too.</>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="relative flex p-0.5 bg-primary/10 rounded-full mb-5 border border-primary/15">
         <motion.div
@@ -197,6 +301,10 @@ const HouseholdFinance = () => {
               Accounts
             </h3>
             <div className="flex gap-2">
+              <button onClick={() => setShowHidden(!showHidden)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showHidden ? "Hide closed" : "Show all"}
+              </button>
               <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
                 <DialogTrigger asChild>
                   <button className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add</button>
@@ -208,49 +316,125 @@ const HouseholdFinance = () => {
                       <Label>Account Name</Label>
                       <Input placeholder="e.g. Joint Savings" value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="h-11 rounded-xl" />
                     </div>
-                    <Button onClick={handleAddAccount} className="w-full h-11 rounded-xl bg-gradient-primary">Create</Button>
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <Select value={newAccountType} onValueChange={setNewAccountType}>
+                        <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ACCOUNT_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={handleAddAccount} disabled={!newAccountName.trim()} className="w-full h-11 rounded-xl bg-gradient-primary">Create Account</Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
           </div>
 
+          {accounts.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8 mb-4">
+              No joint accounts yet. Add one to start tracking household balances — everyone in this household will see them.
+            </p>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-            {latestBalances.filter(a => !a.hidden).map((acc, i) => {
+            {latestBalances.filter((a) => showHidden || !a.hidden).map((acc, i) => {
               const color = COLORS[i % COLORS.length];
               const isSelected = selectedAccounts.includes(acc.id);
               return (
-                <motion.button
+                <motion.div
                   key={acc.id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.03 * i }}
-                  onClick={() => toggleAccount(acc.id)}
-                  className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
-                    isSelected
-                      ? "bg-card shadow-soft"
-                      : "bg-muted/30 border-border/30 opacity-60"
-                  }`}
-                  style={{
-                    borderLeftWidth: 4,
-                    borderLeftColor: isSelected ? color : "transparent",
-                    borderColor: isSelected ? `${color}33` : undefined,
-                  }}
+                  className={`rounded-2xl border-2 bg-card text-left transition-all relative group overflow-hidden ${
+                    isSelected ? "shadow-card" : "shadow-soft"
+                  } ${!acc.active ? "opacity-40" : ""}`}
+                  style={{ borderColor: isSelected ? color : "hsl(var(--border))" }}
                 >
-                  {isSelected && (
-                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none rounded-xl" style={{ background: color }} />
-                  )}
-                  <div className="flex items-center gap-1.5 mb-1 relative">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    <span className="text-[10px] text-muted-foreground uppercase truncate">{acc.name}</span>
+                  <div className="h-1 w-full" style={{ background: color }} />
+                  <div className="p-3 relative">
+                    <button onClick={() => toggleAccount(acc.id)} className="w-full text-left">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm" style={{ backgroundColor: color }}>
+                          <span className="w-2 h-2 rounded-full bg-white/90" />
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider truncate px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
+                          {acc.type || "Account"}
+                        </span>
+                      </div>
+                      <p className="text-base font-bold font-display text-card-foreground">
+                        £{acc.latestBalance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">{acc.name}</p>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setManageAccountId(acc.id);
+                        setRenameValue(acc.name);
+                        setManageType(acc.type || "Current");
+                      }}
+                      className="absolute top-2 right-2 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Manage account"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <p className="text-sm font-bold font-display text-card-foreground relative">
-                    £{acc.latestBalance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
-                  </p>
-                </motion.button>
+                </motion.div>
               );
             })}
           </div>
+
+          <Dialog open={!!manageAccountId} onOpenChange={(o) => { if (!o) setManageAccountId(null); }}>
+            <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+              <DialogHeader><DialogTitle className="font-display">Manage account</DialogTitle></DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="h-11 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select value={manageType} onValueChange={setManageType}>
+                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ACCOUNT_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-10 rounded-xl"
+                    onClick={async () => {
+                      if (!manageAccountId) return;
+                      const acc = accounts.find((a) => a.id === manageAccountId);
+                      await updateAccount(manageAccountId, { hidden: !acc?.hidden });
+                      setManageAccountId(null);
+                    }}
+                  >
+                    {accounts.find((a) => a.id === manageAccountId)?.hidden ? "Reopen" : "Hide / close"}
+                  </Button>
+                  <Button
+                    className="flex-1 h-10 rounded-xl bg-gradient-primary"
+                    disabled={!renameValue.trim()}
+                    onClick={async () => {
+                      if (!manageAccountId) return;
+                      await updateAccount(manageAccountId, { name: renameValue.trim(), type: manageType });
+                      setManageAccountId(null);
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Chart */}
           <div className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft mb-5">
@@ -378,6 +562,8 @@ const HouseholdFinance = () => {
           </motion.div>
         </>
       )}
+
+      <HouseholdManagerSheet open={householdsOpen} onClose={() => setHouseholdsOpen(false)} />
     </FeaturePageShell>
   );
 };

@@ -51,8 +51,8 @@ export interface MeasurementEntry {
 }
 
 export function useWeightTracker(scopeUserId?: string) {
-  const { user } = useAuth();
-  const uid = scopeUserId ?? user?.uid;
+  const { dataUid } = useAuth();
+  const uid = scopeUserId ?? dataUid;
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [heightEntries, setHeightEntries] = useState<HeightEntry[]>([]);
   const [botoxRecords, setBotoxRecords] = useState<BotoxRecord[]>([]);

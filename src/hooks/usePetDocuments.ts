@@ -18,14 +18,14 @@ export interface PetDocument {
 }
 
 export function usePetDocuments() {
-  const { user } = useAuth();
+  const { dataUid } = useAuth();
   const [documents, setDocuments] = useState<PetDocument[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!dataUid) return;
     const q = query(
-      collection(db, "petDocuments", user.uid, "docs"),
+      collection(db, "petDocuments", dataUid, "docs"),
       orderBy("uploadedAt", "desc"),
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -33,19 +33,19 @@ export function usePetDocuments() {
       setLoading(false);
     });
     return unsub;
-  }, [user]);
+  }, [dataUid]);
 
   const uploadDocument = useCallback(async (
     file: File,
     title: string,
     petIds: string[],
   ) => {
-    if (!user) return;
-    const path = `petDocuments/${user.uid}/${Date.now()}_${file.name}`;
+    if (!dataUid) return;
+    const path = `petDocuments/${dataUid}/${Date.now()}_${file.name}`;
     const sRef = storageRef(storage, path);
     await uploadBytes(sRef, file);
     const url = await getDownloadURL(sRef);
-    await addDoc(collection(db, "petDocuments", user.uid, "docs"), {
+    await addDoc(collection(db, "petDocuments", dataUid, "docs"), {
       title: title || file.name,
       url,
       storagePath: path,
@@ -53,13 +53,13 @@ export function usePetDocuments() {
       fileType: file.type,
       uploadedAt: serverTimestamp(),
     });
-  }, [user]);
+  }, [dataUid]);
 
   const deleteDocument = useCallback(async (docItem: PetDocument) => {
-    if (!user) return;
+    if (!dataUid) return;
     try { await deleteObject(storageRef(storage, docItem.storagePath)); } catch {}
-    await deleteDoc(doc(db, "petDocuments", user.uid, "docs", docItem.id));
-  }, [user]);
+    await deleteDoc(doc(db, "petDocuments", dataUid, "docs", docItem.id));
+  }, [dataUid]);
 
   return { documents, loading, uploadDocument, deleteDocument };
 }

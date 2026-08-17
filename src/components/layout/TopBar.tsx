@@ -1,12 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
-import { Bell, Settings, ChevronDown, Home } from "lucide-react";
+import { Bell, Settings, ChevronDown, Home, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { useAppearance } from "@/hooks/useAppearance";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { looksLikeGeneratedId } from "@/lib/householdIds";
 
 const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) => (
   <motion.div
@@ -25,9 +27,11 @@ const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay
 
 const TopBar = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, viewAs, stopViewAs } = useAuth();
   const { profile } = useUserProfile();
   const { activeHouseholdId, availableHouseholds, setActiveHouseholdId } = useActiveHousehold();
+  const { theme } = useAppearance();
+  const namedHouseholds = availableHouseholds.filter((h) => !looksLikeGeneratedId(h.name) && h.name !== h.id);
   const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
   const [now, setNow] = useState(new Date());
@@ -80,19 +84,33 @@ const TopBar = () => {
     );
   };
 
+  const showStars = theme.atmosphere === "stars" || theme.atmosphere === "celestial" || (theme.atmosphere === "none" && isNight);
+  const decorations = theme.decorations ?? [];
+
   return (
     <header
       className="sticky top-0 z-40 border-b border-white/5 overflow-hidden"
       style={{
-        background: isNight
-          ? "linear-gradient(135deg, hsl(215, 35%, 16%) 0%, hsl(200, 32%, 22%) 35%, hsl(190, 35%, 28%) 65%, hsl(178, 55%, 36%) 100%)"
-          : "linear-gradient(135deg, hsl(215, 30%, 22%) 0%, hsl(200, 30%, 28%) 35%, hsl(190, 35%, 34%) 65%, hsl(178, 58%, 40%) 100%)",
+        background: "var(--chrome-header, var(--gradient-hero))",
         paddingTop: "env(safe-area-inset-top)",
       }}
     >
-      {isNight && (
+      {showStars && (
         <div className="absolute inset-0 pointer-events-none">
           {stars.map((s, i) => <Star key={i} {...s} />)}
+        </div>
+      )}
+      {decorations.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-40">
+          {decorations.map((emoji, i) => (
+            <span
+              key={`${emoji}-${i}`}
+              className="absolute text-lg"
+              style={{ left: `${18 + i * 28}%`, top: `${20 + (i % 2) * 28}%` }}
+            >
+              {emoji}
+            </span>
+          ))}
         </div>
       )}
       <div className="relative flex items-center justify-between h-16 px-4 max-w-screen-xl mx-auto w-full">
@@ -105,19 +123,19 @@ const TopBar = () => {
         </div>
 
         <div className="flex items-center gap-1">
-          {availableHouseholds.length > 1 && (
+          {namedHouseholds.length > 1 && (
             <Popover open={householdMenuOpen} onOpenChange={setHouseholdMenuOpen}>
               <PopoverTrigger asChild>
                 <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl hover:bg-white/10 transition-colors max-w-[9rem]">
                   <Home className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
                   <span className="text-xs font-semibold text-white/90 truncate">
-                    {availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household"}
+                    {namedHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household"}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-white/60 flex-shrink-0" />
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-56 p-1.5">
-                {availableHouseholds.map((h) => (
+                {namedHouseholds.map((h) => (
                   <button
                     key={h.id}
                     onClick={() => { setActiveHouseholdId(h.id); setHouseholdMenuOpen(false); }}
@@ -146,6 +164,30 @@ const TopBar = () => {
           </button>
         </div>
       </div>
+      {viewAs && (
+        <div className="relative flex items-center justify-between gap-3 px-4 py-2 bg-amber-500">
+          <p className="text-xs font-semibold text-white truncate">
+            Viewing as {viewAs.name}{viewAs.email ? ` · ${viewAs.email}` : ""}
+          </p>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate("/admin")}
+              className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-bold text-white"
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              onClick={stopViewAs}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-[11px] font-bold text-white"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              Exit
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

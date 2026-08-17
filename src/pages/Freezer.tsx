@@ -18,7 +18,7 @@ type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => Barc
 const today = () => format(new Date(), "yyyy-MM-dd");
 
 const Freezer = () => {
-  const { scopeUserId, permission } = useSharedScope("freezer");
+  const { scopeUserId, permission, pageTitle } = useSharedScope("freezer");
   const canEdit = permission === "edit";
   const { items, loading, addItem, updateItem, removeItem } = useFreezer(scopeUserId ?? undefined);
   const [open, setOpen] = useState(false);
@@ -136,7 +136,7 @@ const Freezer = () => {
 
   return (
     <FeaturePageShell
-      title="Freezer"
+      title={pageTitle}
       subtitle={`${total} ${total === 1 ? "item" : "items"} currently in stock`}
       icon={<Snowflake className="h-5 w-5" />}
       action={

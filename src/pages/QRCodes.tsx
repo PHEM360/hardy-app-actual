@@ -1096,7 +1096,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const QRCodes = () => {
-  const { scopeUserId, permission } = useSharedScope("qrcodes");
+  const { scopeUserId, permission, pageTitle } = useSharedScope("qrcodes");
   const canEdit = permission === "edit";
   const { qrCodes, loading, addQRCode, addQRCodeAndGetId, updateQRCode, deleteQRCode, removeLabelDesign, claimLinkSlug } = useQRCodes(scopeUserId ?? undefined);
   const { settings } = useQRCodeSettings();
@@ -1167,7 +1167,7 @@ const QRCodes = () => {
 
   return (
     <FeaturePageShell
-      title="QR Codes"
+      title={pageTitle}
       subtitle="Generate & manage"
       icon={<QrCode className="w-5 h-5" />}
       action={

@@ -14,10 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useNavigate } from "react-router-dom";
 import { useFinance, type Account, type BalanceEntry } from "@/hooks/useFinance";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import ShareAccessButton from "@/components/sharing/ShareAccessButton";
 import SharedScopeSwitcher from "@/components/sharing/SharedScopeSwitcher";
+import { ACCOUNT_TYPES } from "@/lib/financeAccounts";
 import {
   buildPivotTable, computeAccountSummary, computeTaxYearSummary, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
@@ -161,10 +163,11 @@ interface FinanceProps {
 }
 
 const Finance = ({ mockData }: FinanceProps = {}) => {
+  const navigate = useNavigate();
   const isDark = useIsDarkMode();
   const palette = isDark ? ACCOUNT_COLORS_DARK : ACCOUNT_COLORS_LIGHT;
 
-  const { scopeUserId, permission: scopePermission } = useSharedScope("finance");
+  const { scopeUserId, permission: scopePermission, pageTitle, isOwnScope } = useSharedScope("finance");
   const canEdit = mockData ? false : scopePermission === "edit";
   const live = useFinance(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
@@ -380,7 +383,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="My Finances" subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />}>
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -390,8 +393,8 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
   return (
     <FeaturePageShell
-      title="My Finances"
-      subtitle="Account balances over time"
+      title={pageTitle}
+      subtitle={isOwnScope ? "Account balances over time" : "Shared with you"}
       icon={<Wallet className="w-5 h-5" />}
       action={
         <div className="flex items-center gap-1.5">
@@ -400,6 +403,18 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </div>
       }
     >
+      {isOwnScope && (
+        <button
+          onClick={() => navigate("/household-finance")}
+          className="w-full text-left rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 px-3.5 py-2.5 mb-4 transition-colors"
+        >
+          <p className="text-xs font-semibold text-foreground">This page is your personal finances</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Joint accounts shared with your household live on Household Finance →
+          </p>
+        </button>
+      )}
+
       {/* Total Balance */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl border border-primary/15 shadow-card mb-5 bg-gradient-primary">
         <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total Balance</p>
@@ -436,7 +451,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   <Select value={newAccountType} onValueChange={setNewAccountType}>
                     <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {["Current", "Savings", "ISA", "LISA", "Cash", "Investment", "Pension", "Other"].map((t) => (
+                          {ACCOUNT_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>

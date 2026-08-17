@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail } from "lucide-react";
+import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +19,7 @@ import { useAllHouseholds, useHouseholds } from "@/hooks/useHouseholds";
 import { useAllPageShares, revokePageShareById } from "@/hooks/usePageShares";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
+import { looksLikeGeneratedId } from "@/lib/householdIds";
 
 const ADMIN_EMAIL = "chris.hardy.07@googlemail.com";
 
@@ -75,7 +77,8 @@ const STATS = [
 type AdminView = "main" | "security" | "sharing";
 
 const Admin = () => {
-  const { user } = useAuth();
+  const { user, startViewAs, viewAs } = useAuth();
+  const navigate = useNavigate();
   const [view, setView] = useState<AdminView>("main");
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
@@ -274,14 +277,51 @@ const Admin = () => {
   };
 
   const { households: allHouseholds } = useAllHouseholds();
-  const { createHouseholdFor, addHouseholdMemberById, removeHouseholdMember, deleteHousehold } = useHouseholds();
+  const { createHouseholdFor, addHouseholdMemberById, removeHouseholdMember, deleteHousehold, renameHousehold } = useHouseholds();
   const { shares: allPageShares } = useAllPageShares();
   const appUsersForSharing = useAppUsers();
   const nameForUid = (uid: string) => appUsersForSharing.find((u) => u.id === uid)?.name || uid;
   const existingHouseholdNames = useMemo(
-    () => Array.from(new Set(allHouseholds.map((h) => h.name))).sort(),
+    () => Array.from(new Set(allHouseholds.filter((h) => !looksLikeGeneratedId(h.name)).map((h) => h.name))).sort(),
     [allHouseholds]
   );
+
+  const [hhAssignOpen, setHhAssignOpen] = useState(false);
+  const [hhAssignUserId, setHhAssignUserId] = useState<string | null>(null);
+  const [hhAssignFeatures, setHhAssignFeatures] = useState<FeatureKey[] | null>(null);
+  const [hhMode, setHhMode] = useState<"new" | "existing">("new");
+  const [hhName, setHhName] = useState("");
+  const [hhExistingId, setHhExistingId] = useState("");
+
+  const namedHouseholds = useMemo(
+    () => allHouseholds.filter((h) => !looksLikeGeneratedId(h.name)),
+    [allHouseholds]
+  );
+
+  const confirmHouseholdAssign = async () => {
+    if (!hhAssignUserId || !hhAssignFeatures) return;
+    setActionLoading(true);
+    try {
+      if (hhMode === "existing") {
+        if (!hhExistingId) return;
+        await addHouseholdMemberById(hhExistingId, hhAssignUserId);
+      } else if (hhName.trim()) {
+        const unnamed = allHouseholds.find(
+          (h) => h.memberIds.includes(hhAssignUserId) && looksLikeGeneratedId(h.name)
+        );
+        if (unnamed) await renameHousehold(unnamed.id, hhName.trim());
+        else await createHouseholdFor(hhName.trim(), hhAssignUserId);
+      } else {
+        return;
+      }
+      await updateFeatures(hhAssignUserId, hhAssignFeatures);
+      setHhAssignOpen(false);
+      setHhAssignUserId(null);
+      setHhAssignFeatures(null);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillResult, setBackfillResult] = useState<string | null>(null);
@@ -800,7 +840,6 @@ const Admin = () => {
                           className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/40"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="text-base">{mod.icon}</span>
                             <span className="text-xs font-medium text-card-foreground">{mod.label}</span>
                           </div>
                           <Switch
@@ -810,6 +849,17 @@ const Admin = () => {
                               const next = checked
                                 ? [...currentUser.enabledFeatures, mod.key]
                                 : currentUser.enabledFeatures.filter((k) => k !== mod.key);
+                              const householdFeature = mod.key === "finance_household" || mod.key === "households";
+                              const alreadyNamed = namedHouseholds.some((h) => h.memberIds.includes(currentUser.id));
+                              if (checked && householdFeature && !alreadyNamed) {
+                                setHhAssignUserId(currentUser.id);
+                                setHhAssignFeatures(next);
+                                setHhMode(namedHouseholds.length > 0 ? "existing" : "new");
+                                setHhName("");
+                                setHhExistingId(namedHouseholds[0]?.id ?? "");
+                                setHhAssignOpen(true);
+                                return;
+                              }
                               await updateFeatures(currentUser.id, next);
                             }}
                           />
@@ -821,6 +871,23 @@ const Admin = () => {
 
                 {/* Actions */}
                 <div className="space-y-2 pt-1 border-t border-border/40">
+                  <Button
+                    variant="outline"
+                    className="w-full h-9 rounded-lg text-xs justify-start gap-2"
+                    disabled={actionLoading || currentUser.id === user?.uid}
+                    onClick={() => {
+                      startViewAs({ uid: currentUser.id, name: currentUser.name, email: currentUser.email });
+                      setSelectedUser(null);
+                      navigate("/dashboard");
+                    }}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    {currentUser.id === user?.uid
+                      ? "This is you"
+                      : viewAs?.uid === currentUser.id
+                        ? "Already viewing as this user"
+                        : "View as this user"}
+                  </Button>
                   <Button
                     variant="outline"
                     className="w-full h-9 rounded-lg text-xs justify-start gap-2"
@@ -852,6 +919,63 @@ const Admin = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={hhAssignOpen} onOpenChange={setHhAssignOpen}>
+        <DialogContent className="max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="font-display">Household for this user</DialogTitle>
+            <DialogDescription>
+              Household Finance and Household bills need a named household. Create a new one or add them to an existing household.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="flex rounded-lg overflow-hidden border border-border/50 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setHhMode("new")}
+                className={`flex-1 py-2 ${hhMode === "new" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground"}`}
+              >
+                New household
+              </button>
+              <button
+                type="button"
+                onClick={() => setHhMode("existing")}
+                className={`flex-1 py-2 ${hhMode === "existing" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground"}`}
+              >
+                Existing
+              </button>
+            </div>
+            {hhMode === "new" ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Household name</Label>
+                <Input value={hhName} onChange={(e) => setHhName(e.target.value)} placeholder="e.g. 35PFP" className="h-10 rounded-xl" />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Add to</Label>
+                <Select value={hhExistingId} onValueChange={setHhExistingId}>
+                  <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a household" /></SelectTrigger>
+                  <SelectContent>
+                    {namedHouseholds.map((h) => (
+                      <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {namedHouseholds.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">No named households yet — create a new one.</p>
+                )}
+              </div>
+            )}
+            <Button
+              className="w-full h-10 rounded-xl"
+              disabled={actionLoading || (hhMode === "new" ? !hhName.trim() : !hhExistingId)}
+              onClick={confirmHouseholdAssign}
+            >
+              {actionLoading ? "Saving…" : "Save and enable feature"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

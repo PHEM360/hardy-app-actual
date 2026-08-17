@@ -10,14 +10,16 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
 import { Task } from "@/types/app";
 
 export function useTasks(scopeUserId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const { dataUid } = useAuth();
 
-  const uid = scopeUserId ?? auth.currentUser?.uid;
+  const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
     if (!uid) return;

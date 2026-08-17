@@ -17,6 +17,14 @@ export default function ShareAccessButton({ page, label = "Share" }: { page: str
   const [error, setError] = useState<string | null>(null);
 
   const nameFor = (uid: string) => appUsers.find((u) => u.id === uid)?.name || "Unknown user";
+  const sharedNames = mine.map((s) => nameFor(s.targetUid));
+  const sharedSummary = sharedNames.length === 0
+    ? ""
+    : sharedNames.length === 1
+      ? sharedNames[0]
+      : sharedNames.length === 2
+        ? `${sharedNames[0]}, ${sharedNames[1]}`
+        : `${sharedNames[0]} +${sharedNames.length - 1}`;
 
   const handleShare = async () => {
     if (!email.trim()) return;
@@ -34,10 +42,23 @@ export default function ShareAccessButton({ page, label = "Share" }: { page: str
 
   return (
     <>
-      <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setOpen(true)}>
-        <Share2 className="w-4 h-4" />
-        <span className="hidden sm:inline">{label}</span>
-      </Button>
+      <div className="flex items-center gap-1.5">
+        {mine.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-1 max-w-[9rem] sm:max-w-[12rem] px-2.5 py-1.5 rounded-full bg-primary/8 text-[11px] font-semibold text-primary hover:bg-primary/12 transition-colors"
+            title="Manage who this page is shared with"
+          >
+            <span className="text-muted-foreground font-medium">Shared with:</span>
+            <span className="truncate">{sharedSummary}</span>
+          </button>
+        )}
+        <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setOpen(true)}>
+          <Share2 className="w-4 h-4" />
+          <span className="hidden sm:inline">{label}</span>
+        </Button>
+      </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -48,6 +69,7 @@ export default function ShareAccessButton({ page, label = "Share" }: { page: str
           <div className="space-y-4">
             {mine.length > 0 && (
               <div className="space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Shared with</p>
                 {mine.map((s) => (
                   <div key={s.id} className="flex items-center justify-between gap-2 text-sm bg-muted px-3 py-2 rounded-xl">
                     <span className="font-medium truncate">{nameFor(s.targetUid)}</span>
@@ -60,7 +82,12 @@ export default function ShareAccessButton({ page, label = "Share" }: { page: str
                         <option value="view">View</option>
                         <option value="edit">Edit</option>
                       </select>
-                      <button onClick={() => revoke(s.targetUid)} className="text-muted-foreground hover:text-destructive">
+                      <button
+                        type="button"
+                        onClick={() => revoke(s.targetUid)}
+                        className="text-muted-foreground hover:text-destructive"
+                        title={`Revoke ${nameFor(s.targetUid)}'s access`}
+                      >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>

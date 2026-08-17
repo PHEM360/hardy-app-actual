@@ -6,7 +6,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useUserRole } from "@/auth/useUserRole";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
 
@@ -82,7 +82,7 @@ function NavButton({
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { role, loading } = useUserRole();
+  const { role, loading, isViewAs } = useEffectiveRole();
   const { profile } = useUserProfile();
 
   const rawPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
@@ -92,7 +92,7 @@ const BottomNav = () => {
     .filter((path) => {
       // Admin nav access is role-based only — the per-member "Admin" feature
       // toggle doesn't actually grant the admin role, so it can't gate this.
-      if (path === "/admin") return !loading && (role === "admin" || role === "superadmin");
+      if (path === "/admin") return !isViewAs && !loading && (role === "admin" || role === "superadmin");
       const key = ROUTE_FEATURE_KEY[path];
       if (!key) return true;
       if (loading) return false;
@@ -109,7 +109,7 @@ const BottomNav = () => {
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
-        background: "linear-gradient(135deg, hsl(215, 32%, 18%) 0%, hsl(200, 30%, 25%) 40%, hsl(190, 33%, 31%) 70%, hsl(178, 55%, 38%) 100%)",
+        background: "var(--chrome-nav, var(--gradient-hero))",
         backdropFilter: "blur(16px)",
       }}
     >

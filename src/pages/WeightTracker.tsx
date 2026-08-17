@@ -127,7 +127,7 @@ function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v:
 
 // ── Main component ─────────────────────────────────────────────────────────────
 const HealthTracker = () => {
-  const { scopeUserId, permission } = useSharedScope("health");
+  const { scopeUserId, permission, pageTitle } = useSharedScope("health");
   const canEdit = permission === "edit";
   const {
     entries, heightEntries, botoxRecords, bpEntries, loading,
@@ -278,7 +278,7 @@ const HealthTracker = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title="Health" subtitle="Weight, BP & treatments" icon={<HeartPulse className="w-5 h-5" />}>
+      <FeaturePageShell title={pageTitle} subtitle="Weight, BP & treatments" icon={<HeartPulse className="w-5 h-5" />}>
         <div className="flex items-center justify-center py-20"><DogLoader text="Loading…" /></div>
       </FeaturePageShell>
     );
@@ -286,7 +286,7 @@ const HealthTracker = () => {
 
   return (
     <FeaturePageShell
-      title="Health"
+      title={pageTitle}
       subtitle="Weight, BP & treatments"
       icon={<HeartPulse className="w-5 h-5" />}
       action={
