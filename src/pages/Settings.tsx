@@ -12,6 +12,8 @@ import { signOut, updateProfile, updatePassword, reauthenticateWithCredential, E
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
+import { canAccessRoute, DEFAULT_BOTTOM_NAV } from "@/lib/features";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { useAiConfig } from "@/hooks/useAiConfig";
@@ -44,7 +46,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/tattersalls",       label: "Tattersalls" },
   { path: "/ai-analysis",       label: "AI Analysis" },
 ];
-const DEFAULT_NAV = ["/dashboard", "/finance", "/pets", "/admin", "/more"];
+const DEFAULT_NAV = [...DEFAULT_BOTTOM_NAV, "/more"];
 
 // ── Avatar preview component ──
 const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }: {
@@ -67,7 +69,8 @@ const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }:
 const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { profile, saveProfile } = useUserProfile();
+  const { profile, saveProfile, loading: profileLoading } = useUserProfile();
+  const { role, loading: roleLoading } = useEffectiveRole();
   const existingHouseholdNames = useHouseholdNames();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [firstName, setFirstName] = useState(user?.displayName || "");
@@ -199,6 +202,11 @@ const Settings = () => {
     );
   };
 
+  const navOptions = ALL_NAV_OPTIONS.filter((item) => {
+    if (roleLoading || profileLoading) return item.path === "/dashboard";
+    return canAccessRoute(role, profile?.enabledFeatures ?? [], item.path);
+  });
+
   // Dark mode effect
   useEffect(() => {
     if (darkMode) {
@@ -316,7 +324,7 @@ const Settings = () => {
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
           <p className="text-xs text-muted-foreground">Drag to reorder. Tap to toggle on/off. <strong>More</strong> and <strong>Sign Out</strong> are always shown on the right.</p>
           <div className="space-y-1.5">
-            {ALL_NAV_OPTIONS.map((item, index) => {
+            {navOptions.map((item) => {
               const active = navItems.includes(item.path);
               return (
                 <div
@@ -330,7 +338,7 @@ const Settings = () => {
                     if (from === item.path) return;
                     setNavItems((prev) => {
                       // Work from all orderable paths, inserting missing ones at end
-                      const allPaths = ALL_NAV_OPTIONS.map(o => o.path);
+                      const allPaths = navOptions.map(o => o.path);
                       const ordered = allPaths.filter(p => prev.includes(p) || p === from);
                       const fromIdx = ordered.indexOf(from);
                       const toIdx = ordered.indexOf(item.path);

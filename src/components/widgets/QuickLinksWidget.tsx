@@ -9,7 +9,9 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { toast } from "sonner";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { hasFeatureAccess, QUICK_LINK_FEATURE_KEY } from "@/lib/features";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -34,7 +36,8 @@ const DEFAULT_LINK_IDS = ALL_LINKS.map((l) => l.id);
 export function QuickLinksWidget() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile, saveProfile } = useUserProfile();
+  const { role, loading: roleLoading } = useEffectiveRole();
+  const { profile, saveProfile, loading: profileLoading } = useUserProfile();
   const { companies } = useCompanies();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -106,7 +109,13 @@ export function QuickLinksWidget() {
   };
 
   const enabledIds = profile?.quickLinks?.length ? profile.quickLinks : DEFAULT_LINK_IDS;
-  const visibleLinks = ALL_LINKS.filter((l) => enabledIds.includes(l.id));
+  const accessibleLinks = ALL_LINKS.filter((l) => {
+    const key = QUICK_LINK_FEATURE_KEY[l.id];
+    if (!key) return true;
+    if (roleLoading || profileLoading) return false;
+    return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
+  });
+  const visibleLinks = accessibleLinks.filter((l) => enabledIds.includes(l.id));
 
   const toggleLink = (id: string) => {
     const next = enabledIds.includes(id)
@@ -172,7 +181,7 @@ export function QuickLinksWidget() {
           </DialogHeader>
           <p className="text-xs text-muted-foreground">Choose which shortcuts appear. Turn off anything that doesn’t apply — like expenses.</p>
           <div className="space-y-1.5 pt-1">
-            {ALL_LINKS.map((link) => {
+            {accessibleLinks.map((link) => {
               const on = enabledIds.includes(link.id);
               return (
                 <button

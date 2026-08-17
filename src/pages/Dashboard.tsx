@@ -24,12 +24,12 @@ const Dashboard = () => {
 
   const { layout: fullLayout, updateWidget, resetLayout } = useDashboardLayout();
   const { role, loading: roleLoading } = useEffectiveRole();
-  const { profile } = useUserProfile();
+  const { profile, loading: profileLoading } = useUserProfile();
 
   const layout = fullLayout.filter((w) => {
     const key = WIDGET_FEATURE_KEY[w.type];
     if (!key) return true;
-    if (roleLoading) return false;
+    if (roleLoading || profileLoading) return false;
     return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
   });
 

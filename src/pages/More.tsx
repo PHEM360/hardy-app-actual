@@ -15,10 +15,13 @@ import {
   Settings,
   Snowflake,
   Plane,
+  PiggyBank,
+  Heart,
+  Sparkles,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
+import { canAccessRoute } from "@/lib/features";
 
 type MoreItem = {
   label: string;
@@ -60,6 +63,13 @@ const SECTIONS: Section[] = [
   {
     title: "Finance & Property",
     items: [
+      {
+        label: "My Finance",
+        icon: PiggyBank,
+        route: "/finance",
+        gradient: "linear-gradient(135deg, hsl(25,65%,56%), hsl(15,58%,50%))",
+        iconColor: "#fff",
+      },
       {
         label: "Companies",
         icon: Building2,
@@ -106,6 +116,13 @@ const SECTIONS: Section[] = [
         iconColor: "#fff",
       },
       {
+        label: "Pets",
+        icon: Heart,
+        route: "/pets",
+        gradient: "linear-gradient(135deg, hsl(0,68%,52%), hsl(340,60%,46%))",
+        iconColor: "#fff",
+      },
+      {
         label: "Health",
         icon: Activity,
         route: "/weight",
@@ -124,6 +141,13 @@ const SECTIONS: Section[] = [
         icon: Snowflake,
         route: "/freezer",
         gradient: "linear-gradient(135deg, hsl(198,75%,55%), hsl(215,70%,48%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "AI Analysis",
+        icon: Sparkles,
+        route: "/ai-analysis",
+        gradient: "linear-gradient(135deg, hsl(270,55%,52%), hsl(250,50%,46%))",
         iconColor: "#fff",
       },
     ],
@@ -158,18 +182,17 @@ const SECTIONS: Section[] = [
 
 const More = () => {
   const navigate = useNavigate();
-  const { role, loading } = useEffectiveRole();
-  const { profile } = useUserProfile();
+  const { role, loading: roleLoading } = useEffectiveRole();
+  const { profile, loading: profileLoading } = useUserProfile();
+  const loading = roleLoading || profileLoading;
 
   let delay = 0;
 
   const visibleSections = SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter((item) => {
-      const key = ROUTE_FEATURE_KEY[item.route];
-      if (!key) return true;
       if (loading) return false;
-      return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
+      return canAccessRoute(role, profile?.enabledFeatures ?? [], item.route);
     }),
   })).filter((section) => section.items.length > 0);
 

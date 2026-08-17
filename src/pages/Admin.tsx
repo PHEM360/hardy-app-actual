@@ -12,13 +12,14 @@ import { Switch } from "@/components/ui/switch";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
-import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, updateDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { useAllHouseholds, useHouseholds } from "@/hooks/useHouseholds";
 import { useAllPageShares, revokePageShareById } from "@/hooks/usePageShares";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { FEATURE_MODULES, type FeatureKey } from "@/types/app";
+import { featureEnabled } from "@/lib/features";
 import { looksLikeGeneratedId } from "@/lib/householdIds";
 
 const ADMIN_EMAIL = "chris.hardy.07@googlemail.com";
@@ -272,8 +273,28 @@ const Admin = () => {
   };
 
   const updateFeatures = async (userId: string, features: FeatureKey[]) => {
-    await updateDoc(doc(db, "users", userId), { enabledFeatures: features });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, enabledFeatures: features } : u));
+    const prev = users.find((u) => u.id === userId)?.enabledFeatures ?? [];
+    const added = features.filter((key) => !featureEnabled(prev, key));
+    const payload: { enabledFeatures: FeatureKey[]; navItems?: string[] } = { enabledFeatures: features };
+
+    if (added.length) {
+      const snap = await getDoc(doc(db, "users", userId));
+      const navItems = snap.data()?.navItems;
+      if (Array.isArray(navItems) && navItems.length > 0) {
+        const nextNav = [...navItems];
+        for (const key of added) {
+          const route = FEATURE_MODULES.find((m) => m.key === key)?.route;
+          if (!route || route === "/admin" || nextNav.includes(route)) continue;
+          const moreIdx = nextNav.indexOf("/more");
+          if (moreIdx >= 0) nextNav.splice(moreIdx, 0, route);
+          else nextNav.push(route);
+        }
+        if (nextNav.length !== navItems.length) payload.navItems = nextNav;
+      }
+    }
+
+    await updateDoc(doc(db, "users", userId), payload);
+    setUsers((prevUsers) => prevUsers.map((u) => (u.id === userId ? { ...u, enabledFeatures: features } : u)));
   };
 
   const { households: allHouseholds } = useAllHouseholds();
@@ -833,7 +854,7 @@ const Admin = () => {
                   <p className="text-[10px] text-muted-foreground -mt-1">Admins & superadmins always see everything. These toggles apply to members only.</p>
                   <div className="space-y-1.5">
                     {FEATURE_MODULES.map((mod) => {
-                      const enabled = currentUser.enabledFeatures.includes(mod.key);
+                      const enabled = featureEnabled(currentUser.enabledFeatures, mod.key);
                       return (
                         <div
                           key={mod.key}
@@ -847,8 +868,10 @@ const Admin = () => {
                             disabled={actionLoading}
                             onCheckedChange={async (checked) => {
                               const next = checked
-                                ? [...currentUser.enabledFeatures, mod.key]
-                                : currentUser.enabledFeatures.filter((k) => k !== mod.key);
+                                ? (featureEnabled(currentUser.enabledFeatures, mod.key)
+                                  ? currentUser.enabledFeatures
+                                  : [...currentUser.enabledFeatures, mod.key])
+                                : currentUser.enabledFeatures.filter((k) => !featureEnabled([k], mod.key));
                               const householdFeature = mod.key === "finance_household" || mod.key === "households";
                               const alreadyNamed = namedHouseholds.some((h) => h.memberIds.includes(currentUser.id));
                               if (checked && householdFeature && !alreadyNamed) {

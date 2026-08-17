@@ -8,7 +8,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { hasFeatureAccess, ROUTE_FEATURE_KEY } from "@/lib/features";
+import { canAccessRoute, DEFAULT_BOTTOM_NAV, MAX_BOTTOM_NAV_ITEMS } from "@/lib/features";
 
 type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
 
@@ -30,7 +30,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
 };
 
-const DEFAULT_NAV = ["/dashboard", "/tasks", "/today", "/health", "/more"];
+const DEFAULT_NAV = DEFAULT_BOTTOM_NAV;
 
 function NavButton({
   path,
@@ -82,10 +82,13 @@ function NavButton({
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { role, loading, isViewAs } = useEffectiveRole();
-  const { profile } = useUserProfile();
+  const { role, loading: roleLoading, isViewAs } = useEffectiveRole();
+  const { profile, loading: profileLoading } = useUserProfile();
+  const loading = roleLoading || profileLoading;
 
-  const rawPaths = profile?.navItems && profile.navItems.length > 0 ? profile.navItems : DEFAULT_NAV;
+  const features = profile?.enabledFeatures ?? [];
+  const usingCustomNav = Boolean(profile?.navItems && profile.navItems.length > 0);
+  const rawPaths = usingCustomNav ? profile!.navItems! : DEFAULT_NAV;
 
   const navItems = rawPaths
     .filter((path) => path !== "/more")
@@ -93,11 +96,10 @@ const BottomNav = () => {
       // Admin nav access is role-based only — the per-member "Admin" feature
       // toggle doesn't actually grant the admin role, so it can't gate this.
       if (path === "/admin") return !isViewAs && !loading && (role === "admin" || role === "superadmin");
-      const key = ROUTE_FEATURE_KEY[path];
-      if (!key) return true;
-      if (loading) return false;
-      return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
+      if (loading) return path === "/dashboard" || path === "/today";
+      return canAccessRoute(role, features, path);
     })
+    .slice(0, usingCustomNav ? undefined : MAX_BOTTOM_NAV_ITEMS)
     .map((path) => ({ path, ...ALL_NAV_ITEMS[path] }))
     .filter((item) => Boolean(item.icon));
 
