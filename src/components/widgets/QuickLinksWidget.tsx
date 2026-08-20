@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, X, FileUp, Zap, Pencil, Home } from "lucide-react";
+import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, X, FileUp, Zap, Pencil, Home, CheckCircle2, StickyNote } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
@@ -26,6 +26,7 @@ const ALL_LINKS = [
   { id: "logins",      icon: KeyRound,     label: "Log Ins",    sub: "Credentials", bg: "bg-violet-500",   tint: "bg-violet-50 dark:bg-violet-500/15 border-violet-200/70 dark:border-violet-500/25", href: "/login-details" },
   { id: "event",       icon: CalendarPlus, label: "New Event",  sub: "Calendar",    bg: "bg-blue-500",     tint: "bg-blue-50 dark:bg-blue-500/15 border-blue-200/70 dark:border-blue-500/25",         href: "/calendar" },
   { id: "task",        icon: ListPlus,     label: "Add Task",   sub: "Tasks",       bg: "bg-emerald-500",  tint: "bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200/70 dark:border-emerald-500/25", href: "/tasks" },
+  { id: "note",        icon: StickyNote,   label: "Add Note",   sub: "Quick note",  bg: "bg-amber-500",    tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",         href: "/notes/quick" },
   { id: "finance",     icon: Wallet,       label: "Finance",    sub: "Personal",    bg: "bg-teal-500",     tint: "bg-teal-50 dark:bg-teal-500/15 border-teal-200/70 dark:border-teal-500/25",         href: "/finance" },
   { id: "hh-finance",  icon: Home,         label: "HH Finance", sub: "Household",   bg: "bg-green-600",    tint: "bg-green-50 dark:bg-green-500/15 border-green-200/70 dark:border-green-500/25",     href: "/household-finance" },
   { id: "upload",      icon: FileUp,       label: "Upload",     sub: "Documents",   bg: "bg-sky-500",      tint: "bg-sky-50 dark:bg-sky-500/15 border-sky-200/70 dark:border-sky-500/25",             action: "upload" as const },
@@ -59,6 +60,8 @@ export function QuickLinksWidget() {
   // phone, no way to know in advance).
   const [chosenMode, setChosenMode] = useState<"scan" | "picture" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [savedSummary, setSavedSummary] = useState("");
 
   // Thumbnail for whatever receipt is currently attached
   useEffect(() => {
@@ -72,6 +75,7 @@ export function QuickLinksWidget() {
     const input = fileInputRef.current;
     if (!input) return;
     input.removeAttribute("capture");
+    input.setAttribute("accept", "image/*,application/pdf");
     setChosenMode(null);
     input.click();
   };
@@ -98,10 +102,14 @@ export function QuickLinksWidget() {
         const url = await getDownloadURL(sRef);
         await updateDoc(doc(db, "companies", expForm.companyId, "expenses", docRef.id), { receipts: [url] });
       }
-      setExpenseOpen(false);
+      const companyName = companies.find((c) => c.id === expForm.companyId)?.name || "the company";
+      const amount = parseFloat(expForm.amount) || 0;
+      const summary = `${expForm.description} · £${amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} saved to ${companyName}`;
+      setSavedSummary(summary);
+      setSavedOk(true);
+      toast.success("Expense saved", { description: summary, duration: 5000 });
       setReceiptFile(null);
       setExpForm({ companyId: "", description: "", amount: "", date: new Date().toISOString().split("T")[0], category: "Other" });
-      toast.success("Expense saved");
     } catch (err) {
       console.error("Failed to save expense", err);
       toast.error("Couldn't save expense. Please try again.");
@@ -210,18 +218,49 @@ export function QuickLinksWidget() {
       </Dialog>
 
       {/* Add Expense Dialog */}
-      <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
+      <Dialog open={expenseOpen} onOpenChange={(open) => {
+        setExpenseOpen(open);
+        if (!open) {
+          setSavedOk(false);
+          setSavedSummary("");
+        }
+      }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
+          {savedOk ? (
+            <div className="py-6 px-2 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <DialogHeader>
+                <DialogTitle className="font-display text-center">Expense saved</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{savedSummary}</p>
+              <Button
+                className="mt-5 w-full h-10 rounded-xl bg-gradient-primary"
+                onClick={() => {
+                  setExpenseOpen(false);
+                  setSavedOk(false);
+                  setSavedSummary("");
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          ) : (
+          <>
           <DialogHeader><DialogTitle className="font-display">Add Expense</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1">
               <Label>Company *</Label>
               <Select value={expForm.companyId} onValueChange={(v) => setExpForm((f) => ({ ...f, companyId: v }))}>
-                <SelectTrigger className="h-9 rounded-xl"><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectTrigger className="h-9 rounded-xl"><SelectValue placeholder={companies.length ? "Select company" : "No companies available"} /></SelectTrigger>
                 <SelectContent>
                   {companies.map((c) => <SelectItem key={c.id} value={c.id!}>{c.emoji ? `${c.emoji} ` : ""}{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {companies.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">No companies to log against. Shared companies should appear here once they’ve been shared with you.</p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Description *</Label>
@@ -251,12 +290,17 @@ export function QuickLinksWidget() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
                   e.target.value = "";
-                  if (f) setScanCapture(f);
+                  if (!f) return;
+                  if (!f.type.startsWith("image/")) {
+                    setReceiptFile(f);
+                    return;
+                  }
+                  setScanCapture(f);
                 }}
               />
               {receiptFile ? (
@@ -287,6 +331,8 @@ export function QuickLinksWidget() {
               </Button>
             </div>
           </div>
+          </>
+          )}
         </DialogContent>
       </Dialog>
 

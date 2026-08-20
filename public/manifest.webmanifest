@@ -14,5 +14,35 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add note",
+      "short_name": "Note",
+      "description": "Capture a quick note",
+      "url": "/notes/quick",
+      "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Notes",
+      "short_name": "Notes",
+      "description": "Open notes and checklists",
+      "url": "/notes",
+      "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Calendar",
+      "short_name": "Calendar",
+      "description": "Open the family calendar",
+      "url": "/calendar",
+      "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Tasks",
+      "short_name": "Tasks",
+      "description": "Open the tasks list",
+      "url": "/tasks",
+      "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
+    }
   ]
 }

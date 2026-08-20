@@ -390,8 +390,8 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canEditCompany(companyId);
       }
       match /expenses/{expenseId} {
-        allow read: if isAuthenticated() && canAccessCompany(companyId);
-        allow write: if isAuthenticated() && canEditCompany(companyId);
+        allow read, create, update: if isAuthenticated() && canAccessCompany(companyId);
+        allow delete: if isAuthenticated() && canEditCompany(companyId);
       }
       match /insurance/{policyId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
@@ -427,6 +427,48 @@ service cloud.firestore {
     match /freezer/{userId}/items/{itemId} {
       allow read: if canViewPage(userId, "freezer");
       allow write: if canEditPage(userId, "freezer");
+    }
+
+    // Hub notes (Keep/Notion-style workspace) — separate from Tattersalls notes
+    match /hubNotes/{userId}/folders/{folderId} {
+      allow read: if canViewPage(userId, "notes") ||
+        (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith);
+      allow create: if canEditPage(userId, "notes");
+      allow update: if canEditPage(userId, "notes") ||
+        (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith &&
+          resource.data.get("sharePermission", "view") == "edit");
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+    match /hubNotes/{userId}/items/{noteId} {
+      allow read: if canViewPage(userId, "notes") ||
+        (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith);
+      allow create: if canEditPage(userId, "notes");
+      allow update: if canEditPage(userId, "notes") ||
+        (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith &&
+          resource.data.get("sharePermission", "view") == "edit");
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+    match /hubNotes/{userId}/vault/{noteId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+    match /hubNotes/{userId}/settings/{docId} {
+      allow read: if docId == "vault"
+        ? (isOwner(userId) || isAdmin())
+        : canViewPage(userId, "notes");
+      allow write: if docId == "vault"
+        ? (isOwner(userId) || isAdmin())
+        : canEditPage(userId, "notes");
+    }
+    match /noteGrants/{grantId} {
+      allow read: if isAuthenticated() && (
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
     }
 
     // QR codes library - per user, shareable via pageShares

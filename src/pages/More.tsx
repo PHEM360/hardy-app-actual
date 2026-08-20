@@ -19,6 +19,7 @@ import {
   Heart,
   Sparkles,
   KeyRound,
+  StickyNote,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -44,6 +45,13 @@ const SECTIONS: Section[] = [
         icon: CheckSquare,
         route: "/tasks",
         gradient: "linear-gradient(135deg, hsl(258,60%,58%), hsl(270,55%,52%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Notes",
+        icon: StickyNote,
+        route: "/notes",
+        gradient: "linear-gradient(135deg, hsl(42,92%,52%), hsl(28,85%,48%))",
         iconColor: "#fff",
       },
       {

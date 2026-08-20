@@ -19,6 +19,7 @@ import {
 } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { usePageShares } from "@/hooks/usePageShares";
 import {
   Company,
   CompanyLogin,
@@ -30,16 +31,34 @@ import {
   CompanyTaxReturn,
 } from "@/types/app";
 
+export function canEditCompanyClient(
+  company: Company,
+  dataUid: string | null | undefined,
+  editOwnerIds: Set<string>
+) {
+  if (!dataUid) return false;
+  if (!company.ownerId) return true;
+  if (company.ownerId === dataUid) return true;
+  if ((company.sharedWith ?? []).includes(dataUid)) return true;
+  return editOwnerIds.has(company.ownerId);
+}
+
 export function useCompanies(scopeUserId?: string) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const { dataUid } = useAuth();
   const uid = scopeUserId ?? dataUid;
+  const { sharedWithMe } = usePageShares("companies");
+  const sharedOwnerIds = new Set(sharedWithMe.map((s) => s.ownerId));
+  const editOwnerIds = new Set(
+    sharedWithMe.filter((s) => s.permission === "edit").map((s) => s.ownerId)
+  );
 
   useEffect(() => {
     if (!uid) return;
     // Query all companies — filter client-side so legacy companies (no ownerId)
-    // remain visible and new companies are scoped to owner + sharedWith.
+    // remain visible and new companies are scoped to owner + sharedWith +
+    // anyone who shared the Companies page with the signed-in user.
     const q = query(collection(db, "companies"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const next = snap.docs
@@ -48,14 +67,15 @@ export function useCompanies(scopeUserId?: string) {
           const viewingOwn = !scopeUserId || scopeUserId === dataUid;
           if (!c.ownerId) return viewingOwn;
           if (c.ownerId === uid) return true;
-          if (viewingOwn && dataUid && (c.sharedWith ?? []).includes(dataUid)) return true;
+          if (dataUid && (c.sharedWith ?? []).includes(dataUid) && viewingOwn) return true;
+          if (viewingOwn && c.ownerId && sharedOwnerIds.has(c.ownerId)) return true;
           return false;
         });
       setCompanies(next);
       setLoading(false);
     });
     return unsub;
-  }, [uid, dataUid, scopeUserId]);
+  }, [uid, dataUid, scopeUserId, sharedWithMe]);
 
   const addCompany = useCallback(async (company: Omit<Company, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;
@@ -91,7 +111,7 @@ export function useCompanies(scopeUserId?: string) {
     });
   }, []);
 
-  return { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany };
+  return { companies, loading, addCompany, updateCompany, deleteCompany, shareCompany, unshareCompany, editOwnerIds };
 }
 
 // ─── Logins ────────────────────────────────────────────────────────────────────

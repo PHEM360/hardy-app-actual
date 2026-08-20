@@ -19,6 +19,7 @@ export const PAGE_NOUNS: Record<string, string> = {
   ai_analysis: "AI Analysis",
   tattersalls: "Tattersalls",
   inheritance: "IHT Planner",
+  notes: "Notes",
 };
 
 export interface ScopeOption {

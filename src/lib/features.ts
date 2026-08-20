@@ -26,6 +26,7 @@ export function hasFeatureAccess(
 export const ROUTE_FEATURE_KEY: Record<string, FeatureKey> = {
   ...Object.fromEntries(FEATURE_MODULES.map((m) => [m.route, m.key])),
   "/health": "weight_tracking", // Health page is also served at /weight
+  "/notes/quick": "notes",
 };
 
 /** FeatureKey -> pageShares.page value. Invitees can open the route even without the feature enabled. */
@@ -40,6 +41,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   ai_analysis: "ai_analysis",
   calendar: "calendar",
   annual_leave: "annual_leave",
+  notes: "notes",
 };
 
 /** Route path -> pageShares.page value (includes ungated pages like freezer). */
@@ -55,6 +57,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/ai-analysis": "ai_analysis",
   "/calendar": "calendar",
   "/annual-leave": "annual_leave",
+  "/notes": "notes",
   "/freezer": "freezer",
   "/login-details": "login_details",
   "/qr-codes": "qrcodes",
@@ -85,6 +88,7 @@ export const WIDGET_FEATURE_KEY: Partial<Record<WidgetType, FeatureKey>> = {
   weight: "weight_tracking",
   tasks: "tasks",
   calendar_mini: "calendar",
+  notes: "notes",
 };
 
 /** Quick-link id -> FeatureKey. Links without a key are always available. */
@@ -93,6 +97,7 @@ export const QUICK_LINK_FEATURE_KEY: Record<string, FeatureKey> = {
   "hh-finance": "finance_household",
   event: "calendar",
   task: "tasks",
+  note: "notes",
   expense: "companies",
 };
 

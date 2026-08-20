@@ -66,6 +66,10 @@ service firebase.storage {
       );
     }
 
+    match /companies/{companyId}/receipts/{fileName} {
+      allow read: if canAccessCompanyStorage(companyId);
+      allow write: if canAccessCompanyStorage(companyId);
+    }
     match /companies/{companyId}/{allPaths=**} {
       allow read: if canAccessCompanyStorage(companyId);
       allow write: if canEditCompanyStorage(companyId);

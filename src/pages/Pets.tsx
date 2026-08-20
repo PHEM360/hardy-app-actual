@@ -18,6 +18,9 @@ import type { Pet, TreatmentOption, TreatmentRecord, NotificationSetting, Vaccin
 import { usePetDocuments } from "@/hooks/usePetDocuments";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useSharedScope } from "@/hooks/useSharedScope";
+import { useAuth } from "@/auth/AuthContext";
+import { useAppearance } from "@/hooks/useAppearance";
+import DogLoader from "@/components/DogLoader";
 import { EmojiPick } from "@/components/EmojiPick";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";

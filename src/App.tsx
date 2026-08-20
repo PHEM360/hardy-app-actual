@@ -34,6 +34,9 @@ import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
 import AnnualLeave from "@/pages/AnnualLeave";
+import Notes from "@/pages/Notes";
+import QuickNote from "@/pages/QuickNote";
+import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
 import AiAnalysis from "@/pages/AiAnalysis";
@@ -214,6 +217,23 @@ const App = () => (
                 </RequireFeature>
               }
             />
+            <Route
+              path="/notes"
+              element={
+                <RequireFeature featureKey="notes">
+                  <Notes />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/notes/quick"
+              element={
+                <RequireFeature featureKey="notes">
+                  <QuickNote />
+                </RequireFeature>
+              }
+            />
+            <Route path="/widget/:kind" element={<HubWidget />} />
           </Route>
           <Route path="/" element={<Login />} />
           <Route path="*" element={<NotFound />} />

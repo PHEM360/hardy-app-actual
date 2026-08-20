@@ -5,8 +5,18 @@ import TopBar from "./TopBar";
 const AppLayout = () => {
   const location = useLocation();
   const isLogin = location.pathname === "/login";
+  const hideChrome =
+    location.pathname === "/notes/quick" || location.pathname.startsWith("/widget");
 
   if (isLogin) return <Outlet />;
+
+  if (hideChrome) {
+    return (
+      <div className="min-h-[100dvh] bg-background">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background">

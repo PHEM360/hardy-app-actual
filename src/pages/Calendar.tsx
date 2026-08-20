@@ -30,6 +30,7 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePets } from "@/hooks/usePets";
 import { useTasks } from "@/hooks/useTasks";
 import { useCompanies } from "@/hooks/useCompanies";
+import { useNotes } from "@/hooks/useNotes";
 import type { CalendarEvent, CalendarEventCategory, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ const CalendarPage = () => {
   const { pets } = usePets();
   const { tasks } = useTasks();
   const { companies } = useCompanies();
+  const { datedNotes } = useNotes(scopeUserId ?? undefined);
   const { role } = useEffectiveRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
 
@@ -426,8 +428,28 @@ const CalendarPage = () => {
       });
     }
 
+    // Dated notes from the Notes workspace
+    if (settings.autoImport?.notes !== false) {
+      datedNotes.forEach((note) => {
+        if (!note.dueDate || note.locked) return;
+        try {
+          const due = parseISO(note.dueDate.length === 10 ? `${note.dueDate}T12:00:00` : note.dueDate);
+          if (due < cutoff) return;
+          vEvents.push({
+            id: `__note_${note.id}`,
+            title: `📝 ${note.title || "Note"}`,
+            category: "personal" as CalendarEventCategory,
+            startDate: due.toISOString(),
+            endDate: due.toISOString(),
+            allDay: true,
+            priority: due < now ? "urgent" : "normal",
+          });
+        } catch { /* ignore invalid date */ }
+      });
+    }
+
     return vEvents;
-  }, [pets, householdItems, tasks, companies, settings.autoImport]);
+  }, [pets, householdItems, tasks, companies, datedNotes, settings.autoImport]);
 
   const allDisplayEvents = useMemo(
     () => [...events, ...virtualEvents],
@@ -1310,6 +1332,20 @@ const CalendarPage = () => {
                   onCheckedChange={(v) => saveSettings({
                     ...settings,
                     autoImport: { ...(settings.autoImport ?? {}), companies: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">📝 Notes dates</p>
+                  <p className="text-[11px] text-muted-foreground">Dated notes from the Notes workspace</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.notes !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), notes: v },
                   })}
                 />
               </div>

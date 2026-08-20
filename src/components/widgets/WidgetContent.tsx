@@ -10,6 +10,7 @@ import { TattersallsWidget } from "@/components/widgets/TattersallsWidget";
 import { CompaniesWidget } from "@/components/widgets/CompaniesWidget";
 import { WeightWidget } from "@/components/widgets/WeightWidget";
 import { QuickLinksWidget } from "@/components/widgets/QuickLinksWidget";
+import { NotesWidget } from "@/components/widgets/NotesWidget";
 
 /** Maps a dashboard widget type to its content component — shared by the editable Dashboard grid and the read-only /display kiosk grid. */
 export function WidgetContent({ type }: { type: WidgetType }) {
@@ -25,6 +26,7 @@ export function WidgetContent({ type }: { type: WidgetType }) {
     case "tattersalls":   return <TattersallsWidget />;
     case "companies":     return <CompaniesWidget />;
     case "weight":        return <WeightWidget />;
+    case "notes":         return <NotesWidget />;
     default:              return null;
   }
 }

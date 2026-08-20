@@ -47,12 +47,13 @@ export function useCalendar(scopeUserId?: string) {
 
   const addEvent = useCallback(async (event: Omit<CalendarEvent, "id">) => {
     if (!uid) return;
-    await addDoc(collection(db, "calendar", uid, "events"), {
+    const ref = await addDoc(collection(db, "calendar", uid, "events"), {
       ...event,
       createdBy: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    return ref.id;
   }, [uid]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CalendarEvent>) => {

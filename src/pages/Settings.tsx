@@ -36,6 +36,7 @@ const TEXT_COLOR_OPTIONS = [
 const ALL_NAV_OPTIONS = [
   { path: "/dashboard",         label: "Home" },
   { path: "/tasks",             label: "Tasks" },
+  { path: "/notes",             label: "Notes" },
   { path: "/finance",           label: "Finance" },
   { path: "/pets",              label: "Pets" },
   { path: "/admin",             label: "Admin" },

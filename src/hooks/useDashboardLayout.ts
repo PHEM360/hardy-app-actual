@@ -16,7 +16,8 @@ export type WidgetType =
   | "pets"
   | "tattersalls"
   | "companies"
-  | "weight";
+  | "weight"
+  | "notes";
 
 export interface WidgetLayoutItem {
   id: string;       // stable unique id (matches type for single-instance widgets)
@@ -43,6 +44,7 @@ export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { id: "tattersalls",   type: "tattersalls",   xFrac: 0.5, wFrac: 0.5, y: 1212, h: 230,  visible: true  },
   { id: "companies",     type: "companies",     xFrac: 0,   wFrac: 0.5, y: 1460, h: 230,  visible: true  },
   { id: "weight",        type: "weight",        xFrac: 0.5, wFrac: 0.5, y: 1460, h: 230,  visible: true  },
+  { id: "notes",         type: "notes",         xFrac: 0,   wFrac: 1.0, y: 1708, h: 230,  visible: false },
 ];
 
 export const WIDGET_LABELS: Record<WidgetType, string> = {
@@ -57,6 +59,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   tattersalls:   "Tattersalls",
   companies:     "Companies",
   weight:        "Health",
+  notes:         "Notes",
 };
 
 export const WIDGET_ICONS: Record<WidgetType, string> = {
@@ -71,6 +74,7 @@ export const WIDGET_ICONS: Record<WidgetType, string> = {
   tattersalls:   "🏛️",
   companies:     "🏢",
   weight:        "⚖️",
+  notes:         "📝",
 };
 
 // Bump whenever DEFAULT_LAYOUT's geometry (xFrac/wFrac/y/h) changes meaningfully.

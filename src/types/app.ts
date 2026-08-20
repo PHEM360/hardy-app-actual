@@ -15,6 +15,7 @@ export type FeatureKey =
   | "calendar"
   | "ai_analysis"
   | "annual_leave"
+  | "notes"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -164,6 +165,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "plane",
     route: "/annual-leave",
     color: "info",
+  },
+  {
+    key: "notes",
+    label: "Notes",
+    description: "Notes, checklists & a Notion-style workspace",
+    icon: "sticky-note",
+    route: "/notes",
+    color: "warning",
   },
 ];
 
@@ -602,6 +611,7 @@ export interface CalendarSettings {
     household?: boolean;       // show household item renewal dates
     tasks?: boolean;           // show task due dates
     companies?: boolean;       // show company insurance/tax renewal dates
+    notes?: boolean;           // show dated notes from the Notes workspace
   };
   updatedAt?: any;
 }
