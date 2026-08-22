@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  CalendarPlus, CheckSquare, Lock, Plus, Share2, Shield, StickyNote, Trash2, Unlock, ExternalLink,
+  CalendarPlus, CheckSquare, ExternalLink, Lock, PenLine, Plus, Share2, Shield, StickyNote, Trash2, Unlock, X,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { HubNote, NoteFolder, NoteKind, NoteCategory } from "@/types/notes";
+import type { HubNote, NoteCanvas, NoteFolder, NoteKind, NoteCategory } from "@/types/notes";
 import { NOTE_CATEGORIES, NOTE_COLORS } from "@/types/notes";
 import { googleCalendarUrl } from "@/lib/noteCalendar";
 import { encryptPayload, decryptPayload } from "@/lib/noteCrypto";
 import { NoteDiagramEditor } from "@/components/notes/NoteDiagram";
+import { NoteCanvasEditor } from "@/components/notes/NoteCanvasEditor";
 import { toast } from "sonner";
 
 interface NoteEditorProps {
@@ -31,6 +31,8 @@ interface NoteEditorProps {
   onLeaveVault: () => Promise<void>;
   onAddToHubCalendar: () => Promise<void>;
   defaultKind?: NoteKind;
+  ownerId: string;
+  noteId: string;
 }
 
 const EMPTY: Partial<HubNote> = {
@@ -42,6 +44,7 @@ const EMPTY: Partial<HubNote> = {
   folderId: null,
   checklist: [],
   diagram: null,
+  canvas: { version: 1, height: 520, blocks: [] },
   pinned: false,
   tags: [],
 };
@@ -61,25 +64,42 @@ export function NoteEditor({
   onLeaveVault,
   onAddToHubCalendar,
   defaultKind = "note",
+  ownerId,
+  noteId,
 }: NoteEditorProps) {
   const [draft, setDraft] = useState<Partial<HubNote>>(EMPTY);
   const [passphrase, setPassphrase] = useState("");
   const [unlockedBody, setUnlockedBody] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [showDiagram, setShowDiagram] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setDraft(
-      note
-        ? { ...note }
-        : {
-            ...EMPTY,
-            kind: defaultKind,
-            checklist: defaultKind === "checklist" || defaultKind === "task"
-              ? [{ id: `c${Date.now()}`, text: "", done: false }]
-              : [],
-          }
+    const initialChecklist = note?.checklist ?? (
+      defaultKind === "checklist" || defaultKind === "task"
+        ? [{ id: `c${Date.now()}`, text: "", done: false }]
+        : []
     );
+    const initialCanvas: NoteCanvas = note?.canvas ?? {
+      version: 1,
+      height: 520,
+      blocks: note?.body ? [{
+        id: `legacy-body-${note.id}`,
+        type: "text",
+        x: 18,
+        y: 18,
+        width: 300,
+        height: 180,
+        text: note.body,
+        textStyle: "body",
+      }] : [],
+    };
+    setDraft(note
+      ? { ...note, canvas: initialCanvas }
+      : { ...EMPTY, kind: defaultKind, checklist: initialChecklist, canvas: initialCanvas });
+    setShowChecklist(initialChecklist.length > 0 || defaultKind === "checklist" || defaultKind === "task");
+    setShowDiagram(!!note?.diagram);
     setPassphrase("");
     setUnlockedBody(!note?.locked);
   }, [open, note, defaultKind]);
@@ -98,14 +118,37 @@ export function NoteEditor({
         return;
       }
       const json = await decryptPayload(secret, note.cipher.salt, note.cipher.iv, note.cipher.data);
-      const parsed = JSON.parse(json) as { title?: string; body?: string; checklist?: HubNote["checklist"]; diagram?: HubNote["diagram"] };
+      const parsed = JSON.parse(json) as {
+        title?: string;
+        body?: string;
+        checklist?: HubNote["checklist"];
+        diagram?: HubNote["diagram"];
+        canvas?: HubNote["canvas"];
+      };
+      const revealedCanvas = parsed.canvas ?? (parsed.body ? {
+        version: 1 as const,
+        height: 520,
+        blocks: [{
+          id: `legacy-locked-body-${note.id}`,
+          type: "text" as const,
+          x: 18,
+          y: 18,
+          width: 300,
+          height: 180,
+          text: parsed.body,
+          textStyle: "body" as const,
+        }],
+      } : undefined);
       setDraft((d) => ({
         ...d,
         title: parsed.title ?? d.title,
         body: parsed.body ?? d.body,
         checklist: parsed.checklist ?? d.checklist,
         diagram: parsed.diagram ?? d.diagram,
+        canvas: revealedCanvas ?? d.canvas,
       }));
+      setShowChecklist(!!parsed.checklist?.length);
+      setShowDiagram(!!parsed.diagram);
       setUnlockedBody(true);
     } catch {
       toast.error("Wrong password");
@@ -114,17 +157,28 @@ export function NoteEditor({
 
   const save = async () => {
     if (!canEdit) return;
+    if (!draft.title?.trim()) {
+      toast.error("Give this note a name");
+      return;
+    }
     setBusy(true);
     try {
+      const canvas = draft.canvas ?? { version: 1 as const, height: 520, blocks: [] };
+      const searchableBody = canvas.blocks
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n\n")
+        .trim();
       await onSave({
         title: draft.title,
-        body: draft.body,
+        body: searchableBody,
         kind: draft.kind as NoteKind,
         color: draft.color,
         category: (draft.category as NoteCategory) || "personal",
         folderId: draft.folderId ?? null,
         checklist: draft.checklist,
         diagram: draft.diagram ?? null,
+        canvas,
         dueDate: draft.dueDate || undefined,
         pinned: !!draft.pinned,
         archived: !!draft.archived,
@@ -148,13 +202,21 @@ export function NoteEditor({
     try {
       const cipher = await encryptPayload(
         passphrase,
-        JSON.stringify({ title: draft.title, body: draft.body, checklist: draft.checklist, diagram: draft.diagram })
+        JSON.stringify({
+          title: draft.title,
+          body: draft.body,
+          checklist: draft.checklist,
+          diagram: draft.diagram,
+          canvas: draft.canvas,
+        })
       );
       await onSave(
         {
           title: draft.title,
           body: "",
           checklist: [],
+          diagram: null,
+          canvas: null,
           locked: true,
           cipher,
         },
@@ -167,17 +229,14 @@ export function NoteEditor({
     }
   };
 
-  const colorSwatch = useMemo(
-    () => NOTE_COLORS.find((c) => c.id === (draft.color || "default"))?.swatch,
-    [draft.color]
-  );
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-md">
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-3xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            {draft.kind === "checklist" || draft.kind === "task" ? (
+            {draft.kind === "drawing" ? (
+              <PenLine className="h-4 w-4" />
+            ) : draft.kind === "checklist" || draft.kind === "task" ? (
               <CheckSquare className="h-4 w-4" />
             ) : (
               <StickyNote className="h-4 w-4" />
@@ -222,9 +281,34 @@ export function NoteEditor({
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="space-y-1">
-                <Label>Folder</Label>
+                <Label>Save to tab</Label>
+                <Select
+                  value={draft.kind === "drawing" ? "drawing" : draft.kind === "checklist" || draft.kind === "task" ? "checklist" : "note"}
+                  onValueChange={(value) => {
+                    const kind = value as NoteKind;
+                    setDraft((current) => ({ ...current, kind }));
+                    if (kind === "checklist") {
+                      setShowChecklist(true);
+                      setDraft((current) => ({
+                        ...current,
+                        checklist: current.checklist?.length ? current.checklist : [{ id: `c${Date.now()}`, text: "", done: false }],
+                      }));
+                    }
+                  }}
+                  disabled={!canEdit}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="note">Notes</SelectItem>
+                    <SelectItem value="drawing">Drawings & sketches</SelectItem>
+                    <SelectItem value="checklist">Checklists</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Save in</Label>
                 <Select
                   value={draft.folderId ?? "inbox"}
                   onValueChange={(v) => setDraft((d) => ({ ...d, folderId: v === "inbox" ? null : v }))}
@@ -256,68 +340,94 @@ export function NoteEditor({
               </div>
             </div>
 
-            <Textarea
-              value={draft.body ?? ""}
-              readOnly={!canEdit}
-              onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
-              placeholder="Write the note…"
-              className="min-h-[140px]"
-              style={colorSwatch && draft.color !== "default" ? { backgroundColor: `color-mix(in srgb, ${colorSwatch} 35%, transparent)` } : undefined}
-            />
-
-            <div className="space-y-2 rounded-xl border border-border p-3">
-              <div>
-                <p className="text-sm font-medium flex items-center gap-1.5">
-                  <CheckSquare className="h-4 w-4" /> Checklist
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Optional to-dos on this note. Tick them here, or add a date to see them on the board and calendar. The separate Tasks page is still the full task manager.
-                </p>
-              </div>
-              {(draft.checklist ?? []).map((item, idx) => (
-                <div key={item.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={item.done}
-                    disabled={!canEdit}
-                    onChange={(e) => {
-                      const next = [...(draft.checklist ?? [])];
-                      next[idx] = { ...item, done: e.target.checked };
-                      setDraft((d) => ({ ...d, checklist: next }));
-                    }}
-                  />
-                  <Input
-                    value={item.text}
-                    readOnly={!canEdit}
-                    onChange={(e) => {
-                      const next = [...(draft.checklist ?? [])];
-                      next[idx] = { ...item, text: e.target.value };
-                      setDraft((d) => ({ ...d, checklist: next }));
-                    }}
-                  />
-                </div>
-              ))}
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDraft((d) => ({
-                    ...d,
-                    kind: d.kind === "note" ? "checklist" : d.kind,
-                    checklist: [...(d.checklist ?? []), { id: `c${Date.now()}`, text: "", done: false }],
-                  }))}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add item
-                </Button>
-              )}
-            </div>
-
-            <NoteDiagramEditor
-              diagram={draft.diagram}
+            <NoteCanvasEditor
+              canvas={draft.canvas ?? { version: 1, height: 520, blocks: [] }}
               canEdit={canEdit}
-              onChange={(diagram) => setDraft((d) => ({ ...d, diagram }))}
+              ownerId={ownerId}
+              noteId={noteId}
+              onChange={(canvas) => setDraft((current) => ({ ...current, canvas }))}
+              onAddChecklist={() => {
+                setShowChecklist(true);
+                setDraft((current) => ({
+                  ...current,
+                  checklist: current.checklist?.length ? current.checklist : [{ id: `c${Date.now()}`, text: "", done: false }],
+                }));
+              }}
+              onAddDiagram={() => setShowDiagram(true)}
             />
+
+            {showChecklist && (
+              <div className="space-y-2 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <p className="flex flex-1 items-center gap-1.5 text-sm font-semibold">
+                    <CheckSquare className="h-4 w-4" /> Checklist
+                  </p>
+                  {canEdit && (
+                    <button type="button" onClick={() => {
+                      setShowChecklist(false);
+                      setDraft((current) => ({ ...current, checklist: [], kind: current.kind === "checklist" ? "note" : current.kind }));
+                    }} className="rounded-lg p-1 text-muted-foreground hover:bg-muted" aria-label="Remove checklist">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {(draft.checklist ?? []).map((item, idx) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      disabled={!canEdit}
+                      onChange={(event) => {
+                        const next = [...(draft.checklist ?? [])];
+                        next[idx] = { ...item, done: event.target.checked };
+                        setDraft((current) => ({ ...current, checklist: next }));
+                      }}
+                    />
+                    <Input
+                      value={item.text}
+                      readOnly={!canEdit}
+                      placeholder="Checklist item"
+                      onChange={(event) => {
+                        const next = [...(draft.checklist ?? [])];
+                        next[idx] = { ...item, text: event.target.value };
+                        setDraft((current) => ({ ...current, checklist: next }));
+                      }}
+                    />
+                    {canEdit && (
+                      <button type="button" onClick={() => setDraft((current) => ({ ...current, checklist: current.checklist?.filter((entry) => entry.id !== item.id) }))} className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setDraft((current) => ({
+                    ...current,
+                    checklist: [...(current.checklist ?? []), { id: `c${Date.now()}`, text: "", done: false }],
+                  }))}>
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add item
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {showDiagram && (
+              <div className="relative">
+                {canEdit && (
+                  <button type="button" onClick={() => {
+                    setShowDiagram(false);
+                    setDraft((current) => ({ ...current, diagram: null }));
+                  }} className="absolute right-2 top-2 z-20 rounded-lg bg-card p-1 text-muted-foreground shadow-sm hover:text-destructive" aria-label="Remove flowchart">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                <NoteDiagramEditor
+                  diagram={draft.diagram}
+                  canEdit={canEdit}
+                  onChange={(diagram) => setDraft((current) => ({ ...current, diagram }))}
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Date</Label>
@@ -362,7 +472,7 @@ export function NoteEditor({
 
             {canEdit && (
               <div className="flex flex-col gap-2">
-                <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+                <Button onClick={save} disabled={busy || !draft.title?.trim()}>{busy ? "Saving…" : "Save"}</Button>
                 {draft.dueDate && (
                   <div className="grid grid-cols-2 gap-2">
                     <Button type="button" variant="outline" onClick={onAddToHubCalendar}>
@@ -392,7 +502,15 @@ export function NoteEditor({
                   </div>
                 )}
                 {isOwn && note?.locked && (
-                  <Button type="button" variant="outline" onClick={() => onSave({ locked: false, cipher: null }, { decrypt: true })}>
+                  <Button type="button" variant="outline" onClick={() => onSave({
+                    locked: false,
+                    cipher: null,
+                    title: draft.title,
+                    body: draft.body,
+                    checklist: draft.checklist,
+                    diagram: draft.diagram,
+                    canvas: draft.canvas,
+                  }, { decrypt: true })}>
                     <Unlock className="mr-1 h-3.5 w-3.5" /> Remove password
                   </Button>
                 )}

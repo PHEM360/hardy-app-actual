@@ -47,6 +47,7 @@ function mapNote(id: string, ownerId: string, data: Record<string, unknown>): Hu
     tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
     checklist: Array.isArray(data.checklist) ? (data.checklist as NoteChecklistItem[]) : [],
     diagram: (data.diagram as HubNote["diagram"]) ?? null,
+    canvas: (data.canvas as HubNote["canvas"]) ?? null,
     dueDate: typeof data.dueDate === "string" ? data.dueDate : undefined,
     calendarEventId: typeof data.calendarEventId === "string" ? data.calendarEventId : undefined,
     addToCalendar: !!data.addToCalendar,
@@ -247,6 +248,7 @@ export function useNotes(scopeUserId?: string) {
       tags: input.tags ?? [],
       checklist: input.checklist ?? [],
       diagram: input.diagram ?? null,
+      canvas: input.canvas ?? null,
       dueDate: input.dueDate ?? null,
       calendarEventId: input.calendarEventId ?? null,
       addToCalendar: !!input.addToCalendar,
@@ -258,6 +260,10 @@ export function useNotes(scopeUserId?: string) {
       updatedAt: serverTimestamp(),
     };
     const col = input.vault ? "vault" : "items";
+    if (input.id) {
+      await setDoc(doc(db, "hubNotes", uid, col, input.id), payload);
+      return input.id;
+    }
     const ref = await addDoc(collection(db, "hubNotes", uid, col), payload);
     return ref.id;
   }, [uid, folders, notes.length]);

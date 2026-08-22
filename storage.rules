@@ -41,6 +41,11 @@ service firebase.storage {
       );
     }
 
+    function validNoteMedia() {
+      return request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType.matches('(image|video|audio)/.*');
+    }
+
     match /tattersalls/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
@@ -67,6 +72,20 @@ service firebase.storage {
     match /aiAnalysis/{userId}/{allPaths=**} {
       allow read: if canViewPageStorage(userId, "ai_analysis");
       allow write: if canEditPageStorage(userId, "ai_analysis");
+    }
+
+    match /hubNotes/{userId}/media/{noteId}/{fileName} {
+      allow read: if canViewPageStorage(userId, "notes") ||
+        (request.auth != null &&
+          firestore.exists(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)) &&
+          request.auth.uid in firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharedWith);
+      allow write: if validNoteMedia() && (
+        canEditPageStorage(userId, "notes") ||
+          (request.auth != null &&
+            firestore.exists(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)) &&
+            request.auth.uid in firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharedWith &&
+            firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharePermission == "edit")
+      );
     }
 
     match /{allPaths=**} {

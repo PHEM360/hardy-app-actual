@@ -1,4 +1,4 @@
-export type NoteKind = "note" | "checklist" | "task";
+export type NoteKind = "note" | "checklist" | "task" | "drawing";
 export type NotesView = "grid" | "list" | "board" | "calendar" | "agenda";
 export type NoteSharePermission = "view" | "edit";
 export type VaultUnlockMethod = "pin" | "webauthn" | "both";
@@ -47,6 +47,67 @@ export interface NoteDiagram {
   edges: NoteDiagramEdge[];
 }
 
+export type NoteCanvasBlock =
+  | {
+      id: string;
+      type: "text";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      text: string;
+      textStyle: "body" | "heading" | "callout";
+    }
+  | {
+      id: string;
+      type: "shape";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      shape: "rectangle" | "ellipse" | "diamond";
+      label: string;
+      fill: string;
+    }
+  | {
+      id: string;
+      type: "drawing";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      paths: string[];
+      stroke: string;
+    }
+  | {
+      id: string;
+      type: "media";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      mediaType: "image" | "video" | "audio";
+      url: string;
+      name: string;
+    }
+  | {
+      id: string;
+      type: "location";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      latitude: number;
+      longitude: number;
+      label: string;
+    };
+
+export interface NoteCanvas {
+  version: 1;
+  height: number;
+  blocks: NoteCanvasBlock[];
+}
+
 export interface HubNote {
   id: string;
   ownerId: string;
@@ -61,6 +122,7 @@ export interface HubNote {
   tags: string[];
   checklist: NoteChecklistItem[];
   diagram?: NoteDiagram | null;
+  canvas?: NoteCanvas | null;
   dueDate?: string;
   calendarEventId?: string;
   addToCalendar?: boolean;

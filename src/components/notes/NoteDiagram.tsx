@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { GitBranch, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,46 +58,141 @@ const TEMPLATES: { id: string; label: string; build: () => NoteDiagram }[] = [
   },
 ];
 
+const NODE_LINE_HEIGHT = 14;
+
+function wrapLabel(label: string, maxCharacters: number) {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+
+  const pieces = words.flatMap((word) => {
+    if (word.length <= maxCharacters) return [word];
+    return Array.from({ length: Math.ceil(word.length / maxCharacters) }, (_, index) =>
+      word.slice(index * maxCharacters, (index + 1) * maxCharacters),
+    );
+  });
+  return pieces.reduce<string[]>((lines, word) => {
+    const last = lines.at(-1);
+    if (!last || last.length + word.length + 1 > maxCharacters) lines.push(word);
+    else lines[lines.length - 1] = `${last} ${word}`;
+    return lines;
+  }, []);
+}
+
 function shapePath(n: NoteDiagramNode) {
-  const w = n.shape === "diamond" ? 120 : n.shape === "circle" ? 72 : 128;
-  const h = n.shape === "diamond" ? 72 : n.shape === "circle" ? 72 : n.shape === "oval" ? 48 : 44;
+  const lines = wrapLabel(n.label, n.shape === "diamond" || n.shape === "circle" ? 16 : 22);
+  const textWidth = Math.max(...lines.map((line) => line.length), 1) * 6.4;
+  const textHeight = Math.max(lines.length, 1) * NODE_LINE_HEIGHT;
+  let w = Math.max(n.shape === "diamond" ? 120 : n.shape === "circle" ? 72 : 128, textWidth + 28);
+  let h = Math.max(n.shape === "diamond" ? 72 : n.shape === "circle" ? 72 : n.shape === "oval" ? 48 : 44, textHeight + 20);
+  if (n.shape === "diamond") {
+    w = Math.max(w, textWidth + 64);
+    h = Math.max(h, textHeight + 42);
+  } else if (n.shape === "circle") {
+    w = h = Math.max(w, h);
+  }
   const x = n.x - w / 2;
   const y = n.y - h / 2;
   if (n.shape === "diamond") {
-    return { type: "polygon" as const, points: `${n.x},${y} ${x + w},${n.y} ${n.x},${y + h} ${x},${n.y}`, x, y, w, h };
+    return { type: "polygon" as const, points: `${n.x},${y} ${x + w},${n.y} ${n.x},${y + h} ${x},${n.y}`, x, y, w, h, lines };
   }
-  return { type: n.shape === "circle" || n.shape === "oval" ? "ellipse" as const : "rect" as const, x, y, w, h };
+  return { type: n.shape === "circle" || n.shape === "oval" ? "ellipse" as const : "rect" as const, x, y, w, h, lines };
+}
+
+type NodeShape = ReturnType<typeof shapePath>;
+
+function boundaryPoint(node: NoteDiagramNode, shape: NodeShape, dx: number, dy: number) {
+  if (dx === 0 && dy === 0) return { x: node.x, y: node.y };
+  const rx = shape.w / 2;
+  const ry = shape.h / 2;
+  let scale: number;
+  if (shape.type === "ellipse") {
+    scale = 1 / Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+  } else if (shape.type === "polygon") {
+    scale = 1 / (Math.abs(dx) / rx + Math.abs(dy) / ry);
+  } else {
+    scale = 1 / Math.max(Math.abs(dx) / rx, Math.abs(dy) / ry);
+  }
+  return { x: node.x + dx * scale, y: node.y + dy * scale };
 }
 
 export function DiagramCanvas({ diagram, className }: { diagram: NoteDiagram; className?: string }) {
-  const height = Math.max(220, ...diagram.nodes.map((n) => n.y + 50), 0);
+  const markerId = `note-diagram-arrow-${useId().replace(/:/g, "")}`;
   const nodeMap = useMemo(() => Object.fromEntries(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
+  const shapes = useMemo(
+    () => Object.fromEntries(diagram.nodes.map((node) => [node.id, shapePath(node)])),
+    [diagram.nodes],
+  );
+  const edges = diagram.edges.flatMap((edge) => {
+    const from = nodeMap[edge.from];
+    const to = nodeMap[edge.to];
+    if (!from || !to) return [];
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const start = boundaryPoint(from, shapes[from.id], dx, dy);
+    const end = boundaryPoint(to, shapes[to.id], -dx, -dy);
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    const normalX = length ? -(end.y - start.y) / length : 0;
+    const normalY = length ? (end.x - start.x) / length : 0;
+    const labelWidth = edge.label ? Math.max(20, edge.label.length * 6.2 + 10) : 0;
+    const labelHeight = edge.label ? 18 : 0;
+    const labelX = start.x + (end.x - start.x) * 0.46 + normalX * 11;
+    const labelY = start.y + (end.y - start.y) * 0.46 + normalY * 11;
+    return [{ edge, start, end, labelX, labelY, labelWidth, labelHeight }];
+  });
+  const bounds = [
+    ...diagram.nodes.map((node) => {
+      const shape = shapes[node.id];
+      return { minX: shape.x, minY: shape.y, maxX: shape.x + shape.w, maxY: shape.y + shape.h };
+    }),
+    ...edges.flatMap(({ start, end, labelX, labelY, labelWidth, labelHeight }) => [
+      { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) },
+      ...(labelWidth ? [{
+        minX: labelX - labelWidth / 2,
+        minY: labelY - labelHeight / 2,
+        maxX: labelX + labelWidth / 2,
+        maxY: labelY + labelHeight / 2,
+      }] : []),
+    ]),
+  ];
+  const padding = 18;
+  const minX = bounds.length ? Math.min(...bounds.map((bound) => bound.minX)) - padding : 0;
+  const minY = bounds.length ? Math.min(...bounds.map((bound) => bound.minY)) - padding : 0;
+  const maxX = bounds.length ? Math.max(...bounds.map((bound) => bound.maxX)) + padding : 360;
+  const maxY = bounds.length ? Math.max(...bounds.map((bound) => bound.maxY)) + padding : 220;
+
   return (
-    <svg viewBox={`0 0 360 ${height}`} className={className ?? "w-full h-auto"} role="img">
-      {diagram.edges.map((e) => {
-        const a = nodeMap[e.from];
-        const b = nodeMap[e.to];
-        if (!a || !b) return null;
-        const mx = (a.x + b.x) / 2;
-        const my = (a.y + b.y) / 2;
+    <svg viewBox={`${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`} className={className ?? "w-full h-auto"} role="img">
+      <defs>
+        <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity="0.55" />
+        </marker>
+      </defs>
+      {edges.map(({ edge, start, end, labelX, labelY, labelWidth, labelHeight }) => {
         return (
-          <g key={e.id}>
-            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="currentColor" strokeWidth="1.6" markerEnd="url(#arrow)" opacity="0.55" />
-            {e.label && (
-              <text x={mx} y={my - 6} textAnchor="middle" fontSize="10" fill="currentColor" className="opacity-70">
-                {e.label}
-              </text>
+          <g key={edge.id}>
+            <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="currentColor" strokeWidth="1.6" markerEnd={`url(#${markerId})`} opacity="0.55" />
+            {edge.label && (
+              <g>
+                <rect
+                  x={labelX - labelWidth / 2}
+                  y={labelY - labelHeight / 2}
+                  width={labelWidth}
+                  height={labelHeight}
+                  rx="5"
+                  fill="hsl(var(--card))"
+                  stroke="hsl(var(--border))"
+                  strokeWidth="0.75"
+                />
+                <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="600" fill="currentColor">
+                  {edge.label}
+                </text>
+              </g>
             )}
           </g>
         );
       })}
-      <defs>
-        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity="0.55" />
-        </marker>
-      </defs>
       {diagram.nodes.map((n) => {
-        const s = shapePath(n);
+        const s = shapes[n.id];
         return (
           <g key={n.id}>
             {s.type === "polygon" && (
@@ -109,8 +204,12 @@ export function DiagramCanvas({ diagram, className }: { diagram: NoteDiagram; cl
             {s.type === "rect" && (
               <rect x={s.x} y={s.y} width={s.w} height={s.h} rx="8" fill="hsl(var(--card))" stroke="currentColor" strokeWidth="1.4" />
             )}
-            <text x={n.x} y={n.y + 4} textAnchor="middle" fontSize="11" fontWeight="600" fill="currentColor">
-              {n.label.slice(0, 16)}
+            <text textAnchor="middle" fontSize="11" fontWeight="600" fill="currentColor">
+              {s.lines.map((line, index) => (
+                <tspan key={`${index}-${line}`} x={n.x} y={n.y + (index - (s.lines.length - 1) / 2) * NODE_LINE_HEIGHT} dominantBaseline="central">
+                  {line}
+                </tspan>
+              ))}
             </text>
           </g>
         );

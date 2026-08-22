@@ -1,4 +1,4 @@
-import { CheckSquare, GitBranch, Lock, Pin } from "lucide-react";
+import { CheckSquare, GitBranch, Lock, PenLine, Pin } from "lucide-react";
 import type { HubNote, NotesListStyle } from "@/types/notes";
 import { NOTE_CATEGORIES } from "@/types/notes";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
@@ -25,6 +25,8 @@ export function NoteCard({
   const items = (note.checklist ?? []).filter((i) => i.text.trim());
   const done = items.filter((i) => i.done).length;
   const cat = NOTE_CATEGORIES.find((c) => c.id === note.category);
+  const drawing = note.canvas?.blocks.find((block) => block.type === "drawing");
+  const image = note.canvas?.blocks.find((block) => block.type === "media" && block.mediaType === "image");
 
   return (
     <button
@@ -40,6 +42,7 @@ export function NoteCard({
         {note.locked && <Lock className="h-3.5 w-3.5" />}
         {items.length > 0 && <CheckSquare className="h-3.5 w-3.5" />}
         {note.diagram?.nodes?.length ? <GitBranch className="h-3.5 w-3.5" /> : null}
+        {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
         {cat && (
           <span className="ml-auto rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
             {cat.label}
@@ -53,6 +56,16 @@ export function NoteCard({
         <p className={`mt-1.5 whitespace-pre-wrap leading-relaxed ${compact ? "line-clamp-3 text-[11px]" : "line-clamp-6 text-[13px]"} ${filled ? "text-stone-800/85" : "text-foreground/75"}`}>
           {note.body}
         </p>
+      )}
+      {!note.locked && image?.type === "media" && (
+        <img src={image.url} alt="" className="mt-3 h-32 w-full rounded-xl object-cover" />
+      )}
+      {!note.locked && !image && drawing?.type === "drawing" && drawing.paths.length > 0 && (
+        <svg viewBox={`0 0 ${drawing.width} ${drawing.height}`} className="mt-3 h-28 w-full rounded-xl bg-white/75">
+          {drawing.paths.map((path, index) => (
+            <path key={index} d={path} fill="none" stroke={drawing.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+        </svg>
       )}
       {!note.locked && items.length > 0 && (
         <div className="mt-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>

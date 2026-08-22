@@ -6,6 +6,7 @@ const KIND_SWATCH: Record<string, string> = {
   note: "#fde68a",
   checklist: "#86efac",
   task: "#c4b5fd",
+  drawing: "#93c5fd",
 };
 
 const STATUS_SWATCH = {
