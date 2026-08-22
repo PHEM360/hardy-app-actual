@@ -1,410 +1,924 @@
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { KeyRound, Plus, Eye, EyeOff, Copy, Trash2, Check, Globe, User, Lock, ChevronDown, ChevronUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-  serverTimestamp, query, orderBy,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Globe,
+  KeyRound,
+  Lock,
+  LockKeyhole,
+  Pencil,
+  Phone,
+  Plus,
+  Search,
+  Share2,
+  ShieldCheck,
+  Trash2,
+  User,
+  X,
+} from "lucide-react";
+import {
+  addDoc,
+  collection,
+  collectionGroup,
+  deleteDoc,
+  deleteField,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import PasswordVaultGate from "@/components/passwords/PasswordVaultGate";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useSharedScope } from "@/hooks/useSharedScope";
+import { usePageShares, type SharePermission } from "@/hooks/usePageShares";
+import { useAppUsers } from "@/hooks/useAppUsers";
+import {
+  decryptCredential,
+  encryptCredential,
+  encryptCredentialWithItemKey,
+  importPrivateKey,
+  wrapCredentialKey,
+  type CredentialField,
+  type CredentialFieldType,
+  type PasswordVaultConfig,
+  type PlainCredential,
+  type VaultCipher,
+  type VaultPublicKey,
+} from "@/lib/passwordVaultCrypto";
+import { toast } from "sonner";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Credential {
-  id?: string;
-  name: string;
-  url?: string;
-  username?: string;
-  email?: string;
-  password: string;
-  notes?: string;
-  category?: string;
-  createdAt?: unknown;
-  updatedAt?: unknown;
+interface IndividualShare {
+  uid: string;
+  permission: SharePermission;
 }
 
-const EMPTY: Omit<Credential, "id" | "createdAt" | "updatedAt"> = {
-  name: "", url: "", username: "", email: "", password: "", notes: "", category: "",
+interface EncryptedCredentialDoc {
+  id: string;
+  ownerId: string;
+  encrypted?: boolean;
+  cipher?: VaultCipher;
+  wrappedKeys?: Record<string, string>;
+  sharedWith?: string[];
+  editors?: string[];
+  individualShares?: IndividualShare[];
+  individualAccess?: string[];
+  individualEditors?: string[];
+  legacy?: Partial<PlainCredential>;
+}
+
+interface VaultCredential extends PlainCredential {
+  id: string;
+  ownerId: string;
+  itemKey: Uint8Array;
+  wrappedKeys: Record<string, string>;
+  sharedWith: string[];
+  editors: string[];
+  individualShares: IndividualShare[];
+  individualAccess: string[];
+  individualEditors: string[];
+}
+
+const EMPTY: PlainCredential = {
+  name: "",
+  url: "",
+  username: "",
+  email: "",
+  password: "",
+  fields: [],
+  notes: "",
+  category: "",
 };
+
+const FIELD_OPTIONS: { type: CredentialFieldType; label: string }[] = [
+  { type: "username", label: "Username" },
+  { type: "email", label: "Email address" },
+  { type: "userId", label: "User ID" },
+  { type: "password", label: "Password" },
+  { type: "website", label: "Website" },
+  { type: "phone", label: "Phone number" },
+  { type: "accountNumber", label: "Account number" },
+  { type: "membershipNumber", label: "Membership number" },
+  { type: "pin", label: "PIN or security code" },
+  { type: "other", label: "Other…" },
+];
+
+function newField(type: CredentialFieldType, label?: string): CredentialField {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    label: label || FIELD_OPTIONS.find((option) => option.type === type)?.label || "Other",
+    value: "",
+  };
+}
+
+function credentialFields(credential: PlainCredential): CredentialField[] {
+  if (Array.isArray(credential.fields)) return credential.fields;
+  return [
+    credential.url ? { id: "legacy-url", type: "website" as const, label: "Website", value: credential.url } : null,
+    credential.email ? { id: "legacy-email", type: "email" as const, label: "Email address", value: credential.email } : null,
+    credential.username ? { id: "legacy-username", type: "username" as const, label: "Username", value: credential.username } : null,
+    credential.password ? { id: "legacy-password", type: "password" as const, label: "Password", value: credential.password } : null,
+  ].filter(Boolean) as CredentialField[];
+}
+
+function secretField(type: CredentialFieldType) {
+  return type === "password" || type === "pin";
+}
+
+function fieldIcon(type: CredentialFieldType): ReactNode {
+  if (type === "website") return <Globe className="h-3.5 w-3.5" />;
+  if (type === "email") return <span className="text-xs font-bold">@</span>;
+  if (type === "phone") return <Phone className="h-3.5 w-3.5" />;
+  if (secretField(type)) return <Lock className="h-3.5 w-3.5" />;
+  return <User className="h-3.5 w-3.5" />;
+}
 
 const CATEGORIES = ["Banking", "Email", "Shopping", "Work", "Social", "Finance", "Health", "Government", "Other"];
-
-const CAT_STYLES: Record<string, { border: string; avatar: string; avatarText: string }> = {
-  Banking:    { border: "border-l-blue-400",   avatar: "bg-blue-100 dark:bg-blue-900/40",   avatarText: "text-blue-700 dark:text-blue-300" },
-  Email:      { border: "border-l-green-400",  avatar: "bg-green-100 dark:bg-green-900/40", avatarText: "text-green-700 dark:text-green-300" },
-  Shopping:   { border: "border-l-orange-400", avatar: "bg-orange-100 dark:bg-orange-900/40", avatarText: "text-orange-700 dark:text-orange-300" },
-  Work:       { border: "border-l-purple-400", avatar: "bg-purple-100 dark:bg-purple-900/40", avatarText: "text-purple-700 dark:text-purple-300" },
-  Social:     { border: "border-l-pink-400",   avatar: "bg-pink-100 dark:bg-pink-900/40",   avatarText: "text-pink-700 dark:text-pink-300" },
-  Finance:    { border: "border-l-emerald-400",avatar: "bg-emerald-100 dark:bg-emerald-900/40", avatarText: "text-emerald-700 dark:text-emerald-300" },
-  Health:     { border: "border-l-red-400",    avatar: "bg-red-100 dark:bg-red-900/40",     avatarText: "text-red-700 dark:text-red-300" },
-  Government: { border: "border-l-slate-400",  avatar: "bg-slate-100 dark:bg-slate-800/60", avatarText: "text-slate-700 dark:text-slate-300" },
-  Other:      { border: "border-l-gray-300",   avatar: "bg-gray-100 dark:bg-gray-800/60",   avatarText: "text-gray-600 dark:text-gray-400" },
+const CAT_STYLES: Record<string, { border: string; avatar: string; text: string }> = {
+  Banking: { border: "border-l-blue-400", avatar: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-700 dark:text-blue-300" },
+  Email: { border: "border-l-emerald-400", avatar: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-300" },
+  Shopping: { border: "border-l-orange-400", avatar: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-700 dark:text-orange-300" },
+  Work: { border: "border-l-violet-400", avatar: "bg-violet-100 dark:bg-violet-900/40", text: "text-violet-700 dark:text-violet-300" },
+  Social: { border: "border-l-pink-400", avatar: "bg-pink-100 dark:bg-pink-900/40", text: "text-pink-700 dark:text-pink-300" },
+  Finance: { border: "border-l-teal-400", avatar: "bg-teal-100 dark:bg-teal-900/40", text: "text-teal-700 dark:text-teal-300" },
+  Health: { border: "border-l-red-400", avatar: "bg-red-100 dark:bg-red-900/40", text: "text-red-700 dark:text-red-300" },
+  Government: { border: "border-l-slate-400", avatar: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" },
 };
 
-function getCatStyle(cat?: string) {
-  return CAT_STYLES[cat ?? ""] ?? { border: "border-l-primary/40", avatar: "bg-primary/10", avatarText: "text-primary" };
+function toEncryptedDoc(snapshot: QueryDocumentSnapshot<DocumentData>): EncryptedCredentialDoc {
+  const data = snapshot.data();
+  const ownerId = String(data.ownerId || snapshot.ref.parent.parent?.id || "");
+  return {
+    id: snapshot.id,
+    ownerId,
+    encrypted: data.encrypted === true,
+    cipher: data.cipher,
+    wrappedKeys: data.wrappedKeys,
+    sharedWith: data.sharedWith,
+    editors: data.editors,
+    individualShares: data.individualShares,
+    individualAccess: data.individualAccess,
+    individualEditors: data.individualEditors,
+    legacy: data.encrypted === true ? undefined : {
+      name: data.name,
+      url: data.url,
+      username: data.username,
+      email: data.email,
+      password: data.password,
+      notes: data.notes,
+      category: data.category,
+    },
+  };
 }
 
-// ─── Credential Card ──────────────────────────────────────────────────────────
-
 function CredentialCard({
-  cred,
+  credential,
+  ownerName,
+  canEdit,
+  canShare,
+  canDelete,
   onEdit,
   onDelete,
-  canEdit = true,
+  onShare,
 }: {
-  cred: Credential;
+  credential: VaultCredential;
+  ownerName?: string;
+  canEdit: boolean;
+  canShare: boolean;
+  canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
-  canEdit?: boolean;
+  onShare: () => void;
 }) {
-  const [showPw, setShowPw] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(field);
-      setTimeout(() => setCopied(null), 1500);
-    });
+  const [visibleSecrets, setVisibleSecrets] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState("");
+  const fields = credentialFields(credential);
+  const style = CAT_STYLES[credential.category || ""] || {
+    border: "border-l-primary/50",
+    avatar: "bg-primary/10",
+    text: "text-primary",
   };
 
-  const initials = cred.name.slice(0, 2).toUpperCase();
-  const catStyle = getCatStyle(cred.category);
+  const copy = async (value: string, field: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(field);
+    window.setTimeout(() => setCopied(""), 1400);
+  };
+
+  const row = (field: CredentialField) => (
+    <div className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/45 px-3 py-2">
+      <span className="shrink-0 text-muted-foreground">{fieldIcon(field.type)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{field.label}</span>
+        <span className={`block truncate text-xs ${secretField(field.type) ? "font-mono tracking-wide" : ""}`}>
+          {secretField(field.type) && !visibleSecrets[field.id] ? "•".repeat(Math.min(field.value.length, 18)) : field.value}
+        </span>
+      </span>
+      {secretField(field.type) && (
+        <button type="button" onClick={() => setVisibleSecrets((current) => ({ ...current, [field.id]: !current[field.id] }))} className="text-muted-foreground hover:text-foreground">
+          {visibleSecrets[field.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        </button>
+      )}
+      <button type="button" onClick={() => void copy(field.value, field.id)} className="text-muted-foreground hover:text-foreground">
+        {copied === field.id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
 
   return (
-    <motion.div
+    <motion.article
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      className={`rounded-2xl border border-border/60 border-l-4 ${catStyle.border} bg-card shadow-soft overflow-hidden`}
+      className={`overflow-hidden rounded-2xl border border-border/60 border-l-4 ${style.border} bg-card shadow-card`}
     >
-      {/* Header row */}
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-      >
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${catStyle.avatar}`}>
-          <span className={`text-xs font-bold ${catStyle.avatarText}`}>{initials}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-card-foreground truncate">{cred.name}</p>
-          {(cred.email || cred.username) && (
-            <p className="text-[10px] text-muted-foreground truncate">{cred.email || cred.username}</p>
-          )}
-        </div>
-        {cred.category && (
-          <span className="text-[9px] font-semibold bg-muted text-muted-foreground px-2 py-0.5 rounded-full flex-shrink-0">
-            {cred.category}
+      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/25">
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${style.avatar} ${style.text}`}>
+          {credential.name.slice(0, 2).toUpperCase()}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{credential.name}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {ownerName ? `Shared by ${ownerName}` : fields.find((field) => !secretField(field.type))?.value || "Saved login"}
           </span>
-        )}
-        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+        </span>
+        {credential.individualShares.length > 0 && canShare && <Share2 className="h-3.5 w-3.5 text-primary" />}
+        {credential.category && <span className="rounded-full bg-muted px-2 py-1 text-[9px] font-semibold">{credential.category}</span>}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
 
-      {/* Expanded detail */}
       <AnimatePresence>
         {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 space-y-2.5 border-t border-border/40 pt-3">
-              {/* URL */}
-              {cred.url && (
-                <div className="flex items-center gap-2">
-                  <Globe className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  <a href={cred.url.startsWith("http") ? cred.url : `https://${cred.url}`} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-primary truncate flex-1 hover:underline" onClick={(e) => e.stopPropagation()}>
-                    {cred.url}
-                  </a>
-                  <button onClick={() => copyToClipboard(cred.url!, "url")} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                    {copied === "url" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                </div>
-              )}
-
-              {/* Username */}
-              {cred.username && (
-                <div className="flex items-center gap-2">
-                  <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="text-xs text-card-foreground flex-1 truncate">{cred.username}</span>
-                  <button onClick={() => copyToClipboard(cred.username!, "username")} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                    {copied === "username" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                </div>
-              )}
-
-              {/* Email */}
-              {cred.email && (
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 text-center text-[10px] font-bold text-muted-foreground flex-shrink-0">@</span>
-                  <span className="text-xs text-card-foreground flex-1 truncate">{cred.email}</span>
-                  <button onClick={() => copyToClipboard(cred.email!, "email")} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                    {copied === "email" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                </div>
-              )}
-
-              {/* Password */}
-              <div className="flex items-center gap-2">
-                <Lock className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-card-foreground flex-1 font-mono tracking-wider">
-                  {showPw ? cred.password : "•".repeat(Math.min(cred.password.length, 16))}
-                </span>
-                <button onClick={() => setShowPw((v) => !v)} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                  {showPw ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                </button>
-                <button onClick={() => copyToClipboard(cred.password, "password")} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                  {copied === "password" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                </button>
+            <div className="space-y-2 border-t border-border/50 px-4 py-4">
+              {fields.filter((field) => field.value).map((field) => <div key={field.id}>{row(field)}</div>)}
+              {credential.notes && <p className="rounded-xl bg-muted/45 px-3 py-2 text-xs leading-relaxed text-muted-foreground">{credential.notes}</p>}
+              <div className="flex gap-2 pt-1">
+                {canEdit && (
+                  <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={onEdit}>
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                  </Button>
+                )}
+                {canShare && (
+                  <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={onShare}>
+                    <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share login
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={onDelete}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
-
-              {/* Notes */}
-              {cred.notes && (
-                <p className="text-[10px] text-muted-foreground bg-muted/50 rounded-xl px-3 py-2 leading-relaxed">{cred.notes}</p>
-              )}
-
-              {canEdit && (
-                <div className="flex gap-2 pt-1">
-                  <button onClick={onEdit} className="flex-1 text-xs font-semibold py-1.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors text-card-foreground">
-                    Edit
-                  </button>
-                  <button onClick={onDelete} className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </motion.article>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-const LogInDetails = () => {
+export default function LogInDetails() {
   const { dataUid } = useAuth();
+  const appUsers = useAppUsers();
   const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("login_details");
-  const canEdit = permission === "edit";
-  const uid = scopeUserId ?? dataUid;
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { mine: pageShares } = usePageShares("login_details");
+  const [config, setConfig] = useState<PasswordVaultConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [privateKey, setPrivateKey] = useState<CryptoKey | null>(null);
+  const [sourceDocs, setSourceDocs] = useState<EncryptedCredentialDoc[]>([]);
+  const [individualDocs, setIndividualDocs] = useState<EncryptedCredentialDoc[]>([]);
+  const [credentials, setCredentials] = useState<VaultCredential[]>([]);
+  const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editCred, setEditCred] = useState<Credential | null>(null);
-  const [form, setForm] = useState({ ...EMPTY });
+  const [editCredential, setEditCredential] = useState<VaultCredential | null>(null);
+  const [shareCredential, setShareCredential] = useState<VaultCredential | null>(null);
+  const [form, setForm] = useState<PlainCredential>({ ...EMPTY });
+  const [fieldChoice, setFieldChoice] = useState("");
+  const [customFieldLabel, setCustomFieldLabel] = useState("");
+  const [visibleFormSecrets, setVisibleFormSecrets] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
-  const [showFormPw, setShowFormPw] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [category, setCategory] = useState("All");
+  const [search, setSearch] = useState("");
+
+  const unlocked = !!privateKey;
+  const ownerId = scopeUserId || dataUid;
+  const userName = useCallback(
+    (uid: string) => appUsers.find((user) => user.id === uid)?.name || "Another user",
+    [appUsers],
+  );
 
   useEffect(() => {
-    if (!uid) return;
-    const q = query(
-      collection(db, "users", uid, "credentials"),
-      orderBy("name")
+    if (!dataUid) return;
+    return onSnapshot(
+      doc(db, "users", dataUid, "vault", "config"),
+      (snapshot) => {
+        setConfig(snapshot.exists() ? snapshot.data() as PasswordVaultConfig : null);
+        setConfigLoading(false);
+      },
+      () => {
+        setConfig(null);
+        setConfigLoading(false);
+      },
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setCredentials(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Credential)));
-      setLoading(false);
-    });
-    return unsub;
-  }, [uid]);
+  }, [dataUid]);
+
+  const unlock = useCallback(async (privateJwk: JsonWebKey) => {
+    setPrivateKey(await importPrivateKey(privateJwk));
+  }, []);
+
+  const setup = useCallback(async (
+    nextConfig: PasswordVaultConfig,
+    publicProfile: VaultPublicKey,
+    privateJwk: JsonWebKey,
+  ) => {
+    if (!dataUid) return;
+    await Promise.all([
+      setDoc(doc(db, "users", dataUid, "vault", "config"), {
+        ...nextConfig,
+        updatedAt: serverTimestamp(),
+      }),
+      setDoc(doc(db, "vaultPublicKeys", dataUid), {
+        ...publicProfile,
+        ownerId: dataUid,
+        updatedAt: serverTimestamp(),
+      }),
+    ]);
+    setConfig(nextConfig);
+    await unlock(privateJwk);
+  }, [dataUid, unlock]);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    const lock = () => setPrivateKey(null);
+    const timer = window.setTimeout(lock, 10 * 60 * 1000);
+    const visibility = () => {
+      if (document.visibilityState === "hidden") window.setTimeout(() => {
+        if (document.visibilityState === "hidden") lock();
+      }, 60_000);
+    };
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [unlocked]);
+
+  useEffect(() => {
+    if (!unlocked || !ownerId) {
+      setSourceDocs([]);
+      return;
+    }
+    setLoading(true);
+    return onSnapshot(
+      collection(db, "users", ownerId, "credentials"),
+      (snapshot) => {
+        setSourceDocs(snapshot.docs.map(toEncryptedDoc));
+        setLoading(false);
+      },
+      (error) => {
+        setLoading(false);
+        toast.error(error.code === "permission-denied" ? "You no longer have access to this vault" : "Could not load this vault");
+      },
+    );
+  }, [ownerId, unlocked]);
+
+  useEffect(() => {
+    if (!unlocked || !dataUid || !isOwnScope) {
+      setIndividualDocs([]);
+      return;
+    }
+    const sharedQuery = query(collectionGroup(db, "credentials"), where("individualAccess", "array-contains", dataUid));
+    return onSnapshot(sharedQuery, (snapshot) => {
+      setIndividualDocs(snapshot.docs.map(toEncryptedDoc).filter((item) => item.ownerId !== dataUid));
+    }, () => setIndividualDocs([]));
+  }, [dataUid, isOwnScope, unlocked]);
+
+  useEffect(() => {
+    if (!privateKey || !dataUid) {
+      setCredentials([]);
+      return;
+    }
+    let cancelled = false;
+    const decryptAll = async () => {
+      const combined = [...sourceDocs, ...individualDocs]
+        .filter((item, index, all) => all.findIndex((other) => `${other.ownerId}:${other.id}` === `${item.ownerId}:${item.id}`) === index);
+      const decrypted = await Promise.all(combined.map(async (item) => {
+        if (!item.encrypted || !item.cipher) return null;
+        const wrappedKey = item.wrappedKeys?.[dataUid];
+        if (!wrappedKey) return null;
+        try {
+          const result = await decryptCredential(item.cipher, wrappedKey, privateKey);
+          return {
+            ...result.credential,
+            id: item.id,
+            ownerId: item.ownerId,
+            itemKey: result.itemKey,
+            wrappedKeys: item.wrappedKeys || {},
+            sharedWith: item.sharedWith || [],
+            editors: item.editors || [],
+            individualShares: item.individualShares || [],
+            individualAccess: item.individualAccess || [],
+            individualEditors: item.individualEditors || [],
+          } satisfies VaultCredential;
+        } catch {
+          return null;
+        }
+      }));
+      if (!cancelled) setCredentials(decrypted.filter(Boolean) as VaultCredential[]);
+    };
+    void decryptAll();
+    return () => { cancelled = true; };
+  }, [dataUid, individualDocs, privateKey, sourceDocs]);
+
+  useEffect(() => {
+    if (!privateKey || !dataUid) return;
+    const legacy = sourceDocs.filter((item) => item.ownerId === dataUid && !item.encrypted && item.legacy?.name && item.legacy?.password);
+    if (!legacy.length) return;
+    void (async () => {
+      const profile = await getDoc(doc(db, "vaultPublicKeys", dataUid));
+      if (!profile.exists()) return;
+      const publicKey = (profile.data() as VaultPublicKey).publicKey;
+      await Promise.all(legacy.map(async (item) => {
+        const encrypted = await encryptCredential(item.legacy as PlainCredential, dataUid, publicKey);
+        await updateDoc(doc(db, "users", dataUid, "credentials", item.id), {
+          ownerId: dataUid,
+          ...encrypted,
+          sharedWith: [],
+          editors: [],
+          individualShares: [],
+          individualAccess: [],
+          individualEditors: [],
+          name: deleteField(),
+          url: deleteField(),
+          username: deleteField(),
+          email: deleteField(),
+          password: deleteField(),
+          notes: deleteField(),
+          category: deleteField(),
+          updatedAt: serverTimestamp(),
+        });
+      }));
+      toast.success(`${legacy.length} existing login${legacy.length === 1 ? "" : "s"} secured`);
+    })().catch(() => toast.error("Some existing logins could not be encrypted"));
+  }, [dataUid, privateKey, sourceDocs]);
+
+  useEffect(() => {
+    if (!dataUid || !privateKey || !isOwnScope || credentials.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const profiles = new Map<string, JsonWebKey>();
+      await Promise.all(pageShares.map(async (share) => {
+        const snapshot = await getDoc(doc(db, "vaultPublicKeys", share.targetUid));
+        if (snapshot.exists()) profiles.set(share.targetUid, (snapshot.data() as VaultPublicKey).publicKey);
+      }));
+
+      for (const credential of credentials.filter((item) => item.ownerId === dataUid)) {
+        if (cancelled) return;
+        const grants = new Map<string, SharePermission>();
+        credential.individualShares.forEach((share) => grants.set(share.uid, share.permission));
+        pageShares.forEach((share) => grants.set(share.targetUid, share.permission));
+        const wrappedKeys: Record<string, string> = {};
+        if (credential.wrappedKeys[dataUid]) wrappedKeys[dataUid] = credential.wrappedKeys[dataUid];
+        for (const [uid] of grants) {
+          const publicKey = profiles.get(uid) || (await getDoc(doc(db, "vaultPublicKeys", uid))).data()?.publicKey;
+          if (!publicKey) continue;
+          wrappedKeys[uid] = credential.wrappedKeys[uid] || await wrapCredentialKey(credential.itemKey, publicKey);
+        }
+        const sharedWith = [...grants.keys()].filter((uid) => !!wrappedKeys[uid]);
+        const editors = [...grants.entries()].filter(([, value]) => value === "edit").map(([uid]) => uid);
+        const individualAccess = credential.individualShares.map((share) => share.uid);
+        const individualEditors = credential.individualShares
+          .filter((share) => share.permission === "edit")
+          .map((share) => share.uid);
+        const changed = JSON.stringify(wrappedKeys) !== JSON.stringify(
+          credential.wrappedKeys,
+        ) || JSON.stringify([...credential.sharedWith].sort()) !== JSON.stringify([...sharedWith].sort())
+          || JSON.stringify([...credential.editors].sort()) !== JSON.stringify([...editors].sort())
+          || JSON.stringify([...credential.individualAccess].sort()) !== JSON.stringify([...individualAccess].sort())
+          || JSON.stringify([...credential.individualEditors].sort()) !== JSON.stringify([...individualEditors].sort());
+        if (changed) {
+          await updateDoc(doc(db, "users", dataUid, "credentials", credential.id), {
+            wrappedKeys,
+            sharedWith,
+            editors,
+            individualAccess,
+            individualEditors,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [credentials, dataUid, isOwnScope, pageShares, privateKey]);
 
   const openAdd = () => {
-    setEditCred(null);
-    setForm({ ...EMPTY });
-    setShowFormPw(false);
+    setEditCredential(null);
+    setForm({ ...EMPTY, fields: [] });
+    setFieldChoice("");
+    setCustomFieldLabel("");
+    setVisibleFormSecrets({});
     setDialogOpen(true);
   };
 
-  const openEdit = (cred: Credential) => {
-    setEditCred(cred);
+  const openEdit = (credential: VaultCredential) => {
+    setEditCredential(credential);
     setForm({
-      name: cred.name,
-      url: cred.url ?? "",
-      username: cred.username ?? "",
-      email: cred.email ?? "",
-      password: cred.password,
-      notes: cred.notes ?? "",
-      category: cred.category ?? "",
+      name: credential.name,
+      url: credential.url || "",
+      username: credential.username || "",
+      email: credential.email || "",
+      password: credential.password,
+      fields: credentialFields(credential),
+      notes: credential.notes || "",
+      category: credential.category || "",
     });
-    setShowFormPw(false);
+    setFieldChoice("");
+    setCustomFieldLabel("");
+    setVisibleFormSecrets({});
     setDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!uid || !form.name.trim() || !form.password.trim()) return;
+  const addField = (type: CredentialFieldType, label?: string) => {
+    setForm((current) => ({ ...current, fields: [...(current.fields || []), newField(type, label)] }));
+    setFieldChoice("");
+    setCustomFieldLabel("");
+  };
+
+  const updateField = (id: string, patch: Partial<CredentialField>) => {
+    setForm((current) => ({
+      ...current,
+      fields: (current.fields || []).map((field) => field.id === id ? { ...field, ...patch } : field),
+    }));
+  };
+
+  const removeField = (id: string) => {
+    setForm((current) => ({ ...current, fields: (current.fields || []).filter((field) => field.id !== id) }));
+  };
+
+  const save = async () => {
+    if (!dataUid || !form.name.trim()) return;
     setSaving(true);
+    const fields = (form.fields || [])
+      .filter((field) => field.label.trim() && (secretField(field.type) ? field.value.length > 0 : field.value.trim()))
+      .map((field) => ({
+        ...field,
+        label: field.label.trim(),
+        value: secretField(field.type) ? field.value : field.value.trim(),
+      }));
+    const firstValue = (type: CredentialFieldType) => fields.find((field) => field.type === type)?.value || "";
+    const cleaned: PlainCredential = {
+      name: form.name.trim(),
+      fields,
+      url: firstValue("website"),
+      username: firstValue("username"),
+      email: firstValue("email"),
+      password: firstValue("password"),
+      notes: form.notes?.trim() || "",
+      category: form.category || "",
+    };
     try {
-      const data = {
-        name: form.name.trim(),
-        url: form.url?.trim() || "",
-        username: form.username?.trim() || "",
-        email: form.email?.trim() || "",
-        password: form.password,
-        notes: form.notes?.trim() || "",
-        category: form.category || "",
-        updatedAt: serverTimestamp(),
-      };
-      if (editCred?.id) {
-        await updateDoc(doc(db, "users", uid, "credentials", editCred.id), data);
+      if (editCredential) {
+        await updateDoc(doc(db, "users", editCredential.ownerId, "credentials", editCredential.id), {
+          cipher: await encryptCredentialWithItemKey(cleaned, editCredential.itemKey),
+          updatedAt: serverTimestamp(),
+        });
       } else {
-        await addDoc(collection(db, "users", uid, "credentials"), {
-          ...data,
+        const profile = await getDoc(doc(db, "vaultPublicKeys", dataUid));
+        if (!profile.exists()) throw new Error("Your vault key is missing");
+        const encrypted = await encryptCredential(cleaned, dataUid, (profile.data() as VaultPublicKey).publicKey);
+        await addDoc(collection(db, "users", dataUid, "credentials"), {
+          ownerId: dataUid,
+          ...encrypted,
+          sharedWith: [],
+          editors: [],
+          individualShares: [],
+          individualAccess: [],
+          individualEditors: [],
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
       setDialogOpen(false);
+      toast.success(editCredential ? "Login updated" : "Login saved securely");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save this login");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (cred: Credential) => {
-    if (!uid || !cred.id) return;
-    await deleteDoc(doc(db, "users", uid, "credentials", cred.id));
+  const remove = async (credential: VaultCredential) => {
+    if (credential.ownerId !== dataUid) return;
+    if (!window.confirm(`Delete ${credential.name}? This cannot be undone.`)) return;
+    await deleteDoc(doc(db, "users", credential.ownerId, "credentials", credential.id));
+    toast.success("Login deleted");
   };
 
-  const usedCategories = [...new Set(credentials.map((c) => c.category).filter(Boolean))] as string[];
-  const filterTabs = ["All", ...usedCategories];
+  const updateIndividualShare = async (targetUid: string, nextPermission: SharePermission | null) => {
+    if (!shareCredential || shareCredential.ownerId !== dataUid) return;
+    const individualShares = shareCredential.individualShares.filter((share) => share.uid !== targetUid);
+    if (nextPermission) individualShares.push({ uid: targetUid, permission: nextPermission });
+    const pageGrant = pageShares.find((share) => share.targetUid === targetUid);
+    const shouldRetain = !!nextPermission || !!pageGrant;
+    const wrappedKeys = { ...shareCredential.wrappedKeys };
+    if (shouldRetain && !wrappedKeys[targetUid]) {
+      const profile = await getDoc(doc(db, "vaultPublicKeys", targetUid));
+      if (!profile.exists()) throw new Error(`${userName(targetUid)} needs to set up their password vault first`);
+      wrappedKeys[targetUid] = await wrapCredentialKey(shareCredential.itemKey, (profile.data() as VaultPublicKey).publicKey);
+    }
+    if (!shouldRetain) delete wrappedKeys[targetUid];
+    const grants = new Map<string, SharePermission>();
+    individualShares.forEach((share) => grants.set(share.uid, share.permission));
+    pageShares.forEach((share) => grants.set(share.targetUid, share.permission));
+    const individualAccess = individualShares.map((share) => share.uid);
+    const individualEditors = individualShares
+      .filter((share) => share.permission === "edit")
+      .map((share) => share.uid);
+    await updateDoc(doc(db, "users", dataUid, "credentials", shareCredential.id), {
+      individualShares,
+      individualAccess,
+      individualEditors,
+      wrappedKeys,
+      sharedWith: [...grants.keys()].filter((uid) => !!wrappedKeys[uid]),
+      editors: [...grants.entries()].filter(([, value]) => value === "edit").map(([uid]) => uid),
+      updatedAt: serverTimestamp(),
+    });
+    setShareCredential((current) => current
+      ? { ...current, individualShares, individualAccess, individualEditors, wrappedKeys }
+      : null);
+  };
 
-  const filtered = activeCategory === "All"
-    ? credentials
-    : credentials.filter((c) => c.category === activeCategory);
+  const usedCategories = useMemo(
+    () => [...new Set(credentials.map((credential) => credential.category).filter(Boolean))] as string[],
+    [credentials],
+  );
+  const filtered = useMemo(() => credentials.filter((credential) => {
+    const matchesCategory = category === "All" || credential.category === category;
+    const needle = search.trim().toLowerCase();
+    const matchesSearch = !needle || [credential.name, ...credentialFields(credential).map((field) => field.value)]
+      .some((value) => value?.toLowerCase().includes(needle));
+    return matchesCategory && matchesSearch;
+  }).sort((a, b) => a.name.localeCompare(b.name)), [category, credentials, search]);
+
+  const canEditCredential = (credential: VaultCredential) => credential.ownerId === dataUid
+    || (permission === "edit" && credential.ownerId === ownerId)
+    || credential.individualEditors.includes(dataUid || "");
 
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle={isOwnScope ? "Your saved credentials" : "Shared with you"}
-      icon={<KeyRound className="w-5 h-5" />}
-      sharePage="login_details"
+      subtitle={unlocked ? (isOwnScope ? "Encrypted passwords and secure sharing" : "Securely shared with you") : "Private, encrypted and protected"}
+      icon={<KeyRound className="h-5 w-5" />}
+      sharePage={unlocked && isOwnScope ? "login_details" : undefined}
     >
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {filterTabs.map((tab) => (
-            <button key={tab} onClick={() => setActiveCategory(tab)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-150 ${
-                activeCategory === tab ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/60 text-muted-foreground hover:bg-muted"
-              }`}>
-              {tab}
-            </button>
-          ))}
-        </div>
-        {canEdit && (
-          <button onClick={openAdd} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0">
-            <Plus className="w-3.5 h-3.5" />
-            New
-          </button>
-        )}
-      </div>
-
-      {/* Credentials list */}
-      {loading ? (
-        <p className="text-sm text-muted-foreground text-center py-10">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-14">
-          <KeyRound className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground font-medium">No credentials saved yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Tap "New" to add your first one</p>
-        </div>
+      {!unlocked ? (
+        <PasswordVaultGate config={config} loading={configLoading} onSetup={setup} onUnlock={(key) => void unlock(key)} />
       ) : (
-        <div className="space-y-2">
-          <AnimatePresence mode="popLayout">
-            {filtered.map((cred) => (
-              <CredentialCard
-                key={cred.id}
-                cred={cred}
-                canEdit={canEdit}
-                onEdit={() => openEdit(cred)}
-                onDelete={() => handleDelete(cred)}
-              />
-            ))}
-          </AnimatePresence>
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-primary/20 bg-[color-mix(in_srgb,hsl(var(--primary))_10%,hsl(var(--card)))] p-4 shadow-card">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-sm">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold">Vault unlocked</span>
+                  <span className="block text-xs text-muted-foreground">Passwords lock automatically after 10 minutes</span>
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setPrivateKey(null)}>
+                  <LockKeyhole className="mr-1.5 h-3.5 w-3.5" /> Lock now
+                </Button>
+                {isOwnScope && (
+                  <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" /> Add login
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[12rem_minmax(0,1fr)]">
+            <aside className="h-fit rounded-2xl border border-border/60 bg-card p-3 shadow-card">
+              <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Categories</p>
+              {["All", ...usedCategories].map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                  className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                    category === item ? "bg-gradient-primary text-primary-foreground shadow-sm" : "hover:bg-muted"
+                  }`}
+                >
+                  {item}
+                  <span className="text-[10px] opacity-75">
+                    {item === "All" ? credentials.length : credentials.filter((credential) => credential.category === item).length}
+                  </span>
+                </button>
+              ))}
+            </aside>
+
+            <section className="min-w-0 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search saved logins" className="h-10 rounded-xl bg-card pl-9 shadow-sm" />
+              </div>
+              {loading ? (
+                <div className="rounded-2xl bg-card py-12 text-center text-sm text-muted-foreground shadow-card">Decrypting your logins…</div>
+              ) : filtered.length === 0 ? (
+                <div className="rounded-2xl border border-border/60 bg-card px-6 py-14 text-center shadow-card">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <KeyRound className="h-6 w-6" />
+                  </div>
+                  <p className="mt-3 text-sm font-semibold">{search || category !== "All" ? "No matching logins" : "Your vault is ready"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isOwnScope ? "Add your first login and it will be encrypted before saving." : "No logins have been shared in this vault yet."}
+                  </p>
+                  {isOwnScope && !search && category === "All" && (
+                    <Button size="sm" className="mt-4 rounded-xl bg-gradient-primary" onClick={openAdd}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add first login
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <AnimatePresence mode="popLayout">
+                    {filtered.map((credential) => (
+                      <CredentialCard
+                        key={`${credential.ownerId}:${credential.id}`}
+                        credential={credential}
+                        ownerName={credential.ownerId === dataUid ? undefined : userName(credential.ownerId)}
+                        canEdit={canEditCredential(credential)}
+                        canShare={credential.ownerId === dataUid}
+                        canDelete={credential.ownerId === dataUid}
+                        onEdit={() => openEdit(credential)}
+                        onDelete={() => void remove(credential)}
+                        onShare={() => setShareCredential(credential)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </section>
+          </div>
         </div>
       )}
 
-      {/* Add / Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditCred(null); }}>
-        <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="font-display">{editCred ? "Edit Credential" : "New Credential"}</DialogTitle>
+            <DialogTitle className="font-display">{editCredential ? "Edit login" : "Add a login"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 pt-1">
-            <div className="space-y-1">
-              <Label>Name *</Label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Netflix, HMRC" className="h-9 rounded-xl" />
+          <div className="space-y-3">
+            <div className="space-y-1"><Label>Name *</Label><Input value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} placeholder="Tesco, Netflix, HMRC…" className="rounded-xl" /></div>
+            <div className="space-y-2">
+              {(form.fields || []).map((field) => (
+                <motion.div layout key={field.id} className="rounded-2xl border border-border/60 bg-muted/25 p-3">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    {field.type === "other" ? (
+                      <Input
+                        value={field.label}
+                        onChange={(event) => updateField(field.id, { label: event.target.value })}
+                        aria-label="Custom field name"
+                        className="h-7 flex-1 rounded-lg bg-card px-2 text-xs font-semibold"
+                      />
+                    ) : (
+                      <Label className="flex-1">{field.label}</Label>
+                    )}
+                    <button type="button" onClick={() => removeField(field.id)} className="rounded-lg p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${field.label}`}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      type={secretField(field.type) && !visibleFormSecrets[field.id]
+                        ? "password"
+                        : field.type === "email" ? "email" : field.type === "phone" ? "tel" : field.type === "website" ? "url" : "text"}
+                      value={field.value}
+                      onChange={(event) => updateField(field.id, { value: event.target.value })}
+                      placeholder={`Enter ${field.label.toLowerCase()}`}
+                      className={`rounded-xl bg-card ${secretField(field.type) ? "pr-10" : ""}`}
+                    />
+                    {secretField(field.type) && (
+                      <button type="button" onClick={() => setVisibleFormSecrets((current) => ({ ...current, [field.id]: !current[field.id] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        {visibleFormSecrets[field.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
             </div>
-            <div className="space-y-1">
-              <Label>Website / URL</Label>
-              <Input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="e.g. netflix.com" className="h-9 rounded-xl" />
+            <div className="rounded-2xl border border-primary/20 bg-[color-mix(in_srgb,hsl(var(--primary))_8%,hsl(var(--card)))] p-3">
+              <Label className="mb-1.5 block">Add a field</Label>
+              <select
+                value={fieldChoice}
+                onChange={(event) => {
+                  const type = event.target.value as CredentialFieldType | "";
+                  setFieldChoice(type);
+                  if (type && type !== "other") addField(type);
+                }}
+                className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="">Choose what to add…</option>
+                {FIELD_OPTIONS.map((option) => <option key={option.type} value={option.type}>{option.label}</option>)}
+              </select>
+              {fieldChoice === "other" && (
+                <div className="mt-2 flex gap-2">
+                  <Input value={customFieldLabel} onChange={(event) => setCustomFieldLabel(event.target.value)} placeholder="Field name, e.g. Security answer" className="rounded-xl bg-card" />
+                  <Button type="button" size="sm" disabled={!customFieldLabel.trim()} onClick={() => addField("other", customFieldLabel.trim())} className="h-10 rounded-xl">
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className="h-9 rounded-xl" />
-            </div>
-            <div className="space-y-1">
-              <Label>Username</Label>
-              <Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder="Username (if different from email)" className="h-9 rounded-xl" />
-            </div>
-            <div className="space-y-1">
-              <Label>Password *</Label>
-              <div className="relative">
-                <Input
-                  type={showFormPw ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Password"
-                  className="h-9 rounded-xl pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowFormPw((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showFormPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Category</Label>
               <div className="flex flex-wrap gap-1.5">
-                {CATEGORIES.map((cat) => (
-                  <button key={cat} type="button" onClick={() => setForm((f) => ({ ...f, category: f.category === cat ? "" : cat }))}
-                    className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
-                      form.category === cat ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}>
-                    {cat}
+                {CATEGORIES.map((item) => (
+                  <button key={item} type="button" onClick={() => setForm((value) => ({ ...value, category: value.category === item ? "" : item }))} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${form.category === item ? "bg-gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    {item}
                   </button>
                 ))}
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Notes</Label>
-              <Input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Security questions, pins, etc." className="h-9 rounded-xl" />
+              <Label>Secure notes</Label>
+              <Textarea value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Recovery details or anything else you need to remember…" className="min-h-24 resize-y rounded-xl" />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} className="flex-1 h-9 rounded-xl">Cancel</Button>
-              <Button onClick={handleSave} disabled={!form.name.trim() || !form.password.trim() || saving} className="flex-1 h-9 rounded-xl bg-gradient-primary">
-                {saving ? "Saving…" : "Save"}
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button className="flex-1 rounded-xl bg-gradient-primary" disabled={saving || !form.name.trim()} onClick={() => void save()}>
+                {saving ? "Encrypting…" : "Save securely"}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!shareCredential} onOpenChange={(open) => !open && setShareCredential(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Share2 className="h-4 w-4" /> Share {shareCredential?.name}</DialogTitle>
+            <DialogDescription>Only this login will be shared. Its encryption key is protected for each person separately.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+            {appUsers.filter((user) => user.id !== dataUid).map((user) => {
+              const existing = shareCredential?.individualShares.find((share) => share.uid === user.id);
+              return (
+                <div key={user.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{user.name}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">{user.email}</span>
+                  </span>
+                  <select
+                    value={existing?.permission || ""}
+                    onChange={(event) => {
+                      const value = event.target.value as SharePermission | "";
+                      void updateIndividualShare(user.id, value || null).catch((error) => toast.error(error instanceof Error ? error.message : "Could not update sharing"));
+                    }}
+                    className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs"
+                  >
+                    <option value="">Not shared</option>
+                    <option value="view">Can view</option>
+                    <option value="edit">Can edit</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          <Button variant="outline" className="w-full rounded-xl" onClick={() => setShareCredential(null)}>
+            <X className="mr-1.5 h-3.5 w-3.5" /> Done
+          </Button>
+        </DialogContent>
+      </Dialog>
     </FeaturePageShell>
   );
-};
-
-export default LogInDetails;
+}

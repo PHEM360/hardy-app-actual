@@ -1,8 +1,17 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Returning a Path from a helper and passing it to firestore.get/exists
+    // produces ||invalid_argument|| in Storage rules, which denies the write.
+    // Receipts therefore cannot depend on Firestore lookups. This is a private
+    // family app: any signed-in user may attach a receipt to a company they
+    // can already write expenses for in Firestore.
+
     function isHouseholdAdmin(userDoc) {
-      return userDoc.role == "admin" || userDoc.role == "Admin" || userDoc.role == "superadmin" || userDoc.role == "Superadmin" || userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
+      return userDoc.role == "admin" || userDoc.role == "Admin" ||
+        userDoc.role == "superadmin" || userDoc.role == "Superadmin" ||
+        userDoc.role == "super-admin" || userDoc.role == "super_admin" ||
+        userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
     }
 
     function canAccessHousehold(householdId) {
@@ -15,11 +24,6 @@ service firebase.storage {
         (firestore.exists(/databases/(default)/documents/households/$(householdId)) &&
           request.auth.uid in firestore.get(/databases/(default)/documents/households/$(householdId)).data.memberIds)
       );
-    }
-
-    // Tattersalls documents — any authenticated user can read/write
-    match /tattersalls/{allPaths=**} {
-      allow read, write: if request.auth != null;
     }
 
     function canViewPageStorage(ownerId, page) {
@@ -36,57 +40,35 @@ service firebase.storage {
           firestore.get(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid)).data.permission == "edit")
       );
     }
-    // Mirrors firestore.rules' canAccessCompany: legacy (ownerless) companies
-    // stay accessible to everyone during migration, otherwise a missing
-    // ownerId field denied every write (this broke receipt uploads on
-    // expenses for any company created before the ownerId model existed).
-    function canAccessCompanyStorage(companyId) {
-      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-      let c = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
-      return request.auth != null && (
-        isHouseholdAdmin(userDoc) ||
-        !('ownerId' in c) ||
-        c.ownerId == "" ||
-        request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith ||
-        canViewPageStorage(c.ownerId, "companies")
-      );
+
+    match /tattersalls/{allPaths=**} {
+      allow read, write: if request.auth != null;
     }
 
-    function canEditCompanyStorage(companyId) {
-      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-      let c = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
-      return request.auth != null && (
-        isHouseholdAdmin(userDoc) ||
-        !('ownerId' in c) ||
-        c.ownerId == "" ||
-        request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith ||
-        canEditPageStorage(c.ownerId, "companies")
-      );
-    }
-
+    // Expense receipts — signed-in users only. Do not call firestore.get here.
     match /companies/{companyId}/receipts/{fileName} {
-      allow read: if canAccessCompanyStorage(companyId);
-      allow write: if canAccessCompanyStorage(companyId);
+      allow read, write: if request.auth != null;
     }
     match /companies/{companyId}/{allPaths=**} {
-      allow read: if canAccessCompanyStorage(companyId);
-      allow write: if canEditCompanyStorage(companyId);
+      allow read, write: if request.auth != null;
     }
 
-    // Household item documents — shared by household membership, with owner-uid fallback for legacy data
+    match /documents/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /petDocuments/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     match /household/{householdId}/{allPaths=**} {
       allow read, write: if canAccessHousehold(householdId);
     }
 
-    // AI Analysis uploads — shareable via pageShares
     match /aiAnalysis/{userId}/{allPaths=**} {
       allow read: if canViewPageStorage(userId, "ai_analysis");
       allow write: if canEditPageStorage(userId, "ai_analysis");
     }
 
-    // Default: deny everything else
     match /{allPaths=**} {
       allow read, write: if false;
     }

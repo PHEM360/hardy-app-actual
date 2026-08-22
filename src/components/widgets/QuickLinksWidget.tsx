@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, X, FileUp, Zap, Pencil, Home, CheckCircle2, StickyNote } from "lucide-react";
+import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, FileUp, Zap, Pencil, Home, CheckCircle2, StickyNote } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
+import { ReceiptAttachCard, ReceiptLightbox } from "@/components/receipts/ReceiptPreview";
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
@@ -12,7 +13,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, QUICK_LINK_FEATURE_KEY } from "@/lib/features";
-import { useCompanies } from "@/hooks/useCompanies";
+import { companyReceiptStoragePath, expenseSaveMessage, useCompanies } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export function QuickLinksWidget() {
   });
   const { settings: companySettings } = useCompanySettings(expForm.companyId);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string>("");
+  const [receiptViewerOpen, setReceiptViewerOpen] = useState(false);
   const [scanCapture, setScanCapture] = useState<File | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   // Chosen up front for the camera path (asked before the camera opens). Left
@@ -62,14 +63,6 @@ export function QuickLinksWidget() {
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [savedSummary, setSavedSummary] = useState("");
-
-  // Thumbnail for whatever receipt is currently attached
-  useEffect(() => {
-    if (!receiptFile) { setReceiptPreviewUrl(""); return; }
-    const url = URL.createObjectURL(receiptFile);
-    setReceiptPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [receiptFile]);
 
   const openUpload = () => {
     const input = fileInputRef.current;
@@ -92,27 +85,44 @@ export function QuickLinksWidget() {
     if (!expForm.companyId || !expForm.description || !expForm.amount || !user) return;
     setSaving(true);
     try {
+      const amount = Number.parseFloat(expForm.amount);
       const docRef = await addDoc(collection(db, "companies", expForm.companyId, "expenses"), {
-        description: expForm.description, amount: parseFloat(expForm.amount) || 0,
-        date: expForm.date, category: expForm.category, receipts: [], createdAt: serverTimestamp(),
+        description: expForm.description.trim(),
+        amount: Number.isFinite(amount) ? amount : 0,
+        date: expForm.date,
+        category: expForm.category || "Other",
+        receipts: [],
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
       });
+      let receiptFailed = false;
       if (receiptFile) {
-        const sRef = storageRef(storage, `companies/${expForm.companyId}/receipts/${Date.now()}_${receiptFile.name}`);
-        await uploadBytes(sRef, receiptFile);
-        const url = await getDownloadURL(sRef);
-        await updateDoc(doc(db, "companies", expForm.companyId, "expenses", docRef.id), { receipts: [url] });
+        try {
+          const sRef = storageRef(storage, companyReceiptStoragePath(expForm.companyId, receiptFile.name));
+          await uploadBytes(sRef, receiptFile, { contentType: receiptFile.type || "application/octet-stream" });
+          const url = await getDownloadURL(sRef);
+          await updateDoc(doc(db, "companies", expForm.companyId, "expenses", docRef.id), {
+            receipts: [url],
+            receiptNames: [receiptFile.name],
+          });
+        } catch (receiptErr) {
+          console.error("Failed to upload receipt", receiptErr);
+          receiptFailed = true;
+        }
       }
       const companyName = companies.find((c) => c.id === expForm.companyId)?.name || "the company";
-      const amount = parseFloat(expForm.amount) || 0;
-      const summary = `${expForm.description} · £${amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} saved to ${companyName}`;
-      setSavedSummary(summary);
+      const summary = `${expForm.description} · £${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} saved to ${companyName}`;
+      setSavedSummary(receiptFailed ? `${summary}. The receipt didn’t upload — you can attach it from the company page.` : summary);
       setSavedOk(true);
-      toast.success("Expense saved", { description: summary, duration: 5000 });
+      toast.success("Expense saved", {
+        description: receiptFailed ? "Saved, but the receipt didn’t upload." : summary,
+        duration: 5000,
+      });
       setReceiptFile(null);
       setExpForm({ companyId: "", description: "", amount: "", date: new Date().toISOString().split("T")[0], category: "Other" });
     } catch (err) {
       console.error("Failed to save expense", err);
-      toast.error("Couldn't save expense. Please try again.");
+      toast.error(expenseSaveMessage(err));
     } finally { setSaving(false); }
   };
 
@@ -304,15 +314,11 @@ export function QuickLinksWidget() {
                 }}
               />
               {receiptFile ? (
-                <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
-                  {receiptPreviewUrl ? (
-                    <img src={receiptPreviewUrl} alt="Receipt preview" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/40" />
-                  ) : (
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  )}
-                  <span className="text-[11px] text-foreground flex-1 truncate">{receiptFile.name}</span>
-                  <button onClick={() => setReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
-                </div>
+                <ReceiptAttachCard
+                  file={receiptFile}
+                  onRemove={() => setReceiptFile(null)}
+                  onPreview={() => setReceiptViewerOpen(true)}
+                />
               ) : (
                 <div className="flex gap-2">
                   <button onClick={openUpload} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
@@ -349,6 +355,11 @@ export function QuickLinksWidget() {
         initialMode={chosenMode ?? undefined}
         onConfirm={(scannedFile) => { setReceiptFile(scannedFile); setScanCapture(null); setChosenMode(null); }}
         onCancel={() => { setScanCapture(null); setChosenMode(null); }}
+      />
+      <ReceiptLightbox
+        source={receiptFile ? { file: receiptFile, name: receiptFile.name } : null}
+        open={receiptViewerOpen && !!receiptFile}
+        onClose={() => setReceiptViewerOpen(false)}
       />
     </div>
   );

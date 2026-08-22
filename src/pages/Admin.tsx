@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye } from "lucide-react";
+import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye, Fingerprint } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -211,6 +211,20 @@ const Admin = () => {
       setResetPwResult({ ok: false, msg: msg || "Failed to reset password." });
     } finally {
       setResetPwLoading(false);
+    }
+  };
+
+  const resetPasskeys = async () => {
+    if (!currentUser || !window.confirm(`Reset every passkey for ${currentUser.name}? They will be signed out and required to create a new one.`)) return;
+    setActionLoading(true);
+    try {
+      const call = httpsCallable(functions, "resetUserPasskeys");
+      await call({ uid: currentUser.id });
+      window.alert("Passkeys reset. The user can sign in with their password and create a new passkey.");
+    } catch (error: any) {
+      window.alert(error?.message || "Could not reset passkeys.");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -647,12 +661,12 @@ const Admin = () => {
                   id="invitePassword"
                   value={invitePassword}
                   onChange={(e) => setInvitePassword(e.target.value)}
-                  placeholder="Min 8 chars, 1 number, 1 special char"
+                  placeholder="8+ chars, mixed case, number & symbol"
                   type="password"
                   autoComplete="new-password"
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  Must be 8+ characters, include a number (0–9) and a special character (e.g. ! @ # $). The user can change this after logging in.
+                  Must be 8+ characters with upper- and lower-case letters, a number and a special character. The user can change this after logging in.
                 </p>
               </div>
 
@@ -943,6 +957,14 @@ const Admin = () => {
                     variant="outline"
                     className="w-full h-9 rounded-lg text-xs justify-start gap-2"
                     disabled={actionLoading}
+                    onClick={() => void resetPasskeys()}
+                  >
+                    <Fingerprint className="w-3.5 h-3.5" /> Reset Passkeys
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full h-9 rounded-lg text-xs justify-start gap-2"
+                    disabled={actionLoading}
                     onClick={() => toggleSuspend(currentUser.id, currentUser.status)}
                   >
                     {currentUser.status === "active"
@@ -1133,7 +1155,7 @@ const Admin = () => {
                 <Label className="text-xs">New Temporary Password</Label>
                 <Input
                   type="password"
-                  placeholder="Min 8 chars, 1 number, 1 special char"
+                  placeholder="8+ chars, mixed case, number & symbol"
                   value={tempPassword}
                   onChange={(e) => setTempPassword(e.target.value)}
                   className="h-10 rounded-xl text-sm"

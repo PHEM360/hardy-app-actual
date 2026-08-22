@@ -8,6 +8,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  deleteField,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
@@ -17,6 +18,8 @@ import {
   uploadBytes,
   getDownloadURL,
 } from "firebase/storage";
+import { alignedReceiptNames } from "@/lib/receipts";
+import { cleanCompanyPayload } from "@/lib/companyPayload";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { usePageShares } from "@/hooks/usePageShares";
@@ -30,6 +33,37 @@ import {
   CompanyIncome,
   CompanyTaxReturn,
 } from "@/types/app";
+
+export function companyReceiptStoragePath(companyId: string, fileName: string) {
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "receipt";
+  return `companies/${companyId}/receipts/${Date.now()}_${safe}`;
+}
+
+export function expenseSaveMessage(err: unknown) {
+  const code = err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+  const message = err instanceof Error ? err.message : String(err);
+  if (code.includes("permission-denied") || /permission/i.test(message)) {
+    return "You don’t have permission to save expenses for this company.";
+  }
+  if (/undefined/i.test(message) || code.includes("invalid-argument")) {
+    return "That expense couldn’t be saved because a field was missing. Check amount, date and description.";
+  }
+  return "Couldn't save expense. Please try again.";
+}
+
+function expenseDocPayload(expense: Omit<CompanyExpense, "id" | "createdAt">) {
+  const amount = Number(expense.amount);
+  return {
+    description: String(expense.description ?? "").trim(),
+    amount: Number.isFinite(amount) ? amount : 0,
+    date: expense.date || new Date().toISOString().split("T")[0],
+    category: expense.category || "Other",
+    receipts: Array.isArray(expense.receipts) ? expense.receipts : [],
+    receiptNames: Array.isArray(expense.receiptNames)
+      ? expense.receiptNames
+      : alignedReceiptNames(Array.isArray(expense.receipts) ? expense.receipts : []),
+  };
+}
 
 export function canEditCompanyClient(
   company: Company,
@@ -80,7 +114,7 @@ export function useCompanies(scopeUserId?: string) {
   const addCompany = useCallback(async (company: Omit<Company, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;
     await addDoc(collection(db, "companies"), {
-      ...company,
+      ...cleanCompanyPayload(company),
       ownerId: uid,
       sharedWith: [],
       createdAt: serverTimestamp(),
@@ -89,8 +123,12 @@ export function useCompanies(scopeUserId?: string) {
   }, [uid]);
 
   const updateCompany = useCallback(async (id: string, updates: Partial<Company>) => {
+    const cleanUpdates = cleanCompanyPayload(updates) as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(updates, "parentCompanyId") && updates.parentCompanyId === undefined) {
+      cleanUpdates.parentCompanyId = deleteField();
+    }
     await updateDoc(doc(db, "companies", id), {
-      ...updates,
+      ...cleanUpdates,
       updatedAt: serverTimestamp(),
     });
   }, []);
@@ -188,15 +226,19 @@ export function useCompanyExpenses(companyId: string | undefined) {
       collection(db, "companies", companyId, "expenses"),
       orderBy("date", "desc")
     );
-    return onSnapshot(q, (snap) => {
-      setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyExpense)));
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyExpense)));
+      },
+      (err) => console.error("Failed to load expenses", err)
+    );
   }, [companyId]);
 
   const addExpense = useCallback(async (expense: Omit<CompanyExpense, "id" | "createdAt">) => {
     if (!companyId) return undefined;
     const docRef = await addDoc(collection(db, "companies", companyId, "expenses"), {
-      ...expense,
+      ...expenseDocPayload(expense),
       createdAt: serverTimestamp(),
     });
     return docRef.id;
@@ -212,11 +254,14 @@ export function useCompanyExpenses(companyId: string | undefined) {
           amount: current.amount,
           date: current.date,
           category: current.category,
-          receipts: current.receipts,
+          receipts: current.receipts ?? [],
         }
       : null;
+    const cleanUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined)
+    );
     await updateDoc(doc(db, "companies", companyId, "expenses", id), {
-      ...updates,
+      ...cleanUpdates,
       updatedAt: serverTimestamp(),
       ...(historyEntry ? { history: [...(current?.history ?? []), historyEntry] } : {}),
     });
@@ -227,22 +272,87 @@ export function useCompanyExpenses(companyId: string | undefined) {
     await deleteDoc(doc(db, "companies", companyId, "expenses", id));
   }, [companyId]);
 
+  const writeReceipts = useCallback(async (expenseId: string, urls: string[], names: string[]) => {
+    if (!companyId) return;
+    await updateDoc(doc(db, "companies", companyId, "expenses", expenseId), {
+      receipts: urls,
+      receiptNames: names,
+    });
+  }, [companyId]);
+
   const uploadReceipt = useCallback(async (expenseId: string, file: File, currentUrls: string[]) => {
     if (!companyId) return;
     setUploadingReceipt(true);
     try {
-      const storageRef = ref(storage, `companies/${companyId}/receipts/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
+      const current = expenses.find((e) => e.id === expenseId);
+      const urls = currentUrls ?? current?.receipts ?? [];
+      const names = alignedReceiptNames(urls, current?.receiptNames);
+      const storageRef = ref(storage, companyReceiptStoragePath(companyId, file.name));
+      await uploadBytes(storageRef, file, { contentType: file.type || "application/octet-stream" });
       const url = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, "companies", companyId, "expenses", expenseId), {
-        receipts: [...(currentUrls || []), url],
-      });
+      await writeReceipts(expenseId, [...urls, url], [...names, file.name]);
     } finally {
       setUploadingReceipt(false);
     }
-  }, [companyId]);
+  }, [companyId, expenses, writeReceipts]);
 
-  return { expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense, uploadReceipt };
+  const removeReceipt = useCallback(async (expenseId: string, url: string) => {
+    const current = expenses.find((e) => e.id === expenseId);
+    const urls = current?.receipts ?? [];
+    const names = alignedReceiptNames(urls, current?.receiptNames);
+    const idx = urls.indexOf(url);
+    await writeReceipts(
+      expenseId,
+      urls.filter((u) => u !== url),
+      names.filter((_, i) => i !== idx),
+    );
+  }, [expenses, writeReceipts]);
+
+  const replaceReceipt = useCallback(async (expenseId: string, oldUrl: string, file: File) => {
+    if (!companyId) return;
+    setUploadingReceipt(true);
+    try {
+      const current = expenses.find((e) => e.id === expenseId);
+      const urls = [...(current?.receipts ?? [])];
+      const names = alignedReceiptNames(urls, current?.receiptNames);
+      const storageRef = ref(storage, companyReceiptStoragePath(companyId, file.name));
+      await uploadBytes(storageRef, file, { contentType: file.type || "application/octet-stream" });
+      const url = await getDownloadURL(storageRef);
+      const idx = urls.indexOf(oldUrl);
+      if (idx >= 0) {
+        urls[idx] = url;
+        names[idx] = file.name;
+      } else {
+        urls.push(url);
+        names.push(file.name);
+      }
+      await writeReceipts(expenseId, urls, names);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  }, [companyId, expenses, writeReceipts]);
+
+  const renameReceipt = useCallback(async (expenseId: string, url: string, name: string) => {
+    const current = expenses.find((e) => e.id === expenseId);
+    const urls = current?.receipts ?? [];
+    const names = alignedReceiptNames(urls, current?.receiptNames);
+    const idx = urls.indexOf(url);
+    if (idx < 0) return;
+    names[idx] = name.trim() || names[idx];
+    await writeReceipts(expenseId, urls, names);
+  }, [expenses, writeReceipts]);
+
+  return {
+    expenses,
+    uploadingReceipt,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    uploadReceipt,
+    removeReceipt,
+    replaceReceipt,
+    renameReceipt,
+  };
 }
 
 // ─── Insurance ─────────────────────────────────────────────────────────────────

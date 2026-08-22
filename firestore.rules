@@ -11,10 +11,27 @@ service cloud.firestore {
     // Normal sessions never carry this claim, so the `!('deviceId' in ...)`
     // branch short-circuits before the extra get() runs — zero added cost
     // for every non-device session.
-    function isAuthenticated() {
+    function isFirebaseAuthenticated() {
       return request.auth != null &&
         (!('deviceId' in request.auth.token) ||
           !get(/databases/$(database)/documents/devices/$(request.auth.token.deviceId)).data.get('revoked', false));
+    }
+
+    // Interactive app users must enrol a passkey before normal application
+    // data becomes available. Display-device tokens are exempt because they
+    // have their own pairing and revocation boundary.
+    function isAuthenticated() {
+      return isFirebaseAuthenticated() && (
+        'deviceId' in request.auth.token ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('passkeyEnrolled', false) == true
+        )
+      );
+    }
+
+    function isFirebaseOwner(userId) {
+      return isFirebaseAuthenticated() && request.auth.uid == userId;
     }
     
     function isOwner(userId) {
@@ -25,22 +42,89 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.email == "chris.hardy.07@googlemail.com";
     }
 
+    function userDocExists() {
+      return isFirebaseAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function securitySettingsExist() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/security/settings);
+    }
+
+    function defaultModuleRequirement(moduleId) {
+      return moduleId == "personal_finance" || moduleId == "passwords" ? "passkey" : "none";
+    }
+
+    function moduleRequirement(moduleId) {
+      return securitySettingsExist()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)/security/settings)
+            .data.get("moduleRequirements", {}).get(moduleId, defaultModuleRequirement(moduleId))
+        : defaultModuleRequirement(moduleId);
+    }
+
+    function hasRecentPasskey() {
+      return isAuthenticated() &&
+        request.auth.token.get("passkeyVerifiedAt", 0) >
+          (request.time.toMillis() / 1000) - 300;
+    }
+
+    function hasRecentPassword() {
+      return isAuthenticated() &&
+        request.auth.token.get("auth_time", 0) >
+          (request.time.toMillis() / 1000) - 300 &&
+        request.auth.token.get("firebase", {}).get("sign_in_provider", "") == "password";
+    }
+
+    function meetsModuleSecurity(moduleId) {
+      let requirement = moduleRequirement(moduleId);
+      return requirement == "none" ||
+        (requirement == "passkey" && hasRecentPasskey()) ||
+        (requirement == "password" && hasRecentPassword());
+    }
+
+    function moduleForPage(page) {
+      return page == "finance" ? "personal_finance" :
+        page == "login_details" ? "passwords" :
+        page == "health" ? "health" :
+        page == "notes" ? "notes" :
+        page == "companies" ? "companies" :
+        page == "pets" ? "pets" :
+        page == "tasks" ? "tasks" :
+        page == "calendar" ? "calendar" :
+        page == "inheritance" ? "inheritance" :
+        page == "qrcodes" ? "qr_codes" :
+        page;
+    }
+
     function isSuperAdmin() {
-      return isOwnerAccount() || (isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Superadmin" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "super_admin" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true
+      return isOwnerAccount() || (isAuthenticated() && userDocExists() && (
+        userDoc().get('role', '') == "superadmin" ||
+        userDoc().get('role', '') == "Superadmin" ||
+        userDoc().get('role', '') == "super_admin" ||
+        userDoc().get('isSuperAdmin', false) == true
       ));
     }
     
     function isAdmin() {
       return isAuthenticated() && (
         isSuperAdmin() ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Admin" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
+        (userDocExists() && (
+          userDoc().get('role', '') == "admin" ||
+          userDoc().get('role', '') == "Admin" ||
+          userDoc().get('isAdmin', false) == true
+        ))
       );
+    }
+
+    // `uid in data.sharedWith` errors when the field is missing, which denies
+    // the whole rule before later OR clauses (page shares) can run.
+    function sharedWithHasUid(data) {
+      return request.auth.uid in data.get('sharedWith', []);
     }
 
     // Generic per-page individual sharing: pageShares/{ownerId}_{page}_{targetUid}
@@ -51,7 +135,7 @@ service cloud.firestore {
     }
 
     function canViewPage(ownerId, page) {
-      return isAuthenticated() && (
+      return isAuthenticated() && meetsModuleSecurity(moduleForPage(page)) && (
         isOwner(ownerId) ||
         isAdmin() ||
         exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page)))
@@ -59,7 +143,7 @@ service cloud.firestore {
     }
 
     function canEditPage(ownerId, page) {
-      return isAuthenticated() && (
+      return isAuthenticated() && meetsModuleSecurity(moduleForPage(page)) && (
         isOwner(ownerId) ||
         isAdmin() ||
         (exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))) &&
@@ -75,7 +159,7 @@ service cloud.firestore {
         !('ownerId' in c) ||
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith ||
+        sharedWithHasUid(c) ||
         canViewPage(c.ownerId, "companies");
     }
 
@@ -85,7 +169,7 @@ service cloud.firestore {
         !('ownerId' in c) ||
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
-        request.auth.uid in c.sharedWith ||
+        sharedWithHasUid(c) ||
         canEditPage(c.ownerId, "companies");
     }
 
@@ -98,7 +182,7 @@ service cloud.firestore {
         !('ownerId' in p) ||
         p.ownerId == "" ||
         request.auth.uid == p.ownerId ||
-        request.auth.uid in p.sharedWith ||
+        sharedWithHasUid(p) ||
         canViewPage(p.ownerId, "pets");
     }
 
@@ -116,11 +200,46 @@ service cloud.firestore {
 
     // Users collection - users can read/write their own data, admins can manage all
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() || isFirebaseOwner(userId);
       allow create: if isAuthenticated();
       allow update, delete: if isOwner(userId) || isAdmin();
       // Don't allow direct client writes to other users' docs unless they're admin.
       // Superadmin/admin actions should prefer Cloud Functions.
+
+      // Password-vault configuration contains the encrypted private key and is
+      // deliberately owner-only. Admin status never bypasses this boundary.
+      match /vault/{vaultDoc} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Each user controls their own app/session and per-module requirements.
+      match /security/{securityDoc} {
+        allow read: if isFirebaseOwner(userId);
+        allow write: if isOwner(userId) && hasRecentPasskey();
+      }
+    }
+
+    // Passkey public keys and one-time challenges are read and written only by
+    // server-side WebAuthn verification functions.
+    match /passkeys/{credentialId} {
+      allow read, write: if false;
+    }
+
+    match /passkeyChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+
+    match /passkeyRateLimits/{rateLimitId} {
+      allow read, write: if false;
+    }
+
+    // Public RSA keys let users encrypt an individual credential key for its
+    // recipient. No private or PIN-derived material is stored here.
+    match /vaultPublicKeys/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow delete: if isOwner(userId);
     }
     
     // Invites collection - only admins can manage
@@ -205,7 +324,7 @@ service cloud.firestore {
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith ||
+        sharedWithHasUid(resource.data) ||
         canViewPage(resource.data.ownerId, "pets")
       );
       allow create: if isAuthenticated();
@@ -213,7 +332,7 @@ service cloud.firestore {
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith ||
+        sharedWithHasUid(resource.data) ||
         canEditPage(resource.data.ownerId, "pets")
       );
       allow delete: if isAuthenticated() && (
@@ -348,10 +467,47 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // Credentials (login details vault) - shareable via pageShares
+    // Password-vault records are ciphertext. Owners may migrate legacy records,
+    // but shared users can only read records after client-side encryption.
+    // Admins do not receive implicit vault access.
     match /users/{userId}/credentials/{credId} {
-      allow read: if canViewPage(userId, "login_details");
-      allow write: if canEditPage(userId, "login_details");
+      allow read: if isAuthenticated() && meetsModuleSecurity("passwords") && (
+        isOwner(userId) ||
+        (
+          resource.data.encrypted == true &&
+          (
+            (
+              exists(/databases/$(database)/documents/pageShares/$(pageShareId(userId, "login_details"))) &&
+              get(/databases/$(database)/documents/pageShares/$(pageShareId(userId, "login_details"))).data.targetUid == request.auth.uid
+            ) ||
+            (
+              'individualAccess' in resource.data &&
+              request.auth.uid in resource.data.individualAccess
+            )
+          )
+        )
+      );
+      allow create: if isOwner(userId) && meetsModuleSecurity("passwords") &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.encrypted == true;
+      allow update: if (isOwner(userId) && meetsModuleSecurity("passwords")) || (
+        isAuthenticated() &&
+        meetsModuleSecurity("passwords") &&
+        resource.data.encrypted == true &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cipher', 'updatedAt']) &&
+        (
+          (
+            exists(/databases/$(database)/documents/pageShares/$(pageShareId(userId, "login_details"))) &&
+            get(/databases/$(database)/documents/pageShares/$(pageShareId(userId, "login_details"))).data.permission == "edit"
+          ) ||
+          (
+            'individualEditors' in resource.data &&
+            request.auth.uid in resource.data.individualEditors
+          )
+        )
+      );
+      allow delete: if isOwner(userId) && meetsModuleSecurity("passwords");
     }
 
     // Companies - shared via ownerId + sharedWith, or a companies pageShare.
@@ -362,7 +518,7 @@ service cloud.firestore {
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith ||
+        sharedWithHasUid(resource.data) ||
         canViewPage(resource.data.ownerId, "companies")
       );
       allow update: if isAuthenticated() && (
@@ -370,7 +526,7 @@ service cloud.firestore {
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
-        request.auth.uid in resource.data.sharedWith ||
+        sharedWithHasUid(resource.data) ||
         canEditPage(resource.data.ownerId, "companies")
       );
       allow create: if isAuthenticated();

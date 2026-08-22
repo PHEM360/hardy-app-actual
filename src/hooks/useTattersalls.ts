@@ -41,6 +41,9 @@ export interface TatDocument {
   url: string;
   fileType: string;
   notes?: string;
+  linkedNoteId?: string;
+  linkedNoteType?: "note" | "task";
+  linkedNoteText?: string;
 }
 
 export interface TatComment {
@@ -117,6 +120,9 @@ export function useTattersalls() {
           url: d.data().url ?? "",
           fileType: d.data().fileType ?? "file",
           notes: d.data().notes ?? "",
+          linkedNoteId: d.data().linkedNoteId ?? undefined,
+          linkedNoteType: d.data().linkedNoteType ?? undefined,
+          linkedNoteText: d.data().linkedNoteText ?? undefined,
         }))
       );
     });
@@ -171,7 +177,10 @@ export function useTattersalls() {
     await setDoc(SHARED_DOC, { expenseCategories: cats }, { merge: true });
   }, []);
 
-  const uploadDocument = useCallback(async (file: File) => {
+  const uploadDocument = useCallback(async (
+    file: File,
+    link?: { noteId: string; type: "note" | "task"; text: string },
+  ) => {
     setUploadingDoc(true);
     try {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -186,6 +195,11 @@ export function useTattersalls() {
         fileType,
         notes: "",
         createdAt: serverTimestamp(),
+        ...(link ? {
+          linkedNoteId: link.noteId,
+          linkedNoteType: link.type,
+          linkedNoteText: link.text,
+        } : {}),
       });
     } finally {
       setUploadingDoc(false);
@@ -203,7 +217,7 @@ export function useTattersalls() {
     dueDate?: string,
     authorId?: string,
   ) => {
-    await addDoc(collection(db, "tattersalls", "shared", "notes"), {
+    const noteRef = await addDoc(collection(db, "tattersalls", "shared", "notes"), {
       text,
       author: author ?? "",
       authorId: authorId ?? "",
@@ -213,6 +227,7 @@ export function useTattersalls() {
       comments: [],
       ...(dueDate ? { dueDate } : {}),
     });
+    return noteRef.id;
   }, []);
 
   const updateNote = useCallback(async (id: string, text: string) => {

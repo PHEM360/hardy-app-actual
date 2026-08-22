@@ -1,0 +1,243 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { EmailAuthProvider, reauthenticateWithCredential, signOut } from "firebase/auth";
+import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/auth/AuthContext";
+import { useSecuritySettings } from "@/hooks/useSecuritySettings";
+import {
+  authenticateWithPasskey,
+  passkeyErrorMessage,
+  passkeysSupported,
+  registerPasskey,
+} from "@/lib/passkeys";
+import {
+  appSessionRequiresAuthentication,
+  markOpenSessionSatisfied,
+  markSecurityAuthentication,
+} from "@/lib/securitySession";
+import { moduleForPath, type SecurityRequirement } from "@/types/security";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import DogLoader from "@/components/DogLoader";
+import { toast } from "sonner";
+
+function SecurityFrame({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-gradient-hero px-4 py-8">
+      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-card shadow-elevated">
+        <div className="bg-[color-mix(in_srgb,hsl(var(--primary))_14%,hsl(var(--card)))] px-6 py-7 text-center">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-lg">
+            {icon}
+          </span>
+          <h1 className="mt-4 font-display text-xl font-bold">{title}</h1>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div className="space-y-4 p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function AuthenticationPrompt({
+  requirement,
+  title,
+  description,
+  onVerified,
+  onCancel,
+}: {
+  requirement: SecurityRequirement | "either";
+  title: string;
+  description: string;
+  onVerified: (method: "passkey" | "password") => void;
+  onCancel?: () => void;
+}) {
+  const { user } = useAuth();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState<"passkey" | "password" | null>(null);
+  const [error, setError] = useState("");
+  const showPasskey = requirement === "passkey" || requirement === "either";
+  const showPassword = requirement === "password" || requirement === "either";
+
+  const verifyPasskey = async () => {
+    setBusy("passkey");
+    setError("");
+    try {
+      await authenticateWithPasskey(true);
+      onVerified("passkey");
+    } catch (caught) {
+      setError(passkeyErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const verifyPassword = async () => {
+    if (!user?.email || !password) return;
+    setBusy("password");
+    setError("");
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+      await user.getIdToken(true);
+      markSecurityAuthentication(user.uid, "password");
+      setPassword("");
+      onVerified("password");
+    } catch {
+      setError("That password was not accepted.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <SecurityFrame icon={<LockKeyhole className="h-7 w-7" />} title={title} description={description}>
+      {showPasskey && (
+        <Button
+          className="h-12 w-full rounded-xl bg-gradient-primary"
+          disabled={busy !== null || !passkeysSupported()}
+          onClick={() => void verifyPasskey()}
+        >
+          <Fingerprint className="mr-2 h-5 w-5" />
+          {busy === "passkey" ? "Checking passkey…" : "Continue with passkey"}
+        </Button>
+      )}
+      {showPassword && (
+        <>
+          {showPasskey && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="security-password">Password</Label>
+            <Input
+              id="security-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && void verifyPassword()}
+              className="h-11 rounded-xl"
+            />
+          </div>
+          <Button
+            variant={showPasskey ? "outline" : "default"}
+            className="h-11 w-full rounded-xl"
+            disabled={busy !== null || !password}
+            onClick={() => void verifyPassword()}
+          >
+            <KeyRound className="mr-2 h-4 w-4" />
+            {busy === "password" ? "Checking password…" : "Continue with password"}
+          </Button>
+        </>
+      )}
+      {error && <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+      {onCancel && <Button variant="ghost" className="w-full rounded-xl" onClick={onCancel}>Go back</Button>}
+    </SecurityFrame>
+  );
+}
+
+export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const { settings, passkeyEnrolled, loading } = useSecuritySettings();
+  const [registering, setRegistering] = useState(false);
+  const [sessionVerified, setSessionVerified] = useState(false);
+
+  useEffect(() => setSessionVerified(false), [user?.uid, settings]);
+
+  if (!user || loading) return <DogLoader text="Checking account security…" />;
+
+  if (!passkeyEnrolled) {
+    return (
+      <SecurityFrame
+        icon={<ShieldCheck className="h-7 w-7" />}
+        title="Create your passkey"
+        description="A passkey is now required for every Hardy Hub account. It uses Face ID, your fingerprint, device PIN, or a security key."
+      >
+        <Button
+          className="h-12 w-full rounded-xl bg-gradient-primary"
+          disabled={registering || !passkeysSupported()}
+          onClick={() => {
+            setRegistering(true);
+            void registerPasskey().then(() => {
+              markOpenSessionSatisfied(user.uid);
+              toast.success("Passkey created");
+            }).catch((error) => {
+              toast.error(passkeyErrorMessage(error));
+            }).finally(() => setRegistering(false));
+          }}
+        >
+          <Fingerprint className="mr-2 h-5 w-5" />
+          {registering ? "Creating passkey…" : "Create passkey"}
+        </Button>
+        {!passkeysSupported() && (
+          <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            Open Hardy Hub in a current secure browser on a passkey-compatible device.
+          </p>
+        )}
+        <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+          Passkeys are phishing-resistant. Your face and fingerprint never leave your device.
+        </p>
+        <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" onClick={() => void signOut(auth)}>
+          <LogOut className="mr-2 h-4 w-4" /> Sign out
+        </Button>
+      </SecurityFrame>
+    );
+  }
+
+  const due = !sessionVerified && appSessionRequiresAuthentication(user.uid, settings);
+  if (due) {
+    const requirement = settings.appUnlockMethod === "either" ? "either" : settings.appUnlockMethod;
+    return (
+      <AuthenticationPrompt
+        requirement={requirement}
+        title="Confirm it’s you"
+        description={
+          settings.appUnlockMode === "every_open"
+            ? "Your settings require verification whenever Hardy Hub is opened."
+            : `Your ${settings.appUnlockIntervalDays}-day sign-in period has ended.`
+        }
+        onVerified={() => {
+          markOpenSessionSatisfied(user.uid);
+          setSessionVerified(true);
+        }}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
+export function ModuleSecurityGate({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const { settings, loading } = useSecuritySettings();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const moduleId = moduleForPath(location.pathname);
+  const requirement = moduleId ? settings.moduleRequirements[moduleId] || "none" : "none";
+  const verificationKey = `${moduleId || "none"}:${location.key}`;
+  const [verifiedKey, setVerifiedKey] = useState("");
+  const verified = useMemo(() => verifiedKey === verificationKey, [verificationKey, verifiedKey]);
+
+  if (!user || loading || requirement === "none" || verified) return <>{children}</>;
+  return (
+    <AuthenticationPrompt
+      requirement={requirement}
+      title="Protected page"
+      description={`Your security settings require ${requirement === "passkey" ? "a passkey" : "your password"} before opening this section.`}
+      onVerified={() => setVerifiedKey(verificationKey)}
+      onCancel={() => navigate(-1)}
+    />
+  );
+}

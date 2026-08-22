@@ -26,7 +26,7 @@ import type {
   NotesVaultSettings,
   NoteSharePermission,
 } from "@/types/notes";
-import { DEFAULT_NOTES_PREFS } from "@/types/notes";
+import { DEFAULT_NOTES_PREFS, NOTE_COLORS } from "@/types/notes";
 
 function newId() {
   return `n${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
@@ -41,10 +41,12 @@ function mapNote(id: string, ownerId: string, data: Record<string, unknown>): Hu
     title: typeof data.title === "string" ? data.title : "",
     body: typeof data.body === "string" ? data.body : "",
     color: typeof data.color === "string" ? data.color : "default",
+    category: (data.category as HubNote["category"]) || "personal",
     pinned: !!data.pinned,
     archived: !!data.archived,
     tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
     checklist: Array.isArray(data.checklist) ? (data.checklist as NoteChecklistItem[]) : [],
+    diagram: (data.diagram as HubNote["diagram"]) ?? null,
     dueDate: typeof data.dueDate === "string" ? data.dueDate : undefined,
     calendarEventId: typeof data.calendarEventId === "string" ? data.calendarEventId : undefined,
     addToCalendar: !!data.addToCalendar,
@@ -204,11 +206,12 @@ export function useNotes(scopeUserId?: string) {
     setVaultSettings(settings);
   }, [uid]);
 
-  const addFolder = useCallback(async (name: string, color = "default") => {
+  const addFolder = useCallback(async (name: string, color?: string) => {
     if (!uid) return;
+    const palette = NOTE_COLORS.filter((c) => c.id !== "default");
     await addDoc(collection(db, "hubNotes", uid, "folders"), {
       name,
-      color,
+      color: color ?? palette[folders.length % palette.length].id,
       sortOrder: folders.length,
       sharedWith: [],
       createdAt: serverTimestamp(),
@@ -231,16 +234,19 @@ export function useNotes(scopeUserId?: string) {
   const addNote = useCallback(async (input: Partial<HubNote> & { vault?: boolean }) => {
     if (!uid) return "";
     const folder = folders.find((f) => f.id === input.folderId);
+    const palette = NOTE_COLORS.filter((c) => c.id !== "default");
     const payload = {
       folderId: input.folderId ?? null,
       kind: input.kind ?? "note",
       title: input.title ?? "",
       body: input.body ?? "",
-      color: input.color ?? "default",
+      color: input.color && input.color !== "default" ? input.color : palette[notes.length % palette.length].id,
+      category: input.category ?? "personal",
       pinned: !!input.pinned,
       archived: false,
       tags: input.tags ?? [],
       checklist: input.checklist ?? [],
+      diagram: input.diagram ?? null,
       dueDate: input.dueDate ?? null,
       calendarEventId: input.calendarEventId ?? null,
       addToCalendar: !!input.addToCalendar,
@@ -254,7 +260,7 @@ export function useNotes(scopeUserId?: string) {
     const col = input.vault ? "vault" : "items";
     const ref = await addDoc(collection(db, "hubNotes", uid, col), payload);
     return ref.id;
-  }, [uid, folders]);
+  }, [uid, folders, notes.length]);
 
   const updateNote = useCallback(async (note: HubNote, data: Partial<HubNote>) => {
     const col = note.vault ? "vault" : "items";

@@ -1,0 +1,27 @@
+---
+description: Family-facing UI must look finished, colourful, and consumer-app quality — not a grey admin draft.
+alwaysApply: true
+---
+
+# Hardy Hub UI quality
+
+This is a private family app. Match **Home dashboard**, **Personal Finance**, and **Pets** — not a settings form and not a neon marketing page.
+
+- First implementation should look **finished**: colour, spacing, empty states, motion, mobile, a clear primary action.
+- Do not ship sparse grey cards, dashed placeholders, or “coming soon” shells when the feature exists.
+- Use `FeaturePageShell` (Back, gradient-primary icon tile, `font-display` title), rounded-2xl cards, `shadow-card`, and per-domain accents (BottomNav / widget colours).
+- Colour language: `bg-gradient-primary` for the active tab and primary action; tinted cards (`color-mix` ~10–22% accent into `--card`); a left accent bar on tiles. Not shouting 500-level fills on every chip.
+- Page filters belong in a **left rail**. Keep the bottom nav. Do not put section tabs in a horizontal scroller across the top.
+- Copy is short and friendly. Hide long how-to text behind settings.
+- If the user asks for polish, change layout and colour — do not only add another dropdown.
+
+## Contrast, not camouflage or neon
+
+A tab, chip, or nested box must read as a **different** colour from the surface behind it — a step, not a shout.
+
+- ❌ Pale-on-pale: `bg-white/70` on cream, `bg-muted` inside `bg-card`, grey tabs on a grey toolbar.
+- ❌ A box whose background matches its parent.
+- ❌ Rainbow saturated pills (solid orange / green / blue / violet) for every filter.
+- ✅ Active control: gradient-primary (or a soft accent tint + 2px border) on a `bg-card` tray.
+- ✅ Nested surfaces step: page → card → inner well. Equal left/right padding; `mx-auto`; `min-w-0`; **no horizontal page scroll** on mobile (`overflow-x-hidden` on the page shell, stack or wrap columns instead of `overflow-x-auto`).
+- ✅ Text has real contrast. Do not use `text-muted-foreground` on `bg-muted`.

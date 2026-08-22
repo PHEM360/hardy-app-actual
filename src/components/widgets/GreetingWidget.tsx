@@ -48,6 +48,10 @@ function WeatherLayer({ scene }: { scene: WeatherScene }) {
 
   return (
     <div className="greeting-weather absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div
+        className="absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+        style={{ animation: "greeting-shimmer 12s ease-in-out infinite" }}
+      />
       {(scene === "stars" || scene === "snow" || scene === "storm") && stars.map((s, i) => (
         <span
           key={`star-${i}`}

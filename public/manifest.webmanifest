@@ -2,7 +2,7 @@
   "name": "Hardy Hub",
   "short_name": "Hardy Hub",
   "description": "Private family platform — invite only",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1923",
@@ -18,15 +18,15 @@
   "shortcuts": [
     {
       "name": "Add note",
-      "short_name": "Note",
-      "description": "Capture a quick note",
-      "url": "/notes/quick",
+      "short_name": "Add note",
+      "description": "Open Notes and start a new note",
+      "url": "/notes?new=1",
       "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Notes",
       "short_name": "Notes",
-      "description": "Open notes and checklists",
+      "description": "Open the Notes workspace",
       "url": "/notes",
       "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
     },
@@ -38,10 +38,10 @@
       "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
-      "name": "Tasks",
-      "short_name": "Tasks",
-      "description": "Open the tasks list",
-      "url": "/tasks",
+      "name": "Widget",
+      "short_name": "Widget",
+      "description": "Glance calendar, tasks or notes",
+      "url": "/widget",
       "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]

@@ -308,6 +308,7 @@ export interface CompanyExpense {
   amount: number;
   category: string;        // e.g. "Software", "Marketing", "Payroll"
   receipts?: string[];     // Storage download URLs
+  receiptNames?: string[]; // Display names, parallel to receipts
   createdAt?: any;
   updatedAt?: any;
   history?: CompanyExpenseHistoryEntry[];
@@ -385,6 +386,7 @@ export interface Company {
   description?: string;
   color: string;           // e.g. "#6366f1"
   emoji?: string;          // e.g. "🏢"
+  logoUrl?: string;        // optional uploaded company logo
   taxYearStart: string;    // ISO date, e.g. "2025-04-06"
   isRegistered?: boolean;  // Companies House registered
   companyType?: "registered" | "sole_trader" | "trading_name" | "other";

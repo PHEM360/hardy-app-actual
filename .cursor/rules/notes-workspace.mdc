@@ -1,0 +1,15 @@
+---
+description: Notes workspace product rules (Keep/Notes/Notion, checklists, PWA home screen).
+globs: src/pages/Notes.tsx,src/pages/QuickNote.tsx,src/pages/HubWidget.tsx,src/components/notes/**,src/hooks/useNotes.ts,src/hooks/useNoteVault.ts,src/types/notes.ts,src/lib/note*.ts
+alwaysApply: false
+---
+
+# Notes workspace
+
+- `/notes` is **in addition to** `/tasks`. Never replace or merge away the Tasks page.
+- A **checklist lives inside a note** (tick-boxes + optional body/date/diagram). It is not a Tasks-page item.
+- Layout matches Finance/Pets: `FeaturePageShell` + **left filter rail** (All, Pinned, Checklists, folders, Secure…) + main canvas. Do not put those filters in a top horizontal chip strip.
+- Colour is the app palette: gradient-primary for the active rail item, soft tinted cards, left accent bars. Not neon pills. New notes still get a real card colour, not `default` grey.
+- Every view (grid, list, board/due date, calendar, agenda) must fit one viewport width. Stack board columns on a phone; never `overflow-x-auto` on the page.
+- Phone home screen means the **device icon** (long-press / Add to Home Screen), not the in-app dashboard. Be honest: Android shortcuts work; iOS PWAs cannot be real widgets.
+- Preserve `pathname + search` through login so `/notes?new=1` opens Notes with the composer, already signed in if the session exists.

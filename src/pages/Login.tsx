@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, PawPrint, Sparkles, Anchor, Tractor, Dog, Waves } from "lucide-react";
+import { Eye, EyeOff, PawPrint, Sparkles, Anchor, Tractor, Dog, Waves, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import DogLoader from "@/components/DogLoader";
+import { authenticateWithPasskey, passkeyErrorMessage, passkeysSupported } from "@/lib/passkeys";
+import { markOpenSessionSatisfied, markSecurityAuthentication } from "@/lib/securitySession";
 
 function getAuthErrorMessage(err: any): string {
   const code = String(err?.code || "");
@@ -50,9 +53,10 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { forbidden } = useAuth();
+  const { forbidden, user, initializing } = useAuth();
 
   // Helps confirm deployments are updating. Remove anytime.
   const BUILD_STAMP = "2026-02-14T15:30Z";
@@ -61,6 +65,13 @@ const Login = () => {
     const timer = setTimeout(() => setShowSplash(false), 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (initializing || !user) return;
+    const from = (location.state as { from?: string } | null)?.from;
+    const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+    navigate(target, { replace: true });
+  }, [user, initializing, location.state, navigate]);
 
   // Keep the splash duration in one place so we can compute stagger when
   // the splash finishes. Delays in the file are based on the original
@@ -74,15 +85,42 @@ const Login = () => {
     setLoading(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      markSecurityAuthentication(credential.user.uid, "password");
+      markOpenSessionSatisfied(credential.user.uid);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from || "/dashboard", { replace: true });
+      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+      navigate(target, { replace: true });
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyLoading(true);
+    setError(null);
+    try {
+      const signedInUser = await authenticateWithPasskey(false);
+      markOpenSessionSatisfied(signedInUser.uid);
+      const from = (location.state as { from?: string } | null)?.from;
+      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+      navigate(target, { replace: true });
+    } catch (caught) {
+      setError(passkeyErrorMessage(caught));
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  if (initializing || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-hero">
+        <DogLoader text="Opening Hardy Hub…" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col relative">
@@ -339,6 +377,26 @@ const Login = () => {
               </Button>
             </motion.div>
           </form>
+
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={passkeyLoading || loading || !passkeysSupported()}
+            className="h-12 w-full rounded-xl text-sm font-semibold"
+            onClick={() => void handlePasskeyLogin()}
+          >
+            <Fingerprint className="mr-2 h-5 w-5" />
+            {passkeyLoading ? "Checking passkey…" : "Sign in with passkey"}
+          </Button>
+          <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
+            Passkey not appearing? Use <span className="font-semibold text-foreground">hardyapp.co.uk</span> on both devices
+            and enable the same provider — Apple Passwords, 1Password or Google Password Manager.
+          </p>
 
           <motion.p
             initial={{ opacity: 0 }}

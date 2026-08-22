@@ -92,6 +92,14 @@ export {
 	getHouseholdCalendarEvents,
 } from "./display";
 
+export {
+	beginPasskeyRegistration,
+	finishPasskeyRegistration,
+	beginPasskeyAuthentication,
+	finishPasskeyAuthentication,
+	resetUserPasskeys,
+} from "./passkeys";
+
 // ── Dog tags (Pets page) ──
 export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
 
@@ -110,6 +118,9 @@ export const inviteUser = onCall(async (request) => {
 	}
 	if (password.length < 8) {
 		throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
+	}
+	if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain upper-case and lower-case letters.");
 	}
 	if (!/[0-9]/.test(password)) {
 		throw new HttpsError("invalid-argument", "Password must contain at least one number (0–9).");
@@ -304,6 +315,9 @@ export const onAuthUserDeleted = functionsV1.auth.user().onDelete(async (user) =
 function validatePasswordStrength(password: string) {
 	if (password.length < 8) {
 		throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
+	}
+	if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+		throw new HttpsError("invalid-argument", "Password must contain upper-case and lower-case letters.");
 	}
 	if (!/[0-9]/.test(password)) {
 		throw new HttpsError("invalid-argument", "Password must contain at least one number (0–9).");

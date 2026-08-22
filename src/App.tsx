@@ -44,6 +44,7 @@ import FinancePreview from "@/pages/FinancePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
+import { MandatoryPasskeyGate } from "@/components/security/SecurityGate";
 
 const queryClient = new QueryClient();
 
@@ -74,7 +75,9 @@ const App = () => (
           <Route
             element={
               <RequireAuth>
-                <AppLayout />
+                <MandatoryPasskeyGate>
+                  <AppLayout />
+                </MandatoryPasskeyGate>
               </RequireAuth>
             }
           >
@@ -233,6 +236,7 @@ const App = () => (
                 </RequireFeature>
               }
             />
+            <Route path="/widget" element={<HubWidget />} />
             <Route path="/widget/:kind" element={<HubWidget />} />
           </Route>
           <Route path="/" element={<Login />} />

@@ -1,12 +1,13 @@
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo, useRef } from "react";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
-  Building2, Plus, Edit2, Trash2, Globe, Hash, MapPin,
-  CheckCircle2, XCircle, ChevronRight, QrCode, UserPlus, X,
+  Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
+  ImagePlus, ExternalLink, Mail, Phone,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,11 +16,40 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { storage } from "@/lib/firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useAuth } from "@/auth/AuthContext";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { Company } from "@/types/app";
+import { toast } from "sonner";
+
+function taxYearBounds(taxYearStart?: string) {
+  const base = taxYearStart ? new Date(taxYearStart) : new Date(`${new Date().getFullYear()}-04-06`);
+  const now = new Date();
+  let start = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  while (new Date(start.getFullYear() + 1, start.getMonth(), start.getDate()) <= now) {
+    start = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
+  }
+  const end = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
+  end.setDate(end.getDate() - 1);
+  const daysLeft = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86_400_000));
+  return {
+    start: start.toISOString().split("T")[0],
+    end: end.toISOString().split("T")[0],
+    daysLeft,
+    label: `${start.getFullYear()}/${String(start.getFullYear() + 1).slice(2)}`,
+  };
+}
+
+function shortDate(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 const PALETTE = [
   "#6366f1","#8b5cf6","#ec4899","#ef4444","#f97316",
@@ -40,6 +70,7 @@ const EMPTY: Omit<Company, "id" | "createdAt" | "updatedAt"> = {
   description: "",
   color: "#6366f1",
   emoji: "🏢",
+  logoUrl: "",
   isRegistered: false,
   companyType: "other",
   parentCompanyId: undefined,
@@ -129,6 +160,8 @@ function CompanyForm({
   sharing?: SharingProps;
 }) {
   const [form, setForm] = useState(initial);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const setContact = (k: keyof Company["contact"], v: string) =>
     setForm((f) => ({ ...f, contact: { ...f.contact, [k]: v } }));
@@ -138,6 +171,22 @@ function CompanyForm({
   );
   const isTrading = form.companyType === "trading_name";
   const showCompanyNo = form.companyType === "registered" || form.isRegistered;
+
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "logo";
+      const logoRef = ref(storage, `companies/logos/${Date.now()}_${safeName}`);
+      await uploadBytes(logoRef, file, { contentType: file.type || "image/*" });
+      set("logoUrl", await getDownloadURL(logoRef));
+      toast.success("Logo ready");
+    } catch (error) {
+      console.error("Failed to upload company logo", error);
+      toast.error("Couldn’t upload the logo. Please try again.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   return (
     <div className="space-y-4 pt-1">
@@ -208,15 +257,57 @@ function CompanyForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Icon</Label>
-        <div className="flex gap-1.5 flex-wrap">
-          {EMOJIS.map((e) => (
-            <button key={e} onClick={() => set("emoji", e)}
-              className={`text-xl w-9 h-9 rounded-lg flex items-center justify-center transition-all ${form.emoji === e ? "bg-muted ring-2 ring-primary" : "hover:bg-muted/60"}`}>
-              {e}
+        <Label>Logo or Icon</Label>
+        <p className="text-[10px] text-muted-foreground">The website icon is used automatically. Upload a logo here to override it.</p>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void uploadLogo(file);
+          }}
+        />
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/30 p-2.5">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl text-2xl"
+            style={{ background: `color-mix(in srgb, ${form.color} 25%, hsl(var(--card)))` }}
+          >
+            <CompanyLogoMark
+              logoUrl={form.logoUrl}
+              website={form.contact.website}
+              emoji={form.emoji}
+              name={form.name || "Company"}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={uploadingLogo}
+              className="flex items-center gap-1.5 text-xs font-semibold text-primary disabled:opacity-50"
+            >
+              <ImagePlus className="h-3.5 w-3.5" /> {uploadingLogo ? "Uploading…" : form.logoUrl ? "Replace logo" : "Upload logo"}
             </button>
-          ))}
+            {form.logoUrl && (
+              <button type="button" onClick={() => set("logoUrl", "")} className="mt-1 block text-[10px] text-muted-foreground hover:text-destructive">
+                Remove logo
+              </button>
+            )}
+          </div>
         </div>
+        {!form.logoUrl && (
+          <div className="flex gap-1.5 flex-wrap">
+            {EMOJIS.map((e) => (
+              <button key={e} type="button" onClick={() => set("emoji", e)}
+                className={`text-xl w-9 h-9 rounded-lg flex items-center justify-center transition-all ${form.emoji === e ? "bg-muted ring-2 ring-primary" : "hover:bg-muted/60"}`}>
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {!isTrading && (
@@ -244,35 +335,32 @@ function CompanyForm({
 
       <div className="flex gap-2 pt-2">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-10 rounded-xl">Cancel</Button>
-        <Button onClick={() => onSave(form)} disabled={!form.name.trim() || saving} className="flex-1 h-10 rounded-xl text-white" style={{ backgroundColor: form.color }}>
-          {saving ? "Saving…" : "Save Company"}
+        <Button onClick={() => onSave(form)} disabled={!form.name.trim() || saving || uploadingLogo} className="flex-1 h-10 rounded-xl text-white" style={{ backgroundColor: form.color }}>
+          {saving ? "Saving…" : uploadingLogo ? "Uploading logo…" : "Save Company"}
         </Button>
       </div>
     </div>
   );
 }
 
-function SectionHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="flex items-center gap-2 pt-3 pb-1.5">
-      <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block flex-shrink-0" />
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
-      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">{count}</span>
-    </div>
-  );
-}
-
-// ─── Company Tile ─────────────────────────────────────────────────────────────
-
-function CompanyTile({ co, index, children: tradingNameChildren, currentUid, appUsers, onEdit, onDelete, onNavigate, onEditChild, onDeleteChild, onNavigateChild }: {
-  co: Company; index: number;
-  children?: Company[];
+function CompanyCard({
+  co, index, tradingNameChildren, currentUid, appUsers,
+  onEdit, onDelete, onNavigate, onEditChild, onDeleteChild, onNavigateChild,
+}: {
+  co: Company;
+  index: number;
+  tradingNameChildren?: Company[];
   currentUid?: string;
   appUsers: { id: string; name: string; email: string }[];
-  onEdit: () => void; onDelete: () => void; onNavigate: () => void;
-  onEditChild?: (c: Company) => void; onDeleteChild?: (c: Company) => void; onNavigateChild?: (c: Company) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onNavigate: () => void;
+  onEditChild?: (c: Company) => void;
+  onDeleteChild?: (c: Company) => void;
+  onNavigateChild?: (c: Company) => void;
 }) {
   const typeLabel = co.companyType ? COMPANY_TYPE_LABELS[co.companyType] : null;
+  const snap = taxYearBounds(co.taxYearStart);
   const isOwner = !co.ownerId || co.ownerId === currentUid;
   const sharedWith = co.sharedWith ?? [];
   const sharedLabel = isOwner
@@ -281,149 +369,211 @@ function CompanyTile({ co, index, children: tradingNameChildren, currentUid, app
         const owner = appUsers.find((u) => u.id === co.ownerId);
         return owner ? `Shared by ${owner.name}` : "Shared with you";
       })();
+
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.04 }}
-      className="relative rounded-2xl border border-border/40 bg-card shadow-soft overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
-      style={{ borderTopWidth: 3, borderTopColor: co.color }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04 }}
+      role="button"
+      tabIndex={0}
       onClick={onNavigate}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNavigate(); } }}
+      className="cursor-pointer overflow-hidden rounded-2xl border border-border/40 shadow-card transition-shadow hover:shadow-md"
+      style={{
+        background: `color-mix(in srgb, ${co.color} 15%, hsl(var(--card)))`,
+        borderTopWidth: 3,
+        borderTopColor: co.color,
+      }}
     >
-      <div className="p-3.5">
-        {/* Icon + name row */}
-        <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="p-4">
+        <div className="mb-3 flex items-start gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-            style={{ backgroundColor: `${co.color}20` }}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl"
+            style={{ background: `color-mix(in srgb, ${co.color} 28%, hsl(var(--card)))` }}
           >
-            {co.emoji || "🏢"}
+            <CompanyLogoMark logoUrl={co.logoUrl} website={co.contact.website} emoji={co.emoji} name={co.name} />
           </div>
-          <div className="flex gap-0.5 flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-base font-bold leading-tight text-foreground">{co.name}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {[typeLabel, co.isRegistered ? "Registered" : null, co.contact.companyNumber ? `No. ${co.contact.companyNumber}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            {sharedLabel && <p className="mt-0.5 text-[10px] text-muted-foreground">{sharedLabel}</p>}
+          </div>
+          <div className="flex shrink-0 gap-0.5">
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); onEdit(); }}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-background/50 hover:text-foreground"
               title="Edit / share"
             >
-              <Edit2 className="w-3 h-3" />
+              <Edit2 className="h-3.5 w-3.5" />
             </button>
             {isOwner && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted/40 transition-colors"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-background/50 hover:text-destructive"
               >
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
         </div>
 
-        <p className="text-sm font-bold text-card-foreground leading-tight line-clamp-2">{co.name}</p>
+        {co.description && (
+          <p className="mb-3 line-clamp-2 text-[11px] leading-relaxed text-foreground/70">{co.description}</p>
+        )}
 
-        {/* Badges */}
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {typeLabel && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-              {typeLabel}
-            </span>
+        <div className="grid grid-cols-1 gap-1.5 rounded-xl bg-background/55 p-2.5 text-[10px]">
+          {(co.companyType === "registered" || co.isRegistered) && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Company number</span>
+              <span className="truncate font-semibold text-foreground">{co.contact.companyNumber || "Not added"}</span>
+            </div>
           )}
-          {co.isRegistered && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-700 dark:text-green-400 flex items-center gap-0.5">
-              <CheckCircle2 className="w-2.5 h-2.5" /> Registered
-            </span>
+          {co.contact.vatNumber && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">VAT number</span>
+              <span className="truncate font-semibold text-foreground">{co.contact.vatNumber}</span>
+            </div>
           )}
-          {sharedLabel && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400">
-              {sharedLabel}
-            </span>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Accounting year</span>
+            <span className="text-right font-semibold text-foreground">{shortDate(snap.start)} – {shortDate(snap.end)}</span>
+          </div>
+          {co.contact.email && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Email</span>
+              <a href={`mailto:${co.contact.email}`} onClick={(e) => e.stopPropagation()} className="truncate font-semibold text-primary hover:underline">
+                {co.contact.email}
+              </a>
+            </div>
+          )}
+          {co.contact.phone && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Phone</span>
+              <a href={`tel:${co.contact.phone}`} onClick={(e) => e.stopPropagation()} className="truncate font-semibold text-primary hover:underline">
+                {co.contact.phone}
+              </a>
+            </div>
+          )}
+          {co.contact.website && (
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Website</span>
+              <span className="truncate font-semibold text-foreground">{co.contact.website.replace(/^https?:\/\//, "")}</span>
+            </div>
+          )}
+          {co.contact.address && (
+            <div className="flex justify-between gap-2">
+              <span className="shrink-0 text-muted-foreground">Address</span>
+              <span className="line-clamp-2 text-right font-semibold text-foreground">{co.contact.address}</span>
+            </div>
           )}
         </div>
 
-        {/* Meta */}
-        {(co.contact.companyNumber || co.contact.website || co.description) && (
-          <p className="text-[10px] text-muted-foreground mt-1.5 truncate">
-            {co.contact.companyNumber
-              ? `No. ${co.contact.companyNumber}`
-              : co.contact.website
-              ? co.contact.website.replace(/^https?:\/\//, "")
-              : co.description}
-          </p>
+        {(co.contact.website || co.contact.email || co.contact.phone) && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {co.contact.website && (
+              <a
+                href={/^https?:\/\//i.test(co.contact.website) ? co.contact.website : `https://${co.contact.website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 rounded-lg bg-primary px-2 py-1.5 text-[10px] font-semibold text-primary-foreground"
+              >
+                <ExternalLink className="h-3 w-3" /> Website
+              </a>
+            )}
+            {co.contact.email && (
+              <a
+                href={`mailto:${co.contact.email}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] font-semibold text-foreground"
+              >
+                <Mail className="h-3 w-3" /> Email
+              </a>
+            )}
+            {co.contact.phone && (
+              <a
+                href={`tel:${co.contact.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] font-semibold text-foreground"
+              >
+                <Phone className="h-3 w-3" /> Call
+              </a>
+            )}
+          </div>
         )}
 
-        {/* Trading name sub-tiles */}
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/30 pt-2">
+          <span className="text-[10px] text-muted-foreground">Tax year {snap.label} · {snap.daysLeft} days left</span>
+          <span className="text-[10px] font-semibold text-primary">View details →</span>
+        </div>
+
         {tradingNameChildren && tradingNameChildren.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-border/40">
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1">
-              <span style={{ color: co.color }}>◆</span> Trading As
-            </p>
-            <div className="space-y-1.5">
-              {tradingNameChildren.map((child) => (
+          <div className="mt-3 space-y-1.5 border-t border-border/40 pt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Trading as</p>
+            {tradingNameChildren.map((child) => {
+              const childTaxYear = taxYearBounds(child.taxYearStart);
+              return (
                 <div
                   key={child.id}
                   onClick={(e) => { e.stopPropagation(); onNavigateChild?.(child); }}
-                  className="group flex items-center gap-2.5 px-2.5 py-2 rounded-xl border border-border/30 bg-muted/40 hover:bg-muted/70 hover:border-border/60 transition-all cursor-pointer"
+                  className="rounded-xl p-2.5"
+                  style={{ background: `color-mix(in srgb, ${child.color || co.color} 20%, hsl(var(--card)))` }}
                 >
-                  <div
-                    className="w-6 h-6 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ backgroundColor: `${child.color || co.color}25` }}
-                  >
-                    {child.emoji || "🏷️"}
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-card/70 text-sm">
+                      <CompanyLogoMark
+                        logoUrl={child.logoUrl}
+                        website={child.contact.website}
+                        emoji={child.emoji || "🏷️"}
+                        name={child.name}
+                        className="h-full w-full object-contain p-0.5"
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-semibold text-foreground">{child.name}</span>
+                      <span className="block truncate text-[9px] font-medium text-muted-foreground">Trading name of {co.name}</span>
+                    </span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onEditChild?.(child); }} className="p-1 text-muted-foreground hover:text-foreground">
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onDeleteChild?.(child); }} className="p-1 text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </div>
-                  <span className="text-[11px] font-semibold text-foreground truncate flex-1 leading-tight">{child.name}</span>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onEditChild?.(child); }}
-                      className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-background/60 transition-colors"
-                    >
-                      <Edit2 className="w-2.5 h-2.5" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDeleteChild?.(child); }}
-                      className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-background/60 transition-colors"
-                    >
-                      <Trash2 className="w-2.5 h-2.5" />
-                    </button>
+                  <div className="mt-2 grid gap-1 text-[9px] text-foreground/70">
+                    <p>Accounting year: {shortDate(childTaxYear.start)} – {shortDate(childTaxYear.end)}</p>
+                    {child.contact.email && <p className="truncate">Email: {child.contact.email}</p>}
+                    {child.contact.phone && <p className="truncate">Phone: {child.contact.phone}</p>}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    {child.contact.website ? (
+                      <a
+                        href={/^https?:\/\//i.test(child.contact.website) ? child.contact.website : `https://${child.contact.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 rounded-lg bg-card/80 px-2 py-1 text-[9px] font-semibold text-primary"
+                      >
+                        <ExternalLink className="h-2.5 w-2.5" /> Website
+                      </a>
+                    ) : <span />}
+                    <span className="text-[9px] font-semibold text-primary">View details →</span>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         )}
       </div>
     </motion.div>
-  );
-}
-
-// ─── Action Panel ─────────────────────────────────────────────────────────────
-
-function ActionPanel({ onAddCompany, onQRCodes }: { onAddCompany?: () => void; onQRCodes: () => void }) {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card shadow-soft p-4 space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Actions</p>
-      <div className="space-y-2">
-        {onAddCompany && (
-        <button
-          onClick={onAddCompany}
-          className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary transition-colors text-left"
-        >
-          <Plus className="w-4 h-4 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold leading-tight">Add Company</p>
-            <p className="text-[11px] opacity-70 leading-tight mt-0.5">Register a new business</p>
-          </div>
-        </button>
-        )}
-        <button
-          onClick={onQRCodes}
-          className="flex items-center gap-3 w-full px-3.5 py-3 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 text-violet-600 dark:text-violet-400 transition-colors text-left"
-        >
-          <QrCode className="w-4 h-4 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold leading-tight">QR Codes</p>
-            <p className="text-[11px] opacity-70 leading-tight mt-0.5">Generate & manage QR codes</p>
-          </div>
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -452,7 +602,13 @@ const Companies = () => {
       else await addCompany(form);
       setDialogOpen(false);
       setEditCompany(null);
-    } finally { setSaving(false); }
+      toast.success(editCompany ? "Company updated" : "Company added");
+    } catch (error) {
+      console.error("Failed to save company", error);
+      toast.error("Couldn’t save the company. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleShare = async () => {
@@ -498,18 +654,22 @@ const Companies = () => {
   const registered = useMemo(() => topLevel.filter((c) => c.companyType === "registered"), [topLevel]);
   const soleTraders = useMemo(() => topLevel.filter((c) => c.companyType === "sole_trader"), [topLevel]);
   const others = useMemo(() => topLevel.filter((c) => !c.companyType || c.companyType === "other"), [topLevel]);
+  const unlinkedTradingNames = useMemo(
+    () => tradingNames.filter((c) => !c.parentCompanyId || !companies.some((parent) => parent.id === c.parentCompanyId)),
+    [companies, tradingNames],
+  );
   const getChildren = (id: string) => tradingNames.filter((c) => c.parentCompanyId === id);
 
   const openAdd = () => { setEditCompany(null); setDialogOpen(true); };
 
-  const renderTile = (co: Company, i: number) => (
-    <CompanyTile
+  const renderCard = (co: Company, i: number) => (
+    <CompanyCard
       key={co.id}
       co={co}
       index={i}
       currentUid={user?.uid}
       appUsers={appUsers}
-      children={getChildren(co.id!)}
+      tradingNameChildren={getChildren(co.id!)}
       onEdit={() => { setEditCompany(co); setShareEmail(""); setShareError(null); setShareSuccess(false); setDialogOpen(true); }}
       onDelete={() => co.id && deleteCompany(co.id)}
       onNavigate={() => navigate(`/companies/${co.id}`)}
@@ -532,91 +692,82 @@ const Companies = () => {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle={isOwnScope ? "Business management" : "Shared with you"}
+      subtitle={isOwnScope ? "Overview of all companies" : "Shared with you"}
       icon={<Building2 className="w-5 h-5" />}
       sharePage="companies"
       action={
-        canEdit ? (
-          <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-semibold">
-            <Plus className="w-4 h-4" /> Add
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/qr-codes")} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground" title="QR codes">
+            <QrCode className="h-4 w-4" />
           </button>
-        ) : undefined
+          {canEdit && (
+            <button onClick={openAdd} className="flex items-center gap-1 text-xs font-semibold text-primary">
+              <Plus className="h-4 w-4" /> Add
+            </button>
+          )}
+        </div>
       }
     >
-      {/* Mobile quick actions — shown above list on small screens */}
-      <div className="flex gap-2 mb-4 md:hidden">
-        {canEdit && (
-          <button
-            onClick={openAdd}
-            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
-          >
-            <Plus className="w-4 h-4 text-primary" /> Add Company
-          </button>
-        )}
-        <button
-          onClick={() => navigate("/qr-codes")}
-          className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 text-sm font-medium text-foreground transition-colors"
-        >
-          <QrCode className="w-4 h-4 text-violet-500" /> QR Codes
-        </button>
-      </div>
-
-      {/* Desktop: two-column layout */}
-      <div className="md:grid md:grid-cols-[1fr_220px] md:gap-4 md:items-start">
-        {/* Left — company list */}
-        <div>
-          <AnimatePresence mode="popLayout">
-            {companies.length === 0 ? (
-              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-20 gap-4">
-                <div className="w-20 h-20 rounded-3xl bg-gradient-primary flex items-center justify-center text-3xl shadow-elevated">🏢</div>
-                <div className="text-center">
-                  <p className="text-base font-bold text-card-foreground">No companies yet</p>
-                  <p className="text-sm text-muted-foreground mt-1 max-w-xs">Add your first company to start managing your business portfolio.</p>
+      {companies.length === 0 ? (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-20">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-primary text-3xl shadow-elevated">🏢</div>
+          <div className="text-center">
+            <p className="text-base font-bold text-card-foreground">No companies yet</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">Add a company to build your business structure and keep its records together.</p>
+          </div>
+          {canEdit && (
+            <Button size="sm" onClick={openAdd} className="mt-1 gap-1.5 rounded-xl bg-gradient-primary text-white shadow-glow">
+              <Plus className="h-3.5 w-3.5" /> Add first company
+            </Button>
+          )}
+        </motion.div>
+      ) : (
+        <div className="space-y-5">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-0.5">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Company structure</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Trading names are shown beneath their legal entity.</p>
+              </div>
+              <span className="text-[10px] font-medium text-muted-foreground">{companies.length} total</span>
+            </div>
+            {registered.length > 0 && (
+              <div className="space-y-2.5">
+                <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Registered companies</p>
+                <div className="grid grid-cols-2 items-start gap-3">
+                  {registered.map((co, i) => renderCard(co, i))}
                 </div>
-                {canEdit && (
-                  <Button size="sm" onClick={openAdd} className="mt-1 rounded-xl gap-1.5 bg-gradient-primary text-white shadow-glow">
-                    <Plus className="w-3.5 h-3.5" /> Add First Company
-                  </Button>
-                )}
-              </motion.div>
-            ) : (
-              <div className="space-y-4">
-                {registered.length > 0 && (
-                  <div>
-                    <SectionHeader title="Registered Companies" count={registered.length} />
-                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
-                      {registered.map((co, i) => renderTile(co, i))}
-                    </div>
-                  </div>
-                )}
-                {soleTraders.length > 0 && (
-                  <div>
-                    <SectionHeader title="Sole Traders" count={soleTraders.length} />
-                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
-                      {soleTraders.map((co, i) => renderTile(co, registered.length + i))}
-                    </div>
-                  </div>
-                )}
-                {others.length > 0 && (
-                  <div>
-                    {(registered.length > 0 || soleTraders.length > 0) && (
-                      <SectionHeader title="Other" count={others.length} />
-                    )}
-                    <div className="grid grid-cols-2 gap-3 mt-2 items-start">
-                      {others.map((co, i) => renderTile(co, registered.length + soleTraders.length + i))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
-          </AnimatePresence>
+            {soleTraders.length > 0 && (
+              <div className="space-y-2.5">
+                <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sole traders</p>
+                <div className="grid grid-cols-2 items-start gap-3">
+                  {soleTraders.map((co, i) => renderCard(co, registered.length + i))}
+                </div>
+              </div>
+            )}
+            {others.length > 0 && (
+              <div className="space-y-2.5">
+                {(registered.length > 0 || soleTraders.length > 0) && (
+                  <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Other</p>
+                )}
+                <div className="grid grid-cols-2 items-start gap-3">
+                  {others.map((co, i) => renderCard(co, registered.length + soleTraders.length + i))}
+                </div>
+              </div>
+            )}
+            {unlinkedTradingNames.length > 0 && (
+              <div className="space-y-2.5">
+                <p className="px-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Unlinked trading names</p>
+                <div className="grid grid-cols-2 items-start gap-3">
+                  {unlinkedTradingNames.map((co, i) => renderCard(co, topLevel.length + i))}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
-
-        {/* Right — action panel (desktop only) */}
-        <div className="hidden md:block sticky top-4">
-          <ActionPanel onAddCompany={canEdit ? openAdd : undefined} onQRCodes={() => navigate("/qr-codes")} />
-        </div>
-      </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditCompany(null); }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
@@ -631,6 +782,7 @@ const Companies = () => {
               description: editCompany.description || "",
               color: editCompany.color,
               emoji: editCompany.emoji || "🏢",
+              logoUrl: editCompany.logoUrl || "",
               isRegistered: editCompany.isRegistered ?? false,
               companyType: editCompany.companyType || "other",
               parentCompanyId: editCompany.parentCompanyId,

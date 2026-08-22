@@ -17,7 +17,13 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage }
   const navigate = useNavigate();
 
   return (
-    <div className="px-4 py-4 sm:px-5 sm:py-5">
+    <div
+      className="mx-auto w-full min-w-0 overflow-x-hidden py-4 sm:py-5"
+      style={{
+        paddingLeft: "max(1rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

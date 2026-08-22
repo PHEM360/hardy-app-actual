@@ -2,6 +2,18 @@ export type NoteKind = "note" | "checklist" | "task";
 export type NotesView = "grid" | "list" | "board" | "calendar" | "agenda";
 export type NoteSharePermission = "view" | "edit";
 export type VaultUnlockMethod = "pin" | "webauthn" | "both";
+export type NotesColorMode =
+  | "note"
+  | "folder"
+  | "kind"
+  | "category"
+  | "status"
+  | "alternate"
+  | "random"
+  | "shades"
+  | "none";
+export type NotesListStyle = "keep" | "paper" | "outlined" | "filled" | "compact";
+export type NoteCategory = "personal" | "family" | "work" | "ideas" | "shopping" | "health" | "other";
 
 export interface NoteChecklistItem {
   id: string;
@@ -15,6 +27,26 @@ export interface NoteCipher {
   data: string;
 }
 
+export interface NoteDiagramNode {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  shape: "box" | "diamond" | "circle" | "oval";
+}
+
+export interface NoteDiagramEdge {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+}
+
+export interface NoteDiagram {
+  nodes: NoteDiagramNode[];
+  edges: NoteDiagramEdge[];
+}
+
 export interface HubNote {
   id: string;
   ownerId: string;
@@ -23,10 +55,12 @@ export interface HubNote {
   title: string;
   body: string;
   color: string;
+  category: NoteCategory;
   pinned: boolean;
   archived: boolean;
   tags: string[];
   checklist: NoteChecklistItem[];
+  diagram?: NoteDiagram | null;
   dueDate?: string;
   calendarEventId?: string;
   addToCalendar?: boolean;
@@ -66,6 +100,9 @@ export interface NotesPrefs {
   defaultView: NotesView;
   showTasksPageItems: boolean;
   showCalendarEvents: boolean;
+  colorMode: NotesColorMode;
+  listStyle: NotesListStyle;
+  shadeHue: string;
 }
 
 export interface NotesVaultSettings {
@@ -89,8 +126,21 @@ export const NOTE_COLORS = [
   { id: "gray", label: "Grey", swatch: "#e2e8f0", text: "text-slate-900 dark:text-slate-100" },
 ] as const;
 
+export const NOTE_CATEGORIES: { id: NoteCategory; label: string; swatch: string }[] = [
+  { id: "personal", label: "Personal", swatch: "#fde68a" },
+  { id: "family", label: "Family", swatch: "#fdba74" },
+  { id: "work", label: "Work", swatch: "#93c5fd" },
+  { id: "ideas", label: "Ideas", swatch: "#d8b4fe" },
+  { id: "shopping", label: "Shopping", swatch: "#86efac" },
+  { id: "health", label: "Health", swatch: "#5eead4" },
+  { id: "other", label: "Other", swatch: "#e2e8f0" },
+];
+
 export const DEFAULT_NOTES_PREFS: NotesPrefs = {
   defaultView: "grid",
   showTasksPageItems: true,
   showCalendarEvents: true,
+  colorMode: "note",
+  listStyle: "keep",
+  shadeHue: "#f59e0b",
 };

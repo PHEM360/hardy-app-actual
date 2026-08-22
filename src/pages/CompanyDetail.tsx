@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,6 +7,9 @@ import {
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
+import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
+import { ReceiptAttachCard, ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
+import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -23,6 +26,7 @@ import {
   useCompanyLogins,
   useCompanyServices,
   useCompanyExpenses,
+  expenseSaveMessage,
   useCompanyInsurance,
   useCompanyIncome,
   useCompanyTaxReturns,
@@ -45,6 +49,13 @@ const TABS = [
   { id: "projection",  label: "Projection",  icon: BarChart3 },
   { id: "settings",    label: "Settings",    icon: Settings2 },
 ];
+
+const COMPANY_TYPE_LABELS_DETAIL: Record<string, string> = {
+  registered: "Ltd company",
+  sole_trader: "Sole trader",
+  trading_name: "Trading name",
+  other: "Company",
+};
 
 const SERVICE_UNITS = ["per month", "per year", "per project", "per hour", "per day", "one-off"];
 
@@ -233,7 +244,10 @@ function ServicesTab({ companyId }: { companyId: string }) {
 // ─── Expenses Tab ─────────────────────────────────────────────────────────────
 
 function ExpensesTab({ companyId }: { companyId: string }) {
-  const { expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense, uploadReceipt } = useCompanyExpenses(companyId);
+  const {
+    expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense,
+    uploadReceipt, removeReceipt, replaceReceipt, renameReceipt,
+  } = useCompanyExpenses(companyId);
   const { settings } = useCompanySettings(companyId);
   const [open, setOpen] = useState(false);
   const emptyForm: Omit<CompanyExpense, "id" | "createdAt"> = {
@@ -242,31 +256,28 @@ function ExpensesTab({ companyId }: { companyId: string }) {
     amount: 0,
     category: "Other",
     receipts: [],
+    receiptNames: [],
   };
   const [form, setForm] = useState(emptyForm);
-  // Set while editing an existing expense; null while adding a new one
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const newFileRef = useRef<HTMLInputElement>(null);
-  // Receipt attached to the expense currently being created/edited
   const [newReceiptCapture, setNewReceiptCapture] = useState<File | null>(null);
   const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null);
-  const [newReceiptPreviewUrl, setNewReceiptPreviewUrl] = useState<string>("");
-  // Chosen up front for the camera path; left null for uploads so the scanner
-  // asks its own post-hoc question once the picked file's type is known.
   const [chosenMode, setChosenMode] = useState<"scan" | "picture" | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
-  // Scanner state: which existing expense receipt we're adding to
-  const [scannerCtx, setScannerCtx] = useState<{ expId: string; receipts: string[]; file: File } | null>(null);
+  const [scannerCtx, setScannerCtx] = useState<{
+    expId: string;
+    receipts: string[];
+    file: File;
+    replaceUrl?: string;
+  } | null>(null);
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<ReceiptSource | null>(null);
 
-  // Thumbnail for whatever new receipt is currently attached
-  useEffect(() => {
-    if (!newReceiptFile || !newReceiptFile.type.startsWith("image/")) { setNewReceiptPreviewUrl(""); return; }
-    const url = URL.createObjectURL(newReceiptFile);
-    setNewReceiptPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [newReceiptFile]);
+  const liveExpense = editingId ? expenses.find((e) => e.id === editingId) : undefined;
+  const liveReceipts = liveExpense?.receipts ?? form.receipts ?? [];
+  const liveNames = alignedReceiptNames(liveReceipts, liveExpense?.receiptNames ?? form.receiptNames);
 
   const openAdd = () => {
     setEditingId(null);
@@ -277,9 +288,28 @@ function ExpensesTab({ companyId }: { companyId: string }) {
 
   const openEdit = (exp: CompanyExpense) => {
     setEditingId(exp.id ?? null);
-    setForm({ date: exp.date, description: exp.description, amount: exp.amount, category: exp.category, receipts: exp.receipts ?? [] });
+    setForm({
+      date: exp.date,
+      description: exp.description,
+      amount: exp.amount,
+      category: exp.category,
+      receipts: exp.receipts ?? [],
+      receiptNames: alignedReceiptNames(exp.receipts ?? [], exp.receiptNames),
+    });
     setNewReceiptFile(null);
     setOpen(true);
+  };
+
+  const attachIncomingFile = (f: File) => {
+    if (f.type.startsWith("image/")) {
+      setNewReceiptCapture(f);
+      return;
+    }
+    if (editingId) {
+      void uploadReceipt(editingId, f, liveReceipts);
+    } else {
+      setNewReceiptFile(f);
+    }
   };
 
   const totalThisYear = useMemo(() => {
@@ -298,12 +328,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const handleNewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setNewReceiptFile(f); // PDF etc — attach as-is, scanning doesn't apply
-      return;
-    }
-    setNewReceiptCapture(f); // image — goes through DocumentScannerSheet
+    if (f) attachIncomingFile(f);
   };
 
   const openUpload = () => {
@@ -329,12 +354,38 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       if (editingId) {
         await updateExpense(editingId, { date: form.date, description: form.description, amount: form.amount, category: form.category });
         if (newReceiptFile) {
-          await uploadReceipt(editingId, newReceiptFile, form.receipts ?? []);
+          try {
+            await uploadReceipt(editingId, newReceiptFile, form.receipts ?? []);
+          } catch (receiptErr) {
+            console.error("Failed to upload receipt", receiptErr);
+            toast.success("Expense saved", { description: "The receipt didn’t upload — try attaching it again." });
+            setOpen(false);
+            setEditingId(null);
+            setForm(emptyForm);
+            setNewReceiptFile(null);
+            return;
+          }
         }
       } else {
-        const id = await addExpense({ ...form, receipts: [] });
+        const id = await addExpense({
+          date: form.date,
+          description: form.description,
+          amount: form.amount,
+          category: form.category,
+          receipts: [],
+        });
         if (id && newReceiptFile) {
-          await uploadReceipt(id, newReceiptFile, []);
+          try {
+            await uploadReceipt(id, newReceiptFile, []);
+          } catch (receiptErr) {
+            console.error("Failed to upload receipt", receiptErr);
+            toast.success("Expense saved", { description: "The receipt didn’t upload — try attaching it again." });
+            setOpen(false);
+            setEditingId(null);
+            setForm(emptyForm);
+            setNewReceiptFile(null);
+            return;
+          }
         }
       }
       setOpen(false);
@@ -344,20 +395,26 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       toast.success("Expense saved");
     } catch (err) {
       console.error("Failed to save expense", err);
-      toast.error("Couldn't save expense. Please try again.");
+      toast.error(expenseSaveMessage(err));
     } finally { setSaving(false); }
   };
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2.5">
-        <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20">
-          <p className="text-[10px] text-destructive/70 uppercase tracking-wider">This Year</p>
+        <div
+          className="rounded-2xl p-3.5 shadow-card"
+          style={{ background: "color-mix(in srgb, hsl(var(--destructive)) 16%, hsl(var(--card)))", borderLeft: "4px solid hsl(var(--destructive))" }}
+        >
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-destructive/80">This year</p>
           <p className="text-lg font-bold font-display text-destructive">£{totalThisYear.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="p-3 rounded-xl bg-muted border border-border/50">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Entries</p>
-          <p className="text-lg font-bold font-display text-card-foreground">{expenses.length}</p>
+        <div
+          className="rounded-2xl p-3.5 shadow-card"
+          style={{ background: "color-mix(in srgb, hsl(var(--primary)) 14%, hsl(var(--card)))", borderLeft: "4px solid hsl(var(--primary))" }}
+        >
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-primary/80">Entries</p>
+          <p className="text-lg font-bold font-display text-foreground">{expenses.length}</p>
         </div>
       </div>
 
@@ -374,96 +431,122 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       )}
 
       <div className="flex justify-end">
-        <button onClick={openAdd} className="flex items-center gap-1 text-xs text-primary font-medium"><Plus className="w-3.5 h-3.5" /> Add Expense</button>
+        <button onClick={openAdd} className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-soft">
+          <Plus className="h-3.5 w-3.5" /> Add expense
+        </button>
       </div>
 
       <div className="space-y-2">
-        {expenses.length === 0 && <p className="text-xs text-muted-foreground text-center py-6">No expenses recorded yet.</p>}
-        {expenses.map((exp) => (
-          <div key={exp.id} className="p-3.5 rounded-xl border border-border/50 bg-card shadow-soft">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-card-foreground">{exp.description}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{exp.date} · {exp.category}</p>
-                {(exp.receipts?.length ?? 0) > 0 && (
-                  <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {exp.receipts!.map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                        {url.match(/\.(jpg|jpeg|png|gif|webp)/i) ? (
-                          <img src={url} alt="receipt" className="w-10 h-10 rounded-lg object-cover border border-border/40" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-muted border border-border/40 flex items-center justify-center text-[10px] text-muted-foreground">PDF</div>
-                        )}
-                      </a>
-                    ))}
-                    <label className="w-10 h-10 rounded-lg bg-muted border border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors">
-                      <Upload className="w-3.5 h-3.5 text-muted-foreground" />
-                      <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploadingReceipt}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          e.target.value = "";
-                          if (!f || !exp.id) return;
-                          if (f.type.startsWith("image/")) {
-                            setScannerCtx({ expId: exp.id, receipts: exp.receipts || [], file: f });
-                          } else {
-                            uploadReceipt(exp.id, f, exp.receipts || []);
-                          }
-                        }} />
-                    </label>
-                  </div>
-                )}
-                {(exp.receipts?.length ?? 0) === 0 && (
-                  <label className="mt-2 inline-flex items-center gap-1 text-[10px] text-primary cursor-pointer">
-                    <Upload className="w-3 h-3" /> Add receipt
-                    <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploadingReceipt}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!f || !exp.id) return;
-                        if (f.type.startsWith("image/")) {
-                          setScannerCtx({ expId: exp.id, receipts: [], file: f });
-                        } else {
-                          uploadReceipt(exp.id, f, []);
-                        }
-                      }} />
-                  </label>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                <p className="text-sm font-bold font-display text-destructive">£{exp.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>
-                <button onClick={() => openEdit(exp)} className="p-1 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
-                <button onClick={() => exp.id && deleteExpense(exp.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
-
-            {(exp.history?.length ?? 0) > 0 && (
-              <div className="mt-2 -mx-3.5 -mb-3.5 border-t border-border/50">
-                <button
-                  onClick={() => setHistoryOpenId((cur) => (cur === exp.id ? null : exp.id ?? null))}
-                  className="w-full flex items-center justify-between px-3.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
-                >
-                  <span className="flex items-center gap-1.5"><History className="w-3 h-3" /> Edited ({exp.history!.length})</span>
-                  {historyOpenId === exp.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-                {historyOpenId === exp.id && (
-                  <div className="divide-y divide-border/40 text-[10px] bg-muted/20">
-                    {[...exp.history!].reverse().map((h, i) => (
-                      <div key={i} className="px-3.5 py-2 space-y-0.5">
-                        <div className="font-medium text-muted-foreground">Before edit on {new Date(h.editedAt).toLocaleString("en-GB")}</div>
-                        <div>{h.description} · £{h.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} · {h.date} · {h.category}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+        {expenses.length === 0 && (
+          <div className="rounded-2xl border border-border/40 bg-card px-4 py-10 text-center shadow-soft">
+            <p className="text-sm font-semibold text-foreground">No expenses yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">Add one to keep receipts with the spend.</p>
           </div>
-        ))}
+        )}
+        {expenses.map((exp) => {
+          const names = alignedReceiptNames(exp.receipts ?? [], exp.receiptNames);
+          return (
+            <div
+              key={exp.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openEdit(exp)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEdit(exp); } }}
+              className="cursor-pointer rounded-2xl border border-border/40 p-3.5 shadow-soft transition-shadow hover:shadow-md"
+              style={{
+                background: "color-mix(in srgb, hsl(var(--destructive)) 10%, hsl(var(--card)))",
+                borderLeftWidth: 4,
+                borderLeftColor: "hsl(var(--destructive))",
+              }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-card-foreground">{exp.description}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{exp.date} · {exp.category}</p>
+                  {(exp.receipts?.length ?? 0) > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {exp.receipts!.map((url, i) => (
+                        <ReceiptThumb
+                          key={url}
+                          source={{ url, name: names[i] }}
+                          className="h-20 w-16"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewer({ url, name: names[i] });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="ml-1 flex shrink-0 items-center gap-1">
+                  <p className="text-sm font-bold font-display text-destructive">£{exp.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openEdit(exp); }}
+                    className="p-1 text-muted-foreground hover:text-primary"
+                    aria-label="Edit expense"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); exp.id && deleteExpense(exp.id); }}
+                    className="p-1 text-muted-foreground hover:text-destructive"
+                    aria-label="Delete expense"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {(exp.history?.length ?? 0) > 0 && (
+                <div className="mt-2 -mx-3.5 -mb-3.5 border-t border-border/40">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHistoryOpenId((cur) => (cur === exp.id ? null : exp.id ?? null));
+                    }}
+                    className="flex w-full items-center justify-between px-3.5 py-2 text-[10px] font-medium text-muted-foreground hover:bg-background/40"
+                  >
+                    <span className="flex items-center gap-1.5"><History className="h-3 w-3" /> Edited ({exp.history!.length})</span>
+                    {historyOpenId === exp.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {historyOpenId === exp.id && (
+                    <div className="divide-y divide-border/40 bg-background/30 text-[10px]">
+                      {[...exp.history!].reverse().map((h, i) => (
+                        <div key={i} className="space-y-0.5 px-3.5 py-2">
+                          <div className="font-medium text-muted-foreground">Before edit on {new Date(h.editedAt).toLocaleString("en-GB")}</div>
+                          <div>{h.description} · £{h.amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })} · {h.date} · {h.category}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
-          <DialogHeader><DialogTitle className="font-display">{editingId ? "Edit Expense" : "Add Expense"}</DialogTitle></DialogHeader>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next && viewer) return;
+          setOpen(next);
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          className="mx-4 max-w-md"
+          onPointerDownOutside={(e) => { if (viewer) e.preventDefault(); }}
+          onInteractOutside={(e) => { if (viewer) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (viewer) e.preventDefault(); }}
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">{editingId ? (form.description || "Expense") : "Add expense"}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Description *</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="grid grid-cols-2 gap-2">
@@ -476,33 +559,52 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                 <SelectContent>{settings.expenseCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label>{editingId ? "Attach another receipt (optional)" : "Attach receipt (optional)"}</Label>
-              <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
-              {newReceiptFile ? (
-                <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-muted/30">
-                  {newReceiptPreviewUrl ? (
-                    <img src={newReceiptPreviewUrl} alt="Receipt preview" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/40" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  )}
-                  <span className="text-[11px] text-foreground flex-1 truncate">{newReceiptFile.name}</span>
-                  <button onClick={() => setNewReceiptFile(null)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+
+            <div className="space-y-2">
+              <Label>Receipt</Label>
+              {editingId && liveReceipts.length > 0 && (
+                <div className="space-y-2">
+                  {liveReceipts.map((url, i) => (
+                    <ReceiptManageCard
+                      key={url}
+                      url={url}
+                      name={liveNames[i]}
+                      busy={uploadingReceipt}
+                      onPreview={() => setViewer({ url, name: liveNames[i] })}
+                      onRename={(name) => { void renameReceipt(editingId, url, name); }}
+                      onReplace={(file) => {
+                        if (file.type.startsWith("image/")) {
+                          setScannerCtx({ expId: editingId, receipts: liveReceipts, file, replaceUrl: url });
+                        } else {
+                          void replaceReceipt(editingId, url, file);
+                        }
+                      }}
+                      onRemove={() => { void removeReceipt(editingId, url); }}
+                    />
+                  ))}
                 </div>
+              )}
+              <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
+              {newReceiptFile && !editingId ? (
+                <ReceiptAttachCard
+                  file={newReceiptFile}
+                  onRemove={() => setNewReceiptFile(null)}
+                  onPreview={() => setViewer({ file: newReceiptFile, name: newReceiptFile.name })}
+                />
               ) : (
                 <div className="flex gap-2">
-                  <button onClick={openUpload} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
-                    <Upload className="w-3.5 h-3.5" /> Upload file
+                  <button type="button" onClick={openUpload} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Upload className="h-3.5 w-3.5" /> {liveReceipts.length || newReceiptFile ? "Add another" : "Upload file"}
                   </button>
-                  <button onClick={openCameraChooser} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
-                    <Camera className="w-3.5 h-3.5" /> Take photo
+                  <button type="button" onClick={openCameraChooser} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                    <Camera className="h-3.5 w-3.5" /> Take photo
                   </button>
                 </div>
               )}
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => { setOpen(false); setEditingId(null); setNewReceiptFile(null); }} className="flex-1 h-9 rounded-xl">Cancel</Button>
-              <Button onClick={save} disabled={!form.description || saving} className="flex-1 h-9 rounded-xl bg-gradient-primary">{saving ? "Saving…" : "Save"}</Button>
+              <Button variant="outline" onClick={() => { setOpen(false); setEditingId(null); setNewReceiptFile(null); }} className="h-9 flex-1 rounded-xl">Cancel</Button>
+              <Button onClick={save} disabled={!form.description || saving} className="h-9 flex-1 rounded-xl bg-gradient-primary">{saving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
         </DialogContent>
@@ -519,21 +621,34 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       <DocumentScannerSheet
         imageFile={newReceiptCapture}
         initialMode={chosenMode ?? undefined}
-        onConfirm={(scannedFile) => { setNewReceiptFile(scannedFile); setNewReceiptCapture(null); setChosenMode(null); }}
+        onConfirm={(scannedFile) => {
+          if (editingId) {
+            void uploadReceipt(editingId, scannedFile, liveReceipts);
+          } else {
+            setNewReceiptFile(scannedFile);
+          }
+          setNewReceiptCapture(null);
+          setChosenMode(null);
+        }}
         onCancel={() => { setNewReceiptCapture(null); setChosenMode(null); }}
       />
 
-      {/* Document scanner for receipt images on already-saved expenses */}
       <DocumentScannerSheet
         imageFile={scannerCtx?.file ?? null}
         onConfirm={(scannedFile) => {
           if (scannerCtx) {
-            uploadReceipt(scannerCtx.expId, scannedFile, scannerCtx.receipts);
+            if (scannerCtx.replaceUrl) {
+              void replaceReceipt(scannerCtx.expId, scannerCtx.replaceUrl, scannedFile);
+            } else {
+              void uploadReceipt(scannerCtx.expId, scannedFile, scannerCtx.receipts);
+            }
           }
           setScannerCtx(null);
         }}
         onCancel={() => setScannerCtx(null)}
       />
+
+      <ReceiptLightbox source={viewer} open={!!viewer} onClose={() => setViewer(null)} />
     </div>
   );
 }
@@ -1192,23 +1307,31 @@ function SettingsTab({ companyId }: { companyId: string }) {
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ company }: { company: any }) {
+  const color = company.color || "#6366f1";
+  const contactEntries = Object.entries(company.contact || {}).filter(([, v]) => v);
   return (
-    <div className="space-y-4">
-      <div className="p-4 rounded-xl border border-border/50 bg-card shadow-soft space-y-3">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Contact Details</p>
-        {Object.entries(company.contact || {}).filter(([, v]) => v).map(([k, v]) => (
-          <div key={k} className="flex justify-between text-xs">
-            <span className="text-muted-foreground capitalize">{k.replace(/([A-Z])/g, " $1")}</span>
-            <span className="text-card-foreground font-medium">{v as string}</span>
+    <div className="space-y-3">
+      <div
+        className="space-y-3 rounded-2xl p-4 shadow-soft"
+        style={{ background: `color-mix(in srgb, ${color} 16%, hsl(var(--card)))`, borderLeft: `3px solid ${color}` }}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contact</p>
+        {contactEntries.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-3 text-xs">
+            <span className="capitalize text-muted-foreground">{k.replace(/([A-Z])/g, " $1")}</span>
+            <span className="text-right font-medium text-card-foreground">{v as string}</span>
           </div>
         ))}
-        {Object.values(company.contact || {}).filter(Boolean).length === 0 && (
+        {contactEntries.length === 0 && (
           <p className="text-xs text-muted-foreground">No contact details saved.</p>
         )}
       </div>
-      <div className="p-4 rounded-xl border border-border/50 bg-card shadow-soft">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tax Year</p>
-        <p className="text-sm text-card-foreground">
+      <div
+        className="rounded-2xl p-4 shadow-soft"
+        style={{ background: `color-mix(in srgb, ${color} 14%, hsl(var(--card)))`, borderLeft: `3px solid ${color}` }}
+      >
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tax year</p>
+        <p className="text-sm font-medium text-card-foreground">
           {company.taxYearStart
             ? `${new Date(company.taxYearStart).toLocaleDateString("en-GB", { day: "numeric", month: "long" })} — ${new Date(new Date(company.taxYearStart).setFullYear(new Date(company.taxYearStart).getFullYear() + 1) - 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}`
             : "Not set"}
@@ -1449,7 +1572,13 @@ function EntityFinanceSummary({
     <div className={`rounded-xl border border-border/50 bg-muted/30 p-3 ${isChild ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}`} onClick={onNavigate}>
       <div className="flex items-center gap-2 mb-2">
         <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm" style={{ backgroundColor: `${company.color}20` }}>
-          {company.emoji || "🏢"}
+          <CompanyLogoMark
+            logoUrl={company.logoUrl}
+            website={company.contact.website}
+            emoji={company.emoji}
+            name={company.name}
+            className="h-full w-full rounded-lg object-contain p-0.5"
+          />
         </div>
         <span className="text-xs font-semibold text-foreground flex-1">{company.name}</span>
         {isChild && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
@@ -1970,68 +2099,103 @@ const CompanyDetail = () => {
   }
 
   return (
-    <div className="px-4 py-5">
-      {/* Header */}
+    <div
+      className="mx-auto w-full min-w-0 overflow-x-hidden py-4 sm:py-5"
+      style={{
+        paddingLeft: "max(1rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
+      }}
+    >
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <button onClick={() => navigate("/companies")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
-          <ArrowLeft className="w-4 h-4" /> Companies
+        <button onClick={() => navigate("/companies")} className="group mb-3 flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          Companies
         </button>
-        <div className="flex items-center gap-3">
+        <div
+          className="flex items-center gap-3 rounded-2xl border border-border/40 p-3.5 shadow-card"
+          style={{
+            background: `color-mix(in srgb, ${company.color} 15%, hsl(var(--card)))`,
+            borderLeftWidth: 3,
+            borderLeftColor: company.color,
+          }}
+        >
           <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-soft"
-            style={{ backgroundColor: `${company.color}20`, border: `2px solid ${company.color}40` }}
+            className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xl"
+            style={{ background: `color-mix(in srgb, ${company.color} 28%, hsl(var(--card)))` }}
           >
-            {company.emoji || "🏢"}
+            <CompanyLogoMark logoUrl={company.logoUrl} website={company.contact.website} emoji={company.emoji} name={company.name} />
           </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold font-display text-foreground">{company.name}</h1>
-            {company.description && <p className="text-sm text-muted-foreground mt-0.5">{company.description}</p>}
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-xl font-bold text-foreground">{company.name}</h1>
+            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+              {[
+                company.companyType ? COMPANY_TYPE_LABELS_DETAIL[company.companyType] : null,
+                company.contact.companyNumber ? `No. ${company.contact.companyNumber}` : null,
+                company.description,
+              ].filter(Boolean).join(" · ")}
+            </p>
           </div>
         </div>
-        <div className="mt-4 h-1 rounded-full" style={{ background: `linear-gradient(to right, ${company.color}, ${company.color}40)` }} />
       </motion.div>
 
-      {/* Tab bar */}
-      <div className="flex gap-2 overflow-x-auto pb-1.5 mb-5 no-scrollbar">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all ${
-                active ? "text-white shadow-md" : "bg-muted/60 text-muted-foreground hover:bg-muted"
-              }`}
-              style={active ? { backgroundColor: company.color } : undefined}
-            >
-              <Icon className="w-4 h-4" />
-              <span className="text-[10px] font-semibold">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <div className="flex min-w-0 gap-3">
+        <aside className="w-[3.75rem] shrink-0 sm:w-[11.5rem]">
+          <nav className="sticky top-2 space-y-0.5 rounded-2xl border border-border/40 bg-card p-1.5 shadow-soft">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const on = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl border-[1.5px] px-1.5 py-1.5 text-left transition sm:px-2 ${
+                    on ? "text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                  style={on ? {
+                    background: `color-mix(in srgb, ${company.color} 22%, hsl(var(--card)))`,
+                    borderColor: `color-mix(in srgb, ${company.color} 58%, transparent)`,
+                  } : undefined}
+                >
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                    style={{
+                      background: on
+                        ? `color-mix(in srgb, ${company.color} 34%, hsl(var(--card)))`
+                        : "color-mix(in srgb, hsl(var(--muted)) 70%, hsl(var(--card)))",
+                    }}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="hidden min-w-0 truncate text-[13px] font-semibold sm:block">{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-      {/* Tab content */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.15 }}
-        >
-          {activeTab === "overview"   && <OverviewTab company={company} />}
-          {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
-          {activeTab === "logins"     && <LoginsTab companyId={id!} />}
-          {activeTab === "services"   && <ServicesTab companyId={id!} />}
-          {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}
-          {activeTab === "insurance"  && <InsuranceTab companyId={id!} />}
-          {activeTab === "tax"        && <TaxTab companyId={id!} company={company} allCompanies={companies} />}
-          {activeTab === "projection" && <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />}
-          {activeTab === "settings"   && <SettingsTab companyId={id!} />}
-        </motion.div>
-      </AnimatePresence>
+        <div className="min-w-0 flex-1">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15 }}
+            >
+              {activeTab === "overview"   && <OverviewTab company={company} />}
+              {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
+              {activeTab === "logins"     && <LoginsTab companyId={id!} />}
+              {activeTab === "services"   && <ServicesTab companyId={id!} />}
+              {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}
+              {activeTab === "insurance"  && <InsuranceTab companyId={id!} />}
+              {activeTab === "tax"        && <TaxTab companyId={id!} company={company} allCompanies={companies} />}
+              {activeTab === "projection" && <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />}
+              {activeTab === "settings"   && <SettingsTab companyId={id!} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 };

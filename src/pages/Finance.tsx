@@ -147,12 +147,12 @@ function pillClass(active: boolean) {
 
 function HeroDelta({ label, change, pct }: { label: string; change: number | null; pct: number | null }) {
   return (
-    <div className="rounded-xl bg-white/25 border border-white/45 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-white/80">{label}</p>
+    <div className="min-w-0 rounded-xl bg-white/25 border border-white/45 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
+      <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-white/80 leading-tight">{label}</p>
       {change === null ? (
-        <p className="text-sm text-white/75 mt-0.5">Not enough history</p>
+        <p className="text-[11px] sm:text-sm text-white/75 mt-0.5 leading-tight">Not enough history</p>
       ) : (
-        <p className="text-sm font-bold font-display text-white mt-0.5">
+        <p className="truncate text-xs sm:text-sm font-bold font-display text-white mt-0.5">
           {formatSignedGBP(change)}
           {formatPct(pct) && <span className="text-white/85 font-medium ml-1.5">{formatPct(pct)}</span>}
         </p>
@@ -509,7 +509,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       {isOwnScope && (
         <button
           onClick={() => navigate("/household-finance")}
-          className="w-full text-left rounded-xl border-2 border-border bg-card hover:border-primary/40 px-3.5 py-2.5 mb-4 transition-colors shadow-soft"
+          className="w-full text-left rounded-xl border-2 border-border bg-card hover:border-primary/40 px-3.5 py-2.5 mb-3 sm:mb-4 transition-colors shadow-soft"
         >
           <p className="text-xs font-semibold text-foreground">This page is your personal finances</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -518,7 +518,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </button>
       )}
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl shadow-card mb-5 bg-gradient-primary">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-5 rounded-2xl shadow-card mb-3 sm:mb-5 bg-gradient-primary">
         <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total balance</p>
         <p className="text-2xl font-bold font-display text-white mt-1">
           {formatGBP(totalBalance)}
@@ -527,7 +527,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
           Across {latestBalances.filter((a) => a.active && !a.hidden).length} active accounts
         </p>
         {(showStat("heroMonth") || showStat("heroTaxYear") || showStat("heroOpened")) && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-3 sm:mt-4">
             {showStat("heroMonth") && (
               <HeroDelta label="Since last month" change={portfolio.month.change} pct={portfolio.month.changePct} />
             )}
@@ -539,7 +539,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             )}
           </div>
         )}
-        <p className="text-[11px] text-white/75 mt-3 leading-snug">
+        <p className="hidden sm:block text-[11px] text-white/75 mt-3 leading-snug">
           These changes include money paid in. Individual deposits and withdrawals aren’t recorded, so this isn’t a pure return.
         </p>
       </motion.div>

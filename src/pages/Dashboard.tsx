@@ -12,7 +12,6 @@ import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GAP     = 18;
-const PADDING = 16;
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -55,7 +54,7 @@ const Dashboard = () => {
   }, [updateWidget]);
 
   return (
-    <div className="pb-28">
+    <div className="mx-auto w-full max-w-6xl pb-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-3 sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
         <p className="text-sm font-semibold text-foreground">Dashboard</p>
@@ -138,21 +137,20 @@ const Dashboard = () => {
       {/* Widget canvas */}
       <div
         ref={containerRef}
-        className="relative"
+        className="relative mx-4 sm:mx-5"
         style={{
           height: `${canvasHeight + 32}px`,
-          padding: `${GAP}px ${PADDING}px 0`,
+          marginTop: `${GAP}px`,
         }}
       >
         {containerWidth > 0 && layout.map((item) => {
           if (!item.visible && !editMode) return null;
-          const availWidth = containerWidth - PADDING * 2;
 
           return (
             <WidgetShell
               key={item.id}
               item={item}
-              containerWidth={availWidth}
+              containerWidth={containerWidth}
               editMode={editMode}
               onUpdate={handleUpdate}
             >

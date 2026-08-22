@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,10 @@ import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import { useAiConfig } from "@/hooks/useAiConfig";
 import { useMyDevices } from "@/hooks/useMyDevices";
+import { useSecuritySettings } from "@/hooks/useSecuritySettings";
+import { authenticateWithPasskey, passkeyErrorMessage, registerPasskey } from "@/lib/passkeys";
+import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } from "@/types/security";
+import { toast } from "sonner";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -118,6 +122,17 @@ const Settings = () => {
   const [deviceLabelDraft, setDeviceLabelDraft] = useState("");
   const [forgetConfirmId, setForgetConfirmId] = useState<string | null>(null);
 
+  // Passkeys and per-module security
+  const {
+    settings: securitySettings,
+    passkeyEnrolled,
+    saveSettings: saveSecuritySettings,
+  } = useSecuritySettings();
+  const [securityDraft, setSecurityDraft] = useState<AppSecuritySettings>(securitySettings);
+  const [securitySaving, setSecuritySaving] = useState(false);
+  const [addingPasskey, setAddingPasskey] = useState(false);
+  useEffect(() => setSecurityDraft(securitySettings), [securitySettings]);
+
   // Populate from Firestore profile once loaded
   useEffect(() => {
     if (!profile) return;
@@ -175,7 +190,9 @@ const Settings = () => {
     setChangePasswordError(null);
     setChangePasswordSuccess(false);
     if (!currentPassword) { setChangePasswordError("Please enter your current password."); return; }
-    if (newPassword.length < 6) { setChangePasswordError("New password must be at least 6 characters."); return; }
+    if (newPassword.length < 8) { setChangePasswordError("New password must be at least 8 characters."); return; }
+    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword)) { setChangePasswordError("Include at least one upper-case and one lower-case letter."); return; }
+    if (!/[0-9]/.test(newPassword) || !/[^a-zA-Z0-9]/.test(newPassword)) { setChangePasswordError("Include at least one number and one special character."); return; }
     if (newPassword !== confirmPassword) { setChangePasswordError("New passwords do not match."); return; }
     setChangePasswordLoading(true);
     try {
@@ -196,6 +213,32 @@ const Settings = () => {
       }
     } finally {
       setChangePasswordLoading(false);
+    }
+  };
+
+  const saveSecurity = async () => {
+    setSecuritySaving(true);
+    try {
+      await authenticateWithPasskey(true);
+      await saveSecuritySettings(securityDraft);
+      toast.success("Security settings saved");
+    } catch {
+      toast.error("Could not save security settings");
+    } finally {
+      setSecuritySaving(false);
+    }
+  };
+
+  const addAnotherPasskey = async () => {
+    setAddingPasskey(true);
+    try {
+      if (passkeyEnrolled) await authenticateWithPasskey(true);
+      await registerPasskey("Additional passkey");
+      toast.success("Passkey added");
+    } catch (error) {
+      toast.error(passkeyErrorMessage(error));
+    } finally {
+      setAddingPasskey(false);
     }
   };
 
@@ -582,6 +625,109 @@ const Settings = () => {
           Security
         </h3>
         <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-3">
+          <div className="rounded-2xl border border-primary/20 border-l-4 border-l-primary bg-[color-mix(in_srgb,hsl(var(--primary))_10%,hsl(var(--card)))] p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+                <Fingerprint className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Passkey protected</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {passkeyEnrolled ? "A passkey is registered to your account" : "Passkey setup is required"}
+                </span>
+              </span>
+              <ShieldCheck className="h-5 w-5 text-primary" />
+            </div>
+            <Button variant="outline" size="sm" className="w-full rounded-xl" disabled={addingPasskey} onClick={() => void addAnotherPasskey()}>
+              <Fingerprint className="mr-2 h-4 w-4" />
+              {addingPasskey ? "Creating passkey…" : "Add another passkey"}
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold">Passwordless sign-in</p>
+              <p className="text-[11px] text-muted-foreground">Choose how often this device asks you to prove it is you.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ask me</Label>
+                <select
+                  value={securityDraft.appUnlockMode}
+                  onChange={(event) => setSecurityDraft((current) => ({ ...current, appUnlockMode: event.target.value as AppSecuritySettings["appUnlockMode"] }))}
+                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs"
+                >
+                  <option value="passkey_freshness">When my passkey is no longer recent</option>
+                  <option value="interval">After a set period</option>
+                  <option value="every_open">Every time I open the app</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Verification method</Label>
+                <select
+                  value={securityDraft.appUnlockMethod}
+                  onChange={(event) => setSecurityDraft((current) => ({ ...current, appUnlockMethod: event.target.value as AppSecuritySettings["appUnlockMethod"] }))}
+                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs"
+                >
+                  <option value="passkey">Passkey</option>
+                  <option value="password">Email password</option>
+                  <option value="either">Passkey or password</option>
+                </select>
+              </div>
+            </div>
+            {securityDraft.appUnlockMode !== "every_open" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Period</Label>
+                <select
+                  value={securityDraft.appUnlockIntervalDays}
+                  onChange={(event) => setSecurityDraft((current) => ({ ...current, appUnlockIntervalDays: Number(event.target.value) }))}
+                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs"
+                >
+                  <option value={1}>Every day</option>
+                  <option value={7}>Every 7 days</option>
+                  <option value={14}>Every 14 days</option>
+                  <option value={30}>Every month</option>
+                  <option value={90}>Every 3 months</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold">Page security</p>
+              <p className="text-[11px] text-muted-foreground">Require an additional check whenever you open a protected section.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {SECURITY_MODULES.map((module) => {
+                const requirement = securityDraft.moduleRequirements[module.id] || "none";
+                return (
+                  <label key={module.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold">{module.label}</span>
+                    <select
+                      value={requirement}
+                      onChange={(event) => {
+                        const value = event.target.value as SecurityRequirement;
+                        setSecurityDraft((current) => ({
+                          ...current,
+                          moduleRequirements: { ...current.moduleRequirements, [module.id]: value },
+                        }));
+                      }}
+                      className="rounded-lg border border-border bg-card px-2 py-1 text-[10px]"
+                    >
+                      <option value="none">No extra check</option>
+                      <option value="passkey">Passkey</option>
+                      <option value="password">Password</option>
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+            <Button className="w-full rounded-xl bg-gradient-primary" disabled={securitySaving} onClick={() => void saveSecurity()}>
+              {securitySaving ? "Saving…" : "Save security settings"}
+            </Button>
+          </div>
+
           {!showChangePassword ? (
             <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2" onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(false); }}>
               <Lock className="w-4 h-4" /> Change Password
@@ -595,7 +741,7 @@ const Settings = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">New Password</Label>
-                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="At least 6 characters" />
+                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-10 rounded-xl text-sm" placeholder="8+ characters, mixed case, number & symbol" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Confirm New Password</Label>

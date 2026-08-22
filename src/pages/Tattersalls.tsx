@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
-import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square, Settings, MessageCircle } from "lucide-react";
+import { Building, Plus, FileText, TrendingUp, Upload, Camera, ScanLine, File, Pencil, X, Check, Trash2, StickyNote, CheckSquare, Square, Settings, MessageCircle, Paperclip } from "lucide-react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +14,7 @@ import { useTattersalls, type TatDocument } from "@/hooks/useTattersalls";
 import { useAuth } from "@/auth/AuthContext";
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { toast } from "sonner";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload?.length) {
@@ -111,7 +112,11 @@ const Tattersalls = () => {
   const [newNoteDueDate, setNewNoteDueDate] = useState("");
   const [newNoteAddToTasks, setNewNoteAddToTasks] = useState(false);
   const [newNoteReminder, setNewNoteReminder] = useState("none");
+  const [newNoteFile, setNewNoteFile] = useState<File | null>(null);
   const [addingNote, setAddingNote] = useState(false);
+  const noteFileInputRef = useRef<HTMLInputElement>(null);
+  const existingNoteFileInputRef = useRef<HTMLInputElement>(null);
+  const [attachingNoteId, setAttachingNoteId] = useState<string | null>(null);
   // Edit & comments
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState("");
@@ -209,13 +214,25 @@ const Tattersalls = () => {
       ? newNoteAuthorOther.trim() || undefined
       : newNoteAuthor || undefined;
     try {
-      await addNote(
+      const noteId = await addNote(
         newNoteText.trim(),
         resolvedAuthor,
         newNoteType,
         newNoteType === 'task' ? (newNoteDueDate || undefined) : undefined,
         dataUid,
       );
+      if (newNoteFile) {
+        try {
+          await uploadDocument(newNoteFile, {
+            noteId,
+            type: newNoteType,
+            text: newNoteText.trim(),
+          });
+        } catch (error) {
+          console.error("Failed to attach Tattersalls document", error);
+          toast.error(`${newNoteType === "note" ? "Note" : "Task"} saved, but the file didn’t upload.`);
+        }
+      }
       if (newNoteType === 'task' && newNoteAddToTasks && dataUid) {
         const taskData: Record<string, unknown> = {
           title: newNoteText.trim(),
@@ -232,8 +249,32 @@ const Tattersalls = () => {
       }
       setNewNoteText(""); setNewNoteAuthor(""); setNewNoteAuthorOther("");
       setNewNoteDueDate(""); setNewNoteAddToTasks(false); setNewNoteReminder("none");
+      setNewNoteFile(null);
       setAddMode(null);
     } finally { setAddingNote(false); }
+  };
+
+  const handleAttachToExistingNote = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const note = notes.find((item) => item.id === attachingNoteId);
+    if (!file || !note) {
+      setAttachingNoteId(null);
+      return;
+    }
+    try {
+      await uploadDocument(file, {
+        noteId: note.id,
+        type: note.type ?? "task",
+        text: note.text,
+      });
+      toast.success("File attached");
+    } catch (error) {
+      console.error("Failed to attach Tattersalls document", error);
+      toast.error("Couldn’t attach the file.");
+    } finally {
+      setAttachingNoteId(null);
+    }
   };
 
   const handleSaveEdit = async (noteId: string) => {
@@ -349,13 +390,13 @@ const Tattersalls = () => {
           </h3>
           <div className="flex gap-2">
             <button
-              onClick={() => { setAddMode(addMode === 'note' ? null : 'note'); setNewNoteType('note'); setNewNoteText(""); }}
+              onClick={() => { setAddMode(addMode === 'note' ? null : 'note'); setNewNoteType('note'); setNewNoteText(""); setNewNoteFile(null); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm ${addMode === 'note' ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200"}`}
             >
               <StickyNote className="w-3.5 h-3.5" /> Add Note
             </button>
             <button
-              onClick={() => { setAddMode(addMode === 'task' ? null : 'task'); setNewNoteType('task'); setNewNoteText(""); }}
+              onClick={() => { setAddMode(addMode === 'task' ? null : 'task'); setNewNoteType('task'); setNewNoteText(""); setNewNoteFile(null); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-sm ${addMode === 'task' ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-200"}`}
             >
               <CheckSquare className="w-3.5 h-3.5" /> Add Task
@@ -374,6 +415,38 @@ const Tattersalls = () => {
               placeholder={addMode === 'note' ? "Write your note…" : "Describe the task…"}
               className="h-9 rounded-xl text-sm w-full"
             />
+            <input
+              ref={noteFileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                e.target.value = "";
+                setNewNoteFile(file);
+              }}
+            />
+            {newNoteFile ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-card px-3 py-2 shadow-soft">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-foreground">{newNoteFile.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Will also appear in Documents</p>
+                </div>
+                <button type="button" onClick={() => setNewNoteFile(null)} className="p-1 text-muted-foreground hover:text-destructive" aria-label="Remove attachment">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => noteFileInputRef.current?.click()}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border/60 bg-card text-xs font-semibold text-foreground hover:border-primary/35"
+              >
+                <Paperclip className="h-3.5 w-3.5 text-primary" /> Attach a file
+              </button>
+            )}
             <div>
               <select
                 value={newNoteAuthor}
@@ -420,7 +493,7 @@ const Tattersalls = () => {
                 <Plus className="w-4 h-4 mr-1" />
                 {addingNote ? "Adding…" : addMode === 'note' ? "Add Note" : "Add Task"}
               </Button>
-              <Button variant="ghost" onClick={() => setAddMode(null)} className="h-9 px-3 rounded-xl text-xs">Cancel</Button>
+              <Button variant="ghost" onClick={() => { setAddMode(null); setNewNoteFile(null); }} className="h-9 px-3 rounded-xl text-xs">Cancel</Button>
             </div>
           </div>
         )}
@@ -435,6 +508,7 @@ const Tattersalls = () => {
             const isCommentsOpen = expandedCommentId === note.id;
             const commentCount = note.comments?.length ?? 0;
             const canEdit = !note.authorId || note.authorId === dataUid;
+            const linkedDocuments = documents.filter((doc) => doc.linkedNoteId === note.id);
             return (
               <div key={note.id} className={`transition-colors ${isNoteType ? "bg-amber-50/40 dark:bg-amber-950/15" : note.done ? "bg-muted/15" : ""}`}>
                 <div className="flex items-start gap-3 px-3 py-2.5">
@@ -464,6 +538,27 @@ const Tattersalls = () => {
                       {note.author && <span className="text-[10px] text-muted-foreground">{note.author}</span>}
                       {note.dueDate && <span className="text-[10px] text-muted-foreground">Due: {new Date(note.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
                     </div>
+                    {linkedDocuments.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {linkedDocuments.map((document) => (
+                          <button
+                            key={document.id}
+                            type="button"
+                            onClick={() => openDocDetail(document)}
+                            className="flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-border/50 bg-card px-2 py-1.5 text-left shadow-soft hover:border-primary/35"
+                          >
+                            {document.fileType === "image" ? (
+                              <img src={document.url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                            ) : (
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                                <FileText className="h-3.5 w-3.5 text-primary" />
+                              </span>
+                            )}
+                            <span className="min-w-0 truncate text-[10px] font-semibold text-foreground">{document.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -475,6 +570,19 @@ const Tattersalls = () => {
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       {commentCount > 0 && <span>{commentCount}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachingNoteId(note.id);
+                        existingNoteFileInputRef.current?.click();
+                      }}
+                      disabled={uploadingDoc && attachingNoteId === note.id}
+                      className="rounded p-0.5 text-muted-foreground transition-colors hover:text-primary disabled:opacity-40"
+                      aria-label={`Attach a file to this ${isNoteType ? "note" : "task"}`}
+                      title="Attach file"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
                     </button>
                     {/* Edit (author only) */}
                     {canEdit && !isEditing && (
@@ -526,6 +634,12 @@ const Tattersalls = () => {
             );
           })}
         </div>
+        <input
+          ref={existingNoteFileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleAttachToExistingNote}
+        />
       </div>
 
       {/* Expenses */}
@@ -620,6 +734,12 @@ const Tattersalls = () => {
                   {new Date(doc.date).toLocaleDateString("en-GB")}
                   {doc.notes ? ` · ${doc.notes.slice(0, 40)}${doc.notes.length > 40 ? "…" : ""}` : ""}
                 </p>
+                {doc.linkedNoteId && (
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium text-primary">
+                    <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                    Attached to {doc.linkedNoteType ?? "task"}: {doc.linkedNoteText || "Tattersalls entry"}
+                  </p>
+                )}
               </button>
               <button onClick={() => openDocDetail(doc)} className="text-muted-foreground hover:text-foreground ml-1 flex-shrink-0">
                 <Pencil className="w-3.5 h-3.5" />
