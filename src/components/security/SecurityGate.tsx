@@ -320,7 +320,7 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   );
 }
 
-/** Always requires a fresh passkey for a security-sensitive one-off action. */
+/** Requires a passkey verified within the last five minutes for a sensitive action. */
 export function PasskeyGate({
   children,
   title = "Confirm with your passkey",
@@ -330,8 +330,29 @@ export function PasskeyGate({
   title?: string;
   description?: string;
 }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [verified, setVerified] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setChecking(false);
+      return () => { active = false; };
+    }
+    void user.getIdTokenResult().then((result) => {
+      if (!active) return;
+      const verifiedAt = Number(result.claims.passkeyVerifiedAt || 0);
+      setVerified(verifiedAt >= Date.now() / 1000 - 300);
+      setChecking(false);
+    }).catch(() => {
+      if (active) setChecking(false);
+    });
+    return () => { active = false; };
+  }, [user]);
+
+  if (checking) return <DogLoader text="Checking recent passkey…" />;
   if (verified) return <>{children}</>;
   return (
     <AuthenticationPrompt

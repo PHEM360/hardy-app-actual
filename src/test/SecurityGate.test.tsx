@@ -97,15 +97,27 @@ describe("security gates", () => {
     expect(screen.getByText("Dashboard content")).toBeInTheDocument();
   });
 
-  it("always requires a passkey before display pairing", () => {
+  it("requires a recent passkey before display pairing", async () => {
     enrolled = true;
     render(
       <MemoryRouter>
         <PasskeyGate title="Approve a trusted display"><p>Pair screen</p></PasskeyGate>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: "Approve a trusted display" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Approve a trusted display" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Continue with passkey" })).toBeInTheDocument();
     expect(screen.queryByText("Pair screen")).not.toBeInTheDocument();
+  });
+
+  it("reuses a passkey presented moments before display pairing", async () => {
+    enrolled = true;
+    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000);
+    render(
+      <MemoryRouter>
+        <PasskeyGate title="Approve a trusted display"><p>Pair screen</p></PasskeyGate>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Pair screen")).toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: "Approve a trusted display" })).not.toBeInTheDocument();
   });
 });
