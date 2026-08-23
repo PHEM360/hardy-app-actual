@@ -3,7 +3,7 @@ export type AppUnlockMode = "every_open" | "interval" | "passkey_freshness";
 export type AppUnlockMethod = "passkey" | "password" | "either";
 
 export interface AppSecuritySettings {
-  version: 1;
+  version: 2;
   appUnlockMode: AppUnlockMode;
   appUnlockMethod: AppUnlockMethod;
   appUnlockIntervalDays: number;
@@ -34,10 +34,10 @@ export const SECURITY_MODULES = [
 ] as const;
 
 export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
-  version: 1,
+  version: 2,
   appUnlockMode: "passkey_freshness",
   appUnlockMethod: "passkey",
-  appUnlockIntervalDays: 30,
+  appUnlockIntervalDays: 7,
   moduleRequirements: {
     personal_finance: "passkey",
     passwords: "passkey",
@@ -51,12 +51,16 @@ export function moduleForPath(pathname: string) {
   )?.id ?? null;
 }
 
-export function normalizeSecuritySettings(value?: Partial<AppSecuritySettings> | null): AppSecuritySettings {
+type StoredSecuritySettings = Partial<Omit<AppSecuritySettings, "version">> & { version?: number };
+
+export function normalizeSecuritySettings(value?: StoredSecuritySettings | null): AppSecuritySettings {
+  const savedInterval = Number(value?.appUnlockIntervalDays);
+  const intervalDays = Number(value?.version || 0) < 2 && savedInterval === 30 ? 7 : savedInterval || 7;
   return {
     ...DEFAULT_SECURITY_SETTINGS,
     ...value,
-    version: 1,
-    appUnlockIntervalDays: Math.min(365, Math.max(1, Number(value?.appUnlockIntervalDays) || 30)),
+    version: 2,
+    appUnlockIntervalDays: Math.min(365, Math.max(1, intervalDays)),
     moduleRequirements: {
       ...DEFAULT_SECURITY_SETTINGS.moduleRequirements,
       ...(value?.moduleRequirements || {}),

@@ -43,6 +43,17 @@ export function appSessionRequiresAuthentication(uid: string, settings: AppSecur
   return !lastVerified || Date.now() - lastVerified > maxAge;
 }
 
+export function hasFreshSecurityAuthentication(
+  uid: string,
+  method: "password" | "passkey",
+  maxAgeDays: number,
+) {
+  const record = read(uid);
+  const verifiedAt = method === "passkey" ? record.lastPasskeyAt : record.lastPasswordAt;
+  const maxAge = Math.max(1, maxAgeDays) * 24 * 60 * 60 * 1000;
+  return !!verifiedAt && Date.now() - verifiedAt <= maxAge;
+}
+
 export function clearSecuritySession(uid: string) {
   window.localStorage.removeItem(`${LOCAL_PREFIX}${uid}`);
   window.sessionStorage.removeItem(`${OPEN_PREFIX}${uid}`);

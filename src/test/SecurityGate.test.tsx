@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MandatoryPasskeyGate, ModuleSecurityGate, PasskeyGate } from "@/components/security/SecurityGate";
 import { DEFAULT_SECURITY_SETTINGS } from "@/types/security";
 import { markSecurityAuthentication } from "@/lib/securitySession";
 
 let enrolled = false;
+let tokenPasskeyVerifiedAt = 0;
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
-    user: { uid: "user-1", email: "person@example.com" },
+    user: {
+      uid: "user-1",
+      email: "person@example.com",
+      getIdTokenResult: async () => ({ claims: { passkeyVerifiedAt: tokenPasskeyVerifiedAt } }),
+    },
   }),
 }));
 
@@ -31,6 +36,7 @@ vi.mock("@/lib/passkeys", () => ({
 describe("security gates", () => {
   beforeEach(() => {
     enrolled = false;
+    tokenPasskeyVerifiedAt = 0;
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -45,7 +51,7 @@ describe("security gates", () => {
     expect(screen.queryByText("Private app")).not.toBeInTheDocument();
   });
 
-  it("allows the app after enrolled monthly passkey verification", () => {
+  it("allows the app after an enrolled recent passkey verification", () => {
     enrolled = true;
     markSecurityAuthentication("user-1", "passkey");
     render(
@@ -56,16 +62,29 @@ describe("security gates", () => {
     expect(screen.getByText("Private app")).toBeInTheDocument();
   });
 
-  it("requires another passkey when opening Finance", () => {
+  it("requires another passkey when opening Finance", async () => {
     enrolled = true;
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: "Protected page" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Protected page" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Continue with passkey" })).toBeInTheDocument();
     expect(screen.queryByText("Finance content")).not.toBeInTheDocument();
+  });
+
+  it("reuses a passkey login when opening Finance within seven days", async () => {
+    enrolled = true;
+    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000);
+    markSecurityAuthentication("user-1", "passkey");
+    render(
+      <MemoryRouter initialEntries={["/finance"]}>
+        <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Finance content")).toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: "Protected page" })).not.toBeInTheDocument();
   });
 
   it("opens modules with no additional security requirement", () => {

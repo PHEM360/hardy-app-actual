@@ -81,6 +81,25 @@ service cloud.firestore {
           (request.time.toMillis() / 1000) - 300;
     }
 
+    function modulePasskeyFreshnessDays() {
+      let requestedDays = securitySettingsExist()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)/security/settings)
+            .data.get("appUnlockIntervalDays", 7)
+        : 7;
+      let settingsVersion = securitySettingsExist()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)/security/settings)
+            .data.get("version", 1)
+        : 2;
+      let migratedDays = settingsVersion < 2 && requestedDays == 30 ? 7 : requestedDays;
+      return migratedDays < 1 ? 1 : migratedDays > 365 ? 365 : migratedDays;
+    }
+
+    function hasFreshModulePasskey() {
+      return isAuthenticated() &&
+        request.auth.token.get("passkeyVerifiedAt", 0) >
+          (request.time.toMillis() / 1000) - (modulePasskeyFreshnessDays() * 86400);
+    }
+
     function hasRecentPassword() {
       return isAuthenticated() &&
         request.auth.token.get("auth_time", 0) >
@@ -91,7 +110,7 @@ service cloud.firestore {
     function meetsModuleSecurity(moduleId) {
       let requirement = moduleRequirement(moduleId);
       return requirement == "none" ||
-        (requirement == "passkey" && hasRecentPasskey()) ||
+        (requirement == "passkey" && hasFreshModulePasskey()) ||
         (requirement == "password" && hasRecentPassword());
     }
 

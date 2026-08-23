@@ -13,6 +13,7 @@ import {
 } from "@/lib/passkeys";
 import {
   appSessionRequiresAuthentication,
+  hasFreshSecurityAuthentication,
   markOpenSessionSatisfied,
   markSecurityAuthentication,
 } from "@/lib/securitySession";
@@ -275,9 +276,39 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   const requirement = moduleId ? settings.moduleRequirements[moduleId] || "none" : "none";
   const verificationKey = `${moduleId || "none"}:${location.key}`;
   const [verifiedKey, setVerifiedKey] = useState("");
+  const [tokenPasskeyAt, setTokenPasskeyAt] = useState(0);
+  const [claimsChecked, setClaimsChecked] = useState(false);
   const verified = useMemo(() => verifiedKey === verificationKey, [verificationKey, verifiedKey]);
+  const localPasskeyIsFresh = !!user && requirement === "passkey" &&
+    hasFreshSecurityAuthentication(user.uid, "passkey", settings.appUnlockIntervalDays);
+  const tokenPasskeyIsFresh = tokenPasskeyAt > Date.now() - settings.appUnlockIntervalDays * 24 * 60 * 60 * 1000;
 
-  if (!user || loading || requirement === "none" || verified) return <>{children}</>;
+  useEffect(() => {
+    let active = true;
+    if (!user || requirement !== "passkey") {
+      setTokenPasskeyAt(0);
+      setClaimsChecked(true);
+      return () => { active = false; };
+    }
+    setClaimsChecked(false);
+    void user.getIdTokenResult().then((result) => {
+      if (!active) return;
+      setTokenPasskeyAt(Number(result.claims.passkeyVerifiedAt || 0) * 1000);
+      setClaimsChecked(true);
+    }).catch(() => {
+      if (!active) return;
+      setTokenPasskeyAt(0);
+      setClaimsChecked(true);
+    });
+    return () => { active = false; };
+  }, [user, requirement, location.pathname]);
+
+  if (!user || loading || requirement === "none" || verified || (localPasskeyIsFresh && tokenPasskeyIsFresh)) {
+    return <>{children}</>;
+  }
+  if (requirement === "passkey" && localPasskeyIsFresh && !claimsChecked) {
+    return <DogLoader text="Checking recent passkey…" />;
+  }
   return (
     <AuthenticationPrompt
       requirement={requirement}

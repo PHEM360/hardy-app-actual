@@ -82,6 +82,18 @@ describe("passkey Firestore enforcement", () => {
     });
     await assertSucceeds(getDoc(doc(recentPasskey, "finance", "owner", "accounts", "main")));
     await assertSucceeds(getDoc(doc(recentPasskey, "users", "owner", "credentials", "tesco")));
+
+    const sixDayOldPasskey = context("owner", {
+      passkeyVerifiedAt: Math.floor((Date.now() - 6 * 24 * 60 * 60 * 1000) / 1000),
+      authMethod: "passkey",
+    });
+    await assertSucceeds(getDoc(doc(sixDayOldPasskey, "finance", "owner", "accounts", "main")));
+
+    const eightDayOldPasskey = context("owner", {
+      passkeyVerifiedAt: Math.floor((Date.now() - 8 * 24 * 60 * 60 * 1000) / 1000),
+      authMethod: "passkey",
+    });
+    await assertFails(getDoc(doc(eightDayOldPasskey, "finance", "owner", "accounts", "main")));
   });
 
   it("honours a user's no-extra-security choice", async () => {
@@ -93,6 +105,33 @@ describe("passkey Firestore enforcement", () => {
     const db = context("owner");
     await assertSucceeds(getDoc(doc(db, "finance", "owner", "accounts", "main")));
     await assertSucceeds(getDoc(doc(db, "users", "owner", "credentials", "tesco")));
+  });
+
+  it("honours a shorter passkey freshness period chosen by the user", async () => {
+    await environment.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), "users", "owner", "security", "settings"), {
+        appUnlockIntervalDays: 1,
+        moduleRequirements: { personal_finance: "passkey" },
+      });
+    });
+    const twoDayOldPasskey = context("owner", {
+      passkeyVerifiedAt: Math.floor((Date.now() - 2 * 24 * 60 * 60 * 1000) / 1000),
+    });
+    await assertFails(getDoc(doc(twoDayOldPasskey, "finance", "owner", "accounts", "main")));
+  });
+
+  it("migrates the old monthly default to seven days", async () => {
+    await environment.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), "users", "owner", "security", "settings"), {
+        version: 1,
+        appUnlockIntervalDays: 30,
+        moduleRequirements: { personal_finance: "passkey" },
+      });
+    });
+    const eightDayOldPasskey = context("owner", {
+      passkeyVerifiedAt: Math.floor((Date.now() - 8 * 24 * 60 * 60 * 1000) / 1000),
+    });
+    await assertFails(getDoc(doc(eightDayOldPasskey, "finance", "owner", "accounts", "main")));
   });
 
   it("requires a recent passkey before security settings can be weakened", async () => {

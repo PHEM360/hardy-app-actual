@@ -233,9 +233,15 @@ const Settings = () => {
   const addAnotherPasskey = async () => {
     setAddingPasskey(true);
     try {
-      if (passkeyEnrolled) await authenticateWithPasskey(true);
-      await registerPasskey("Additional passkey");
-      toast.success("Passkey added");
+      try {
+        await registerPasskey("This device");
+      } catch (error) {
+        const code = String((error as { code?: string } | undefined)?.code || "");
+        if (!passkeyEnrolled || !code.includes("failed-precondition")) throw error;
+        await authenticateWithPasskey(true);
+        await registerPasskey("This device");
+      }
+      toast.success("Passkey added to this device");
     } catch (error) {
       toast.error(passkeyErrorMessage(error));
     } finally {
@@ -634,21 +640,21 @@ const Settings = () => {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">Passkey protected</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  {passkeyEnrolled ? "A passkey is registered to your account" : "Passkey setup is required"}
+                  {passkeyEnrolled ? "Your account has a passkey. Add this device for local Face ID or fingerprint prompts." : "Passkey setup is required"}
                 </span>
               </span>
               <ShieldCheck className="h-5 w-5 text-primary" />
             </div>
             <Button variant="outline" size="sm" className="w-full rounded-xl" disabled={addingPasskey} onClick={() => void addAnotherPasskey()}>
               <Fingerprint className="mr-2 h-4 w-4" />
-              {addingPasskey ? "Creating passkey…" : "Add another passkey"}
+              {addingPasskey ? "Creating passkey…" : "Add Face ID / fingerprint on this device"}
             </Button>
           </div>
 
           <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
             <div>
               <p className="text-sm font-semibold">Passwordless sign-in</p>
-              <p className="text-[11px] text-muted-foreground">Choose how often this device asks you to prove it is you.</p>
+              <p className="text-[11px] text-muted-foreground">A successful passkey unlocks the app and protected pages for this period. The default is 7 days.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -697,7 +703,7 @@ const Settings = () => {
           <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
             <div>
               <p className="text-sm font-semibold">Page security</p>
-              <p className="text-[11px] text-muted-foreground">Require an additional check whenever you open a protected section.</p>
+              <p className="text-[11px] text-muted-foreground">Protected pages reuse a passkey presented within your chosen period. Sensitive approvals can still require a fresh check.</p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {SECURITY_MODULES.map((module) => {
