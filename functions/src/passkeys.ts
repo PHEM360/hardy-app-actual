@@ -118,9 +118,10 @@ async function userPasskeys(uid: string) {
 }
 
 function passkeysForRp(passkeys: StoredPasskey[], rpID: string) {
-  // Legacy records have no rpID, so keep offering them to avoid locking out
-  // accounts created before the relying-party domain was recorded.
-  return passkeys.filter((passkey) => !passkey.rpID || passkey.rpID === rpID);
+  // A WebAuthn credential cannot cross relying-party domains. Legacy records
+  // without an rpID must be replaced through the password-confirmed recovery
+  // flow rather than offered to a browser that can never use them.
+  return passkeys.filter((passkey) => passkey.rpID === rpID);
 }
 
 function hasFreshPasswordAuthentication(request: { auth?: { token?: Record<string, unknown> } }) {
@@ -154,13 +155,12 @@ export const beginPasskeyRegistration = onCall(async (request) => {
   }
   const passkeyVerifiedAt = Number(request.auth?.token?.passkeyVerifiedAt || 0);
   const hasPasskeyForExactRp = existing.some((passkey) => passkey.rpID === rpID);
-  const canBootstrapLocalPasskey = rpID === "localhost" &&
-    !hasPasskeyForExactRp &&
+  const canBootstrapPasskeyForRp = !hasPasskeyForExactRp &&
     hasFreshPasswordAuthentication(request);
   if (
     profile.data()?.passkeyEnrolled === true &&
     passkeyVerifiedAt < (Date.now() / 1000) - 300 &&
-    !canBootstrapLocalPasskey
+    !canBootstrapPasskeyForRp
   ) {
     throw new HttpsError("failed-precondition", "Confirm an existing passkey before adding another.");
   }

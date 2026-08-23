@@ -68,12 +68,10 @@ function AuthenticationPrompt({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"passkey" | "password" | "local-setup" | null>(null);
   const [error, setError] = useState("");
+  const [showPasskeyRecovery, setShowPasskeyRecovery] = useState(false);
   const showPasskey = requirement === "passkey" || requirement === "either";
   const showPassword = requirement === "password" || requirement === "either";
-  const showLocalPasskeySetup = import.meta.env.DEV &&
-    window.location.hostname === "localhost" &&
-    showPasskey &&
-    !showPassword;
+  const canRecoverPasskey = showPasskey && !showPassword;
 
   const verifyPasskey = async () => {
     setBusy("passkey");
@@ -105,14 +103,14 @@ function AuthenticationPrompt({
     }
   };
 
-  const setupLocalPasskey = async () => {
+  const recoverPasskeyForThisDevice = async () => {
     if (!user?.email || !password) return;
     setBusy("local-setup");
     setError("");
     try {
       await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
       await user.getIdToken(true);
-      await registerPasskey("Local development passkey");
+      await registerPasskey(window.location.hostname === "localhost" ? "Local development passkey" : "This device");
       setPassword("");
       onVerified("passkey");
     } catch (caught) {
@@ -139,24 +137,29 @@ function AuthenticationPrompt({
           </p>
         </>
       )}
-      {showLocalPasskeySetup && (
+      {canRecoverPasskey && !showPasskeyRecovery && (
+        <Button type="button" variant="ghost" className="w-full rounded-xl text-xs text-muted-foreground" disabled={busy !== null} onClick={() => setShowPasskeyRecovery(true)}>
+          Can’t find your passkey? Set up this device
+        </Button>
+      )}
+      {canRecoverPasskey && showPasskeyRecovery && (
         <div className="space-y-2 rounded-2xl border border-primary/20 bg-primary/5 p-3">
-          <p className="text-xs font-semibold">First time on localhost?</p>
+          <p className="text-xs font-semibold">Create a passkey for this device</p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Production passkeys belong to hardyapp.co.uk. Confirm your password once to create a separate passkey for this development address.
+            Confirm your account password. If your existing passkey belongs to an older Hardy Hub address, you can then create a replacement using Apple Passwords, Google Password Manager or this device.
           </p>
           <Input
             type="password"
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && void setupLocalPasskey()}
+            onKeyDown={(event) => event.key === "Enter" && void recoverPasskeyForThisDevice()}
             placeholder="Account password"
             className="h-10 rounded-xl bg-card"
           />
-          <Button type="button" variant="outline" className="h-10 w-full rounded-xl" disabled={busy !== null || !password} onClick={() => void setupLocalPasskey()}>
+          <Button type="button" variant="outline" className="h-10 w-full rounded-xl" disabled={busy !== null || !password} onClick={() => void recoverPasskeyForThisDevice()}>
             <KeyRound className="mr-2 h-4 w-4" />
-            {busy === "local-setup" ? "Creating local passkey…" : "Create localhost passkey"}
+            {busy === "local-setup" ? "Creating passkey…" : "Confirm password and create passkey"}
           </Button>
         </div>
       )}

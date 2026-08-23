@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MandatoryPasskeyGate, ModuleSecurityGate, PasskeyGate } from "@/components/security/SecurityGate";
 import { DEFAULT_SECURITY_SETTINGS } from "@/types/security";
@@ -60,6 +60,19 @@ describe("security gates", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Private app")).toBeInTheDocument();
+  });
+
+  it("offers password-confirmed recovery when this domain has no usable passkey", () => {
+    enrolled = true;
+    render(
+      <MemoryRouter>
+        <MandatoryPasskeyGate><p>Private app</p></MandatoryPasskeyGate>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Can’t find your passkey? Set up this device" }));
+    expect(screen.getByText("Create a passkey for this device")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Account password")).toBeInTheDocument();
+    expect(screen.queryByText("Private app")).not.toBeInTheDocument();
   });
 
   it("requires another passkey when opening Finance", async () => {
