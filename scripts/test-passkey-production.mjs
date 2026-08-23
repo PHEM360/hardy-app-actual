@@ -6,6 +6,10 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   const page = await browser.newPage();
+  await page.goto("https://hardyhub-7b30d.web.app/login", { waitUntil: "networkidle", timeout: 30_000 });
+  assert.equal(new URL(page.url()).origin, origin);
+  assert.equal(new URL(page.url()).pathname, "/login");
+
   await page.goto(origin, { waitUntil: "networkidle", timeout: 30_000 });
   await page.getByLabel("Email").waitFor();
   await page.getByLabel("Password").waitFor();
