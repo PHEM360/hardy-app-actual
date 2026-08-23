@@ -4,7 +4,7 @@
   "description": "Private family platform — invite only",
   "start_url": "/dashboard",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0f1923",
   "theme_color": "#0f1923",
   "icons": [
@@ -42,6 +42,13 @@
       "short_name": "Widget",
       "description": "Glance calendar, tasks or notes",
       "url": "/widget",
+      "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Remote display",
+      "short_name": "Display",
+      "description": "Open the always-on display receiver",
+      "url": "/display",
       "icons": [{ "src": "/App Icon.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]

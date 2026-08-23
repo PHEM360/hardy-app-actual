@@ -3,6 +3,7 @@ import { AlarmClock, BellOff, Clock3 } from "lucide-react";
 import type { Alarm } from "@/hooks/useDeviceSettings";
 import { useTabLeader } from "@/hooks/useTabLeader";
 import { playAlarmTone, stopAlarmTone } from "@/lib/alarmTone";
+import { getSunriseProgress } from "@/lib/sunriseAlarm";
 
 const CHECK_INTERVAL_MS = 15_000;
 const SNOOZE_MINUTES = 9;
@@ -16,6 +17,7 @@ export function AlarmManager({
 }) {
   const [firing, setFiring] = useState<Alarm | null>(null);
   const [flash, setFlash] = useState(false);
+  const [sunriseProgress, setSunriseProgress] = useState(0);
   const isLeader = useTabLeader("hardyhub-display-alarm-owner");
   const lastCheckRef = useRef(new Date());
   const snoozedUntilRef = useRef<Map<string, number>>(new Map());
@@ -54,6 +56,16 @@ export function AlarmManager({
   }, [alarms, onUpdateAlarm]);
 
   useEffect(() => {
+    const updateSunrise = () => {
+      const now = new Date();
+      setSunriseProgress(getSunriseProgress(alarms, now));
+    };
+    updateSunrise();
+    const interval = setInterval(updateSunrise, CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [alarms]);
+
+  useEffect(() => {
     if (!firing) {
       stopAlarmTone();
       return;
@@ -66,7 +78,20 @@ export function AlarmManager({
     };
   }, [firing, isLeader]);
 
-  if (!firing) return null;
+  if (!firing) {
+    if (!sunriseProgress) return null;
+    return (
+      <div
+        className="pointer-events-none fixed inset-0 z-40 transition-opacity"
+        style={{
+          opacity: 0.18 + sunriseProgress * 0.72,
+          transitionDuration: "15000ms",
+          background: "radial-gradient(circle at 50% 105%, #fff7c2 0%, #fbbf24 30%, #f97316 58%, rgba(124,45,18,.35) 100%)",
+        }}
+        aria-hidden
+      />
+    );
+  }
 
   const dismiss = () => setFiring(null);
   const snooze = () => {

@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
   CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays, Sun, StickyNote,
+  MonitorSmartphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut } from "firebase/auth";
@@ -30,6 +31,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: "hsl(220,60%,55%)",  gradient: "linear-gradient(135deg,hsl(218,63%,58%),hsl(230,58%,50%))" },
   "/notes":             { icon: StickyNote,    label: "Notes",      color: "hsl(42,85%,48%)",   gradient: "linear-gradient(135deg,hsl(42,92%,52%),hsl(28,85%,48%))" },
   "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
+  "/remote-displays":   { icon: MonitorSmartphone, label: "Remote Displays", color: "hsl(198,60%,46%)", gradient: "linear-gradient(135deg,hsl(198,65%,50%),hsl(210,60%,44%))" },
 };
 
 const DEFAULT_NAV = DEFAULT_BOTTOM_NAV;

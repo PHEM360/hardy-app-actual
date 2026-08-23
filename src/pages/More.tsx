@@ -20,6 +20,7 @@ import {
   Sparkles,
   KeyRound,
   StickyNote,
+  MonitorSmartphone,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -184,6 +185,13 @@ const SECTIONS: Section[] = [
         icon: Bell,
         route: "/notifications",
         gradient: "linear-gradient(135deg, hsl(44,90%,52%), hsl(32,80%,46%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Remote Displays",
+        icon: MonitorSmartphone,
+        route: "/remote-displays",
+        gradient: "linear-gradient(135deg, hsl(198,65%,50%), hsl(210,60%,44%))",
         iconColor: "#fff",
       },
       {

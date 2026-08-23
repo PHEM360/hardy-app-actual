@@ -394,8 +394,12 @@ const Login = () => {
             {passkeyLoading ? "Checking passkey…" : "Sign in with passkey"}
           </Button>
           <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
-            Passkey not appearing? Use <span className="font-semibold text-foreground">hardyapp.co.uk</span> on both devices
-            and enable the same provider — Apple Passwords, 1Password or Google Password Manager.
+            {import.meta.env.DEV ? (
+              <>Localhost uses its own passkey. Sign in with your email and password once, then create the local passkey when prompted.</>
+            ) : (
+              <>Passkey not appearing? Use <span className="font-semibold text-foreground">hardyapp.co.uk</span> on both devices
+                and enable the same provider — Apple Passwords, 1Password or Google Password Manager.</>
+            )}
           </p>
 
           <motion.p

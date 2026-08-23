@@ -35,13 +35,14 @@ export function AlarmsSettingsPanel({
   const [draftTime, setDraftTime] = useState("07:00");
   const [draftLabel, setDraftLabel] = useState("");
   const [draftDays, setDraftDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [draftSunriseMinutes, setDraftSunriseMinutes] = useState(30);
 
   const toggleDraftDay = (d: number) => {
     setDraftDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
   };
 
   const submit = () => {
-    onAdd({ time: draftTime, days: draftDays, label: draftLabel, enabled: true });
+    onAdd({ time: draftTime, days: draftDays, label: draftLabel, enabled: true, sunriseMinutes: draftSunriseMinutes });
     setAdding(false);
     setDraftLabel("");
   };
@@ -59,6 +60,7 @@ export function AlarmsSettingsPanel({
             <p className="text-xs text-muted-foreground truncate">
               {describeDays(alarm.days)}
               {alarm.label ? ` · ${alarm.label}` : ""}
+              {alarm.sunriseMinutes ? ` · Sunrise ${alarm.sunriseMinutes}m` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -80,6 +82,20 @@ export function AlarmsSettingsPanel({
               onChange={(e) => setDraftTime(e.target.value)}
               className="h-9 rounded-lg bg-background border border-border px-2 text-sm flex-1"
             />
+          </div>
+          <div className="flex items-center gap-3">
+            <Label className="text-xs w-16">Sunrise</Label>
+            <select
+              value={draftSunriseMinutes}
+              onChange={(e) => setDraftSunriseMinutes(Number(e.target.value))}
+              className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+            >
+              <option value={0}>Off</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={45}>45 minutes</option>
+              <option value={60}>60 minutes</option>
+            </select>
           </div>
           <div className="flex items-center gap-3">
             <Label className="text-xs w-16">Label</Label>

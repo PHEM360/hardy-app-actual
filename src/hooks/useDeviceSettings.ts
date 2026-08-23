@@ -21,6 +21,7 @@ export interface Alarm {
   days: number[]; // 0=Sun..6=Sat; empty = one-off, fires once then disables itself
   label: string;
   enabled: boolean;
+  sunriseMinutes?: number;
 }
 
 export interface PhotoFrameSettings {
@@ -28,10 +29,44 @@ export interface PhotoFrameSettings {
   intervalSeconds: number;
   shuffle: boolean;
   showCaptions: boolean;
+  photoIds: string[];
 }
 
 export interface CalendarSceneSettings {
   enabled: boolean;
+  daysAhead: number;
+}
+
+export type DisplayWidgetType = "clock" | "photos" | "calendar" | "tasks";
+
+export interface DisplayWidgetLayout {
+  id: string;
+  type: DisplayWidgetType;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title?: string;
+  accentColor?: string;
+  clockStyle?: ClockStyle;
+  format24h?: boolean;
+  showSeconds?: boolean;
+  showDate?: boolean;
+  photoIds?: string[];
+  photoIntervalSeconds?: number;
+  calendarDaysAhead?: number;
+  calendarCategories?: string[];
+  taskFilter?: "today" | "open" | "all";
+  taskLimit?: number;
+  taskIds?: string[];
+}
+
+export interface DisplayPage {
+  id: string;
+  name: string;
+  durationSeconds: number;
+  background: string;
+  widgets: DisplayWidgetLayout[];
 }
 
 export interface OverviewSceneSettings {
@@ -50,6 +85,7 @@ export interface DeviceSettings {
   calendar: CalendarSceneSettings;
   overview: OverviewSceneSettings;
   scenes: SceneRotationSettings;
+  pages: DisplayPage[];
 }
 
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
@@ -66,13 +102,24 @@ export const DEFAULT_PHOTO_FRAME_SETTINGS: PhotoFrameSettings = {
   intervalSeconds: 20,
   shuffle: true,
   showCaptions: true,
+  photoIds: [],
 };
 
 export const DEFAULT_KIOSK_WIDGETS: WidgetType[] = ["today", "tasks", "households", "pets"];
 
-export const DEFAULT_CALENDAR_SCENE_SETTINGS: CalendarSceneSettings = { enabled: false };
+export const DEFAULT_CALENDAR_SCENE_SETTINGS: CalendarSceneSettings = { enabled: false, daysAhead: 14 };
 export const DEFAULT_OVERVIEW_SCENE_SETTINGS: OverviewSceneSettings = { enabled: false, widgets: DEFAULT_KIOSK_WIDGETS };
 export const DEFAULT_SCENE_ROTATION_SETTINGS: SceneRotationSettings = { rotateSeconds: 30 };
+
+export const DEFAULT_DISPLAY_PAGES: DisplayPage[] = [
+  {
+    id: "clock",
+    name: "Clock",
+    durationSeconds: 30,
+    background: "#09090b",
+    widgets: [{ id: "clock-main", type: "clock", x: 0, y: 0, w: 12, h: 12 }],
+  },
+];
 
 export interface DeviceDoc {
   id: string;
@@ -85,6 +132,49 @@ export interface DeviceDoc {
   settings: DeviceSettings;
 }
 
+function legacyPages(raw: Partial<DeviceSettings> | undefined): DisplayPage[] {
+  const pages: DisplayPage[] = [...DEFAULT_DISPLAY_PAGES];
+  if (raw?.photoFrame?.enabled) {
+    pages.push({
+      id: "photos",
+      name: "Photos",
+      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      background: "#09090b",
+      widgets: [{
+        id: "photos-main",
+        type: "photos",
+        x: 0, y: 0, w: 12, h: 12,
+        photoIds: raw.photoFrame.photoIds || [],
+        photoIntervalSeconds: raw.photoFrame.intervalSeconds || 20,
+      }],
+    });
+  }
+  if (raw?.calendar?.enabled) {
+    pages.push({
+      id: "calendar",
+      name: "Calendar",
+      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      background: "#09090b",
+      widgets: [{
+        id: "calendar-main",
+        type: "calendar",
+        x: 0, y: 0, w: 12, h: 12,
+        calendarDaysAhead: raw.calendar.daysAhead || 14,
+      }],
+    });
+  }
+  if (raw?.overview?.enabled) {
+    pages.push({
+      id: "tasks",
+      name: "Tasks",
+      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      background: "#09090b",
+      widgets: [{ id: "tasks-main", type: "tasks", x: 1, y: 1, w: 10, h: 10, taskFilter: "open", taskLimit: 10 }],
+    });
+  }
+  return pages;
+}
+
 function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings {
   return {
     clock: { ...DEFAULT_CLOCK_SETTINGS, ...(raw?.clock ?? {}) },
@@ -93,6 +183,7 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     calendar: { ...DEFAULT_CALENDAR_SCENE_SETTINGS, ...(raw?.calendar ?? {}) },
     overview: { ...DEFAULT_OVERVIEW_SCENE_SETTINGS, ...(raw?.overview ?? {}) },
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
+    pages: Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw),
   };
 }
 
@@ -234,6 +325,14 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updatePages = useCallback(
+    async (pages: DisplayPage[]) => {
+      if (!deviceId) return;
+      await updateDoc(doc(db, "devices", deviceId), { "settings.pages": pages });
+    },
+    [deviceId]
+  );
+
   return {
     device,
     loading,
@@ -246,5 +345,6 @@ export function useDeviceSettings(deviceId: string | null) {
     updateCalendarSettings,
     updateOverviewSettings,
     updateSceneSettings,
+    updatePages,
   };
 }

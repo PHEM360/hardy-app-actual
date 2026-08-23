@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as functionsV1 from "firebase-functions/v1";
 import { PDFParse } from "pdf-parse";
 import { postmarkKey } from "./notifications/scheduler";
@@ -43,6 +44,9 @@ type UserRole = "superadmin" | "admin" | "member";
 function requireAuth(context: { auth?: { uid: string; token: any } }) {
 	const uid = context.auth?.uid;
 	if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+	if (context.auth?.token?.deviceId) {
+		throw new HttpsError("permission-denied", "Remote display credentials cannot use this service.");
+	}
 	return uid;
 }
 
@@ -140,7 +144,7 @@ export const inviteUser = onCall(async (request) => {
 		displayName,
 		role,
 		enabled: true,
-		createdAt: admin.firestore.FieldValue.serverTimestamp(),
+		createdAt: FieldValue.serverTimestamp(),
 		createdBy: uid,
 	};
 
@@ -244,7 +248,7 @@ export const listAppUsers = onCall(async (request) => {
 					displayName,
 					role: "member",
 					enabled: !record.disabled,
-					createdAt: admin.firestore.FieldValue.serverTimestamp(),
+					createdAt: FieldValue.serverTimestamp(),
 					createdBy: "listAppUsers-backfill",
 				},
 				{ merge: true }
@@ -298,7 +302,7 @@ export const onAuthUserCreated = functionsV1.auth.user().onCreate(async (user) =
 			displayName,
 			role: "member",
 			enabled: !user.disabled,
-			createdAt: admin.firestore.FieldValue.serverTimestamp(),
+			createdAt: FieldValue.serverTimestamp(),
 			createdBy: "auth-onCreate",
 		},
 		{ merge: true }
@@ -465,7 +469,7 @@ export const backfillHouseholds = onCall(async (request) => {
 			const existing = existingSnaps[idx];
 			const memberIds = Array.from(membersByHousehold.get(id)!);
 			const update: Record<string, unknown> = {
-				memberIds: admin.firestore.FieldValue.arrayUnion(...memberIds),
+				memberIds: FieldValue.arrayUnion(...memberIds),
 			};
 			if (!existing.exists || !existing.data()?.name) {
 				update.name = id;
@@ -474,7 +478,7 @@ export const backfillHouseholds = onCall(async (request) => {
 				update.createdBy = memberIds.slice().sort()[0];
 			}
 			if (!existing.exists) {
-				update.createdAt = admin.firestore.FieldValue.serverTimestamp();
+				update.createdAt = FieldValue.serverTimestamp();
 			}
 			batch.set(ref, update, { merge: true });
 			touched += 1;

@@ -169,7 +169,9 @@ export default function Notes() {
         n.canvas?.blocks.some((block) =>
           (block.type === "text" && block.text.toLowerCase().includes(q)) ||
           (block.type === "shape" && block.label.toLowerCase().includes(q)) ||
-          (block.type === "location" && block.label.toLowerCase().includes(q))
+          (block.type === "location" && block.label.toLowerCase().includes(q)) ||
+          (block.type === "checklist" && block.items.some((item) => item.text.toLowerCase().includes(q))) ||
+          (block.type === "diagram" && block.diagram?.nodes.some((node) => node.label.toLowerCase().includes(q)))
         )
       );
     }

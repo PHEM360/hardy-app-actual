@@ -65,10 +65,14 @@ function AuthenticationPrompt({
 }) {
   const { user } = useAuth();
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState<"passkey" | "password" | null>(null);
+  const [busy, setBusy] = useState<"passkey" | "password" | "local-setup" | null>(null);
   const [error, setError] = useState("");
   const showPasskey = requirement === "passkey" || requirement === "either";
   const showPassword = requirement === "password" || requirement === "either";
+  const showLocalPasskeySetup = import.meta.env.DEV &&
+    window.location.hostname === "localhost" &&
+    showPasskey &&
+    !showPassword;
 
   const verifyPasskey = async () => {
     setBusy("passkey");
@@ -100,17 +104,60 @@ function AuthenticationPrompt({
     }
   };
 
+  const setupLocalPasskey = async () => {
+    if (!user?.email || !password) return;
+    setBusy("local-setup");
+    setError("");
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+      await user.getIdToken(true);
+      await registerPasskey("Local development passkey");
+      setPassword("");
+      onVerified("passkey");
+    } catch (caught) {
+      setError(passkeyErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <SecurityFrame icon={<LockKeyhole className="h-7 w-7" />} title={title} description={description}>
       {showPasskey && (
-        <Button
-          className="h-12 w-full rounded-xl bg-gradient-primary"
-          disabled={busy !== null || !passkeysSupported()}
-          onClick={() => void verifyPasskey()}
-        >
-          <Fingerprint className="mr-2 h-5 w-5" />
-          {busy === "passkey" ? "Checking passkey…" : "Continue with passkey"}
-        </Button>
+        <>
+          <Button
+            className="h-12 w-full rounded-xl bg-gradient-primary"
+            disabled={busy !== null || !passkeysSupported()}
+            onClick={() => void verifyPasskey()}
+          >
+            <Fingerprint className="mr-2 h-5 w-5" />
+            {busy === "passkey" ? "Checking passkey…" : "Continue with passkey"}
+          </Button>
+          <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+            Touch ID or Face ID appears when this device has the matching passkey. A QR code lets you use a passkey stored on another device.
+          </p>
+        </>
+      )}
+      {showLocalPasskeySetup && (
+        <div className="space-y-2 rounded-2xl border border-primary/20 bg-primary/5 p-3">
+          <p className="text-xs font-semibold">First time on localhost?</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Production passkeys belong to hardyapp.co.uk. Confirm your password once to create a separate passkey for this development address.
+          </p>
+          <Input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void setupLocalPasskey()}
+            placeholder="Account password"
+            className="h-10 rounded-xl bg-card"
+          />
+          <Button type="button" variant="outline" className="h-10 w-full rounded-xl" disabled={busy !== null || !password} onClick={() => void setupLocalPasskey()}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            {busy === "local-setup" ? "Creating local passkey…" : "Create localhost passkey"}
+          </Button>
+        </div>
       )}
       {showPassword && (
         <>
@@ -237,6 +284,30 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
       title="Protected page"
       description={`Your security settings require ${requirement === "passkey" ? "a passkey" : "your password"} before opening this section.`}
       onVerified={() => setVerifiedKey(verificationKey)}
+      onCancel={() => navigate(-1)}
+    />
+  );
+}
+
+/** Always requires a fresh passkey for a security-sensitive one-off action. */
+export function PasskeyGate({
+  children,
+  title = "Confirm with your passkey",
+  description = "Confirm it’s you before continuing.",
+}: {
+  children: ReactNode;
+  title?: string;
+  description?: string;
+}) {
+  const navigate = useNavigate();
+  const [verified, setVerified] = useState(false);
+  if (verified) return <>{children}</>;
+  return (
+    <AuthenticationPrompt
+      requirement="passkey"
+      title={title}
+      description={description}
+      onVerified={() => setVerified(true)}
       onCancel={() => navigate(-1)}
     />
   );

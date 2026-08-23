@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import {
-  CalendarPlus, CheckSquare, ExternalLink, Lock, PenLine, Plus, Share2, Shield, StickyNote, Trash2, Unlock, X,
+  CalendarPlus, CheckSquare, ChevronDown, ExternalLink, Lock, PenLine, Share2, Shield, SlidersHorizontal, StickyNote, Trash2, Unlock,
 } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { HubNote, NoteCanvas, NoteFolder, NoteKind, NoteCategory } from "@/types/notes";
 import { NOTE_CATEGORIES, NOTE_COLORS } from "@/types/notes";
 import { googleCalendarUrl } from "@/lib/noteCalendar";
 import { encryptPayload, decryptPayload } from "@/lib/noteCrypto";
-import { NoteDiagramEditor } from "@/components/notes/NoteDiagram";
-import { NoteCanvasEditor } from "@/components/notes/NoteCanvasEditor";
+import { PaperNoteCanvasEditor } from "@/components/notes/PaperNoteCanvasEditor";
 import { toast } from "sonner";
 
 interface NoteEditorProps {
@@ -71,8 +71,7 @@ export function NoteEditor({
   const [passphrase, setPassphrase] = useState("");
   const [unlockedBody, setUnlockedBody] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [showChecklist, setShowChecklist] = useState(false);
-  const [showDiagram, setShowDiagram] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +80,7 @@ export function NoteEditor({
         ? [{ id: `c${Date.now()}`, text: "", done: false }]
         : []
     );
-    const initialCanvas: NoteCanvas = note?.canvas ?? {
+    const baseCanvas: NoteCanvas = note?.canvas ?? {
       version: 1,
       height: 520,
       blocks: note?.body ? [{
@@ -95,16 +94,60 @@ export function NoteEditor({
         textStyle: "body",
       }] : [],
     };
+    const migratedBlocks = [...baseCanvas.blocks];
+    const nextBlockY = () => Math.max(28, ...migratedBlocks.map((block) => block.y + block.height + 24));
+    if (note?.body && !migratedBlocks.some((block) => block.type === "text")) {
+      migratedBlocks.push({
+        id: `legacy-body-${note.id}`,
+        type: "text",
+        x: 28,
+        y: nextBlockY(),
+        width: 320,
+        height: 190,
+        text: note.body,
+        textStyle: "body",
+      });
+    }
+    if (initialChecklist.length > 0 && !migratedBlocks.some((block) => block.type === "checklist")) {
+      migratedBlocks.push({
+        id: `legacy-checklist-${note?.id || noteId}`,
+        type: "checklist",
+        x: 28,
+        y: nextBlockY(),
+        width: 330,
+        height: Math.max(190, initialChecklist.length * 42 + 75),
+        items: initialChecklist,
+      });
+    }
+    if (note?.diagram && !migratedBlocks.some((block) => block.type === "diagram")) {
+      migratedBlocks.push({
+        id: `legacy-diagram-${note.id}`,
+        type: "diagram",
+        x: 28,
+        y: nextBlockY(),
+        width: 440,
+        height: 430,
+        diagram: note.diagram,
+      });
+    }
+    const initialCanvas: NoteCanvas = {
+      ...baseCanvas,
+      height: Math.max(baseCanvas.height, ...migratedBlocks.map((block) => block.y + block.height + 80)),
+      blocks: migratedBlocks,
+    };
     setDraft(note
       ? { ...note, canvas: initialCanvas }
       : { ...EMPTY, kind: defaultKind, checklist: initialChecklist, canvas: initialCanvas });
-    setShowChecklist(initialChecklist.length > 0 || defaultKind === "checklist" || defaultKind === "task");
-    setShowDiagram(!!note?.diagram);
+    setShowDetails(false);
     setPassphrase("");
     setUnlockedBody(!note?.locked);
-  }, [open, note, defaultKind]);
+  }, [open, note, defaultKind, noteId]);
 
   const locked = !!draft.locked && !unlockedBody;
+  const selectedColor = NOTE_COLORS.find((color) => color.id === draft.color) ?? NOTE_COLORS[1];
+  const editorBackground = `color-mix(in srgb, ${selectedColor.swatch} 18%, hsl(var(--background)))`;
+  const canvasChecklist = draft.canvas?.blocks.find((block) => block.type === "checklist");
+  const canvasDiagram = draft.canvas?.blocks.find((block) => block.type === "diagram");
 
   const reveal = async () => {
     if (!note?.cipher) {
@@ -139,16 +182,43 @@ export function NoteEditor({
           textStyle: "body" as const,
         }],
       } : undefined);
+      const revealedBlocks = [...(revealedCanvas?.blocks ?? [])];
+      const nextRevealedY = () => Math.max(28, ...revealedBlocks.map((block) => block.y + block.height + 24));
+      if (parsed.checklist?.length && !revealedBlocks.some((block) => block.type === "checklist")) {
+        revealedBlocks.push({
+          id: `locked-checklist-${note.id}`,
+          type: "checklist",
+          x: 28,
+          y: nextRevealedY(),
+          width: 330,
+          height: Math.max(190, parsed.checklist.length * 42 + 75),
+          items: parsed.checklist,
+        });
+      }
+      if (parsed.diagram && !revealedBlocks.some((block) => block.type === "diagram")) {
+        revealedBlocks.push({
+          id: `locked-diagram-${note.id}`,
+          type: "diagram",
+          x: 28,
+          y: nextRevealedY(),
+          width: 440,
+          height: 430,
+          diagram: parsed.diagram,
+        });
+      }
+      const migratedCanvas = revealedCanvas || revealedBlocks.length ? {
+        version: 1 as const,
+        height: Math.max(revealedCanvas?.height ?? 520, ...revealedBlocks.map((block) => block.y + block.height + 80)),
+        blocks: revealedBlocks,
+      } : undefined;
       setDraft((d) => ({
         ...d,
         title: parsed.title ?? d.title,
         body: parsed.body ?? d.body,
         checklist: parsed.checklist ?? d.checklist,
         diagram: parsed.diagram ?? d.diagram,
-        canvas: revealedCanvas ?? d.canvas,
+        canvas: migratedCanvas ?? d.canvas,
       }));
-      setShowChecklist(!!parsed.checklist?.length);
-      setShowDiagram(!!parsed.diagram);
       setUnlockedBody(true);
     } catch {
       toast.error("Wrong password");
@@ -169,6 +239,8 @@ export function NoteEditor({
         .map((block) => block.text)
         .join("\n\n")
         .trim();
+      const checklist = canvas.blocks.find((block) => block.type === "checklist");
+      const diagram = canvas.blocks.find((block) => block.type === "diagram");
       await onSave({
         title: draft.title,
         body: searchableBody,
@@ -176,8 +248,8 @@ export function NoteEditor({
         color: draft.color,
         category: (draft.category as NoteCategory) || "personal",
         folderId: draft.folderId ?? null,
-        checklist: draft.checklist,
-        diagram: draft.diagram ?? null,
+        checklist: checklist?.type === "checklist" ? checklist.items : [],
+        diagram: diagram?.type === "diagram" ? diagram.diagram : null,
         canvas,
         dueDate: draft.dueDate || undefined,
         pinned: !!draft.pinned,
@@ -205,8 +277,8 @@ export function NoteEditor({
         JSON.stringify({
           title: draft.title,
           body: draft.body,
-          checklist: draft.checklist,
-          diagram: draft.diagram,
+          checklist: canvasChecklist?.type === "checklist" ? canvasChecklist.items : draft.checklist,
+          diagram: canvasDiagram?.type === "diagram" ? canvasDiagram.diagram : draft.diagram,
           canvas: draft.canvas,
         })
       );
@@ -231,7 +303,7 @@ export function NoteEditor({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-3xl">
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto border-l-border/50 sm:max-w-3xl" style={{ background: editorBackground }}>
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             {draft.kind === "drawing" ? (
@@ -243,6 +315,7 @@ export function NoteEditor({
             )}
             {note ? "Edit" : "New"} note
           </SheetTitle>
+          <SheetDescription className="sr-only">Write and arrange content on a flexible note canvas.</SheetDescription>
         </SheetHeader>
 
         {locked ? (
@@ -263,212 +336,97 @@ export function NoteEditor({
               value={draft.title ?? ""}
               onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
               placeholder="Title"
-              className="text-lg font-semibold"
+              className="h-auto border-0 bg-transparent px-1 py-2 font-display text-2xl font-bold shadow-none focus-visible:ring-0"
               readOnly={!canEdit}
             />
 
-            <div className="flex gap-1 flex-wrap">
-              {NOTE_COLORS.map((c) => (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/55 bg-white/45 p-2 shadow-sm backdrop-blur">
+              <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-foreground/55">Paper</span>
+              {NOTE_COLORS.map((color) => (
                 <button
-                  key={c.id}
+                  key={color.id}
                   type="button"
-                  title={c.label}
+                  title={color.label}
+                  aria-label={`${color.label} note colour`}
                   disabled={!canEdit}
-                  onClick={() => setDraft((d) => ({ ...d, color: c.id }))}
-                  className={`h-6 w-6 rounded-full border-2 ${draft.color === c.id ? "border-foreground" : "border-transparent"}`}
-                  style={{ background: c.id === "default" ? "hsl(var(--muted))" : c.swatch }}
+                  onClick={() => setDraft((current) => ({ ...current, color: color.id }))}
+                  className={`h-6 w-6 rounded-full border-2 shadow-sm transition hover:scale-110 ${draft.color === color.id ? "border-foreground ring-2 ring-background" : "border-white/70"}`}
+                  style={{ background: color.id === "default" ? "hsl(var(--muted))" : color.swatch }}
                 />
               ))}
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="space-y-1">
-                <Label>Save to tab</Label>
-                <Select
-                  value={draft.kind === "drawing" ? "drawing" : draft.kind === "checklist" || draft.kind === "task" ? "checklist" : "note"}
-                  onValueChange={(value) => {
-                    const kind = value as NoteKind;
-                    setDraft((current) => ({ ...current, kind }));
-                    if (kind === "checklist") {
-                      setShowChecklist(true);
-                      setDraft((current) => ({
-                        ...current,
-                        checklist: current.checklist?.length ? current.checklist : [{ id: `c${Date.now()}`, text: "", done: false }],
-                      }));
-                    }
-                  }}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="note">Notes</SelectItem>
-                    <SelectItem value="drawing">Drawings & sketches</SelectItem>
-                    <SelectItem value="checklist">Checklists</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Save in</Label>
-                <Select
-                  value={draft.folderId ?? "inbox"}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, folderId: v === "inbox" ? null : v }))}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inbox">Inbox</SelectItem>
-                    {folders.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>{f.emoji ? `${f.emoji} ` : ""}{f.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Category</Label>
-                <Select
-                  value={draft.category || "personal"}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, category: v as NoteCategory }))}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {NOTE_CATEGORIES.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="flex w-full items-center gap-2 rounded-2xl border border-foreground/10 bg-white/45 px-4 py-3 text-left shadow-sm transition hover:bg-white/65">
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">Note details</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {draft.folderId ? folders.find((folder) => folder.id === draft.folderId)?.name || "Folder" : "General notes"}
+                      {" · "}{NOTE_CATEGORIES.find((category) => category.id === draft.category)?.label || "Personal"}
+                    </span>
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 space-y-3 rounded-2xl border border-foreground/10 bg-white/55 p-4 shadow-card backdrop-blur">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label>Save to tab</Label>
+                      <Select value={draft.kind === "drawing" ? "drawing" : draft.kind === "checklist" || draft.kind === "task" ? "checklist" : "note"} onValueChange={(value) => setDraft((current) => ({ ...current, kind: value as NoteKind }))} disabled={!canEdit}>
+                        <SelectTrigger className="bg-white/80"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="note">Notes</SelectItem>
+                          <SelectItem value="drawing">Drawings & sketches</SelectItem>
+                          <SelectItem value="checklist">Checklists</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Save in</Label>
+                      <Select value={draft.folderId ?? "inbox"} onValueChange={(value) => setDraft((current) => ({ ...current, folderId: value === "inbox" ? null : value }))} disabled={!canEdit}>
+                        <SelectTrigger className="bg-white/80"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inbox">General notes</SelectItem>
+                          {folders.map((folder) => <SelectItem key={folder.id} value={folder.id}>{folder.emoji ? `${folder.emoji} ` : ""}{folder.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Category</Label>
+                      <Select value={draft.category || "personal"} onValueChange={(value) => setDraft((current) => ({ ...current, category: value as NoteCategory }))} disabled={!canEdit}>
+                        <SelectTrigger className="bg-white/80"><SelectValue /></SelectTrigger>
+                        <SelectContent>{NOTE_CATEGORIES.map((category) => <SelectItem key={category.id} value={category.id}>{category.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Date</Label>
+                    <Input type="date" value={draft.dueDate?.slice(0, 10) ?? ""} readOnly={!canEdit} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value || undefined }))} className="bg-white/80" />
+                  </div>
+                  {draft.dueDate && (
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-white/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Show on Hardy Hub calendar</p><p className="text-[11px] text-muted-foreground">Creates or updates a linked event</p></div>
+                      <Switch checked={!!draft.addToCalendar} disabled={!canEdit} onCheckedChange={(value) => setDraft((current) => ({ ...current, addToCalendar: value }))} />
+                    </div>
+                  )}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-white/70 px-3 py-2"><p className="text-sm font-medium">Pinned</p><Switch checked={!!draft.pinned} disabled={!canEdit} onCheckedChange={(value) => setDraft((current) => ({ ...current, pinned: value }))} /></div>
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-white/70 px-3 py-2"><p className="text-sm font-medium">Archived</p><Switch checked={!!draft.archived} disabled={!canEdit} onCheckedChange={(value) => setDraft((current) => ({ ...current, archived: value }))} /></div>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-            <NoteCanvasEditor
+            <PaperNoteCanvasEditor
               canvas={draft.canvas ?? { version: 1, height: 520, blocks: [] }}
               canEdit={canEdit}
               ownerId={ownerId}
               noteId={noteId}
               onChange={(canvas) => setDraft((current) => ({ ...current, canvas }))}
-              onAddChecklist={() => {
-                setShowChecklist(true);
-                setDraft((current) => ({
-                  ...current,
-                  checklist: current.checklist?.length ? current.checklist : [{ id: `c${Date.now()}`, text: "", done: false }],
-                }));
-              }}
-              onAddDiagram={() => setShowDiagram(true)}
             />
-
-            {showChecklist && (
-              <div className="space-y-2 rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <p className="flex flex-1 items-center gap-1.5 text-sm font-semibold">
-                    <CheckSquare className="h-4 w-4" /> Checklist
-                  </p>
-                  {canEdit && (
-                    <button type="button" onClick={() => {
-                      setShowChecklist(false);
-                      setDraft((current) => ({ ...current, checklist: [], kind: current.kind === "checklist" ? "note" : current.kind }));
-                    }} className="rounded-lg p-1 text-muted-foreground hover:bg-muted" aria-label="Remove checklist">
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                {(draft.checklist ?? []).map((item, idx) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={item.done}
-                      disabled={!canEdit}
-                      onChange={(event) => {
-                        const next = [...(draft.checklist ?? [])];
-                        next[idx] = { ...item, done: event.target.checked };
-                        setDraft((current) => ({ ...current, checklist: next }));
-                      }}
-                    />
-                    <Input
-                      value={item.text}
-                      readOnly={!canEdit}
-                      placeholder="Checklist item"
-                      onChange={(event) => {
-                        const next = [...(draft.checklist ?? [])];
-                        next[idx] = { ...item, text: event.target.value };
-                        setDraft((current) => ({ ...current, checklist: next }));
-                      }}
-                    />
-                    {canEdit && (
-                      <button type="button" onClick={() => setDraft((current) => ({ ...current, checklist: current.checklist?.filter((entry) => entry.id !== item.id) }))} className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {canEdit && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setDraft((current) => ({
-                    ...current,
-                    checklist: [...(current.checklist ?? []), { id: `c${Date.now()}`, text: "", done: false }],
-                  }))}>
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add item
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {showDiagram && (
-              <div className="relative">
-                {canEdit && (
-                  <button type="button" onClick={() => {
-                    setShowDiagram(false);
-                    setDraft((current) => ({ ...current, diagram: null }));
-                  }} className="absolute right-2 top-2 z-20 rounded-lg bg-card p-1 text-muted-foreground shadow-sm hover:text-destructive" aria-label="Remove flowchart">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <NoteDiagramEditor
-                  diagram={draft.diagram}
-                  canEdit={canEdit}
-                  onChange={(diagram) => setDraft((current) => ({ ...current, diagram }))}
-                />
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={draft.dueDate?.slice(0, 10) ?? ""}
-                readOnly={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, dueDate: e.target.value || undefined }))}
-              />
-            </div>
-
-            {draft.dueDate && (
-              <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">Show on Hardy Hub calendar</p>
-                  <p className="text-[11px] text-muted-foreground">Creates or updates a linked event</p>
-                </div>
-                <Switch
-                  checked={!!draft.addToCalendar}
-                  disabled={!canEdit}
-                  onCheckedChange={(v) => setDraft((d) => ({ ...d, addToCalendar: v }))}
-                />
-              </div>
-            )}
-
-            <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
-              <p className="text-sm font-medium">Pinned</p>
-              <Switch
-                checked={!!draft.pinned}
-                disabled={!canEdit}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, pinned: v }))}
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
-              <p className="text-sm font-medium">Archived</p>
-              <Switch
-                checked={!!draft.archived}
-                disabled={!canEdit}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, archived: v }))}
-              />
-            </div>
 
             {canEdit && (
               <div className="flex flex-col gap-2">
@@ -507,8 +465,8 @@ export function NoteEditor({
                     cipher: null,
                     title: draft.title,
                     body: draft.body,
-                    checklist: draft.checklist,
-                    diagram: draft.diagram,
+                    checklist: canvasChecklist?.type === "checklist" ? canvasChecklist.items : draft.checklist,
+                    diagram: canvasDiagram?.type === "diagram" ? canvasDiagram.diagram : draft.diagram,
                     canvas: draft.canvas,
                   }, { decrypt: true })}>
                     <Unlock className="mr-1 h-3.5 w-3.5" /> Remove password

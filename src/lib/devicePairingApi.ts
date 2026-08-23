@@ -3,8 +3,14 @@ import { functions } from "@/lib/firebase";
 
 export type PairingStatus = "pending" | "approved" | "denied" | "expired" | "not_found";
 
-export async function createDevicePairing(): Promise<{ pairingId: string; expiresAt: number }> {
-  const fn = httpsCallable<void, { pairingId: string; expiresAt: number }>(functions, "createDevicePairing");
+export interface CreatedDevicePairing {
+  pairingId: string;
+  claimSecret: string;
+  expiresAt: number;
+}
+
+export async function createDevicePairing(): Promise<CreatedDevicePairing> {
+  const fn = httpsCallable<void, CreatedDevicePairing>(functions, "createDevicePairing");
   const res = await fn();
   return res.data;
 }
@@ -15,12 +21,12 @@ export async function getDevicePairingStatus(pairingId: string): Promise<Pairing
   return res.data.status;
 }
 
-export async function approveDevicePairing(pairingId: string, householdId: string | null): Promise<void> {
-  const fn = httpsCallable<{ pairingId: string; householdId: string | null }, { success: boolean }>(
+export async function approveDevicePairing(pairingId: string): Promise<void> {
+  const fn = httpsCallable<{ pairingId: string }, { success: boolean }>(
     functions,
     "approveDevicePairing"
   );
-  await fn({ pairingId, householdId });
+  await fn({ pairingId });
 }
 
 export async function denyDevicePairing(pairingId: string): Promise<void> {
@@ -29,12 +35,13 @@ export async function denyDevicePairing(pairingId: string): Promise<void> {
 }
 
 export async function claimDevicePairing(
-  pairingId: string
+  pairingId: string,
+  claimSecret: string
 ): Promise<{ customToken: string; deviceId: string; householdId: string | null }> {
   const fn = httpsCallable<
-    { pairingId: string },
+    { pairingId: string; claimSecret: string },
     { customToken: string; deviceId: string; householdId: string | null }
   >(functions, "claimDevicePairing");
-  const res = await fn({ pairingId });
+  const res = await fn({ pairingId, claimSecret });
   return res.data;
 }

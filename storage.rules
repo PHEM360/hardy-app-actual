@@ -14,9 +14,21 @@ service firebase.storage {
         userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
     }
 
+    function isInteractiveUser() {
+      return request.auth != null && !('deviceId' in request.auth.token);
+    }
+
+    function isActiveDisplayFor(userId) {
+      return request.auth != null &&
+        'deviceId' in request.auth.token &&
+        request.auth.uid == userId &&
+        firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.uid == userId &&
+        firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.revoked == false;
+    }
+
     function canAccessHousehold(householdId) {
       let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-      return request.auth != null && (
+      return isInteractiveUser() && (
         request.auth.uid == householdId ||
         isHouseholdAdmin(userDoc) ||
         userDoc.householdId == householdId ||
@@ -27,14 +39,14 @@ service firebase.storage {
     }
 
     function canViewPageStorage(ownerId, page) {
-      return request.auth != null && (
+      return isInteractiveUser() && (
         request.auth.uid == ownerId ||
         firestore.exists(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid))
       );
     }
 
     function canEditPageStorage(ownerId, page) {
-      return request.auth != null && (
+      return isInteractiveUser() && (
         request.auth.uid == ownerId ||
         (firestore.exists(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid)) &&
           firestore.get(/databases/(default)/documents/pageShares/$(ownerId + '_' + page + '_' + request.auth.uid)).data.permission == "edit")
@@ -47,22 +59,22 @@ service firebase.storage {
     }
 
     match /tattersalls/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isInteractiveUser();
     }
 
     // Expense receipts — signed-in users only. Do not call firestore.get here.
     match /companies/{companyId}/receipts/{fileName} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isInteractiveUser();
     }
     match /companies/{companyId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isInteractiveUser();
     }
 
     match /documents/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isInteractiveUser() && request.auth.uid == userId;
     }
     match /petDocuments/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isInteractiveUser() && request.auth.uid == userId;
     }
 
     match /household/{householdId}/{allPaths=**} {
@@ -74,14 +86,23 @@ service firebase.storage {
       allow write: if canEditPageStorage(userId, "ai_analysis");
     }
 
+    match /displayPhotos/{userId}/{fileName} {
+      allow read: if (isInteractiveUser() && request.auth.uid == userId) || isActiveDisplayFor(userId);
+      allow create, update: if isInteractiveUser() &&
+        request.auth.uid == userId &&
+        request.resource.size < 20 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow delete: if isInteractiveUser() && request.auth.uid == userId;
+    }
+
     match /hubNotes/{userId}/media/{noteId}/{fileName} {
       allow read: if canViewPageStorage(userId, "notes") ||
-        (request.auth != null &&
+        (isInteractiveUser() &&
           firestore.exists(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)) &&
           request.auth.uid in firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharedWith);
       allow write: if validNoteMedia() && (
         canEditPageStorage(userId, "notes") ||
-          (request.auth != null &&
+          (isInteractiveUser() &&
             firestore.exists(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)) &&
             request.auth.uid in firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharedWith &&
             firestore.get(/databases/(default)/documents/hubNotes/$(userId)/items/$(noteId)).data.sharePermission == "edit")

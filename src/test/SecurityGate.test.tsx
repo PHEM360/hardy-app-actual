@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { MandatoryPasskeyGate, ModuleSecurityGate } from "@/components/security/SecurityGate";
+import { MandatoryPasskeyGate, ModuleSecurityGate, PasskeyGate } from "@/components/security/SecurityGate";
 import { DEFAULT_SECURITY_SETTINGS } from "@/types/security";
 import { markSecurityAuthentication } from "@/lib/securitySession";
 
@@ -76,5 +76,17 @@ describe("security gates", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Dashboard content")).toBeInTheDocument();
+  });
+
+  it("always requires a passkey before display pairing", () => {
+    enrolled = true;
+    render(
+      <MemoryRouter>
+        <PasskeyGate title="Approve a trusted display"><p>Pair screen</p></PasskeyGate>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { name: "Approve a trusted display" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with passkey" })).toBeInTheDocument();
+    expect(screen.queryByText("Pair screen")).not.toBeInTheDocument();
   });
 });

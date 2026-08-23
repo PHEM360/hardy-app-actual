@@ -100,6 +100,24 @@ export type NoteCanvasBlock =
       latitude: number;
       longitude: number;
       label: string;
+    }
+  | {
+      id: string;
+      type: "checklist";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      items: NoteChecklistItem[];
+    }
+  | {
+      id: string;
+      type: "diagram";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      diagram: NoteDiagram | null;
     };
 
 export interface NoteCanvas {

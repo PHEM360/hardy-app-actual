@@ -3,14 +3,14 @@ import { useParams } from "react-router-dom";
 import { MonitorSmartphone, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DogLoader from "@/components/DogLoader";
-import { useActiveHousehold } from "@/hooks/useActiveHousehold";
+import { useAuth } from "@/auth/AuthContext";
 import { approveDevicePairing, denyDevicePairing, getDevicePairingStatus, type PairingStatus } from "@/lib/devicePairingApi";
 
 type Phase = "checking" | "confirm" | "approving" | "approved" | "denying" | "denied" | "unavailable" | "error";
 
 export default function DisplayPair() {
   const { pairingId } = useParams<{ pairingId: string }>();
-  const { activeHouseholdId, loading: householdLoading } = useActiveHousehold();
+  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("checking");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ export default function DisplayPair() {
     setPhase("approving");
     setErrorMsg(null);
     try {
-      await approveDevicePairing(pairingId, activeHouseholdId ?? null);
+      await approveDevicePairing(pairingId);
       setPhase("approved");
     } catch (err) {
       setErrorMsg((err as { message?: string })?.message || "Couldn't approve this display. Please try again.");
@@ -73,13 +73,13 @@ export default function DisplayPair() {
         </div>
 
         <div className="px-6 py-6 space-y-5">
-          {(phase === "checking" || householdLoading && phase === "confirm") && (
+          {phase === "checking" && (
             <div className="flex flex-col items-center gap-4 py-4">
               <DogLoader text="Checking this code…" />
             </div>
           )}
 
-          {phase === "confirm" && !householdLoading && (
+          {phase === "confirm" && (
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
                 <MonitorSmartphone className="w-7 h-7 text-primary" />
@@ -87,10 +87,21 @@ export default function DisplayPair() {
               <div>
                 <p className="font-semibold text-sm">Link this display to your account?</p>
                 <p className="text-[12px] text-muted-foreground mt-1">
-                  It will stay signed in permanently on that screen, so treat it like handing over your login —
-                  only approve a device you're setting up yourself.
+                  This screen will be linked only to the account below. It will not change when you switch households on your phone.
                 </p>
               </div>
+              <div className="w-full rounded-2xl border border-primary/15 bg-primary/[0.06] px-4 py-3 text-left">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Account</p>
+                <p className="text-sm font-medium mt-0.5 truncate">
+                  {user?.displayName || user?.email || "Your Hardy Hub account"}
+                </p>
+                {user?.displayName && user.email && (
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.email}</p>
+                )}
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground -mt-1">
+                Only approve a display you are setting up yourself. The code expires after five minutes and can be used once.
+              </p>
               <div className="w-full flex flex-col gap-2 pt-1">
                 <Button className="w-full rounded-xl" onClick={handleApprove}>
                   Approve this display
@@ -117,7 +128,7 @@ export default function DisplayPair() {
                 <p className="font-semibold text-sm">Display linked</p>
                 <p className="text-[12px] text-muted-foreground mt-1">
                   Head back to that screen — it should sign in automatically within a few seconds.
-                  You can rename or remove it later from Settings → Linked Displays.
+                  You can configure, rename or remove it later from Remote Displays.
                 </p>
               </div>
             </div>

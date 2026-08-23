@@ -24,6 +24,7 @@ describe("app security sessions", () => {
     expect(DEFAULT_SECURITY_SETTINGS.moduleRequirements.passwords).toBe("passkey");
     expect(moduleForPath("/finance/accounts")).toBe("personal_finance");
     expect(moduleForPath("/login-details")).toBe("passwords");
+    expect(moduleForPath("/remote-displays")).toBe("remote_displays");
   });
 
   it("keeps the default session open after a recent passkey", () => {

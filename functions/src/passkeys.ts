@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import * as admin from "firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
   generateAuthenticationOptions,
@@ -31,7 +32,7 @@ interface ChallengeRecord {
   uid: string | null;
   origin: string;
   rpID: string;
-  expiresAt: admin.firestore.Timestamp;
+  expiresAt: Timestamp;
 }
 
 interface StoredPasskey {
@@ -42,8 +43,8 @@ interface StoredPasskey {
   counter: number;
   transports?: AuthenticatorTransportFuture[];
   label: string;
-  createdAt: admin.firestore.Timestamp;
-  lastUsedAt?: admin.firestore.Timestamp;
+  createdAt: Timestamp;
+  lastUsedAt?: Timestamp;
 }
 
 function requestContext(request: { rawRequest: { headers: { origin?: string } } }) {
@@ -53,8 +54,11 @@ function requestContext(request: { rawRequest: { headers: { origin?: string } } 
   return { origin, rpID };
 }
 
-function requireUid(request: { auth?: { uid: string } }) {
+function requireUid(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  if (request.auth.token?.deviceId) {
+    throw new HttpsError("permission-denied", "Remote display credentials cannot manage passkeys.");
+  }
   return request.auth.uid;
 }
 
@@ -62,8 +66,8 @@ async function storeChallenge(record: Omit<ChallengeRecord, "expiresAt">) {
   const challengeId = randomUUID();
   await admin.firestore().doc(`passkeyChallenges/${challengeId}`).set({
     ...record,
-    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + CHALLENGE_TTL_MS),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + CHALLENGE_TTL_MS),
+    createdAt: FieldValue.serverTimestamp(),
   });
   return challengeId;
 }
@@ -81,8 +85,8 @@ async function enforceChallengeRateLimit(request: { rawRequest: { ip?: string; s
       throw new HttpsError("resource-exhausted", "Too many passkey requests. Please wait a moment.");
     }
     transaction.set(ref, startedAt > now - CHALLENGE_RATE_WINDOW_MS
-      ? { startedAt, count: count + 1, expiresAt: admin.firestore.Timestamp.fromMillis(now + CHALLENGE_RATE_WINDOW_MS) }
-      : { startedAt: now, count: 1, expiresAt: admin.firestore.Timestamp.fromMillis(now + CHALLENGE_RATE_WINDOW_MS) });
+      ? { startedAt, count: count + 1, expiresAt: Timestamp.fromMillis(now + CHALLENGE_RATE_WINDOW_MS) }
+      : { startedAt: now, count: 1, expiresAt: Timestamp.fromMillis(now + CHALLENGE_RATE_WINDOW_MS) });
   });
 }
 
@@ -119,6 +123,13 @@ function passkeysForRp(passkeys: StoredPasskey[], rpID: string) {
   return passkeys.filter((passkey) => !passkey.rpID || passkey.rpID === rpID);
 }
 
+function hasFreshPasswordAuthentication(request: { auth?: { token?: Record<string, unknown> } }) {
+  const token = request.auth?.token;
+  const firebase = token?.firebase as { sign_in_provider?: string } | undefined;
+  const authenticatedAt = Number(token?.auth_time || 0);
+  return firebase?.sign_in_provider === "password" && authenticatedAt >= (Date.now() / 1000) - 300;
+}
+
 async function requirePasskeyAdmin(uid: string, email?: string) {
   const profile = await admin.firestore().doc(`users/${uid}`).get();
   const role = String(profile.data()?.role || "").toLowerCase().replace(/[-_\s]/g, "");
@@ -142,7 +153,15 @@ export const beginPasskeyRegistration = onCall(async (request) => {
     throw new HttpsError("permission-denied", "This account is not enabled.");
   }
   const passkeyVerifiedAt = Number(request.auth?.token?.passkeyVerifiedAt || 0);
-  if (profile.data()?.passkeyEnrolled === true && passkeyVerifiedAt < (Date.now() / 1000) - 300) {
+  const hasPasskeyForExactRp = existing.some((passkey) => passkey.rpID === rpID);
+  const canBootstrapLocalPasskey = rpID === "localhost" &&
+    !hasPasskeyForExactRp &&
+    hasFreshPasswordAuthentication(request);
+  if (
+    profile.data()?.passkeyEnrolled === true &&
+    passkeyVerifiedAt < (Date.now() / 1000) - 300 &&
+    !canBootstrapLocalPasskey
+  ) {
     throw new HttpsError("failed-precondition", "Confirm an existing passkey before adding another.");
   }
   const options = await generateRegistrationOptions({
@@ -201,7 +220,7 @@ export const finishPasskeyRegistration = onCall(async (request) => {
     label,
     deviceType: credentialDeviceType,
     backedUp: credentialBackedUp,
-    createdAt: admin.firestore.Timestamp.now(),
+    createdAt: Timestamp.now(),
   };
   const passkeyRef = admin.firestore().doc(`passkeys/${credential.id}`);
   await admin.firestore().runTransaction(async (transaction) => {
@@ -210,7 +229,7 @@ export const finishPasskeyRegistration = onCall(async (request) => {
     transaction.create(passkeyRef, passkey);
     transaction.set(admin.firestore().doc(`users/${uid}`), {
       passkeyEnrolled: true,
-      passkeyEnrolledAt: admin.firestore.FieldValue.serverTimestamp(),
+      passkeyEnrolledAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   });
   const token = await admin.auth().createCustomToken(uid, {
@@ -230,7 +249,7 @@ export const beginPasskeyAuthentication = onCall(async (request) => {
   if (uid && existingForRp.length === 0) {
     throw new HttpsError("failed-precondition", "No passkey is registered for this web address.");
   }
-  const options = await generateAuthenticationOptions({
+  const generatedOptions = await generateAuthenticationOptions({
     rpID,
     allowCredentials: uid ? existingForRp.map((passkey) => ({
       id: passkey.credentialId,
@@ -239,6 +258,12 @@ export const beginPasskeyAuthentication = onCall(async (request) => {
     userVerification: "required",
     timeout: 60_000,
   });
+  const options = {
+    ...generatedOptions,
+    // Prefer Touch ID, Face ID, Windows Hello, or another authenticator on
+    // this device. Browsers can still offer a phone QR fallback when needed.
+    hints: ["client-device", "hybrid"],
+  };
   const challengeId = await storeChallenge({
     challenge: options.challenge,
     kind: "authentication",
@@ -291,7 +316,7 @@ export const finishPasskeyAuthentication = onCall(async (request) => {
     }
     transaction.update(passkeyRef, {
       counter: verification.authenticationInfo.newCounter,
-      lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastUsedAt: FieldValue.serverTimestamp(),
     });
   });
   const token = await admin.auth().createCustomToken(passkey.uid, {
@@ -311,7 +336,7 @@ export const resetUserPasskeys = onCall(async (request) => {
   snapshot.docs.forEach((document) => batch.delete(document.ref));
   batch.set(admin.firestore().doc(`users/${targetUid}`), {
     passkeyEnrolled: false,
-    passkeyResetAt: admin.firestore.FieldValue.serverTimestamp(),
+    passkeyResetAt: FieldValue.serverTimestamp(),
     passkeyResetBy: adminUid,
   }, { merge: true });
   await batch.commit();

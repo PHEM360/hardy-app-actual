@@ -27,6 +27,7 @@ export const SECURITY_MODULES = [
   { id: "annual_leave", label: "Annual Leave", routes: ["/annual-leave"] },
   { id: "ai_analysis", label: "AI Analysis", routes: ["/ai-analysis"] },
   { id: "qr_codes", label: "QR Codes", routes: ["/qr-codes"] },
+  { id: "remote_displays", label: "Remote Displays", routes: ["/remote-displays"] },
   { id: "admin", label: "Admin", routes: ["/admin"] },
   { id: "more", label: "More", routes: ["/more"] },
   { id: "settings", label: "Settings", routes: ["/settings", "/themes", "/notifications"] },
@@ -40,6 +41,7 @@ export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
   moduleRequirements: {
     personal_finance: "passkey",
     passwords: "passkey",
+    remote_displays: "passkey",
   },
 };
 

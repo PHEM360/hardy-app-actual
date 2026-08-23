@@ -1,42 +1,24 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Maximize, WifiOff } from "lucide-react";
+import { Maximize, WifiOff } from "lucide-react";
 import DogLoader from "@/components/DogLoader";
 import { useDeviceAuth } from "@/hooks/useDeviceAuth";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { useWakeLock } from "@/hooks/useWakeLock";
-import { useHouseholdPhotos } from "@/hooks/useHouseholdPhotos";
-import { useHouseholdCalendar } from "@/hooks/useHouseholdCalendar";
 import { useAutoUnlockAudio } from "@/hooks/useAutoUnlockAudio";
-import { SceneRotator } from "@/components/display/SceneRotator";
-import { DisplaySettingsSheet } from "@/components/display/DisplaySettingsSheet";
 import { DisplayLoginScreen } from "@/components/display/DisplayLoginScreen";
 import { AlarmManager } from "@/components/display/AlarmManager";
 import { AudioUnlockOverlay } from "@/components/display/AudioUnlockOverlay";
+import { RemoteDisplayRuntime } from "@/components/display/RemoteDisplayRuntime";
 
 export default function Display() {
-  const { status, deviceId, signInError, signInDirect, forgetThisDevice, pairing, restartPairing } = useDeviceAuth();
+  const { status, deviceId, pairing, restartPairing } = useDeviceAuth();
   const {
     device,
     loading: settingsLoading,
-    updateClockSettings,
-    updatePhotoFrameSettings,
-    addAlarm,
     updateAlarm,
-    deleteAlarm,
-    renameDevice,
-    updateCalendarSettings,
-    updateOverviewSettings,
-    updateSceneSettings,
   } = useDeviceSettings(deviceId);
-  const { photos, loading: photosLoading, addPhotos, deletePhoto } = useHouseholdPhotos(device?.householdId ?? null);
-  const {
-    events: calendarEvents,
-    loading: calendarLoading,
-    error: calendarError,
-  } = useHouseholdCalendar(device?.settings.calendar.enabled ? device.householdId : null);
   const { supported: wakeLockSupported } = useWakeLock(status === "ready");
   const { unlocked: audioUnlocked, tryUnlock: tryUnlockAudio } = useAutoUnlockAudio(status === "ready");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -63,7 +45,7 @@ export default function Display() {
         <WifiOff className="w-10 h-10 text-white/40" />
         <p className="text-white text-lg font-semibold">This display was disconnected</p>
         <p className="text-white/50 text-sm max-w-sm">
-          It was removed from Linked Displays in Settings. Sign in again below to reconnect it.
+          It was removed from Remote Displays. Refresh this page to securely link it again.
         </p>
       </div>
     );
@@ -72,8 +54,6 @@ export default function Display() {
   if (status === "signed_out") {
     return (
       <DisplayLoginScreen
-        error={signInError}
-        onSignIn={signInDirect}
         pairing={pairing}
         onRestartPairing={restartPairing}
       />
@@ -90,13 +70,7 @@ export default function Display() {
 
   return (
     <div className="min-h-screen w-full bg-zinc-950 relative overflow-hidden select-none">
-      <SceneRotator
-        device={device}
-        photos={photos}
-        calendarEvents={calendarEvents}
-        calendarLoading={calendarLoading}
-        calendarError={calendarError}
-      />
+      <RemoteDisplayRuntime device={device} />
 
       <AlarmManager alarms={device.settings.alarms} onUpdateAlarm={updateAlarm} />
       <AudioUnlockOverlay
@@ -121,41 +95,7 @@ export default function Display() {
             <Maximize className="w-4 h-4" />
           </button>
         )}
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"
-          aria-label="Display settings"
-        >
-          <SettingsIcon className="w-4 h-4" />
-        </button>
       </div>
-
-      <DisplaySettingsSheet
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        deviceLabel={device.label}
-        onRename={renameDevice}
-        onForgetDevice={forgetThisDevice}
-        clockSettings={device.settings.clock}
-        onChangeClock={updateClockSettings}
-        alarms={device.settings.alarms}
-        onAddAlarm={addAlarm}
-        onUpdateAlarm={updateAlarm}
-        onDeleteAlarm={deleteAlarm}
-        photoFrameSettings={device.settings.photoFrame}
-        onChangePhotoFrame={updatePhotoFrameSettings}
-        photos={photos}
-        photosLoading={photosLoading}
-        onAddPhotos={addPhotos}
-        onDeletePhoto={deletePhoto}
-        hasHousehold={!!device.householdId}
-        calendarSettings={device.settings.calendar}
-        onChangeCalendar={updateCalendarSettings}
-        overviewSettings={device.settings.overview}
-        onChangeOverview={updateOverviewSettings}
-        sceneSettings={device.settings.scenes}
-        onChangeScenes={updateSceneSettings}
-      />
     </div>
   );
 }

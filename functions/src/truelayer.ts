@@ -53,8 +53,11 @@ export type BankAccountSnapshot = {
   linkedAccountId: string | null;
 };
 
-function requireUid(auth?: { uid: string }) {
+function requireUid(auth?: { uid: string; token?: Record<string, unknown> }) {
   if (!auth?.uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  if (auth.token?.deviceId) {
+    throw new HttpsError("permission-denied", "Remote display credentials cannot access banking services.");
+  }
   return auth.uid;
 }
 

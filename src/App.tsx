@@ -29,6 +29,7 @@ import QRCodes from "@/pages/QRCodes";
 import Locate from "@/pages/Locate";
 import Display from "@/pages/Display";
 import DisplayPair from "@/pages/DisplayPair";
+import RemoteDisplays from "@/pages/RemoteDisplays";
 import TagScan from "@/pages/TagScan";
 import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
@@ -44,7 +45,7 @@ import FinancePreview from "@/pages/FinancePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
-import { MandatoryPasskeyGate } from "@/components/security/SecurityGate";
+import { MandatoryPasskeyGate, PasskeyGate } from "@/components/security/SecurityGate";
 
 const queryClient = new QueryClient();
 
@@ -62,7 +63,14 @@ const App = () => (
             path="/pair/:pairingId"
             element={
               <RequireAuth>
-                <DisplayPair />
+                <MandatoryPasskeyGate>
+                  <PasskeyGate
+                    title="Approve a trusted display"
+                    description="Use your passkey before giving this screen access to your photos, calendar and tasks."
+                  >
+                    <DisplayPair />
+                  </PasskeyGate>
+                </MandatoryPasskeyGate>
               </RequireAuth>
             }
           />
@@ -196,6 +204,7 @@ const App = () => (
             <Route path="/themes" element={<Themes />} />
             <Route path="/login-details" element={<LogInDetails />} />
             <Route path="/qr-codes" element={<QRCodes />} />
+            <Route path="/remote-displays" element={<RemoteDisplays />} />
             <Route
               path="/ai-analysis"
               element={

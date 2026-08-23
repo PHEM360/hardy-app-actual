@@ -1,76 +1,50 @@
-import { useEffect, useMemo, useState } from "react";
-import type { DeviceDoc } from "@/hooks/useDeviceSettings";
-import type { HouseholdPhoto } from "@/hooks/useHouseholdPhotos";
-import type { HouseholdCalendarEvent } from "@/hooks/useHouseholdCalendar";
-import { ClockScene } from "@/components/display/ClockScene";
-import { CompactClockOverlay } from "@/components/display/CompactClockOverlay";
-import { PhotoFrameScene } from "@/components/display/PhotoFrameScene";
-import { CalendarScene } from "@/components/display/CalendarScene";
-import { KioskWidgetGrid } from "@/components/display/KioskWidgetGrid";
-
-type SceneType = "clock" | "photos" | "calendar" | "overview";
+import { useEffect, useState } from "react";
+import { DEFAULT_DISPLAY_PAGES, type DeviceDoc } from "@/hooks/useDeviceSettings";
+import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
+import type { CalendarEvent, Task } from "@/types/app";
+import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
 
 export function SceneRotator({
   device,
   photos,
   calendarEvents,
-  calendarLoading,
-  calendarError,
+  tasks,
 }: {
   device: DeviceDoc;
-  photos: HouseholdPhoto[];
-  calendarEvents: HouseholdCalendarEvent[];
-  calendarLoading: boolean;
-  calendarError: string | null;
+  photos: RemoteDisplayPhoto[];
+  calendarEvents: CalendarEvent[];
+  tasks: Task[];
 }) {
-  const scenes = useMemo(() => {
-    const list: SceneType[] = ["clock"];
-    if (device.settings.photoFrame.enabled && photos.length > 0) list.push("photos");
-    if (device.settings.calendar.enabled && device.householdId) list.push("calendar");
-    if (device.settings.overview.enabled && device.householdId) list.push("overview");
-    return list;
-  }, [device, photos.length]);
-
   const [index, setIndex] = useState(0);
+  const pages = device.settings.pages;
 
   useEffect(() => {
-    if (index >= scenes.length) setIndex(0);
-  }, [scenes.length, index]);
+    if (index >= pages.length) setIndex(0);
+  }, [pages.length, index]);
 
   useEffect(() => {
-    if (scenes.length < 2) return;
-    const interval = setInterval(() => {
-      setIndex((i) => (i + 1) % scenes.length);
-    }, Math.max(10, device.settings.scenes.rotateSeconds) * 1000);
-    return () => clearInterval(interval);
-  }, [scenes.length, device.settings.scenes.rotateSeconds]);
-
-  const current = scenes[index] ?? "clock";
+    if (pages.length < 2) return;
+    const currentDuration = pages[index]?.durationSeconds || device.settings.scenes.rotateSeconds;
+    const timeout = setTimeout(() => {
+      setIndex((current) => (current + 1) % pages.length);
+    }, Math.max(10, currentDuration) * 1000);
+    return () => clearTimeout(timeout);
+  }, [pages, index, device.settings.scenes.rotateSeconds]);
 
   return (
     <div className="absolute inset-0">
-      {current === "clock" && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <ClockScene settings={device.settings.clock} />
+      <DisplayPageRenderer
+        page={pages[index] || pages[0] || DEFAULT_DISPLAY_PAGES[0]}
+        photos={photos}
+        calendarEvents={calendarEvents}
+        tasks={tasks}
+      />
+      {pages.length > 1 && (
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
+          {pages.map((page, pageIndex) => (
+            <span key={page.id} className={`h-1 rounded-full transition-all ${pageIndex === index ? "w-6 bg-white/70" : "w-1.5 bg-white/25"}`} />
+          ))}
         </div>
-      )}
-      {current === "photos" && (
-        <>
-          <PhotoFrameScene photos={photos} settings={device.settings.photoFrame} />
-          <CompactClockOverlay settings={device.settings.clock} />
-        </>
-      )}
-      {current === "calendar" && (
-        <>
-          <CalendarScene events={calendarEvents} loading={calendarLoading} error={calendarError} />
-          <CompactClockOverlay settings={device.settings.clock} />
-        </>
-      )}
-      {current === "overview" && (
-        <>
-          <KioskWidgetGrid enabled={device.settings.overview.widgets} />
-          <CompactClockOverlay settings={device.settings.clock} />
-        </>
       )}
     </div>
   );

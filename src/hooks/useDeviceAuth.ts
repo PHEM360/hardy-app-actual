@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { signInWithCustomToken, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { getIdTokenResult, signInWithCustomToken, signOut } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
-import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { claimDevicePairing, createDevicePairing, getDevicePairingStatus } from "@/lib/devicePairingApi";
 
 const DEVICE_ID_KEY = "hardyhub-display-device-id";
@@ -19,27 +18,28 @@ export interface PairingState {
 }
 
 /**
- * Owns the /display page's own sign-in lifecycle: either a QR code is scanned
- * and approved from a phone (custom-token sign-in, minted by Cloud Functions),
- * or the device signs in directly with email/password. Either way, once
- * signed in it stays signed in indefinitely via Firebase's local persistence.
+ * Owns the /display page's QR-only sign-in lifecycle. A display session is
+ * accepted only when its Firebase token carries the server-minted deviceId
+ * claim that identifies the revocable devices/{id} record.
  */
 export function useDeviceAuth() {
   const { user, initializing } = useAuth();
-  const { activeHouseholdId } = useActiveHousehold();
   const [deviceId, setDeviceId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : window.localStorage.getItem(DEVICE_ID_KEY)
   );
   const [status, setStatus] = useState<DeviceAuthStatus>("loading");
-  const [signInError, setSignInError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<PairingState>({ phase: "starting", qrUrl: null, error: null });
   const [restartNonce, setRestartNonce] = useState(0);
+  const [validationNonce, setValidationNonce] = useState(0);
   const pairingIdRef = useRef<string | null>(null);
+  const claimSecretRef = useRef<string | null>(null);
   const pairingGenerationRef = useRef(0);
 
-  // Resolve / create the devices/{id} doc once we know the auth state.
+  // Resolve only server-minted display sessions. A normal account session
+  // visiting /display is signed out instead of being promoted into a device.
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function resolve() {
       if (initializing) return;
@@ -49,55 +49,55 @@ export function useDeviceAuth() {
       }
 
       try {
-        if (deviceId) {
-          const snap = await getDoc(doc(db, "devices", deviceId));
-          if (cancelled) return;
-          const data = snap.exists() ? snap.data() : null;
-          if (data && data.uid === user.uid && data.revoked !== true) {
-            setStatus("ready");
-            return;
-          }
-          if (data?.revoked === true) {
-            window.localStorage.removeItem(DEVICE_ID_KEY);
-            setDeviceId(null);
-            setStatus("revoked");
-            return;
-          }
-          window.localStorage.removeItem(DEVICE_ID_KEY);
-        }
-      } catch {
-        // Transient read failure (e.g. a just-completed sign-in still
-        // propagating) — fall through and let the retry below settle it
-        // rather than getting stuck on a permanent loading state.
-        if (cancelled) return;
-      }
+        const token = await getIdTokenResult(user);
+        const claimedDeviceId = typeof token.claims.deviceId === "string" ? token.claims.deviceId : null;
 
-      // No stored device (or it was stale) — this is a direct email/password
-      // sign-in on this device, so provision a device doc for it now.
-      const ref = await addDoc(collection(db, "devices"), {
-        uid: user.uid,
-        householdId: activeHouseholdId ?? null,
-        label: "New Display",
-        deviceType: "display",
-        pairedVia: "direct",
-        revoked: false,
-        createdAt: serverTimestamp(),
-        lastSeenAt: serverTimestamp(),
-        settings: {},
-      });
-      if (cancelled) return;
-      window.localStorage.setItem(DEVICE_ID_KEY, ref.id);
-      setDeviceId(ref.id);
-      setStatus("ready");
+        if (!claimedDeviceId) {
+          window.localStorage.removeItem(DEVICE_ID_KEY);
+          setDeviceId(null);
+          await signOut(auth);
+          if (!cancelled) setStatus("signed_out");
+          return;
+        }
+
+        const snap = await getDoc(doc(db, "devices", claimedDeviceId));
+        if (cancelled) return;
+        const data = snap.exists() ? snap.data() : null;
+        if (!data || data.uid !== user.uid || data.revoked === true) {
+          window.localStorage.removeItem(DEVICE_ID_KEY);
+          setDeviceId(null);
+          await signOut(auth);
+          if (!cancelled) setStatus("signed_out");
+          return;
+        }
+
+        window.localStorage.setItem(DEVICE_ID_KEY, claimedDeviceId);
+        if (deviceId !== claimedDeviceId) setDeviceId(claimedDeviceId);
+        setStatus("ready");
+      } catch (error) {
+        if (cancelled) return;
+        // Revoked device tokens are denied by Firestore before their device
+        // document can be read. Clear that session and offer a fresh QR,
+        // while retrying ordinary network failures without disconnecting.
+        const code = String((error as { code?: unknown })?.code || "");
+        if (code.includes("permission-denied") || code.includes("unauthenticated")) {
+          window.localStorage.removeItem(DEVICE_ID_KEY);
+          setDeviceId(null);
+          await signOut(auth).catch(() => {});
+          if (!cancelled) setStatus("signed_out");
+        } else {
+          setStatus("loading");
+          retryTimer = setTimeout(() => setValidationNonce((value) => value + 1), POLL_INTERVAL_MS);
+        }
+      }
     }
 
     resolve();
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
-    // activeHouseholdId intentionally excluded — only read once, at provisioning time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initializing, user, deviceId]);
+  }, [initializing, user, deviceId, validationNonce]);
 
   // QR pairing lifecycle — only runs while nobody's signed in on this device.
   useEffect(() => {
@@ -109,14 +109,15 @@ export function useDeviceAuth() {
     async function start() {
       setPairing({ phase: "starting", qrUrl: null, error: null });
       try {
-        const { pairingId } = await createDevicePairing();
+        const { pairingId, claimSecret } = await createDevicePairing();
         if (generation !== pairingGenerationRef.current) return;
         pairingIdRef.current = pairingId;
+        claimSecretRef.current = claimSecret;
         const qrUrl = `${window.location.origin}/pair/${pairingId}`;
         setPairing({ phase: "waiting", qrUrl, error: null });
 
         pollTimer = setInterval(async () => {
-          if (generation !== pairingGenerationRef.current || !pairingIdRef.current) return;
+          if (generation !== pairingGenerationRef.current || !pairingIdRef.current || !claimSecretRef.current) return;
           try {
             const pairingStatus = await getDevicePairingStatus(pairingIdRef.current);
             if (generation !== pairingGenerationRef.current) return;
@@ -125,7 +126,7 @@ export function useDeviceAuth() {
               if (pollTimer) clearInterval(pollTimer);
               setPairing((p) => ({ ...p, phase: "claiming" }));
               try {
-                const claimed = await claimDevicePairing(pairingIdRef.current);
+                const claimed = await claimDevicePairing(pairingIdRef.current, claimSecretRef.current!);
                 if (generation !== pairingGenerationRef.current) return;
                 // Sign in FIRST — only once the SDK actually holds a valid session do we
                 // flip deviceId, which triggers Firestore reads gated on request.auth.
@@ -160,6 +161,8 @@ export function useDeviceAuth() {
     start();
     return () => {
       pairingGenerationRef.current += 1; // invalidate this run
+      pairingIdRef.current = null;
+      claimSecretRef.current = null;
       if (pollTimer) clearInterval(pollTimer);
     };
   }, [status, restartNonce]);
@@ -178,22 +181,6 @@ export function useDeviceAuth() {
     return () => clearInterval(interval);
   }, [status, deviceId]);
 
-  const signInDirect = useCallback(async (email: string, password: string) => {
-    setSignInError(null);
-    try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch (err) {
-      const code = String((err as { code?: string } | undefined)?.code || "");
-      let message = "Sign-in failed. Please check your details and try again.";
-      if (code.includes("invalid-email")) message = "That email address doesn't look right.";
-      else if (code.includes("invalid-credential") || code.includes("wrong-password")) message = "Incorrect email or password.";
-      else if (code.includes("user-not-found")) message = "No account found for that email.";
-      else if (code.includes("too-many-requests")) message = "Too many attempts. Please wait a moment and try again.";
-      setSignInError(message);
-      throw err;
-    }
-  }, []);
-
   const forgetThisDevice = useCallback(async () => {
     if (typeof window !== "undefined") window.localStorage.removeItem(DEVICE_ID_KEY);
     setDeviceId(null);
@@ -201,5 +188,5 @@ export function useDeviceAuth() {
     setStatus("signed_out");
   }, []);
 
-  return { status, deviceId, signInError, signInDirect, forgetThisDevice, pairing, restartPairing };
+  return { status, deviceId, forgetThisDevice, pairing, restartPairing };
 }
