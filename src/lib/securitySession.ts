@@ -17,14 +17,20 @@ function read(uid: string): SecuritySessionRecord {
   }
 }
 
-export function markSecurityAuthentication(uid: string, method: "password" | "passkey") {
-  const now = Date.now();
+export function markSecurityAuthenticationAt(uid: string, method: "password" | "passkey", atMs: number) {
+  const record = read(uid);
+  const previous = method === "passkey" ? record.lastPasskeyAt : record.lastPasswordAt;
+  if (previous && previous >= atMs) return;
   const next = {
-    ...read(uid),
-    lastAuthAt: now,
-    ...(method === "passkey" ? { lastPasskeyAt: now } : { lastPasswordAt: now }),
+    ...record,
+    lastAuthAt: Math.max(record.lastAuthAt || 0, atMs),
+    ...(method === "passkey" ? { lastPasskeyAt: atMs } : { lastPasswordAt: atMs }),
   };
   window.localStorage.setItem(`${LOCAL_PREFIX}${uid}`, JSON.stringify(next));
+}
+
+export function markSecurityAuthentication(uid: string, method: "password" | "passkey") {
+  markSecurityAuthenticationAt(uid, method, Date.now());
 }
 
 export function markOpenSessionSatisfied(uid: string) {
@@ -52,6 +58,20 @@ export function hasFreshSecurityAuthentication(
   const verifiedAt = method === "passkey" ? record.lastPasskeyAt : record.lastPasswordAt;
   const maxAge = Math.max(1, maxAgeDays) * 24 * 60 * 60 * 1000;
   return !!verifiedAt && Date.now() - verifiedAt <= maxAge;
+}
+
+/**
+ * The passkey claim on the Firebase ID token is what Firestore rules and the
+ * Cloud Functions check, so the app uses it as the single source of truth for
+ * "have they shown a passkey recently" rather than per-browser storage.
+ */
+export function passkeyClaimVerifiedAt(claims: { passkeyVerifiedAt?: unknown } | undefined) {
+  return Number(claims?.passkeyVerifiedAt || 0) * 1000;
+}
+
+export function passkeyClaimIsFresh(claims: { passkeyVerifiedAt?: unknown }, maxAgeDays: number) {
+  const verifiedAtMs = passkeyClaimVerifiedAt(claims);
+  return verifiedAtMs > 0 && Date.now() - verifiedAtMs <= Math.max(1, maxAgeDays) * 24 * 60 * 60 * 1000;
 }
 
 export function clearSecuritySession(uid: string) {

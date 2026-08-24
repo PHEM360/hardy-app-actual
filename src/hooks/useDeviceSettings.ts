@@ -2,6 +2,44 @@ import { useEffect, useState, useCallback } from "react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { WidgetType } from "@/hooks/useDashboardLayout";
+import {
+  applyPageLayout,
+  createDisplayWidget,
+  DEFAULT_DISPLAY_PAGES,
+  stripUndefined,
+  type DisplayPage,
+} from "@/lib/displayPages";
+
+export {
+  BACKDROP_LABELS,
+  DEFAULT_DISPLAY_PAGES,
+  DISPLAY_THEMES,
+  DURATION_CHOICES,
+  PAGE_LAYOUTS,
+  PAGE_PRESETS,
+  WIDGET_DESCRIPTIONS,
+  WIDGET_LABELS,
+  WIDGET_ORDER,
+  activeDisplayPages,
+  applyPageLayout,
+  createDisplayWidget,
+  displayTheme,
+  durationLabel,
+  isPageActiveAt,
+  layoutIsResizable,
+  layoutSlots,
+  pageScheduleLabel,
+  stripUndefined,
+} from "@/lib/displayPages";
+export type {
+  DisplayBackdropKind,
+  DisplayPage,
+  DisplayPageLayout,
+  DisplayPagePreset,
+  DisplayTheme,
+  DisplayWidgetLayout,
+  DisplayWidgetType,
+} from "@/lib/displayPages";
 
 export type ClockStyle = "digital" | "analog";
 export type ClockSize = "medium" | "large" | "xlarge";
@@ -35,38 +73,6 @@ export interface PhotoFrameSettings {
 export interface CalendarSceneSettings {
   enabled: boolean;
   daysAhead: number;
-}
-
-export type DisplayWidgetType = "clock" | "photos" | "calendar" | "tasks";
-
-export interface DisplayWidgetLayout {
-  id: string;
-  type: DisplayWidgetType;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  title?: string;
-  accentColor?: string;
-  clockStyle?: ClockStyle;
-  format24h?: boolean;
-  showSeconds?: boolean;
-  showDate?: boolean;
-  photoIds?: string[];
-  photoIntervalSeconds?: number;
-  calendarDaysAhead?: number;
-  calendarCategories?: string[];
-  taskFilter?: "today" | "open" | "all";
-  taskLimit?: number;
-  taskIds?: string[];
-}
-
-export interface DisplayPage {
-  id: string;
-  name: string;
-  durationSeconds: number;
-  background: string;
-  widgets: DisplayWidgetLayout[];
 }
 
 export interface OverviewSceneSettings {
@@ -111,16 +117,6 @@ export const DEFAULT_CALENDAR_SCENE_SETTINGS: CalendarSceneSettings = { enabled:
 export const DEFAULT_OVERVIEW_SCENE_SETTINGS: OverviewSceneSettings = { enabled: false, widgets: DEFAULT_KIOSK_WIDGETS };
 export const DEFAULT_SCENE_ROTATION_SETTINGS: SceneRotationSettings = { rotateSeconds: 30 };
 
-export const DEFAULT_DISPLAY_PAGES: DisplayPage[] = [
-  {
-    id: "clock",
-    name: "Clock",
-    durationSeconds: 30,
-    background: "#09090b",
-    widgets: [{ id: "clock-main", type: "clock", x: 0, y: 0, w: 12, h: 12 }],
-  },
-];
-
 export interface DeviceDoc {
   id: string;
   uid: string;
@@ -134,16 +130,17 @@ export interface DeviceDoc {
 
 function legacyPages(raw: Partial<DeviceSettings> | undefined): DisplayPage[] {
   const pages: DisplayPage[] = [...DEFAULT_DISPLAY_PAGES];
+  const rotate = raw?.scenes?.rotateSeconds || 300;
   if (raw?.photoFrame?.enabled) {
     pages.push({
       id: "photos",
       name: "Photos",
-      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      durationSeconds: rotate,
       background: "#09090b",
+      layout: "full",
       widgets: [{
+        ...createDisplayWidget("photos"),
         id: "photos-main",
-        type: "photos",
-        x: 0, y: 0, w: 12, h: 12,
         photoIds: raw.photoFrame.photoIds || [],
         photoIntervalSeconds: raw.photoFrame.intervalSeconds || 20,
       }],
@@ -153,12 +150,12 @@ function legacyPages(raw: Partial<DeviceSettings> | undefined): DisplayPage[] {
     pages.push({
       id: "calendar",
       name: "Calendar",
-      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      durationSeconds: rotate,
       background: "#09090b",
+      layout: "full",
       widgets: [{
+        ...createDisplayWidget("calendar"),
         id: "calendar-main",
-        type: "calendar",
-        x: 0, y: 0, w: 12, h: 12,
         calendarDaysAhead: raw.calendar.daysAhead || 14,
       }],
     });
@@ -167,9 +164,10 @@ function legacyPages(raw: Partial<DeviceSettings> | undefined): DisplayPage[] {
     pages.push({
       id: "tasks",
       name: "Tasks",
-      durationSeconds: raw.scenes?.rotateSeconds || 30,
+      durationSeconds: rotate,
       background: "#09090b",
-      widgets: [{ id: "tasks-main", type: "tasks", x: 1, y: 1, w: 10, h: 10, taskFilter: "open", taskLimit: 10 }],
+      layout: "full",
+      widgets: [{ ...createDisplayWidget("tasks"), id: "tasks-main", taskLimit: 10 }],
     });
   }
   return pages;
@@ -183,7 +181,7 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     calendar: { ...DEFAULT_CALENDAR_SCENE_SETTINGS, ...(raw?.calendar ?? {}) },
     overview: { ...DEFAULT_OVERVIEW_SCENE_SETTINGS, ...(raw?.overview ?? {}) },
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
-    pages: Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw),
+    pages: (Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw)).map(applyPageLayout),
   };
 }
 
@@ -328,7 +326,9 @@ export function useDeviceSettings(deviceId: string | null) {
   const updatePages = useCallback(
     async (pages: DisplayPage[]) => {
       if (!deviceId) return;
-      await updateDoc(doc(db, "devices", deviceId), { "settings.pages": pages });
+      // Clearing an optional setting leaves undefined behind, which Firestore
+      // rejects for the whole document, so drop those keys instead.
+      await updateDoc(doc(db, "devices", deviceId), { "settings.pages": stripUndefined(pages) });
     },
     [deviceId]
   );

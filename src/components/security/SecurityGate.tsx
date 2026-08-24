@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EmailAuthProvider, reauthenticateWithCredential, signOut } from "firebase/auth";
 import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
@@ -16,6 +16,9 @@ import {
   hasFreshSecurityAuthentication,
   markOpenSessionSatisfied,
   markSecurityAuthentication,
+  markSecurityAuthenticationAt,
+  passkeyClaimIsFresh,
+  passkeyClaimVerifiedAt,
 } from "@/lib/securitySession";
 import { moduleForPath, type SecurityRequirement } from "@/types/security";
 import { Button } from "@/components/ui/button";
@@ -49,6 +52,57 @@ function SecurityFrame({
       </div>
     </div>
   );
+}
+
+/**
+ * Reads the passkey timestamp minted into the ID token when a passkey was last
+ * presented. One verification therefore covers every gate for the whole period
+ * the account owner chose, on any device signed into that session.
+ */
+function usePasskeyClaimFreshness(maxAgeDays: number, enabled: boolean) {
+  const { user } = useAuth();
+  const uid = user?.uid;
+  const userRef = useRef(user);
+  userRef.current = user;
+  const [checking, setChecking] = useState(enabled);
+  const [verifiedAtMs, setVerifiedAtMs] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    if (!uid || !enabled) {
+      setChecking(false);
+      setVerifiedAtMs(0);
+      return () => { active = false; };
+    }
+    setChecking(true);
+    const read = async () => {
+      const current = userRef.current;
+      if (!current) return 0;
+      const cached = await current.getIdTokenResult();
+      if (passkeyClaimIsFresh(cached.claims, maxAgeDays)) return passkeyClaimVerifiedAt(cached.claims);
+      // The claim may have been minted in another tab or on another gate, so
+      // take one refreshed look before asking the person to authenticate again.
+      const refreshed = await current.getIdTokenResult(true);
+      return passkeyClaimIsFresh(refreshed.claims, maxAgeDays) ? passkeyClaimVerifiedAt(refreshed.claims) : 0;
+    };
+    read()
+      .then((claimedAt) => {
+        if (!active) return;
+        // Remember when the passkey was actually shown so the next page opens
+        // without another round trip to discover the period is still running.
+        if (claimedAt > 0) markSecurityAuthenticationAt(uid, "passkey", claimedAt);
+        setVerifiedAtMs(claimedAt);
+        setChecking(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setVerifiedAtMs(0);
+        setChecking(false);
+      });
+    return () => { active = false; };
+  }, [uid, enabled, maxAgeDays]);
+
+  return { checking, fresh: verifiedAtMs > 0 };
 }
 
 function AuthenticationPrompt({
@@ -204,6 +258,12 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
   const { settings, passkeyEnrolled, loading } = useSecuritySettings();
   const [registering, setRegistering] = useState(false);
   const [sessionVerified, setSessionVerified] = useState(false);
+  const sessionDue = !!user && !loading && passkeyEnrolled && !sessionVerified &&
+    appSessionRequiresAuthentication(user.uid, settings);
+  const { fresh: passkeyFresh, checking: checkingPasskey } = usePasskeyClaimFreshness(
+    settings.appUnlockIntervalDays,
+    sessionDue && settings.appUnlockMode !== "every_open",
+  );
 
   useEffect(() => setSessionVerified(false), [user?.uid, settings]);
 
@@ -247,8 +307,9 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
     );
   }
 
-  const due = !sessionVerified && appSessionRequiresAuthentication(user.uid, settings);
-  if (due) {
+  if (sessionDue && checkingPasskey) return <DogLoader text="Checking your recent passkey…" />;
+
+  if (sessionDue && !passkeyFresh) {
     const requirement = settings.appUnlockMethod === "either" ? "either" : settings.appUnlockMethod;
     return (
       <AuthenticationPrompt
@@ -279,38 +340,20 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   const requirement = moduleId ? settings.moduleRequirements[moduleId] || "none" : "none";
   const verificationKey = `${moduleId || "none"}:${location.key}`;
   const [verifiedKey, setVerifiedKey] = useState("");
-  const [tokenPasskeyAt, setTokenPasskeyAt] = useState(0);
-  const [claimsChecked, setClaimsChecked] = useState(false);
   const verified = useMemo(() => verifiedKey === verificationKey, [verificationKey, verifiedKey]);
-  const localPasskeyIsFresh = !!user && requirement === "passkey" &&
-    hasFreshSecurityAuthentication(user.uid, "passkey", settings.appUnlockIntervalDays);
-  const tokenPasskeyIsFresh = tokenPasskeyAt > Date.now() - settings.appUnlockIntervalDays * 24 * 60 * 60 * 1000;
+  const { fresh: passkeyFresh, checking } = usePasskeyClaimFreshness(
+    settings.appUnlockIntervalDays,
+    !!user && !loading && requirement === "passkey" && !verified,
+  );
+  const passwordIsFresh = !!user && requirement === "password" &&
+    hasFreshSecurityAuthentication(user.uid, "password", settings.appUnlockIntervalDays);
 
-  useEffect(() => {
-    let active = true;
-    if (!user || requirement !== "passkey") {
-      setTokenPasskeyAt(0);
-      setClaimsChecked(true);
-      return () => { active = false; };
-    }
-    setClaimsChecked(false);
-    void user.getIdTokenResult().then((result) => {
-      if (!active) return;
-      setTokenPasskeyAt(Number(result.claims.passkeyVerifiedAt || 0) * 1000);
-      setClaimsChecked(true);
-    }).catch(() => {
-      if (!active) return;
-      setTokenPasskeyAt(0);
-      setClaimsChecked(true);
-    });
-    return () => { active = false; };
-  }, [user, requirement, location.pathname]);
-
-  if (!user || loading || requirement === "none" || verified || (localPasskeyIsFresh && tokenPasskeyIsFresh)) {
+  if (!user || loading || requirement === "none" || verified || passwordIsFresh) {
     return <>{children}</>;
   }
-  if (requirement === "passkey" && localPasskeyIsFresh && !claimsChecked) {
-    return <DogLoader text="Checking recent passkey…" />;
+  if (requirement === "passkey") {
+    if (checking) return <DogLoader text="Checking your recent passkey…" />;
+    if (passkeyFresh) return <>{children}</>;
   }
   return (
     <AuthenticationPrompt
@@ -323,7 +366,10 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   );
 }
 
-/** Requires a passkey verified within the last five minutes for a sensitive action. */
+/**
+ * Guards a sensitive action, such as approving a remote display, with the same
+ * passkey period the account owner chose rather than a separate short window.
+ */
 export function PasskeyGate({
   children,
   title = "Confirm with your passkey",
@@ -334,29 +380,16 @@ export function PasskeyGate({
   description?: string;
 }) {
   const { user } = useAuth();
+  const { settings, loading } = useSecuritySettings();
   const navigate = useNavigate();
   const [verified, setVerified] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const { fresh, checking } = usePasskeyClaimFreshness(
+    settings.appUnlockIntervalDays,
+    !!user && !loading && !verified,
+  );
 
-  useEffect(() => {
-    let active = true;
-    if (!user) {
-      setChecking(false);
-      return () => { active = false; };
-    }
-    void user.getIdTokenResult().then((result) => {
-      if (!active) return;
-      const verifiedAt = Number(result.claims.passkeyVerifiedAt || 0);
-      setVerified(verifiedAt >= Date.now() / 1000 - 300);
-      setChecking(false);
-    }).catch(() => {
-      if (active) setChecking(false);
-    });
-    return () => { active = false; };
-  }, [user]);
-
-  if (checking) return <DogLoader text="Checking recent passkey…" />;
-  if (verified) return <>{children}</>;
+  if (loading || checking) return <DogLoader text="Checking your recent passkey…" />;
+  if (verified || fresh) return <>{children}</>;
   return (
     <AuthenticationPrompt
       requirement="passkey"

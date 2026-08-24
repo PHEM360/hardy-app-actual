@@ -62,13 +62,14 @@ describe("security gates", () => {
     expect(screen.getByText("Private app")).toBeInTheDocument();
   });
 
-  it("offers password-confirmed recovery when this domain has no usable passkey", () => {
+  it("offers password-confirmed recovery when this domain has no usable passkey", async () => {
     enrolled = true;
     render(
       <MemoryRouter>
         <MandatoryPasskeyGate><p>Private app</p></MandatoryPasskeyGate>
       </MemoryRouter>,
     );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Can’t find your passkey? Set up this device" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Can’t find your passkey? Set up this device" }));
     expect(screen.getByText("Create a passkey for this device")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Account password")).toBeInTheDocument();
@@ -89,8 +90,7 @@ describe("security gates", () => {
 
   it("reuses a passkey login when opening Finance within seven days", async () => {
     enrolled = true;
-    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000);
-    markSecurityAuthentication("user-1", "passkey");
+    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 3 * 86_400;
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
@@ -98,6 +98,19 @@ describe("security gates", () => {
     );
     await waitFor(() => expect(screen.getByText("Finance content")).toBeInTheDocument());
     expect(screen.queryByRole("heading", { name: "Protected page" })).not.toBeInTheDocument();
+  });
+
+  it("asks again once the passkey period has run out", async () => {
+    enrolled = true;
+    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 8 * 86_400;
+    markSecurityAuthentication("user-1", "passkey");
+    render(
+      <MemoryRouter initialEntries={["/finance"]}>
+        <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Protected page" })).toBeInTheDocument());
+    expect(screen.queryByText("Finance content")).not.toBeInTheDocument();
   });
 
   it("opens modules with no additional security requirement", () => {
@@ -125,6 +138,18 @@ describe("security gates", () => {
   it("reuses a passkey presented moments before display pairing", async () => {
     enrolled = true;
     tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000);
+    render(
+      <MemoryRouter>
+        <PasskeyGate title="Approve a trusted display"><p>Pair screen</p></PasskeyGate>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Pair screen")).toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: "Approve a trusted display" })).not.toBeInTheDocument();
+  });
+
+  it("links a display without a new passkey when one was shown days ago", async () => {
+    enrolled = true;
+    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 4 * 86_400;
     render(
       <MemoryRouter>
         <PasskeyGate title="Approve a trusted display"><p>Pair screen</p></PasskeyGate>

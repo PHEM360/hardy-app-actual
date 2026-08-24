@@ -3,6 +3,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { hasFreshPasskey, passkeyFreshnessDays } from "./securityPolicy";
 
 // Always-on /display kiosk pairing. A display shows a QR code, a phone scans
 // it and approves, and the display then signs in permanently as that account
@@ -64,13 +65,13 @@ function requireAuth(request: { auth?: { uid: string } }) {
   return uid;
 }
 
-function requireAccountAuth(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {
+async function requireAccountAuth(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {
   const uid = requireAuth(request);
   if (request.auth?.token?.deviceId) {
     throw new HttpsError("permission-denied", "Pairing must be approved from your phone or computer.");
   }
-  const passkeyVerifiedAt = Number(request.auth?.token?.passkeyVerifiedAt || 0);
-  if (passkeyVerifiedAt < (Date.now() / 1000) - 300) {
+  const days = await passkeyFreshnessDays(uid);
+  if (!hasFreshPasskey(request.auth?.token, days)) {
     throw new HttpsError("failed-precondition", "Confirm your passkey before linking a remote display.");
   }
   return uid;
@@ -110,7 +111,7 @@ export const getDevicePairingStatus = onCall(async (request) => {
 });
 
 export const approveDevicePairing = onCall(async (request) => {
-  const uid = requireAccountAuth(request);
+  const uid = await requireAccountAuth(request);
   const pairingId = pairingIdFrom(request);
 
   const ref = admin.firestore().doc(`devicePairings/${pairingId}`);
@@ -135,7 +136,7 @@ export const approveDevicePairing = onCall(async (request) => {
 });
 
 export const denyDevicePairing = onCall(async (request) => {
-  requireAccountAuth(request);
+  await requireAccountAuth(request);
   const pairingId = pairingIdFrom(request);
 
   const ref = admin.firestore().doc(`devicePairings/${pairingId}`);

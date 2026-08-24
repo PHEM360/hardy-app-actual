@@ -80,4 +80,32 @@ await assert.rejects(
   (error) => error.code === "FAILED_PRECONDITION",
 );
 
-console.log("PASS: real callable create, passkey approval, secret claim, device minting, and idempotent retry");
+const daysAgo = (days) => Math.floor(Date.now() / 1000) - days * 86_400;
+const settingsRef = admin.firestore().doc(`users/${uid}/security/settings`);
+await settingsRef.delete().catch(() => {});
+
+// One passkey covers the whole default period, so linking a second screen days
+// later must not demand another one.
+const withinPeriod = await call("createDevicePairing", {});
+await call("approveDevicePairing", { pairingId: withinPeriod.pairingId }, await idTokenFor(uid, { passkeyVerifiedAt: daysAgo(3) }));
+assert.equal(
+  await call("getDevicePairingStatus", { pairingId: withinPeriod.pairingId }).then((value) => value.status),
+  "approved",
+);
+
+const beyondPeriod = await call("createDevicePairing", {});
+await assert.rejects(
+  call("approveDevicePairing", { pairingId: beyondPeriod.pairingId }, await idTokenFor(uid, { passkeyVerifiedAt: daysAgo(8) })),
+  (error) => error.code === "FAILED_PRECONDITION",
+);
+
+// A stricter period chosen in Settings must be honoured by the server too.
+await settingsRef.set({ appUnlockIntervalDays: 1, version: 2 }, { merge: true });
+const strict = await call("createDevicePairing", {});
+await assert.rejects(
+  call("approveDevicePairing", { pairingId: strict.pairingId }, await idTokenFor(uid, { passkeyVerifiedAt: daysAgo(2) })),
+  (error) => error.code === "FAILED_PRECONDITION",
+);
+await settingsRef.delete().catch(() => {});
+
+console.log("PASS: callable create, passkey approval reused across the chosen period, secret claim, device minting, and idempotent retry");

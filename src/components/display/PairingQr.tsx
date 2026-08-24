@@ -1,42 +1,42 @@
 import QRCode from "react-qr-code";
-import { RefreshCw, Smartphone } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import type { PairingState } from "@/hooks/useDeviceAuth";
 
+/**
+ * Sized in viewport units rather than rem so a TV or tablet with enlarged
+ * system font and screen-zoom settings still shows a QR code that fits, and one
+ * big enough to scan from across the room.
+ */
 export function PairingQr({ pairing, onRestart }: { pairing: PairingState; onRestart: () => void }) {
+  const side = "min(38vmin, 420px)";
   return (
-    <div className="flex flex-col items-center text-center gap-4">
-      <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-        <Smartphone className="w-4.5 h-4.5 text-white/70" />
-      </div>
-      <div>
-        <p className="text-white font-semibold text-sm">Scan with your phone</p>
-        <p className="text-white/50 text-xs mt-1 max-w-[15rem]">
-          Open your camera, scan the code, then approve on your phone.
-        </p>
-      </div>
-
-      <div className="w-44 h-44 rounded-2xl bg-white p-3 flex items-center justify-center relative">
+    <div className="flex flex-col items-center gap-[2vmin] text-center">
+      <div
+        className="flex items-center justify-center rounded-[3vmin] bg-white"
+        style={{ width: side, height: side, padding: "min(2.5vmin, 18px)" }}
+      >
         {pairing.phase === "waiting" && pairing.qrUrl && (
-          <QRCode value={pairing.qrUrl} size={152} style={{ width: "100%", height: "100%" }} />
+          <QRCode value={pairing.qrUrl} size={256} style={{ width: "100%", height: "100%" }} />
         )}
         {(pairing.phase === "starting" || pairing.phase === "claiming") && (
-          <div className="flex flex-col items-center gap-2 text-zinc-500">
-            <RefreshCw className="w-6 h-6 animate-spin" />
-            <span className="text-[11px] font-medium">
+          <div className="flex flex-col items-center gap-[1.5vmin] text-zinc-500">
+            <RefreshCw className="animate-spin" style={{ width: "5vmin", height: "5vmin" }} />
+            <span className="font-medium" style={{ fontSize: "clamp(11px, 1.9vmin, 17px)" }}>
               {pairing.phase === "claiming" ? "Signing in…" : "Generating code…"}
             </span>
           </div>
         )}
         {(pairing.phase === "expired" || pairing.phase === "denied" || pairing.phase === "error") && (
-          <div className="flex flex-col items-center gap-2 text-zinc-600 px-2">
-            <span className="text-[11px] font-medium text-center">
+          <div className="flex flex-col items-center gap-[1.5vmin] px-[2vmin] text-zinc-600">
+            <span className="font-medium" style={{ fontSize: "clamp(11px, 1.9vmin, 17px)" }}>
               {pairing.phase === "expired" && "This code expired"}
               {pairing.phase === "denied" && "Sign-in was denied"}
               {pairing.phase === "error" && (pairing.error || "Something went wrong")}
             </span>
             <button
               onClick={onRestart}
-              className="text-[11px] font-semibold text-primary underline underline-offset-2"
+              className="font-semibold text-primary underline underline-offset-2"
+              style={{ fontSize: "clamp(11px, 1.9vmin, 17px)" }}
             >
               Get a new code
             </button>
@@ -45,7 +45,9 @@ export function PairingQr({ pairing, onRestart }: { pairing: PairingState; onRes
       </div>
 
       {pairing.phase === "waiting" && (
-        <p className="text-white/30 text-[10px]">Code refreshes automatically if it expires</p>
+        <p className="text-white/35" style={{ fontSize: "clamp(9px, 1.5vmin, 14px)" }}>
+          A new code appears automatically if this one expires
+        </p>
       )}
     </div>
   );

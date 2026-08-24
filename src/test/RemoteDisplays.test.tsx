@@ -31,9 +31,6 @@ vi.mock("@/components/layout/FeaturePageShell", () => ({
     <main><h1>{title}</h1>{action}{children}</main>
   ),
 }));
-vi.mock("react-rnd", () => ({
-  Rnd: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
 vi.mock("@/auth/AuthContext", () => ({ useAuth: () => ({ dataUid: "owner" }) }));
 vi.mock("@/hooks/useMyDevices", () => ({
   useMyDevices: () => ({
@@ -91,20 +88,91 @@ describe("RemoteDisplays", () => {
     vi.clearAllMocks();
   });
 
-  it("lists the linked account device and builds a second widget page", async () => {
+  it("adds a ready-made page from a preset and saves it", async () => {
     vi.useFakeTimers();
     render(<RemoteDisplays />);
 
     expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Page" }));
-    expect(screen.getByRole("button", { name: "Page 2" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Task summary" }));
-    expect(screen.getByText("Widget settings")).toBeInTheDocument();
-    expect(screen.getByText("Tasks to show")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Add page/ }));
+    fireEvent.click(screen.getByText("Full month calendar"));
 
     await vi.advanceTimersByTimeAsync(400);
     expect(mocks.updatePages).toHaveBeenCalled();
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { widgets: { type: string }[] }[];
+    expect(saved.at(-1)?.widgets.map((widget) => widget.type)).toEqual(["calendar"]);
+  });
+
+  it("lets a page be scheduled to overnight hours only", async () => {
+    vi.useFakeTimers();
+    render(<RemoteDisplays />);
+
+    fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(screen.getByLabelText("Show from")).toHaveValue("21:00");
+    expect(screen.getByLabelText("Show until")).toHaveValue("06:00");
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { activeFrom?: string; activeTo?: string }[];
+    expect(saved[0]).toMatchObject({ activeFrom: "21:00", activeTo: "06:00" });
+  });
+
+  it("chooses what fills each area of the page", async () => {
+    vi.useFakeTimers();
+    render(<RemoteDisplays />);
+
+    fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "photos" } });
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(screen.getByText("Photo frame settings")).toBeInTheDocument();
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { widgets: { type: string }[] }[];
+    expect(saved[0].widgets[0].type).toBe("photos");
+  });
+
+  it("switches the layout so two widgets sit side by side", async () => {
+    vi.useFakeTimers();
+    render(<RemoteDisplays />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Side by side/ }));
+    fireEvent.change(screen.getByLabelText("Widget for area 2"), { target: { value: "tasks" } });
+    await vi.advanceTimersByTimeAsync(400);
+
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { widgets: { type: string; x: number; w: number }[] }[];
+    expect(saved[0].widgets).toHaveLength(2);
+    expect(saved[0].widgets[1]).toMatchObject({ type: "tasks", x: 6, w: 6 });
+  });
+
+  it("never writes an undefined field, which Firestore would reject", async () => {
+    vi.useFakeTimers();
+    render(<RemoteDisplays />);
+
+    fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
+    fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "all" } });
+    await vi.advanceTimersByTimeAsync(400);
+
+    const undefinedFields: string[] = [];
+    const scan = (value: unknown, path: string) => {
+      if (value === undefined) undefinedFields.push(path);
+      else if (Array.isArray(value)) value.forEach((item, index) => scan(item, `${path}[${index}]`));
+      else if (value && typeof value === "object") {
+        Object.entries(value).forEach(([key, item]) => scan(item, `${path}.${key}`));
+      }
+    };
+    scan(mocks.updatePages.mock.calls.at(-1)?.[0], "pages");
+    expect(undefinedFields).toEqual([]);
+  });
+
+  it("opens a widget’s settings from its Settings button", async () => {
+    vi.useFakeTimers();
+    render(<RemoteDisplays />);
+
+    fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
+    fireEvent.click(screen.getByRole("button", { name: /Close widget settings/ }));
+    expect(screen.queryByText("Clock settings")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
+    expect(screen.getByText("Clock settings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Heading on screen")).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(400);
   });
 
   it("revokes a linked display from its management page", () => {

@@ -12,8 +12,10 @@ import {
   type Base64URLString,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
+import { passkeyFreshnessDays } from "./securityPolicy";
 
 const RP_NAME = "Hardy Hub";
+const PRIMARY_RP_ID = "hardyapp.co.uk";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_CONTEXTS = new Map([
   ["https://hardyapp.co.uk", "hardyapp.co.uk"],
@@ -117,11 +119,16 @@ async function userPasskeys(uid: string) {
   return snapshot.docs.map((doc) => doc.data() as StoredPasskey);
 }
 
+function passkeyRpID(passkey: StoredPasskey) {
+  // Records created before rpID was stored all belong to the live site, which
+  // was the only place passkeys could be created at the time.
+  return passkey.rpID || PRIMARY_RP_ID;
+}
+
 function passkeysForRp(passkeys: StoredPasskey[], rpID: string) {
-  // A WebAuthn credential cannot cross relying-party domains. Legacy records
-  // without an rpID must be replaced through the password-confirmed recovery
-  // flow rather than offered to a browser that can never use them.
-  return passkeys.filter((passkey) => passkey.rpID === rpID);
+  // A WebAuthn credential cannot cross relying-party domains, so only offer
+  // the browser credentials it can actually satisfy.
+  return passkeys.filter((passkey) => passkeyRpID(passkey) === rpID);
 }
 
 function hasFreshPasswordAuthentication(request: { auth?: { token?: Record<string, unknown> } }) {
@@ -154,12 +161,11 @@ export const beginPasskeyRegistration = onCall(async (request) => {
     throw new HttpsError("permission-denied", "This account is not enabled.");
   }
   const passkeyVerifiedAt = Number(request.auth?.token?.passkeyVerifiedAt || 0);
-  const hasPasskeyForExactRp = existing.some((passkey) => passkey.rpID === rpID);
-  const canBootstrapPasskeyForRp = !hasPasskeyForExactRp &&
-    hasFreshPasswordAuthentication(request);
+  const freshnessDays = await passkeyFreshnessDays(uid);
+  const canBootstrapPasskeyForRp = existingForRp.length === 0 && hasFreshPasswordAuthentication(request);
   if (
     profile.data()?.passkeyEnrolled === true &&
-    passkeyVerifiedAt < (Date.now() / 1000) - 300 &&
+    passkeyVerifiedAt < (Date.now() / 1000) - freshnessDays * 86_400 &&
     !canBootstrapPasskeyForRp
   ) {
     throw new HttpsError("failed-precondition", "Confirm an existing passkey before adding another.");
@@ -317,6 +323,7 @@ export const finishPasskeyAuthentication = onCall(async (request) => {
     transaction.update(passkeyRef, {
       counter: verification.authenticationInfo.newCounter,
       lastUsedAt: FieldValue.serverTimestamp(),
+      rpID: challenge.rpID,
     });
   });
   const token = await admin.auth().createCustomToken(passkey.uid, {
