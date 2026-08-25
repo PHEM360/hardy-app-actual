@@ -24,8 +24,13 @@ describe("remote display Storage enforcement", () => {
     await environment.clearStorage();
     await environment.withSecurityRulesDisabled(async (admin) => {
       await setDoc(doc(admin.firestore(), "devices", "kitchen"), { uid: "owner", revoked: false });
+      await setDoc(doc(admin.firestore(), "companies", "company"), {
+        ownerId: "owner",
+        sharedWith: ["editor"],
+      });
       await uploadBytes(ref(admin.storage(), "displayPhotos/owner/photo.jpg"), new Uint8Array([1, 2, 3]), { contentType: "image/jpeg" });
       await uploadBytes(ref(admin.storage(), "documents/owner/private.pdf"), new Uint8Array([4, 5, 6]), { contentType: "application/pdf" });
+      await uploadBytes(ref(admin.storage(), "companies/company/marketing/brand.jpg"), new Uint8Array([7, 8, 9]), { contentType: "image/jpeg" });
     });
   });
 
@@ -44,5 +49,28 @@ describe("remote display Storage enforcement", () => {
       await updateDoc(doc(admin.firestore(), "devices", "kitchen"), { revoked: true });
     });
     await assertFails(getBytes(ref(display, "displayPhotos/owner/photo.jpg")));
+  });
+
+  it("limits company marketing media to people who can access that company", async () => {
+    const owner = environment.authenticatedContext("owner").storage();
+    const editor = environment.authenticatedContext("editor").storage();
+    const stranger = environment.authenticatedContext("stranger").storage();
+    await assertSucceeds(getBytes(ref(owner, "companies/company/marketing/brand.jpg")));
+    await assertSucceeds(getBytes(ref(editor, "companies/company/marketing/brand.jpg")));
+    await assertFails(getBytes(ref(stranger, "companies/company/marketing/brand.jpg")));
+    await assertSucceeds(uploadBytes(
+      ref(editor, "companies/company/marketing/new.jpg"),
+      new Uint8Array([1, 2, 3]),
+      { contentType: "image/jpeg" },
+    ));
+  });
+
+  it("only accepts images and videos in the marketing library", async () => {
+    const owner = environment.authenticatedContext("owner").storage();
+    await assertFails(uploadBytes(
+      ref(owner, "companies/company/marketing/script.html"),
+      new Uint8Array([1, 2, 3]),
+      { contentType: "text/html" },
+    ));
   });
 });

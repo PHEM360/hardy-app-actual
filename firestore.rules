@@ -588,6 +588,47 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
       }
+      match /marketing/{documentId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /campaigns/{campaignId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /marketingAssets/{assetId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /content/{contentId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow create: if isAuthenticated() &&
+          canEditCompany(companyId) &&
+          request.resource.data.status in ['suggestion', 'draft', 'awaiting_approval'];
+        allow update: if isAuthenticated() && canEditCompany(companyId) && (
+          request.resource.data.status in ['suggestion', 'draft', 'rejected', 'cancelled'] ||
+          (
+            request.resource.data.status == 'awaiting_approval' &&
+            request.resource.data.approvalVersion == resource.data.approvalVersion + 1 &&
+            request.resource.data.approvedVersion == 0
+          )
+        );
+        allow delete: if isAuthenticated() && canEditCompany(companyId);
+      }
+      // OAuth tokens are never stored here. This contains only account labels
+      // and connection health written by trusted Cloud Functions.
+      match /platformConnections/{connectionId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if false;
+      }
+    }
+
+    // Publishing jobs and encrypted platform credentials are server-only.
+    match /marketingPublishJobs/{jobId} {
+      allow read, write: if false;
+    }
+    match /marketingPlatformCredentials/{credentialId} {
+      allow read, write: if false;
     }
 
     // Company settings (income/expense categories, tax rate) - same sharing model as companies

@@ -104,6 +104,17 @@ export {
 	resetUserPasskeys,
 } from "./passkeys";
 
+// ── Company marketing ──
+export {
+	generateMarketingPlan,
+	approveMarketingContent,
+	rejectMarketingContent,
+	publishMarketingContentNow,
+	processMarketingPublishJobs,
+	startMarketingPlatformConnection,
+	generateMarketingImage,
+} from "./marketing";
+
 // ── Dog tags (Pets page) ──
 export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
 

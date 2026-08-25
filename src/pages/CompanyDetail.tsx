@@ -5,9 +5,11 @@ import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
+  Megaphone,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
+import CompanyMarketingTab from "@/components/companies/CompanyMarketingTab";
 import { ReceiptAttachCard, ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
@@ -41,6 +43,7 @@ import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, Company
 const TABS = [
   { id: "overview",    label: "Overview",    icon: Info },
   { id: "finance",     label: "Finance",     icon: TrendingUp },
+  { id: "marketing",   label: "Social & Ads", icon: Megaphone },
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
   { id: "expenses",    label: "Expenses",    icon: Receipt },
@@ -2185,6 +2188,7 @@ const CompanyDetail = () => {
             >
               {activeTab === "overview"   && <OverviewTab company={company} />}
               {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
+              {activeTab === "marketing"  && <CompanyMarketingTab companyId={id!} company={company} />}
               {activeTab === "logins"     && <LoginsTab companyId={id!} />}
               {activeTab === "services"   && <ServicesTab companyId={id!} />}
               {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}

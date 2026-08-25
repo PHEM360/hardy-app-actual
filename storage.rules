@@ -53,6 +53,28 @@ service firebase.storage {
       );
     }
 
+    function canViewCompanyStorage(companyId) {
+      let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
+      return isInteractiveUser() && (
+        !('ownerId' in company) ||
+        company.ownerId == "" ||
+        request.auth.uid == company.ownerId ||
+        ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
+        canViewPageStorage(company.ownerId, "companies")
+      );
+    }
+
+    function canEditCompanyStorage(companyId) {
+      let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
+      return isInteractiveUser() && (
+        !('ownerId' in company) ||
+        company.ownerId == "" ||
+        request.auth.uid == company.ownerId ||
+        ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
+        canEditPageStorage(company.ownerId, "companies")
+      );
+    }
+
     function validNoteMedia() {
       return request.resource.size < 50 * 1024 * 1024 &&
         request.resource.contentType.matches('(image|video|audio)/.*');
@@ -62,11 +84,25 @@ service firebase.storage {
       allow read, write: if isInteractiveUser();
     }
 
-    // Expense receipts — signed-in users only. Do not call firestore.get here.
+    // Company files use the same owner/share model as the company document.
     match /companies/{companyId}/receipts/{fileName} {
-      allow read, write: if isInteractiveUser();
+      allow read: if canViewCompanyStorage(companyId);
+      allow write: if canEditCompanyStorage(companyId);
     }
-    match /companies/{companyId}/{allPaths=**} {
+    match /companies/{companyId}/marketing/{fileName} {
+      allow read: if canViewCompanyStorage(companyId);
+      allow create, update: if canEditCompanyStorage(companyId) &&
+        request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType.matches('(image|video)/.*');
+      allow delete: if canEditCompanyStorage(companyId);
+    }
+    match /companies/{companyId}/taxreturns/{fileName} {
+      allow read: if canViewCompanyStorage(companyId);
+      allow write: if canEditCompanyStorage(companyId);
+    }
+    // Logos are uploaded while the company form is still being completed, so
+    // there is no company document to authorise against yet.
+    match /companies/logos/{fileName} {
       allow read, write: if isInteractiveUser();
     }
 

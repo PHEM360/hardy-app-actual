@@ -240,19 +240,80 @@ export interface TaskSettings {
 // ─── Marketing ────────────────────────────────────────────────────────────────
 
 export type SocialPlatform = "instagram" | "linkedin" | "facebook";
-export type ContentStatus = "suggestion" | "draft" | "approved" | "posted";
-export type ContentType = "social_post" | "article" | "campaign_idea";
+export type ContentStatus =
+  | "suggestion"
+  | "draft"
+  | "awaiting_approval"
+  | "approved"
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "rejected"
+  | "failed"
+  | "cancelled";
+export type ContentType = "social_post" | "article" | "campaign_idea" | "advert";
+export type MarketingAssetSource = "uploaded" | "ai_generated";
+export type MarketingCampaignStatus = "idea" | "planned" | "active" | "completed" | "cancelled";
 
 export interface MarketingProfile {
-  brandVoice: string;          // e.g. "Direct, no-nonsense, expert tone"
-  targetAudience: string;      // e.g. "Neurodivergent professionals aged 25-45"
-  keyMessages: string[];       // Core things to always communicate
-  competitors: string[];       // Competitor names/URLs for context
-  platforms: SocialPlatform[]; // Active platforms
-  tradingNames: string[];      // Trading names for this company
-  relatedCompanyIds: string[]; // Other companies with overlapping audience
-  industry: string;            // e.g. "Executive coaching / neurodiversity"
+  brandVoice: string;
+  targetAudience: string;
+  objectives: string[];
+  keyMessages: string[];
+  requiredPhrases: string[];
+  bannedPhrases: string[];
+  disclaimers: string[];
+  preferredHashtags: string[];
+  competitors: string[];
+  platforms: SocialPlatform[];
+  tradingNames: string[];
+  relatedCompanyIds: string[];
+  industry: string;
+  website: string;
+  defaultPlanDays: number;
+  postsPerWeek: number;
+  approvalRequired: boolean;
+  createdAt?: any;
   updatedAt?: any;
+}
+
+export interface MarketingCampaign {
+  id?: string;
+  name: string;
+  objective: string;
+  audience: string;
+  brief: string;
+  startDate: string;
+  endDate: string;
+  budget?: number;
+  status: MarketingCampaignStatus;
+  platforms: SocialPlatform[];
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface MarketingAsset {
+  id?: string;
+  name: string;
+  url: string;
+  storagePath: string;
+  mediaType: "image" | "video";
+  source: MarketingAssetSource;
+  tags: string[];
+  altText: string;
+  usageNotes: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface ContentRevision {
+  id: string;
+  draft: string;
+  hashtags: string[];
+  assetIds: string[];
+  changedBy: string;
+  reason: string;
+  createdAt: string;
 }
 
 export interface ContentPiece {
@@ -260,14 +321,57 @@ export interface ContentPiece {
   type: ContentType;
   platform: SocialPlatform | "website";
   topic: string;
-  trendReason?: string;         // Why AI suggested this now
-  draft: string;                // AI-generated draft
-  refinedDraft?: string;        // After user edits
-  hashtags?: string[];
+  campaignId: string;
+  objective: string;
+  audience: string;
+  trendReason: string;
+  draft: string;
+  refinedDraft: string;
+  hashtags: string[];
+  assetIds: string[];
+  aiImagePrompt: string;
+  scheduledFor: string;
+  timezone: string;
   status: ContentStatus;
-  postedAt?: string;
+  approvalVersion: number;
+  approvedVersion: number;
+  approvedAt: string;
+  approvedBy: string;
+  rejectedAt: string;
+  rejectedBy: string;
+  rejectionReason: string;
+  publishedAt: string;
+  externalPostId: string;
+  externalPostUrl: string;
+  publishAttempts: number;
+  publishError: string;
+  aiProvider: string;
+  aiModel: string;
+  aiReasoning: string;
+  brandChecks: string[];
+  engagementSuggestions: string[];
+  revisions: ContentRevision[];
   createdAt?: any;
   updatedAt?: any;
+}
+
+export interface MarketingPlanRequest {
+  periodDays: number;
+  postsPerWeek: number;
+  platforms: SocialPlatform[];
+  campaignId?: string;
+  focus?: string;
+}
+
+export interface MarketingPlatformConnection {
+  id?: string;
+  platform: SocialPlatform;
+  accountName: string;
+  accountId: string;
+  status: "not_connected" | "connected" | "expired" | "error";
+  capabilities: string[];
+  lastCheckedAt: string;
+  error: string;
 }
 
 // ─── Companies ────────────────────────────────────────────────────────────────
