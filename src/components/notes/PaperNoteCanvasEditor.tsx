@@ -68,6 +68,7 @@ export function PaperNoteCanvasEditor({
   const [paperWidth, setPaperWidth] = useState(720);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [pendingChecklistFocus, setPendingChecklistFocus] = useState<string | null>(null);
 
   const paperInk = useMemo(
     () => canvas.blocks.find((block): block is Extract<NoteCanvasBlock, { type: "drawing" }> => block.type === "drawing" && block.id === "paper-ink"),
@@ -78,6 +79,13 @@ export function PaperNoteCanvasEditor({
   useEffect(() => {
     if (!canEdit) setTool("select");
   }, [canEdit]);
+
+  useEffect(() => {
+    if (!pendingChecklistFocus) return;
+    const input = paperRef.current?.querySelector<HTMLInputElement>(`input[data-checklist-item="${pendingChecklistFocus}"]`);
+    input?.focus();
+    if (input) setPendingChecklistFocus(null);
+  }, [pendingChecklistFocus, canvas.blocks]);
 
   useEffect(() => {
     const paper = paperRef.current;
@@ -519,10 +527,32 @@ export function PaperNoteCanvasEditor({
                             const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, done: event.target.checked } : entry);
                             updateBlock(block.id, { items });
                           }} />
-                          <Input value={item.text} readOnly={!canEdit} placeholder="List item" onChange={(event) => {
-                            const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, text: event.target.value } : entry);
-                            updateBlock(block.id, { items });
-                          }} className="h-8 border-0 bg-transparent px-1 shadow-none" />
+                          <Input
+                            value={item.text}
+                            readOnly={!canEdit}
+                            placeholder="List item"
+                            data-checklist-item={`${block.id}:${item.id}`}
+                            onChange={(event) => {
+                              const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, text: event.target.value } : entry);
+                              updateBlock(block.id, { items });
+                            }}
+                            onKeyDown={(event) => {
+                              if (!canEdit || event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                              event.preventDefault();
+                              const next = block.items[index + 1];
+                              if (next) {
+                                setPendingChecklistFocus(`${block.id}:${next.id}`);
+                                return;
+                              }
+                              const newItem = { id: blockId(), text: "", done: false } satisfies NoteChecklistItem;
+                              updateBlock(block.id, {
+                                items: [...block.items, newItem],
+                                height: Math.max(block.height, (block.items.length + 1) * 42 + 75),
+                              });
+                              setPendingChecklistFocus(`${block.id}:${newItem.id}`);
+                            }}
+                            className="h-8 border-0 bg-transparent px-1 shadow-none"
+                          />
                           {canEdit && <button type="button" onClick={() => updateBlock(block.id, { items: block.items.filter((entry) => entry.id !== item.id) })} className="text-slate-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>}
                         </div>
                       ))}

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
@@ -36,7 +36,7 @@ import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Notes from "@/pages/Notes";
-import QuickNote from "@/pages/QuickNote";
+import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
@@ -241,10 +241,11 @@ const App = () => (
               path="/notes/quick"
               element={
                 <RequireFeature featureKey="notes">
-                  <QuickNote />
+                  <Navigate to="/notes?new=1" replace />
                 </RequireFeature>
               }
             />
+            <Route path="/email" element={<Email />} />
             <Route path="/widget" element={<HubWidget />} />
             <Route path="/widget/:kind" element={<HubWidget />} />
           </Route>

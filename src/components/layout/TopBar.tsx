@@ -1,36 +1,27 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Settings, ChevronDown, Home, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { useAppearance } from "@/hooks/useAppearance";
+import { useDisplayWeather } from "@/hooks/useDisplayWeather";
+import { ChromeSceneLayer } from "@/components/chrome/ChromeSceneLayer";
+import { resolveChromeScene } from "@/lib/chromeScenes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { looksLikeGeneratedId } from "@/lib/householdIds";
-
-const Star = ({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) => (
-  <motion.div
-    className="absolute rounded-full"
-    style={{
-      left: `${x}%`,
-      top: `${y}%`,
-      width: size,
-      height: size,
-      background: "hsl(0, 0%, 100%)",
-    }}
-    animate={{ opacity: [0.2, 0.9, 0.2], scale: [0.8, 1.2, 0.8] }}
-    transition={{ duration: 2 + Math.random() * 2, repeat: Infinity, delay }}
-  />
-);
 
 const TopBar = () => {
   const navigate = useNavigate();
   const { user, viewAs, stopViewAs } = useAuth();
   const { profile } = useUserProfile();
   const { activeHouseholdId, availableHouseholds, setActiveHouseholdId } = useActiveHousehold();
-  const { theme } = useAppearance();
+  const {
+    theme, headerScene, headerColor, headerPhotoUrl,
+    headerShowWeather, headerShowDate, headerShowTime,
+  } = useAppearance();
+  const { weather } = useDisplayWeather();
   const namedHouseholds = availableHouseholds.filter((h) => !looksLikeGeneratedId(h.name) && h.name !== h.id);
   const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
@@ -44,18 +35,16 @@ const TopBar = () => {
 
   const hour = now.getHours();
   const isNight = hour >= 20 || hour < 6;
+  const scene = resolveChromeScene(headerScene, { atmosphere: theme.atmosphere, isNight, fallback: "none" });
+  const decorations = headerScene === "auto" ? (theme.decorations ?? []) : [];
 
   const dateStr = format(now, "EEEE do MMM");
   const timeStr = format(now, "HH:mm");
-
-  const stars = useMemo(() =>
-    Array.from({ length: 18 }, (_, i) => ({
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: 1 + Math.random() * 2.5,
-      delay: Math.random() * 3,
-    })), []
-  );
+  const meta = [
+    headerShowDate ? dateStr : null,
+    headerShowTime ? timeStr : null,
+    headerShowWeather && weather ? `${weather.temperature}° ${weather.description}` : null,
+  ].filter(Boolean).join(" · ");
 
   const renderAvatar = () => {
     const avatarType = profile?.avatarType ?? "initials";
@@ -84,22 +73,19 @@ const TopBar = () => {
     );
   };
 
-  const showStars = theme.atmosphere === "stars" || theme.atmosphere === "celestial" || (theme.atmosphere === "none" && isNight);
-  const decorations = theme.decorations ?? [];
-
   return (
     <header
       className="sticky top-0 z-40 border-b border-white/5 overflow-hidden"
       style={{
-        background: "var(--chrome-header, var(--gradient-hero))",
+        background: headerColor || "var(--chrome-header, var(--gradient-hero))",
         paddingTop: "env(safe-area-inset-top)",
       }}
     >
-      {showStars && (
-        <div className="absolute inset-0 pointer-events-none">
-          {stars.map((s, i) => <Star key={i} {...s} />)}
-        </div>
+      {headerPhotoUrl && (
+        <img src={headerPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none" />
       )}
+      {headerPhotoUrl && <div className="absolute inset-0 bg-black/35 pointer-events-none" />}
+      <ChromeSceneLayer scene={scene} density="compact" />
       {decorations.length > 0 && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-40">
           {decorations.map((emoji, i) => (
@@ -114,15 +100,15 @@ const TopBar = () => {
         </div>
       )}
       <div className="relative flex items-center justify-between h-16 px-4 max-w-screen-xl mx-auto w-full">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           {renderAvatar()}
-          <div className="leading-tight">
-            <p className="text-sm font-semibold font-display text-white/95 tracking-wide">{firstName}</p>
-            <p className="text-[10px] text-white/55 font-medium tracking-wide">{dateStr} · {timeStr}</p>
+          <div className="leading-tight min-w-0">
+            <p className="text-sm font-semibold font-display text-white/95 tracking-wide truncate">{firstName}</p>
+            {meta && <p className="text-[10px] text-white/55 font-medium tracking-wide truncate">{meta}</p>}
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {namedHouseholds.length > 1 && (
             <Popover open={householdMenuOpen} onOpenChange={setHouseholdMenuOpen}>
               <PopoverTrigger asChild>

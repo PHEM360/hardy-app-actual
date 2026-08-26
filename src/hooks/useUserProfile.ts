@@ -28,6 +28,16 @@ export interface UserProfile {
     loaderPreset?: string;
     loaderLeft?: string;
     loaderRight?: string;
+    headerScene?: string;
+    headerColor?: string;
+    headerPhotoUrl?: string;
+    headerShowWeather?: boolean;
+    headerShowDate?: boolean;
+    headerShowTime?: boolean;
+    greetingScene?: string;
+    greetingColor?: string;
+    greetingPhotoUrl?: string;
+    greetingMatchHeader?: boolean;
   };
   quickLinks?: string[];
 }

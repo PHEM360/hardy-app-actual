@@ -1,10 +1,11 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
-import type { MarketingPlanRequest } from "@/types/app";
+import type { MarketingAuditRequest, MarketingPlanRequest } from "@/types/app";
 
 export interface GeneratedMarketingPlan {
   created: number;
   contentIds: string[];
+  imagesCreated?: number;
   summary: string;
 }
 
@@ -13,6 +14,14 @@ export async function generateMarketingPlan(companyId: string, request: Marketin
     { companyId: string; request: MarketingPlanRequest },
     GeneratedMarketingPlan
   >(functions, "generateMarketingPlan");
+  return (await call({ companyId, request })).data;
+}
+
+export async function generateMarketingAudit(companyId: string, request: MarketingAuditRequest) {
+  const call = httpsCallable<
+    { companyId: string; request: MarketingAuditRequest },
+    { auditId: string; headline: string }
+  >(functions, "generateMarketingAudit");
   return (await call({ companyId, request })).data;
 }
 

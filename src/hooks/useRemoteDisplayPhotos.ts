@@ -1,14 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
-import { deleteObject, getBlob, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import { parseDisplayPhotoLinks, type DisplayPhotoSource } from "@/lib/displayPhotos";
 
 export interface RemoteDisplayPhoto {
   id: string;
   url: string;
   storagePath: string;
   caption: string;
+  source: DisplayPhotoSource;
   createdAt: unknown;
+}
+
+async function resolvePhotoUrl(photo: Omit<RemoteDisplayPhoto, "url"> & { url?: string }): Promise<string> {
+  if (photo.source === "link" && photo.url) return photo.url;
+  if (photo.url?.startsWith("http")) return photo.url;
+  if (!photo.storagePath) return photo.url || "";
+  try {
+    return await getDownloadURL(ref(storage, photo.storagePath));
+  } catch (error) {
+    console.warn("Display photo could not be loaded", photo.storagePath, error);
+    return "";
+  }
 }
 
 export function useRemoteDisplayPhotos(uid: string | null | undefined) {
@@ -23,26 +37,23 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
     }
     const photosQuery = query(collection(db, "displayPhotos", uid, "items"), orderBy("createdAt", "asc"));
     let active = true;
-    let objectUrls: string[] = [];
     const unsubscribe = onSnapshot(photosQuery, async (snapshot) => {
-      const nextObjectUrls: string[] = [];
-      const records = snapshot.docs.map((photo) => ({ id: photo.id, ...photo.data() } as Omit<RemoteDisplayPhoto, "url">));
-      const hydrated = await Promise.all(records.map(async (photo) => {
-        try {
-          const blob = await getBlob(ref(storage, photo.storagePath), 20 * 1024 * 1024);
-          const url = URL.createObjectURL(blob);
-          nextObjectUrls.push(url);
-          return { ...photo, url };
-        } catch {
-          return { ...photo, url: "" };
-        }
-      }));
-      if (!active) {
-        nextObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-        return;
-      }
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
-      objectUrls = nextObjectUrls;
+      const records = snapshot.docs.map((photo) => {
+        const data = photo.data();
+        return {
+          id: photo.id,
+          storagePath: String(data.storagePath || ""),
+          caption: String(data.caption || ""),
+          source: data.source === "link" ? "link" : "upload",
+          createdAt: data.createdAt,
+          url: String(data.url || ""),
+        } as Omit<RemoteDisplayPhoto, "url"> & { url?: string };
+      });
+      const hydrated = await Promise.all(records.map(async (photo) => ({
+        ...photo,
+        url: await resolvePhotoUrl(photo),
+      })));
+      if (!active) return;
       setPhotos(hydrated);
       setLoading(false);
     }, () => {
@@ -52,8 +63,6 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
     return () => {
       active = false;
       unsubscribe();
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
-      objectUrls = [];
     };
   }, [uid]);
 
@@ -65,12 +74,30 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
       const storagePath = `displayPhotos/${uid}/${crypto.randomUUID()}-${safeName}`;
       const target = ref(storage, storagePath);
       await uploadBytes(target, file, { contentType: file.type });
+      const url = await getDownloadURL(target);
       await addDoc(collection(db, "displayPhotos", uid, "items"), {
         storagePath,
+        url,
+        source: "upload",
         caption: "",
         createdAt: serverTimestamp(),
       });
     }
+  }, [uid]);
+
+  const addLinkedPhotos = useCallback(async (text: string) => {
+    if (!uid) return { added: 0, folderCount: 0, skippedCount: 0 };
+    const parsed = parseDisplayPhotoLinks(text);
+    for (const url of parsed.urls) {
+      await addDoc(collection(db, "displayPhotos", uid, "items"), {
+        storagePath: "",
+        url,
+        source: "link",
+        caption: "",
+        createdAt: serverTimestamp(),
+      });
+    }
+    return { added: parsed.urls.length, folderCount: parsed.folderCount, skippedCount: parsed.skippedCount };
   }, [uid]);
 
   const updateCaption = useCallback(async (photoId: string, caption: string) => {
@@ -81,8 +108,8 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
   const deletePhoto = useCallback(async (photo: RemoteDisplayPhoto) => {
     if (!uid) return;
     await deleteDoc(doc(db, "displayPhotos", uid, "items", photo.id));
-    await deleteObject(ref(storage, photo.storagePath)).catch(() => {});
+    if (photo.storagePath) await deleteObject(ref(storage, photo.storagePath)).catch(() => {});
   }, [uid]);
 
-  return { photos, loading, addPhotos, updateCaption, deletePhoto };
+  return { photos, loading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto };
 }

@@ -1,12 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pencil, Check, RotateCcw, Eye, EyeOff } from "lucide-react";
-import { useDashboardLayout, WIDGET_LABELS, WIDGET_ICONS } from "@/hooks/useDashboardLayout";
+import { useDashboardLayout, WIDGET_LABELS, WIDGET_ICONS, isNotesPinnedFirst } from "@/hooks/useDashboardLayout";
 import type { WidgetLayoutItem } from "@/hooks/useDashboardLayout";
 import { WidgetShell } from "@/components/widgets/WidgetShell";
 import { WidgetContent } from "@/components/widgets/WidgetContent";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useNotes } from "@/hooks/useNotes";
 import { hasFeatureAccess, WIDGET_FEATURE_KEY } from "@/lib/features";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -21,9 +22,10 @@ const Dashboard = () => {
   const [editMode, setEditMode] = useState(false);
   const [showHiddenPanel, setShowHiddenPanel] = useState(false);
 
-  const { layout: fullLayout, updateWidget, resetLayout } = useDashboardLayout();
+  const { layout: fullLayout, updateWidget, resetLayout, pinNotesFirst } = useDashboardLayout();
   const { role, loading: roleLoading } = useEffectiveRole();
   const { profile, loading: profileLoading } = useUserProfile();
+  const { prefs } = useNotes();
 
   const layout = fullLayout.filter((w) => {
     const key = WIDGET_FEATURE_KEY[w.type];
@@ -31,6 +33,12 @@ const Dashboard = () => {
     if (roleLoading || profileLoading) return false;
     return hasFeatureAccess(role, profile?.enabledFeatures ?? [], key);
   });
+
+  useEffect(() => {
+    if (!prefs.dashboardNoteId) return;
+    if (isNotesPinnedFirst(fullLayout)) return;
+    pinNotesFirst();
+  }, [prefs.dashboardNoteId, fullLayout, pinNotesFirst]);
 
   // Measure container width
   useEffect(() => {

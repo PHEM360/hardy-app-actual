@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, FileUp, Zap, Pencil, Home, CheckCircle2, StickyNote } from "lucide-react";
+import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, Camera, Paperclip, FileUp, Zap, Pencil, Home, CheckCircle2, StickyNote, Mail } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
@@ -21,13 +21,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const ALL_LINKS = [
+export const ALL_LINKS = [
   { id: "today",       icon: CheckSquare2, label: "Today",      sub: "Focus list",  bg: "bg-amber-500",   tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",     href: "/today" },
   { id: "expense",     icon: Receipt,      label: "Expense",    sub: "Quick log",   bg: "bg-rose-500",     tint: "bg-rose-50 dark:bg-rose-500/15 border-rose-200/70 dark:border-rose-500/25",         action: "expense" as const },
   { id: "logins",      icon: KeyRound,     label: "Log Ins",    sub: "Credentials", bg: "bg-violet-500",   tint: "bg-violet-50 dark:bg-violet-500/15 border-violet-200/70 dark:border-violet-500/25", href: "/login-details" },
   { id: "event",       icon: CalendarPlus, label: "New Event",  sub: "Calendar",    bg: "bg-blue-500",     tint: "bg-blue-50 dark:bg-blue-500/15 border-blue-200/70 dark:border-blue-500/25",         href: "/calendar" },
   { id: "task",        icon: ListPlus,     label: "Add Task",   sub: "Tasks",       bg: "bg-emerald-500",  tint: "bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200/70 dark:border-emerald-500/25", href: "/tasks" },
-  { id: "note",        icon: StickyNote,   label: "Add Note",   sub: "Quick note",  bg: "bg-amber-500",    tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",         href: "/notes/quick" },
+  { id: "note",        icon: StickyNote,   label: "Add Note",   sub: "New note",    bg: "bg-amber-500",    tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",         href: "/notes?new=1" },
+  { id: "email",       icon: Mail,         label: "Email",      sub: "Inbox",       bg: "bg-indigo-500",   tint: "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200/70 dark:border-indigo-500/25", href: "/email" },
   { id: "finance",     icon: Wallet,       label: "Finance",    sub: "Personal",    bg: "bg-teal-500",     tint: "bg-teal-50 dark:bg-teal-500/15 border-teal-200/70 dark:border-teal-500/25",         href: "/finance" },
   { id: "hh-finance",  icon: Home,         label: "HH Finance", sub: "Household",   bg: "bg-green-600",    tint: "bg-green-50 dark:bg-green-500/15 border-green-200/70 dark:border-green-500/25",     href: "/household-finance" },
   { id: "upload",      icon: FileUp,       label: "Upload",     sub: "Documents",   bg: "bg-sky-500",      tint: "bg-sky-50 dark:bg-sky-500/15 border-sky-200/70 dark:border-sky-500/25",             action: "upload" as const },

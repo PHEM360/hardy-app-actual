@@ -10,6 +10,7 @@ import {
   orderBy,
   serverTimestamp,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -164,6 +165,15 @@ export function usePets(scopeUserId?: string) {
     []
   );
 
+  const unsharePet = useCallback(
+    async (petId: string, targetUid: string) => {
+      await updateDoc(doc(db, "pets", petId), {
+        sharedWith: arrayRemove(targetUid),
+      });
+    },
+    []
+  );
+
   const updatePet = useCallback(async (petId: string, updates: Partial<Pet>) => {
     await updateDoc(doc(db, "pets", petId), updates as any);
   }, []);
@@ -190,5 +200,5 @@ export function usePets(scopeUserId?: string) {
     [pets]
   );
 
-  return { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet };
+  return { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet, unsharePet };
 }

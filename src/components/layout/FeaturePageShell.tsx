@@ -11,9 +11,11 @@ interface FeaturePageShellProps {
   action?: React.ReactNode;
   /** Enables page sharing + "view as" for this page key. Omit on household pages. */
   sharePage?: string;
+  /** Replaces the default whole-page share button when this page needs a custom share flow. */
+  shareAccess?: React.ReactNode;
 }
 
-const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage }: FeaturePageShellProps) => {
+const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess }: FeaturePageShellProps) => {
   const navigate = useNavigate();
 
   return (
@@ -50,7 +52,7 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage }
           </div>
           {(sharePage || action) && (
             <div className="flex-shrink-0">
-              {sharePage ? <PageShareBar page={sharePage} extra={action} /> : action}
+              {sharePage ? <PageShareBar page={sharePage} extra={action} access={shareAccess} /> : action}
             </div>
           )}
         </div>

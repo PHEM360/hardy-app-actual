@@ -12,4 +12,5 @@ export const KIOSK_WIDGET_TYPES: WidgetType[] = [
   "quick_links",
   "finance",
   "notes",
+  "messages",
 ];

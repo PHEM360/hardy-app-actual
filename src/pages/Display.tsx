@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { Maximize, WifiOff } from "lucide-react";
+import { FolderOpen, Maximize, Moon, Sun, WifiOff } from "lucide-react";
 import DogLoader from "@/components/DogLoader";
 import { useDeviceAuth } from "@/hooks/useDeviceAuth";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useAutoUnlockAudio } from "@/hooks/useAutoUnlockAudio";
+import { useLocalDisplayFolder } from "@/hooks/useLocalDisplayFolder";
 import { DisplayLoginScreen } from "@/components/display/DisplayLoginScreen";
 import { AlarmManager } from "@/components/display/AlarmManager";
 import { AudioUnlockOverlay } from "@/components/display/AudioUnlockOverlay";
 import { RemoteDisplayRuntime } from "@/components/display/RemoteDisplayRuntime";
+import { nextNightEndIso, resolveNightMode } from "@/lib/displayNightMode";
 
 export default function Display() {
   const { status, deviceId, pairing, restartPairing } = useDeviceAuth();
@@ -16,9 +18,11 @@ export default function Display() {
     device,
     loading: settingsLoading,
     updateAlarm,
+    updateNightMode,
   } = useDeviceSettings(deviceId);
   const { supported: wakeLockSupported } = useWakeLock(status === "ready");
   const { unlocked: audioUnlocked, tryUnlock: tryUnlockAudio } = useAutoUnlockAudio(status === "ready");
+  const localFolder = useLocalDisplayFolder();
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -68,9 +72,11 @@ export default function Display() {
     );
   }
 
+  const night = resolveNightMode(device.settings.nightMode, device.settings.alarms, new Date());
+
   return (
     <div className="min-h-screen w-full bg-zinc-950 relative overflow-hidden select-none">
-      <RemoteDisplayRuntime device={device} />
+      <RemoteDisplayRuntime device={device} extraPhotos={localFolder.photos} />
 
       <AlarmManager alarms={device.settings.alarms} onUpdateAlarm={updateAlarm} />
       <AudioUnlockOverlay
@@ -86,6 +92,30 @@ export default function Display() {
             This browser can't keep the screen awake automatically — disable auto-sleep in the device's system settings.
           </span>
         )}
+        {localFolder.supported && (
+          <button
+            type="button"
+            onClick={() => void (localFolder.folderName ? localFolder.clearFolder() : localFolder.pickFolder())}
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"
+            aria-label={localFolder.folderName ? `Stop using ${localFolder.folderName}` : "Use a photo folder on this computer"}
+            title={localFolder.folderName ? `Using ${localFolder.folderName}` : "Use a folder on this computer"}
+          >
+            <FolderOpen className="w-4 h-4" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            const now = new Date();
+            void updateNightMode(night.active
+              ? { override: "off", overrideUntil: nextNightEndIso(device.settings.nightMode, now) }
+              : { override: "on", overrideUntil: nextNightEndIso(device.settings.nightMode, now) });
+          }}
+          className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"
+          aria-label={night.active ? "Leave night mode" : "Night mode"}
+        >
+          {night.active ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
         {!isFullscreen && (
           <button
             onClick={requestFullscreen}

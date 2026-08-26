@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
-  ImagePlus, ExternalLink, Mail, Phone,
+  ImagePlus, ExternalLink, Mail, Phone, Megaphone,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
@@ -723,6 +723,20 @@ const Companies = () => {
         </motion.div>
       ) : (
         <div className="space-y-5">
+          <section
+            className="flex gap-3 rounded-2xl border border-border/50 bg-card p-4 shadow-card"
+            style={{ borderLeft: "3px solid hsl(var(--primary))" }}
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+              <Megaphone className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-base font-bold">Social & Ads</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Open a company, then Social & Ads. Save how the brand sounds, add competitors and what's happening now, then generate a month of posts with pictures. Review each one before you copy it onto Instagram, Facebook or LinkedIn.
+              </p>
+            </div>
+          </section>
           <section className="space-y-3">
             <div className="flex items-center justify-between px-0.5">
               <div>

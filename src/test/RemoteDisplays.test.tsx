@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import RemoteDisplays from "@/pages/RemoteDisplays";
-import { DEFAULT_DISPLAY_PAGES, type DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_DISPLAY_PAGES, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
 
 const mocks = vi.hoisted(() => ({
   updatePages: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +23,7 @@ const device: DeviceDoc = {
     overview: { enabled: false, widgets: [] },
     scenes: { rotateSeconds: 30 },
     pages: DEFAULT_DISPLAY_PAGES,
+    nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false },
   },
 };
 
@@ -48,6 +49,7 @@ vi.mock("@/hooks/useDeviceSettings", async (importOriginal) => {
       device,
       loading: false,
       updatePages: mocks.updatePages,
+      updateNightMode: vi.fn(),
       updateSceneSettings: vi.fn(),
       addAlarm: vi.fn(),
       updateAlarm: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock("@/hooks/useRemoteDisplayPhotos", () => ({
     photos: [],
     loading: false,
     addPhotos: vi.fn(),
+    addLinkedPhotos: vi.fn(),
     updateCaption: vi.fn(),
     deletePhoto: vi.fn(),
   }),
@@ -180,5 +183,12 @@ describe("RemoteDisplays", () => {
     render(<RemoteDisplays />);
     fireEvent.click(screen.getByRole("button", { name: /Disconnect/ }));
     expect(mocks.forgetDevice).toHaveBeenCalledWith("kitchen");
+  });
+
+  it("explains how to fill the photo library without using Firebase storage", () => {
+    render(<RemoteDisplays />);
+    expect(screen.getByRole("heading", { name: "Photo library" })).toBeTruthy();
+    expect(screen.getByText(/Linked Drive or web photos stay where they are/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Night mode" })).toBeTruthy();
   });
 });

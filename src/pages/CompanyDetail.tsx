@@ -1309,11 +1309,37 @@ function SettingsTab({ companyId }: { companyId: string }) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ company }: { company: any }) {
+function OverviewTab({ company, onOpenMarketing }: { company: any; onOpenMarketing: () => void }) {
   const color = company.color || "#6366f1";
   const contactEntries = Object.entries(company.contact || {}).filter(([, v]) => v);
   return (
     <div className="space-y-3">
+      <button
+        type="button"
+        onClick={onOpenMarketing}
+        aria-label="Generate a month of posts"
+        className="w-full rounded-2xl p-4 text-left shadow-soft"
+        style={{ background: `color-mix(in srgb, ${color} 16%, hsl(var(--card)))`, borderLeft: `3px solid ${color}` }}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: `color-mix(in srgb, ${color} 28%, hsl(var(--card)))` }}
+          >
+            <Megaphone className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Social & Ads</p>
+            <p className="mt-1 text-sm font-semibold text-card-foreground">Generate a month of posts</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Save brand voice, then let AI draft posts and pictures from your competitors, current themes and the UK calendar. Review before you copy them out.
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+              Open Social & Ads <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </div>
+        </div>
+      </button>
       <div
         className="space-y-3 rounded-2xl p-4 shadow-soft"
         style={{ background: `color-mix(in srgb, ${color} 16%, hsl(var(--card)))`, borderLeft: `3px solid ${color}` }}
@@ -2186,7 +2212,7 @@ const CompanyDetail = () => {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.15 }}
             >
-              {activeTab === "overview"   && <OverviewTab company={company} />}
+              {activeTab === "overview"   && <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />}
               {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
               {activeTab === "marketing"  && <CompanyMarketingTab companyId={id!} company={company} />}
               {activeTab === "logins"     && <LoginsTab companyId={id!} />}

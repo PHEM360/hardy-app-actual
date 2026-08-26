@@ -58,6 +58,7 @@ export async function getDogTagProfileBySlug(slug: string): Promise<DogTagPublic
 export interface DogTagNotifyRecipient {
   uid: string;
   name: string;
+  email?: string;
 }
 
 export async function getDogTagNotifyRecipients(petId: string): Promise<DogTagNotifyRecipient[]> {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Check, ChevronLeft, ChevronRight, Clock, ExternalLink, ImagePlus, MapPin, MonitorSmartphone,
-  Palette, Plus, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X,
+import { Check, ChevronLeft, ChevronRight, Clock, ExternalLink, ImagePlus, MapPin, MonitorSmartphone,
+  Moon, Palette, Plus, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,9 @@ import { useCalendar } from "@/hooks/useCalendar";
 import { RemoteLayoutEditor } from "@/components/display/RemoteLayoutEditor";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
 import { AlarmsSettingsPanel } from "@/components/display/AlarmsSettingsPanel";
+import { NightModeSettingsPanel } from "@/components/display/NightModeSettingsPanel";
+import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
+import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
 import { toast } from "sonner";
 
 const FIELD = "h-10 w-full min-w-0 rounded-xl border border-white/15 bg-white/[0.09] px-3 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-primary focus:bg-white/[0.14]";
@@ -101,8 +103,8 @@ export default function RemoteDisplays() {
   const loadedDeviceRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
-  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm } = useDeviceSettings(selectedDeviceId);
-  const { photos, loading: photosLoading, addPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
+  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode } = useDeviceSettings(selectedDeviceId);
+  const { photos, loading: photosLoading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const calendarCategories = useMemo(
@@ -919,6 +921,39 @@ export default function RemoteDisplays() {
                 </div>
               </div>
 
+              <DisplayPhotoLibrary
+                photos={photos}
+                loading={photosLoading}
+                hasPhotoPage={pages.some((page) => page.widgets.some((widget) => widget.type === "photos"))}
+                onUpload={addPhotos}
+                onAddLinks={addLinkedPhotos}
+                onDelete={deletePhoto}
+                onAddPhotoPage={() => addPreset("photo-frame")}
+              />
+
+              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                <div className="mb-3 flex items-center gap-2">
+                  <Moon className="h-4 w-4 text-sky-400" />
+                  <div>
+                    <h2 className="font-display text-base font-bold">Night mode</h2>
+                    <p className="text-[11px] text-muted-foreground">Show a clock or a blank screen at bedtime, on a schedule or with one tap.</p>
+                  </div>
+                </div>
+                <NightModeSettingsPanel
+                  nightMode={device.settings.nightMode}
+                  alarms={device.settings.alarms}
+                  onChange={(patch) => void updateNightMode(patch)}
+                  onActivate={() => void updateNightMode({
+                    override: "on",
+                    overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
+                  })}
+                  onClear={() => void updateNightMode({
+                    override: "off",
+                    overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
+                  })}
+                />
+              </div>
+
               <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
                 <div className="mb-3 flex items-center gap-2">
                   <Sunrise className="h-4 w-4 text-amber-500" />
@@ -927,7 +962,31 @@ export default function RemoteDisplays() {
                     <p className="text-[11px] text-muted-foreground">Sunrise mode gradually warms and brightens the display before the alarm.</p>
                   </div>
                 </div>
-                <AlarmsSettingsPanel alarms={device.settings.alarms} onAdd={addAlarm} onUpdate={updateAlarm} onDelete={deleteAlarm} />
+                <AlarmsSettingsPanel
+                  alarms={device.settings.alarms}
+                  onAdd={(alarm) => {
+                    void addAlarm(alarm);
+                    if (device.settings.nightMode.withAlarms && alarm.enabled) {
+                      void updateNightMode({
+                        override: "on",
+                        overrideUntil: overrideUntilForAlarm(alarm.time, new Date()),
+                      });
+                    }
+                  }}
+                  onUpdate={(id, patch) => {
+                    void updateAlarm(id, patch);
+                    if (patch.enabled === true && device.settings.nightMode.withAlarms) {
+                      const time = patch.time || device.settings.alarms.find((item) => item.id === id)?.time;
+                      if (time) {
+                        void updateNightMode({
+                          override: "on",
+                          overrideUntil: overrideUntilForAlarm(time, new Date()),
+                        });
+                      }
+                    }
+                  }}
+                  onDelete={deleteAlarm}
+                />
               </div>
             </>
           )}

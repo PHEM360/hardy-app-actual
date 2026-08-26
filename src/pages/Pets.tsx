@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { DogTagsSection } from "@/components/pets/DogTagsSection";
-import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote, Share2, UserPlus, FolderOpen, Upload, Camera, Trash2, FileText, ImageIcon, X } from "lucide-react";
+import { PetsShareButton } from "@/components/pets/PetsShareButton";
+import { Heart, Plus, Syringe, ChevronDown, ChevronUp, StickyNote, Share2, FolderOpen, Upload, Camera, Trash2, FileText, ImageIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, differenceInYears, differenceInMonths } from "date-fns";
@@ -22,8 +23,6 @@ import { useAuth } from "@/auth/AuthContext";
 import { useAppearance } from "@/hooks/useAppearance";
 import DogLoader from "@/components/DogLoader";
 import { EmojiPick } from "@/components/EmojiPick";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 function getAge(b: string) {
   const bd = new Date(b), now = new Date();
@@ -131,7 +130,7 @@ const DogEntrance = ({ names, left, right }: { names: string; left: string; righ
 const Pets = () => {
   const { scopeUserId, pageTitle, permission, isOwnScope } = useSharedScope("pets");
   const canEdit = permission === "edit";
-  const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet } = usePets(scopeUserId ?? undefined);
+  const { pets, loading, addPet, updatePet, addWeightEntry, addTreatmentRecord, sharePet, unsharePet } = usePets(scopeUserId ?? undefined);
   const { documents, uploadDocument, deleteDocument } = usePetDocuments();
   const { schedulePetReminders } = usePushNotifications();
   const { user } = useAuth();
@@ -167,12 +166,7 @@ const Pets = () => {
   const [saveSettingsLoading, setSaveSettingsLoading] = useState<string | null>(null); // holds petId while saving
   const [saveSettingsError, setSaveSettingsError] = useState<string | null>(null);
   const [localEdits, setLocalEdits] = useState<Record<string, Partial<Pet>>>({});
-  const [shareOpen, setShareOpen] = useState(false);
-  const [sharePetId, setSharePetId] = useState("");
-  const [shareEmail, setShareEmail] = useState("");
-  const [shareLoading, setShareLoading] = useState(false);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [shareSuccess, setShareSuccess] = useState(false);
+  const [shareFocusPetId, setShareFocusPetId] = useState<string | null>(null);
 
   // Document upload state
   const [docUploadOpen, setDocUploadOpen] = useState(false);
@@ -183,6 +177,15 @@ const Pets = () => {
 
   // Merge Firestore data with any unsaved local edits for the settings dialog
   const mergedPets = pets.map((p) => ({ ...p, ...(localEdits[p.id] ?? {}) }));
+  const shareAccess = (
+    <PetsShareButton
+      pets={mergedPets}
+      sharePet={sharePet}
+      unsharePet={unsharePet}
+      focusPetId={shareFocusPetId}
+      onFocusHandled={() => setShareFocusPetId(null)}
+    />
+  );
 
   // Default selector IDs once pets load
   const firstPetId = pets[0]?.id ?? "";
@@ -325,38 +328,6 @@ const Pets = () => {
     }
   };
 
-  const handleShare = async () => {
-    if (!shareEmail.trim() || !sharePetId) return;
-    setShareError(null);
-    setShareLoading(true);
-    setShareSuccess(false);
-    try {
-      const usersQ = query(collection(db, "users"), where("email", "==", shareEmail.trim().toLowerCase()));
-      const snap = await getDocs(usersQ);
-      if (snap.empty) {
-        setShareError("No user found with that email address.");
-        return;
-      }
-      const targetUid = snap.docs[0].id;
-      if (targetUid === user?.uid) {
-        setShareError("That's your own account!");
-        return;
-      }
-      const pet = pets.find(p => p.id === sharePetId);
-      if (pet?.sharedWith?.includes(targetUid)) {
-        setShareError("Already shared with this user.");
-        return;
-      }
-      await sharePet(sharePetId, targetUid);
-      setShareSuccess(true);
-      setShareEmail("");
-    } catch (err: any) {
-      setShareError(err?.message ?? "Failed to share. Try again.");
-    } finally {
-      setShareLoading(false);
-    }
-  };
-
   const saveSettings = async (petId: string) => {    const edits = localEdits[petId];
     if (!edits) return;
     setSaveSettingsError(null);
@@ -417,7 +388,7 @@ const Pets = () => {
 
   if (loading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />} sharePage="pets">
+      <FeaturePageShell title={pageTitle} subtitle="Health, weight & care" icon={<Heart className="w-5 h-5" />} sharePage="pets" shareAccess={shareAccess}>
         <div className="flex flex-col items-center justify-center py-20">
           <DogLoader text="Loading pets…" />
         </div>
@@ -431,6 +402,7 @@ const Pets = () => {
       subtitle="Health, weight & care"
       icon={<Heart className="w-5 h-5" />}
       sharePage="pets"
+      shareAccess={shareAccess}
     >
       {pets.length > 0 && (
         <DogEntrance
@@ -487,46 +459,6 @@ const Pets = () => {
         )}
       </div>
 
-      {/* Share Pet Dialog */}
-      <Dialog open={shareOpen} onOpenChange={(o) => { setShareOpen(o); if (!o) { setShareEmail(""); setShareError(null); setShareSuccess(false); } }}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Share Pet
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-xs text-muted-foreground">
-              Enter the email address of another app user to give them access to{" "}
-              <strong>{pets.find(p => p.id === sharePetId)?.name ?? "this pet"}</strong>.
-              They will be able to view and update this pet's data.
-            </p>
-            <div className="space-y-1.5">
-              <Label>Email address</Label>
-              <Input
-                type="email"
-                value={shareEmail}
-                onChange={(e) => setShareEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="h-11 rounded-xl"
-                autoCapitalize="none"
-                autoCorrect="off"
-              />
-            </div>
-            {shareError && <p className="text-xs text-destructive">{shareError}</p>}
-            {shareSuccess && <p className="text-xs text-success font-medium">✓ Shared successfully! They'll see this pet next time they open the app.</p>}
-            <Button
-              onClick={handleShare}
-              disabled={!shareEmail.trim() || shareLoading}
-              className="w-full h-11 rounded-xl bg-gradient-primary"
-            >
-              {shareLoading ? "Sharing…" : "Share Access"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {pets.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-20 h-20 rounded-3xl bg-gradient-warm flex items-center justify-center text-4xl mb-5 shadow-elevated">🐾</div>
@@ -560,7 +492,7 @@ const Pets = () => {
                 <p className="text-xl font-extrabold font-display text-card-foreground tracking-wide">{pet.name}</p>
                 {pet.ownerId === user?.uid ? (
                   <button
-                    onClick={() => { setSharePetId(pet.id); setShareOpen(true); setShareError(null); setShareSuccess(false); }}
+                    onClick={() => setShareFocusPetId(pet.id)}
                     className="p-1.5 rounded-lg bg-black/10 hover:bg-black/20 transition-colors"
                     title="Share with another user"
                   >

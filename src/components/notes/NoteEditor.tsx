@@ -24,7 +24,8 @@ interface NoteEditorProps {
   canEdit: boolean;
   isOwn: boolean;
   lockSecret?: string;
-  onSave: (patch: Partial<HubNote>, options?: { encryptWith?: string; decrypt?: boolean }) => Promise<void>;
+  onSave: (patch: Partial<HubNote>, options?: { encryptWith?: string; decrypt?: boolean; showOnDashboard?: boolean }) => Promise<void>;
+  showOnDashboard?: boolean;
   onDelete: () => Promise<void>;
   onShare: () => void;
   onMoveVault: () => Promise<void>;
@@ -66,12 +67,14 @@ export function NoteEditor({
   defaultKind = "note",
   ownerId,
   noteId,
+  showOnDashboard = false,
 }: NoteEditorProps) {
   const [draft, setDraft] = useState<Partial<HubNote>>(EMPTY);
   const [passphrase, setPassphrase] = useState("");
   const [unlockedBody, setUnlockedBody] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [onDashboard, setOnDashboard] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -141,7 +144,8 @@ export function NoteEditor({
     setShowDetails(false);
     setPassphrase("");
     setUnlockedBody(!note?.locked);
-  }, [open, note, defaultKind, noteId]);
+    setOnDashboard(!!showOnDashboard);
+  }, [open, note, defaultKind, noteId, showOnDashboard]);
 
   const locked = !!draft.locked && !unlockedBody;
   const selectedColor = NOTE_COLORS.find((color) => color.id === draft.color) ?? NOTE_COLORS[1];
@@ -256,7 +260,7 @@ export function NoteEditor({
         archived: !!draft.archived,
         tags: draft.tags,
         addToCalendar: !!draft.addToCalendar,
-      });
+      }, { showOnDashboard: onDashboard });
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save");
@@ -419,6 +423,20 @@ export function NoteEditor({
                 </div>
               </CollapsibleContent>
             </Collapsible>
+
+            {canEdit && isOwn && !note?.vault && !draft.locked && (
+              <div className="flex items-center justify-between rounded-xl border border-border bg-white/70 px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium">Show on dashboard</p>
+                  <p className="text-[11px] text-muted-foreground">Pins this note as the first widget</p>
+                </div>
+                <Switch
+                  checked={onDashboard}
+                  onCheckedChange={setOnDashboard}
+                  aria-label="Show on dashboard"
+                />
+              </div>
+            )}
 
             <PaperNoteCanvasEditor
               canvas={draft.canvas ?? { version: 1, height: 520, blocks: [] }}

@@ -12,19 +12,11 @@ import {
   type Base64URLString,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
+import { PRIMARY_RP_ID, resolvePasskeyContext } from "./passkeyContext";
 import { passkeyFreshnessDays } from "./securityPolicy";
 
 const RP_NAME = "Hardy Hub";
-const PRIMARY_RP_ID = "hardyapp.co.uk";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const ALLOWED_CONTEXTS = new Map([
-  ["https://hardyapp.co.uk", "hardyapp.co.uk"],
-  ["https://www.hardyapp.co.uk", "hardyapp.co.uk"],
-  ["https://hardyhub-7b30d.web.app", "hardyhub-7b30d.web.app"],
-  ["https://hardyhub-7b30d.firebaseapp.com", "hardyhub-7b30d.firebaseapp.com"],
-  ["http://localhost:5173", "localhost"],
-  ["http://localhost:8080", "localhost"],
-]);
 const CHALLENGE_RATE_WINDOW_MS = 60_000;
 const CHALLENGE_RATE_LIMIT = 20;
 
@@ -51,9 +43,9 @@ interface StoredPasskey {
 
 function requestContext(request: { rawRequest: { headers: { origin?: string } } }) {
   const origin = String(request.rawRequest.headers.origin || "");
-  const rpID = ALLOWED_CONTEXTS.get(origin);
-  if (!rpID) throw new HttpsError("permission-denied", "Passkeys are not available from this web address.");
-  return { origin, rpID };
+  const context = resolvePasskeyContext(origin);
+  if (!context) throw new HttpsError("failed-precondition", "Passkeys are not available from this web address.");
+  return context;
 }
 
 function requireUid(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {

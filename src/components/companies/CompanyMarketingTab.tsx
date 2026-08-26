@@ -17,10 +17,12 @@ import {
   LayoutDashboard,
   Lightbulb,
   Link2,
+  ListOrdered,
   Loader2,
   Megaphone,
   Pencil,
   Plus,
+  Radar,
   Settings2,
   Sparkles,
   Trash2,
@@ -36,6 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useCompanyMarketing } from "@/hooks/useCompanyMarketing";
+import { CompanyMarketingAudit } from "@/components/companies/CompanyMarketingAudit";
 import { copyMarketingPost, downloadMarketingPost, isMarketingProfileReady } from "@/lib/marketingContent";
 import {
   approveMarketingContent,
@@ -57,7 +60,7 @@ import type {
 } from "@/types/app";
 
 type MarketingState = ReturnType<typeof useCompanyMarketing>;
-type SectionId = "overview" | "planner" | "review" | "campaigns" | "media" | "brand" | "connections" | "adviser";
+type SectionId = "overview" | "planner" | "review" | "campaigns" | "media" | "brand" | "audit" | "connections" | "adviser";
 
 const PLATFORMS: SocialPlatform[] = ["instagram", "facebook", "linkedin"];
 const PLATFORM_LABELS: Record<SocialPlatform, string> = {
@@ -88,6 +91,7 @@ const SECTION_ITEMS: Array<{ id: SectionId; label: string; icon: typeof LayoutDa
   { id: "campaigns", label: "Campaigns", icon: Megaphone },
   { id: "media", label: "Media", icon: FileImage },
   { id: "brand", label: "Brand guidance", icon: Settings2 },
+  { id: "audit", label: "PR audit", icon: Radar },
   { id: "connections", label: "Connections", icon: Link2 },
   { id: "adviser", label: "Ad adviser", icon: Lightbulb },
 ];
@@ -230,12 +234,16 @@ function SectionHeading({
 function OverviewSection({
   state,
   company,
+  companyId,
   onSection,
 }: {
   state: MarketingState;
   company: Company;
+  companyId: string;
   onSection: (section: SectionId) => void;
 }) {
+  const [generatingMonth, setGeneratingMonth] = useState(false);
+  const brandReady = isMarketingProfileReady(state.profile);
   const counts = {
     review: state.content.filter((item) => item.status === "awaiting_approval").length,
     scheduled: state.content.filter((item) => item.status === "scheduled" || item.status === "approved").length,
@@ -257,18 +265,85 @@ function OverviewSection({
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor))
     .slice(0, 4);
 
+  const generateNextMonth = async () => {
+    if (!brandReady) {
+      toast.error("Save brand voice, audience and a few key messages first.");
+      onSection("brand");
+      return;
+    }
+    setGeneratingMonth(true);
+    try {
+      const result = await generateMarketingPlan(companyId, {
+        periodDays: 30,
+        postsPerWeek: state.profile.postsPerWeek || 3,
+        platforms: state.profile.platforms.length ? state.profile.platforms : PLATFORMS,
+        includeImages: true,
+        focus: "Create the next month of engaging social posts with matching pictures.",
+      });
+      toast.success(result.summary || `${result.created} posts created for review.`);
+      onSection("review");
+    } catch (error) {
+      toast.error(`Plan could not be generated: ${errorMessage(error)}`);
+    } finally {
+      setGeneratingMonth(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <SectionHeading
         title="Social & Ads"
         description={`Plan, review and publish ${company.name}'s marketing in one place.`}
         action={
-          <Button onClick={() => onSection(completeness < 70 ? "brand" : "planner")} className="gap-2 bg-gradient-primary">
+          <Button onClick={() => onSection(brandReady ? "planner" : "brand")} className="gap-2 bg-gradient-primary">
             <Sparkles className="h-4 w-4" />
-            {completeness < 70 ? "Finish setup" : "Generate a plan"}
+            {brandReady ? "Open planner" : "Finish setup"}
           </Button>
         }
       />
+      <div className={`${cardClass} p-4 sm:p-5`} style={companySurface(company.color, 12)}>
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+            <ListOrdered className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-lg font-bold">How this works</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You clicked in — next, tell AI how this brand sounds, then generate a month of posts with pictures.
+            </p>
+          </div>
+        </div>
+        <ol className="mt-4 space-y-3">
+          {[
+            ["Brand guidance", "Add voice, audience, key messages, competitors and anything happening now. This is what AI writes from."],
+            ["Optional photos", "Upload your own shots in Media if you would rather use real photography than AI pictures."],
+            ["Generate next month", "AI drafts posts and matching pictures from your brand, competitor notes, the UK calendar and current themes."],
+            ["Review", "Approve, reject with a reason, or edit. Rejected feedback shapes the next batch."],
+            ["Share it", "Copy or download each post into Instagram, Facebook or LinkedIn. Direct posting is not connected yet."],
+          ].map(([title, detail], index) => (
+            <li key={title} className="flex gap-3 rounded-xl border border-border/50 bg-card p-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-primary text-xs font-bold text-primary-foreground">
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{title}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 text-xs text-muted-foreground">
+          AI cannot log into Instagram or scrape a competitor's feed. List competitor names or websites, and note seasonal hooks or news in Brand guidance.
+        </p>
+        <Button
+          onClick={() => void generateNextMonth()}
+          disabled={generatingMonth}
+          className="mt-4 w-full gap-2 bg-gradient-primary sm:w-auto"
+        >
+          {generatingMonth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {generatingMonth ? "Generating next month…" : "Generate next month"}
+        </Button>
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           ["Needs review", counts.review, ClipboardCheck, "text-amber-600"],
@@ -509,6 +584,7 @@ function PlanGenerator({
     platforms: state.profile.platforms.length ? state.profile.platforms : PLATFORMS,
     campaignId: "",
     focus: advert ? "Create an advert plan with testable messaging and a clear call to action." : "",
+    includeImages: true,
   });
   const [generating, setGenerating] = useState(false);
   const essentialReady = isMarketingProfileReady(state.profile);
@@ -539,7 +615,7 @@ function PlanGenerator({
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground"><Sparkles className="h-4 w-4" /></span>
         <div>
           <h3 className="font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground">AI drafts content; nothing publishes without your workflow.</p>
+          <p className="text-xs text-muted-foreground">AI uses brand voice, competitors, current themes and the UK calendar. Nothing publishes until you review it.</p>
         </div>
       </div>
       {!essentialReady && (
@@ -569,6 +645,17 @@ function PlanGenerator({
       <div className="mt-4">
         <PlatformChecks value={request.platforms} onChange={(platforms) => setRequest({ ...request, platforms })} />
       </div>
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 bg-muted/25 p-3">
+        <Checkbox
+          aria-label="Create pictures for each post"
+          checked={request.includeImages !== false}
+          onCheckedChange={(next) => setRequest({ ...request, includeImages: Boolean(next) })}
+        />
+        <span>
+          <span className="block text-sm font-medium">Create pictures for each post</span>
+          <span className="block text-xs text-muted-foreground">AI generates a matching image. Swap in your own photos later if you prefer.</span>
+        </span>
+      </label>
       <Button onClick={generate} disabled={generating || !essentialReady} className="mt-4 w-full gap-2 bg-gradient-primary sm:w-auto">
         {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {generating ? "Generating plan…" : advert ? "Generate advert plan" : "Generate plan"}
@@ -1021,7 +1108,7 @@ const ARRAY_PROFILE_FIELDS: Array<{ key: keyof MarketingProfile; label: string; 
   { key: "bannedPhrases", label: "Banned phrases", hint: "Words or claims AI must avoid." },
   { key: "disclaimers", label: "Disclaimers", hint: "Legal or contextual notices, one per line." },
   { key: "preferredHashtags", label: "Preferred hashtags", hint: "One hashtag per line." },
-  { key: "competitors", label: "Competitors", hint: "One competitor per line." },
+  { key: "competitors", label: "Competitors", hint: "One name or website per line. AI uses this to write distinctive angles — it cannot scrape Instagram." },
   { key: "tradingNames", label: "Trading names", hint: "One recognised trading name per line." },
   { key: "relatedCompanyIds", label: "Related company IDs", hint: "One Hardy Hub company ID per line." },
 ];
@@ -1038,7 +1125,7 @@ function BrandSection({ state }: { state: MarketingState }) {
   ].filter(Boolean);
   return (
     <div className="space-y-5">
-      <SectionHeading title="Brand guidance" description="Give AI the full context it needs to write useful, recognisable content." />
+      <SectionHeading title="Brand guidance" description="Give AI the voice, audience, competitors and current themes it needs to write useful, recognisable content." />
       {essentialsMissing.length > 0 && <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-sm"><div className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><p><strong>Generation is paused.</strong> Add {essentialsMissing.join(", ")} before AI can generate a plan.</p></div></div>}
       <form className={`${cardClass} space-y-5 p-4 sm:p-5`} onSubmit={async (event) => {
         event.preventDefault();
@@ -1050,6 +1137,11 @@ function BrandSection({ state }: { state: MarketingState }) {
           <Field label="Target audience" hint="Who they are, what they need and what matters to them."><Textarea aria-label="Target audience" rows={4} value={form.targetAudience} onChange={(event) => setForm({ ...form, targetAudience: event.target.value })} /></Field>
           <Field label="Industry"><Input aria-label="Industry" value={form.industry} onChange={(event) => setForm({ ...form, industry: event.target.value })} /></Field>
           <Field label="Website"><Input aria-label="Marketing website" type="url" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></Field>
+          <div className="sm:col-span-2">
+            <Field label="What's happening now" hint="Seasonal hooks, local events, news in your sector, or what a competitor just launched.">
+              <Textarea aria-label="What's happening now" rows={3} value={form.currentThemes || ""} onChange={(event) => setForm({ ...form, currentThemes: event.target.value })} />
+            </Field>
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {ARRAY_PROFILE_FIELDS.map((field) => (
@@ -1173,12 +1265,13 @@ export default function CompanyMarketingTab({ companyId, company }: { companyId:
           </nav>
         </aside>
         <div className="min-w-0 flex-1">
-          {section === "overview" && <OverviewSection state={state} company={company} onSection={setSection} />}
+          {section === "overview" && <OverviewSection state={state} company={company} companyId={companyId} onSection={setSection} />}
           {section === "planner" && <PlannerSection state={state} companyId={companyId} />}
           {section === "review" && <ReviewSection state={state} companyId={companyId} />}
           {section === "campaigns" && <CampaignsSection state={state} company={company} />}
           {section === "media" && <MediaSection state={state} companyId={companyId} />}
           {section === "brand" && <BrandSection state={state} />}
+          {section === "audit" && <CompanyMarketingAudit companyId={companyId} companyColor={company.color} state={state} />}
           {section === "connections" && <ConnectionsSection state={state} companyId={companyId} />}
           {section === "adviser" && <AdviserSection state={state} companyId={companyId} />}
         </div>

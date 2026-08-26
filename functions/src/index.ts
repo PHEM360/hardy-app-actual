@@ -107,6 +107,7 @@ export {
 // ── Company marketing ──
 export {
 	generateMarketingPlan,
+	generateMarketingAudit,
 	approveMarketingContent,
 	rejectMarketingContent,
 	publishMarketingContentNow,

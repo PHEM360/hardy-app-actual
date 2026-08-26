@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { HouseholdPhoto } from "@/hooks/useHouseholdPhotos";
+import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import type { PhotoFrameSettings } from "@/hooks/useDeviceSettings";
+import { visibleDisplayPhotos } from "@/lib/displayPhotos";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -11,12 +12,13 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
-export function PhotoFrameScene({ photos, settings }: { photos: HouseholdPhoto[]; settings: PhotoFrameSettings }) {
+export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPhoto[]; settings: PhotoFrameSettings }) {
+  const usable = visibleDisplayPhotos(photos);
   const order = useMemo(
-    () => (settings.shuffle ? shuffleArray(photos) : photos),
+    () => (settings.shuffle ? shuffleArray(usable) : usable),
     // Re-shuffle only when the underlying photo set actually changes, not every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [photos.map((p) => p.id).join(","), settings.shuffle]
+    [usable.map((p) => p.id).join(","), settings.shuffle]
   );
   const [index, setIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

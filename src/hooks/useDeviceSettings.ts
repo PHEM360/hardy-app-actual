@@ -9,6 +9,7 @@ import {
   stripUndefined,
   type DisplayPage,
 } from "@/lib/displayPages";
+import { DEFAULT_NIGHT_MODE, type NightModeSettings } from "@/lib/displayNightMode";
 
 export {
   BACKDROP_LABELS,
@@ -31,6 +32,9 @@ export {
   pageScheduleLabel,
   stripUndefined,
 } from "@/lib/displayPages";
+export type { NightModeSettings, NightScreen } from "@/lib/displayNightMode";
+export { DEFAULT_NIGHT_MODE } from "@/lib/displayNightMode";
+
 export type {
   DisplayBackdropKind,
   DisplayPage,
@@ -92,6 +96,7 @@ export interface DeviceSettings {
   overview: OverviewSceneSettings;
   scenes: SceneRotationSettings;
   pages: DisplayPage[];
+  nightMode: NightModeSettings;
 }
 
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
@@ -182,6 +187,7 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     overview: { ...DEFAULT_OVERVIEW_SCENE_SETTINGS, ...(raw?.overview ?? {}) },
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
     pages: (Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw)).map(applyPageLayout),
+    nightMode: { ...DEFAULT_NIGHT_MODE, ...(raw?.nightMode ?? {}) },
   };
 }
 
@@ -323,6 +329,16 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updateNightMode = useCallback(
+    async (patch: Partial<NightModeSettings>) => {
+      if (!deviceId || !device) return;
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.nightMode": { ...device.settings.nightMode, ...patch },
+      });
+    },
+    [deviceId, device]
+  );
+
   const updatePages = useCallback(
     async (pages: DisplayPage[]) => {
       if (!deviceId) return;
@@ -345,6 +361,7 @@ export function useDeviceSettings(deviceId: string | null) {
     updateCalendarSettings,
     updateOverviewSettings,
     updateSceneSettings,
+    updateNightMode,
     updatePages,
   };
 }

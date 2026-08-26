@@ -600,6 +600,11 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
       }
+      match /marketingAudits/{auditId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow delete: if isAuthenticated() && canEditCompany(companyId);
+        allow create, update: if false;
+      }
       match /content/{contentId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow create: if isAuthenticated() &&
@@ -783,6 +788,10 @@ service cloud.firestore {
       allow read, write: if canAccessHousehold(householdId);
     }
 
+    match /household/{householdId}/messages/{messageId} {
+      allow read, write: if canAccessHousehold(householdId);
+    }
+
     // Joint household finance — shared with every household member (not personal finance/{uid})
     match /household/{householdId}/financeAccounts/{accountId} {
       allow read, write: if canAccessHousehold(householdId);
@@ -830,7 +839,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt']) ||
           (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['settings']) &&
-            request.resource.data.settings.diff(resource.data.settings).affectedKeys().hasOnly(['alarms'])
+            request.resource.data.settings.diff(resource.data.settings).affectedKeys().hasOnly(['alarms', 'nightMode'])
           )
         )
       );

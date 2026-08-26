@@ -50,6 +50,18 @@ describe("NoteEditor paper layout", () => {
       canvas: expect.objectContaining({
         blocks: expect.arrayContaining([expect.objectContaining({ type: "checklist" })]),
       }),
-    })));
+    }), expect.objectContaining({ showOnDashboard: false })));
+  });
+
+  it("saves show-on-dashboard when the switch is on", async () => {
+    const onSave = renderEditor();
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Milk" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Show on dashboard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Milk" }),
+      expect.objectContaining({ showOnDashboard: true }),
+    ));
   });
 });

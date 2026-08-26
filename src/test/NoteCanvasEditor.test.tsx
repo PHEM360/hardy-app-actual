@@ -120,4 +120,31 @@ describe("NoteCanvasEditor", () => {
     rerender(<PaperNoteCanvasEditor canvas={withMap} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
     expect(screen.getByTitle("Saved location")).toHaveAttribute("src", expect.stringContaining("openstreetmap.org"));
   });
+
+  it("moves to a new checklist item when Enter is pressed", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
+    rerender(<PaperNoteCanvasEditor canvas={withChecklist} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+
+    const firstItem = screen.getByPlaceholderText("List item");
+    fireEvent.change(firstItem, { target: { value: "Milk" } });
+    const typed = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
+    rerender(<PaperNoteCanvasEditor canvas={typed} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+
+    fireEvent.keyDown(screen.getByDisplayValue("Milk"), { key: "Enter" });
+    const afterEnter = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
+    const checklist = afterEnter.blocks.find((block) => block.type === "checklist");
+    expect(checklist).toEqual(expect.objectContaining({
+      items: [expect.objectContaining({ text: "Milk" }), expect.objectContaining({ text: "" })],
+    }));
+
+    rerender(<PaperNoteCanvasEditor canvas={afterEnter} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+    const items = screen.getAllByPlaceholderText("List item");
+    expect(items).toHaveLength(2);
+    expect(items[1]).toHaveFocus();
+  });
 });

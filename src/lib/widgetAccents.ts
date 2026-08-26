@@ -18,6 +18,7 @@ export const WIDGET_ACCENT: Record<WidgetType, string> = {
   companies: "hsl(210,50%,50%)",
   weight: "hsl(152,55%,40%)",
   notes: "hsl(42,85%,48%)",
+  messages: "hsl(340,55%,48%)",
 };
 
 /** Diagonal gradient (accent -> darker accent) used for widget header bands. */

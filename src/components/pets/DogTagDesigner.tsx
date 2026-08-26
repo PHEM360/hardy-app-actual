@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import QRCodeSVG from "react-qr-code";
 import { toPng } from "html-to-image";
-import { toast } from "sonner";
 import {
   ArrowLeft,
   Printer,
@@ -37,9 +34,12 @@ import type { Pet } from "@/hooks/usePets";
 import type { DogTag, DogTagProfile, DogTagShape } from "@/hooks/useDogTags";
 import { normalizeSlug } from "@/hooks/useDogTags";
 import { getDogTagNotifyRecipients, type DogTagNotifyRecipient } from "@/lib/dogTagApi";
-import { DOG_TAG_SHAPES, dogTagAspectRatio, dogTagShapeStyle } from "@/lib/dogTagShapes";
-import { APP_BASE_URL } from "@/lib/appUrl";
+import { DOG_TAG_SHAPES, dogTagShapeStyle } from "@/lib/dogTagShapes";
 import { DogTagProfilePanel } from "@/components/pets/DogTagProfilePanel";
+import { DogTagNotifyExtras } from "@/components/pets/DogTagNotifyExtras";
+import { publicTagUrl, TagFace } from "@/components/pets/DogTagFace";
+import { DogTagPrintDialog } from "@/components/pets/DogTagPrintDialog";
+import { printTagKey } from "@/lib/dogTagPrint";
 
 type Side = "front" | "back";
 
@@ -54,15 +54,10 @@ type TagDraft = {
   stickerTextSizeCm: number;
   backText: string;
   backTextSizeCm: number;
+  notifyEmails: string[];
+  notifyUids: string[];
   profile: DogTagProfile;
 };
-
-const PRINT_PX_PER_CM = 96 / 2.54; // standard 96dpi browser print assumption
-
-export function publicTagUrl(tag: DogTag): string {
-  if (tag.slug) return `${APP_BASE_URL}/p/${tag.slug}`;
-  return `${APP_BASE_URL}/tag/${tag.petId}/${tag.id}?c=${tag.code}`;
-}
 
 function sectionLabel(icon: React.ReactNode, color: string, text: string) {
   return (
@@ -75,77 +70,6 @@ function sectionLabel(icon: React.ReactNode, color: string, text: string) {
   );
 }
 
-/** widthCm/heightCm respect the shape's aspect ratio around a single "size". */
-function faceDimensionsCm(shape: DogTagShape, sizeCm: number) {
-  const aspect = dogTagAspectRatio(shape);
-  return {
-    widthCm: aspect >= 1 ? sizeCm : sizeCm * aspect,
-    heightCm: aspect >= 1 ? sizeCm / aspect : sizeCm,
-  };
-}
-
-/** One tag face, rendered at real cm dimensions — shared by the on-screen preview (scaled via CSS zoom) and the print sheet (1:1). */
-function TagFace({
-  tag,
-  draft,
-  side,
-  pxPerCm,
-}: {
-  tag: DogTag;
-  draft: TagDraft;
-  side: Side;
-  pxPerCm: number;
-}) {
-  const { widthCm, heightCm } = faceDimensionsCm(draft.shape, draft.sizeCm);
-  const qrPx = draft.qrSizeCm * pxPerCm;
-
-  return (
-    <div
-      className="flex flex-col items-center justify-center gap-[2%] shadow-lg border border-black/10 overflow-hidden"
-      style={{
-        width: widthCm * pxPerCm,
-        height: heightCm * pxPerCm,
-        backgroundColor: draft.bgColor,
-        ...dogTagShapeStyle(draft.shape),
-      }}
-    >
-      {side === "front" ? (
-        <>
-          <div className="dog-tag-qr" style={{ width: qrPx, height: qrPx }}>
-            <QRCodeSVG value={publicTagUrl(tag)} fgColor={draft.fgColor} bgColor="transparent" size={qrPx} style={{ width: "100%", height: "100%" }} />
-          </div>
-          {draft.stickerText.trim() && (
-            <p
-              className="text-center font-bold leading-tight break-words px-1"
-              style={{ color: draft.fgColor, fontSize: draft.stickerTextSizeCm * pxPerCm }}
-            >
-              {draft.stickerText}
-            </p>
-          )}
-        </>
-      ) : (
-        <p
-          className="text-center font-bold leading-snug break-words whitespace-pre-line px-2"
-          style={{ color: draft.fgColor, fontSize: draft.backTextSizeCm * pxPerCm }}
-        >
-          {draft.backText.trim() || "IF FOUND\nPlease scan the QR code\non the front"}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** Mounted straight under <body> (bypassing the whole app tree) so print CSS can hide #root entirely — a position:fixed target nested inside the still-laid-out (if invisible) Designer was getting repeated once per paginated page, producing multiple copies. */
-function PrintSheet({ tag, draft }: { tag: DogTag; draft: TagDraft }) {
-  return createPortal(
-    <div id="dog-tag-print-root" className="hidden print:flex flex-col items-center gap-8 py-8">
-      <TagFace tag={tag} draft={draft} side="front" pxPerCm={PRINT_PX_PER_CM} />
-      <TagFace tag={tag} draft={draft} side="back" pxPerCm={PRINT_PX_PER_CM} />
-    </div>,
-    document.body
-  );
-}
-
 export function DogTagDesigner({
   pet,
   tag,
@@ -154,6 +78,8 @@ export function DogTagDesigner({
   onRegenerate,
   onDelete,
   onClaimSlug,
+  pets = [],
+  tagsByPet = {},
 }: {
   pet: Pet;
   tag: DogTag;
@@ -162,6 +88,8 @@ export function DogTagDesigner({
   onRegenerate: () => Promise<void>;
   onDelete: () => void;
   onClaimSlug: (rawSlug: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  pets?: Pet[];
+  tagsByPet?: Record<string, DogTag[]>;
 }) {
   const [draft, setDraft] = useState<TagDraft>({
     label: tag.label,
@@ -174,6 +102,8 @@ export function DogTagDesigner({
     stickerTextSizeCm: tag.stickerTextSizeCm,
     backText: tag.backText,
     backTextSizeCm: tag.backTextSizeCm,
+    notifyEmails: tag.notifyEmails || [],
+    notifyUids: tag.notifyUids || [],
     profile: tag.profile,
   });
   const [side, setSide] = useState<Side>("front");
@@ -181,6 +111,7 @@ export function DogTagDesigner({
   const [exporting, setExporting] = useState(false);
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const [slugInput, setSlugInput] = useState(tag.slug);
   const [slugSaving, setSlugSaving] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
@@ -239,50 +170,17 @@ export function DogTagDesigner({
     }
   }, [pet.name, tag.label, side]);
 
-  const handlePrint = useCallback(() => {
-    // iOS/Android treat this as an installed app when added to the home
-    // screen (see the apple-mobile-web-app-capable meta tag) — there's no
-    // browser chrome to host the print sheet in that mode, so window.print()
-    // silently does nothing instead of erroring. Catch it and say so, rather
-    // than leaving the button looking broken.
-    const isStandalone =
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      window.matchMedia("(display-mode: standalone)").matches;
-    if (isStandalone) {
-      toast.error("Printing isn't available from the Home Screen app", {
-        description: "Open hardyapp.co.uk in Safari or Chrome to print, or use the PNG button and print that image instead.",
-      });
-      return;
-    }
+  const previewTag = { ...tag, ...draft };
+  const catalogPets = pets.length > 0 ? pets : [pet];
+  const catalogTags = {
+    ...tagsByPet,
+    [pet.id]: [tag, ...(tagsByPet[pet.id] || []).filter((item) => item.id !== tag.id)],
+  };
 
-    const styleId = "dog-tag-print-style";
-    let s = document.getElementById(styleId) as HTMLStyleElement | null;
-    if (!s) {
-      s = document.createElement("style");
-      s.id = styleId;
-      document.head.appendChild(s);
-    }
-    // #root (the whole app, incl. this Designer) is fully removed from layout
-    // during print — not just hidden — so the print sheet is the only thing
-    // with any height and the page count comes out to exactly what its own
-    // content needs, instead of the Designer's own (much taller) layout.
-    s.textContent = `
-      @media print {
-        #root { display: none !important; }
-        #dog-tag-print-root { display: flex !important; }
-      }
-    `;
-    window.print();
-    setTimeout(() => s?.remove(), 2000);
-  }, []);
-
-  const recipientNames = recipients?.map((r) => r.name).join(", ");
   const previewPxPerCm = 220 / draft.sizeCm;
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <PrintSheet tag={tag} draft={draft} />
-
       {/* Top bar */}
       <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500">
         <button
@@ -295,8 +193,8 @@ export function DogTagDesigner({
           <p className="text-sm font-bold text-white truncate">🐾 Dog Tag — {pet.name}</p>
           <p className="text-[11px] text-white/80">{draft.label}</p>
         </div>
-        <Button variant="secondary" size="icon" onClick={handlePrint} className="h-8 w-8 sm:w-auto sm:px-3 rounded-xl gap-1.5 text-xs flex-shrink-0">
-          <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print both sides</span>
+        <Button variant="secondary" size="icon" onClick={() => setPrintOpen(true)} className="h-8 w-8 sm:w-auto sm:px-3 rounded-xl gap-1.5 text-xs flex-shrink-0">
+          <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print</span>
         </Button>
         <Button variant="secondary" size="icon" onClick={handleExport} disabled={exporting} className="h-8 w-8 sm:w-auto sm:px-3 rounded-xl gap-1.5 text-xs flex-shrink-0">
           <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{exporting ? "Saving…" : "PNG"}</span>
@@ -324,7 +222,7 @@ export function DogTagDesigner({
             ))}
           </div>
           <div id="dog-tag-preview-current">
-            <TagFace tag={tag} draft={draft} side={side} pxPerCm={previewPxPerCm} />
+            <TagFace tag={previewTag} side={side} pxPerCm={previewPxPerCm} />
           </div>
           <p className="text-xs text-muted-foreground font-mono bg-white/80 px-2 py-1 rounded-lg border border-border">
             {publicTagUrl(tag).replace(/^https?:\/\//, "")}
@@ -370,6 +268,7 @@ export function DogTagDesigner({
                 className="rounded-xl resize-none text-sm"
                 rows={3}
               />
+              <p className="text-[11px] text-muted-foreground">Leave blank for a plain coloured back.</p>
             </div>
             <div className="space-y-1.5 pl-1">
               <div className="flex items-center justify-between">
@@ -443,8 +342,7 @@ export function DogTagDesigner({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Set your printer to 100% scale (not "fit to page") for these sizes to print accurately. "Print
-              both sides" prints one front and one back, at true size.
+              Set your printer to 100% scale (not “fit to page”). Print lets you place stickers on leftover A4 sheet and include other pets’ tags.
             </p>
           </div>
 
@@ -490,11 +388,13 @@ export function DogTagDesigner({
 
           <div className="pt-1 border-t border-border space-y-3">
             <div className="pt-3">{sectionLabel(<Users className="w-3 h-3" />, "bg-orange-500", "When scanned")}</div>
-            {recipients && recipients.length > 0 && (
-              <p className="text-[11px] text-muted-foreground -mt-1.5">
-                Notifies your household: <span className="font-medium text-foreground">{recipientNames}</span>
-              </p>
-            )}
+            <DogTagNotifyExtras
+              petName={pet.name}
+              accessRecipients={recipients}
+              notifyUids={draft.notifyUids}
+              notifyEmails={draft.notifyEmails}
+              onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+            />
             <DogTagProfilePanel profile={draft.profile} onChange={(patch) => setField("profile", { ...draft.profile, ...patch })} petName={pet.name} />
           </div>
 
@@ -541,6 +441,15 @@ export function DogTagDesigner({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DogTagPrintDialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        pets={catalogPets}
+        tagsByPet={catalogTags}
+        preselectedKeys={[printTagKey(pet.id, tag.id)]}
+        drafts={{ [printTagKey(pet.id, tag.id)]: draft }}
+      />
     </div>
   );
 }

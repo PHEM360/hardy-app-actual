@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DEFAULT_DISPLAY_PAGES, type DeviceDoc } from "@/hooks/useDeviceSettings";
 import { activeDisplayPages } from "@/lib/displayPages";
+import { resolveNightMode } from "@/lib/displayNightMode";
+import { NightModeView } from "@/components/display/NightModeView";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import type { CalendarEvent, Task } from "@/types/app";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
@@ -99,6 +101,11 @@ export function SceneRotator({
   }, [pages.length]);
 
   const current = pages[index] || pages[0] || DEFAULT_DISPLAY_PAGES[0];
+  const night = resolveNightMode(device.settings.nightMode, device.settings.alarms, new Date(minuteTick));
+
+  if (night.active) {
+    return <NightModeView screen={device.settings.nightMode.screen} clock={device.settings.clock} />;
+  }
 
   return (
     <div className="absolute inset-0">

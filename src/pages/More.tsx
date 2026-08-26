@@ -174,7 +174,7 @@ const SECTIONS: Section[] = [
     title: "Settings",
     items: [
       {
-        label: "Themes",
+        label: "Display / Themes",
         icon: Palette,
         route: "/themes",
         gradient: "linear-gradient(135deg, hsl(314,55%,52%), hsl(280,50%,48%))",

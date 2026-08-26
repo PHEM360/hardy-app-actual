@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   reject: vi.fn(),
   connectionUrl: vi.fn(),
   generateImage: vi.fn(),
+  generateAudit: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -34,6 +35,7 @@ vi.mock("@/lib/marketingApi", () => ({
   rejectMarketingContent: mocks.reject,
   getMarketingConnectionUrl: mocks.connectionUrl,
   generateMarketingImage: mocks.generateImage,
+  generateMarketingAudit: mocks.generateAudit,
 }));
 
 vi.mock("sonner", () => ({
@@ -50,6 +52,7 @@ const profile: MarketingProfile = {
   disclaimers: [],
   preferredHashtags: ["help"],
   competitors: [],
+  currentThemes: "",
   platforms: ["instagram", "facebook"],
   tradingNames: [],
   relatedCompanyIds: [],
@@ -121,6 +124,7 @@ function marketingState() {
     campaigns: [],
     assets: [],
     connections: [],
+    audits: [],
     loading: false,
     saveProfile: mocks.saveProfile,
     addCampaign: mocks.addCampaign,
@@ -132,6 +136,7 @@ function marketingState() {
     uploadAssets: mocks.uploadAssets,
     updateAsset: mocks.updateAsset,
     deleteAsset: mocks.deleteAsset,
+    deleteAudit: vi.fn(),
   };
 }
 
@@ -158,6 +163,7 @@ describe("CompanyMarketingTab", () => {
     mocks.approve.mockResolvedValue({ status: "scheduled" });
     mocks.reject.mockResolvedValue({ status: "rejected" });
     mocks.connectionUrl.mockResolvedValue({ available: false, reason: "Provider credentials have not been configured." });
+    mocks.generateAudit.mockResolvedValue({ auditId: "audit-1", headline: "Weekly PR audit" });
   });
 
   it("saves the complete brand profile", async () => {
@@ -185,7 +191,27 @@ describe("CompanyMarketingTab", () => {
       postsPerWeek: 5,
       focus: "Autumn launch",
       platforms: ["instagram", "facebook"],
+      includeImages: true,
     })));
+  });
+
+  it("explains how to generate a month of posts", () => {
+    renderTab();
+    expect(screen.getByRole("heading", { name: "How this works" })).toBeTruthy();
+    expect(screen.getByText(/You clicked in/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Generate next month" })).toBeTruthy();
+  });
+
+  it("starts a 30-day pictured plan from overview when brand guidance is ready", async () => {
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Generate next month" }));
+    await waitFor(() => expect(mocks.generatePlan).toHaveBeenCalledWith("company-1", expect.objectContaining({
+      periodDays: 30,
+      postsPerWeek: 3,
+      includeImages: true,
+      platforms: ["instagram", "facebook"],
+    })));
+    expect(mocks.toastSuccess).toHaveBeenCalled();
   });
 
   it("approves the exact review version", async () => {
@@ -249,5 +275,18 @@ describe("CompanyMarketingTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connections" }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Instagram" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Provider credentials have not been configured.");
+  });
+
+  it("runs a PR audit with pasted Search Console notes", async () => {
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "PR audit" }));
+    expect(screen.getByRole("heading", { name: "What this scan can see" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search Console or ranking notes"), {
+      target: { value: "boiler repair London is the top query, 1,200 impressions." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run a scan" }));
+    await waitFor(() => expect(mocks.generateAudit).toHaveBeenCalledWith("company-1", expect.objectContaining({
+      searchNotes: "boiler repair London is the top query, 1,200 impressions.",
+    })));
   });
 });

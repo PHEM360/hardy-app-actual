@@ -46,6 +46,7 @@ describe("marketing profile readiness", () => {
     disclaimers: [],
     preferredHashtags: [],
     competitors: [],
+    currentThemes: "",
     platforms: ["instagram"],
     tradingNames: [],
     relatedCompanyIds: [],

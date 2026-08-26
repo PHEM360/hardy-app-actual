@@ -69,15 +69,31 @@ export async function authenticateWithPasskey(reauthenticate = false) {
   return credential.user;
 }
 
+function cleanPasskeyMessage(message: string) {
+  return message.replace(/^Firebase:\s*/i, "").replace(/\s*\([^)]*\)\.?$/, "").trim();
+}
+
 export function passkeyErrorMessage(error: unknown) {
   const code = String((error as { code?: string } | undefined)?.code || "");
   const message = String((error as { message?: string } | undefined)?.message || "");
+  const cleaned = cleanPasskeyMessage(message);
   if (code.includes("cancelled") || code.includes("not-allowed") || message.includes("NotAllowedError")) {
     return "No matching passkey was selected. Check that both devices use hardyapp.co.uk and that the same password provider is enabled.";
   }
-  if (code.includes("failed-precondition")) {
-    return message.replace(/^Firebase:\s*/i, "").replace(/\s*\([^)]*\)\.?$/, "") || "This passkey request expired. Please try again.";
+  if (cleaned.includes("not available from this web address")) {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return `Passkeys on this computer need http://localhost:8080. You are on ${window.location.origin}.`;
+    }
+    return "Open hardyapp.co.uk to use your passkey.";
   }
-  if (code.includes("permission-denied")) return "That passkey could not be verified.";
-  return message.replace(/^Firebase:\s*/i, "") || "Passkey authentication failed.";
+  if (cleaned.includes("No passkey is registered for this web address")) {
+    return "This address does not have a passkey yet. Sign in with your email and password, then create one for this device.";
+  }
+  if (code.includes("failed-precondition")) {
+    return cleaned || "This passkey request expired. Please try again.";
+  }
+  if (code.includes("permission-denied")) {
+    return cleaned || "That passkey could not be verified.";
+  }
+  return cleaned || "Passkey authentication failed.";
 }

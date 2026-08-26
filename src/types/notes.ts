@@ -183,6 +183,8 @@ export interface NotesPrefs {
   colorMode: NotesColorMode;
   listStyle: NotesListStyle;
   shadeHue: string;
+  /** Own note shown as the first dashboard widget. */
+  dashboardNoteId: string | null;
 }
 
 export interface NotesVaultSettings {
@@ -223,4 +225,5 @@ export const DEFAULT_NOTES_PREFS: NotesPrefs = {
   colorMode: "note",
   listStyle: "keep",
   shadeHue: "#f59e0b",
+  dashboardNoteId: null,
 };

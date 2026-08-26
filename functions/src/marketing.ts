@@ -6,21 +6,30 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
+  buildMarketingAuditInstructions,
+  buildMarketingPlanInstructions,
   calculateMarketingPieceCount,
   cleanOptionalString,
+  extractPublicPageHints,
   hasMeaningfulMarketingProfile,
+  isSafePublicHttpUrl,
   MarketingBrandProfile,
   MarketingPlatform,
   parseApprovalVersion,
+  parseMarketingAuditInput,
   parseMarketingPlanInput,
   parsePlatform,
+  splitCompetitorHints,
   stringList,
+  ukSeasonalContext,
 } from "./marketingValidation";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const MODEL = "gpt-4o-mini";
 const TIMEZONE = "Europe/London";
 const MAX_GENERATED_PIECES = 40;
+const MAX_PLAN_IMAGES = 14;
+const IMAGE_CONCURRENCY = 2;
 
 interface CallableAuth {
   uid: string;
@@ -201,7 +210,7 @@ async function requestJsonFromOpenAi(
       },
       body: JSON.stringify({
         model: MODEL,
-        temperature: 0.5,
+        temperature: 0.65,
         max_tokens: 12000,
         response_format: {
           type: "json_schema",
@@ -286,8 +295,143 @@ async function requestJsonFromOpenAi(
   }
 }
 
+async function fetchPublicPage(url: string, textLimit = 1500): Promise<{
+  url: string;
+  title: string;
+  description: string;
+  headings: string[];
+  text: string;
+} | null> {
+  if (!isSafePublicHttpUrl(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "User-Agent": "HardyHubMarketingBot/1.0" },
+    });
+    if (!response.ok) return null;
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("text/html") && !contentType.includes("text/plain")) return null;
+    const raw = (await response.text()).slice(0, 120_000);
+    const hints = extractPublicPageHints(raw);
+    return {
+      url,
+      title: hints.title,
+      description: hints.description,
+      headings: hints.headings,
+      text: hints.text.slice(0, textLimit),
+    };
+  } catch (error) {
+    logger.warn("Public page fetch skipped", { url, error });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function competitorPageSnapshots(urls: string[]): Promise<Array<{ url: string; snapshot: string }>> {
+  const snapshots: Array<{ url: string; snapshot: string }> = [];
+  for (const url of urls) {
+    const page = await fetchPublicPage(url, 1500);
+    if (page?.text) snapshots.push({ url: page.url, snapshot: page.text });
+  }
+  return snapshots;
+}
+
+async function recentRejectionNotes(companyId: string): Promise<string[]> {
+  const snapshot = await admin.firestore()
+    .collection(`companies/${companyId}/content`)
+    .orderBy("updatedAt", "desc")
+    .limit(24)
+    .get();
+  return snapshot.docs
+    .map((item) => item.data())
+    .filter((item) => item.status === "rejected" && String(item.rejectionReason || "").trim())
+    .slice(0, 6)
+    .map((item) => `${String(item.topic || "Post").slice(0, 80)}: ${String(item.rejectionReason).slice(0, 240)}`);
+}
+
+async function mapPool<T>(
+  items: T[],
+  size: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  async function run() {
+    while (next < items.length) {
+      const index = next++;
+      await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, run));
+}
+
+async function saveGeneratedMarketingImage(
+  companyId: string,
+  actor: string,
+  prompt: string
+): Promise<{ assetId: string; url: string; storagePath: string }> {
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openaiApiKey.value()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-image-1",
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+      output_format: "png",
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    logger.error("Marketing image generation failed", { status: response.status, detail });
+    throw new HttpsError("internal", "The AI service could not generate this image.");
+  }
+  const result = await response.json() as OpenAiImageResponse;
+  const encoded = result.data?.[0]?.b64_json;
+  if (!encoded) throw new HttpsError("internal", "The AI service returned no image.");
+
+  const assetId = randomUUID();
+  const storagePath = `companies/${companyId}/marketing/${assetId}.png`;
+  const downloadToken = randomUUID();
+  const bucket = admin.storage().bucket();
+  await bucket.file(storagePath).save(Buffer.from(encoded, "base64"), {
+    contentType: "image/png",
+    metadata: {
+      metadata: {
+        firebaseStorageDownloadTokens: downloadToken,
+        generatedBy: actor,
+      },
+    },
+  });
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+    `${encodeURIComponent(storagePath)}?alt=media&token=${downloadToken}`;
+  await admin.firestore().doc(`companies/${companyId}/marketingAssets/${assetId}`).set({
+    name: "AI generated marketing image",
+    url,
+    storagePath,
+    mediaType: "image",
+    source: "ai_generated",
+    tags: ["ai-generated"],
+    altText: prompt.slice(0, 300),
+    usageNotes: result.data?.[0]?.revised_prompt || prompt,
+    aiProvider: "openai",
+    aiModel: "gpt-image-1",
+    createdBy: actor,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { assetId, url, storagePath };
+}
+
 export const generateMarketingPlan = onCall(
-  { secrets: [openaiApiKey], timeoutSeconds: 180, memory: "512MiB" },
+  { secrets: [openaiApiKey], timeoutSeconds: 540, memory: "1GiB" },
   async (request) => {
     const auth = requireMarketingAuth(request);
     const companyId = requireDocumentId(request.data?.companyId, "companyId");
@@ -300,10 +444,11 @@ export const generateMarketingPlan = onCall(
     }
 
     const db = admin.firestore();
-    const [companySnap, profileSnap, campaignSnap] = await Promise.all([
+    const [companySnap, profileSnap, campaignSnap, rejectionNotes] = await Promise.all([
       db.doc(`companies/${companyId}`).get(),
       db.doc(`companies/${companyId}/marketing/profile`).get(),
       input.campaignId ? db.doc(`companies/${companyId}/campaigns/${input.campaignId}`).get() : Promise.resolve(null),
+      recentRejectionNotes(companyId),
     ]);
     const profile = (profileSnap.data() || {}) as MarketingBrandProfile;
     if (!profileSnap.exists || !hasMeaningfulMarketingProfile(profile)) {
@@ -321,29 +466,42 @@ export const generateMarketingPlan = onCall(
       calculateMarketingPieceCount(input.periodDays, input.postsPerWeek)
     );
     const company = companySnap.data() || {};
-    const systemPrompt = [
-      "You are a senior UK social media strategist.",
-      "Create polished, concrete, ready-to-review content; never use placeholders.",
-      "Respect every required phrase, banned phrase and disclaimer.",
-      "Use British English. Do not make unsupported factual or legal claims.",
-      `Return exactly ${count} pieces and only use the requested platforms.`,
-    ].join(" ");
+    const competitors = splitCompetitorHints(profile.competitors);
+    const websiteUrl = cleanOptionalString(profile.website, 300);
+    const pageUrls = [
+      ...competitors.urls,
+      ...(websiteUrl && isSafePublicHttpUrl(websiteUrl) ? [websiteUrl] : []),
+    ].slice(0, 3);
+    const pageSnapshots = await competitorPageSnapshots(pageUrls);
+    const seasonal = ukSeasonalContext(new Date());
+    const systemPrompt = buildMarketingPlanInstructions(count, seasonal);
     const userPrompt = JSON.stringify({
       companyName: company.name || "",
       companyDescription: company.description || "",
       brandProfile: profile,
+      competitorNames: competitors.names,
+      publicPageSnapshots: pageSnapshots,
+      currentThemes: cleanOptionalString(profile.currentThemes, 2000) || "",
+      recentRejectionFeedback: rejectionNotes,
       campaign: campaignSnap?.data() || null,
       plan: input,
       requestedPieceCount: count,
+      notes: [
+        "Public page snapshots are homepage text only. Do not invent Instagram or Facebook posts you have not seen.",
+        "If rejection feedback is present, do not repeat those mistakes.",
+      ],
     });
     const generated = await requestJsonFromOpenAi(systemPrompt, userPrompt, count);
 
-    const collection = db.collection(`companies/${companyId}/content`);
+    const collectionRef = db.collection(`companies/${companyId}/content`);
     const batch = db.batch();
-    const ids: string[] = [];
+    const created: Array<{ id: string; prompt: string }> = [];
     generated.forEach((piece, index) => {
-      const ref = collection.doc();
-      ids.push(ref.id);
+      const ref = collectionRef.doc();
+      created.push({
+        id: ref.id,
+        prompt: String(piece.aiImagePrompt || "").trim(),
+      });
       const requestedPlatform = String(piece.platform || "").toLowerCase() as MarketingPlatform;
       const platform = input.platforms.includes(requestedPlatform) ?
         requestedPlatform : input.platforms[index % input.platforms.length];
@@ -356,12 +514,319 @@ export const generateMarketingPlan = onCall(
       ));
     });
     await batch.commit();
-    logger.info("Generated marketing plan", { companyId, uid: auth.uid, count });
+
+    let imagesCreated = 0;
+    if (input.includeImages) {
+      await mapPool(created.slice(0, MAX_PLAN_IMAGES), IMAGE_CONCURRENCY, async (item) => {
+        if (item.prompt.length < 10) return;
+        try {
+          const asset = await saveGeneratedMarketingImage(companyId, auth.uid, item.prompt);
+          await db.doc(`companies/${companyId}/content/${item.id}`).update({
+            assetIds: [asset.assetId],
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          imagesCreated += 1;
+        } catch (error) {
+          logger.warn("Plan image generation failed", { contentId: item.id, error });
+        }
+      });
+    }
+
+    logger.info("Generated marketing plan", {
+      companyId,
+      uid: auth.uid,
+      count: created.length,
+      imagesCreated,
+    });
+    const imageNote = input.includeImages
+      ? imagesCreated
+        ? `, with ${imagesCreated} picture${imagesCreated === 1 ? "" : "s"}`
+        : ". Pictures could not be attached this time"
+      : "";
     return {
-      created: ids.length,
-      contentIds: ids,
-      summary: `Created ${ids.length} posts for review over ${input.periodDays} days.`,
+      created: created.length,
+      contentIds: created.map((item) => item.id),
+      imagesCreated,
+      summary: `Created ${created.length} posts for review over ${input.periodDays} days${imageNote}.`,
     };
+  }
+);
+
+const AUDIT_IMPACT = ["high", "medium", "low"] as const;
+
+function stringArray(value: unknown, maximumItems: number, maximumLength: number): string[] {
+  return stringList(value, maximumItems, maximumLength);
+}
+
+function completeMarketingAudit(raw: Record<string, unknown>, sources: string[], actor: string) {
+  const search = raw.search && typeof raw.search === "object" ? raw.search as Record<string, unknown> : {};
+  const ads = raw.ads && typeof raw.ads === "object" ? raw.ads as Record<string, unknown> : {};
+  const social = raw.social && typeof raw.social === "object" ? raw.social as Record<string, unknown> : {};
+  const website = raw.website && typeof raw.website === "object" ? raw.website as Record<string, unknown> : {};
+  const opportunities = Array.isArray(raw.opportunities) ? raw.opportunities : [];
+  return {
+    headline: String(raw.headline || "Weekly PR audit").trim().slice(0, 200),
+    executiveSummary: String(raw.executiveSummary || "").trim().slice(0, 4000),
+    search: {
+      demand: String(search.demand || "").trim().slice(0, 2000),
+      match: String(search.match || "").trim().slice(0, 2000),
+      ranking: String(search.ranking || "").trim().slice(0, 2000),
+      queries: stringArray(search.queries, 12, 120),
+    },
+    ads: {
+      performance: String(ads.performance || "").trim().slice(0, 2000),
+      caveats: String(ads.caveats || "").trim().slice(0, 2000),
+    },
+    social: {
+      performance: String(social.performance || "").trim().slice(0, 2000),
+      popularTopics: stringArray(social.popularTopics, 12, 120),
+    },
+    website: {
+      strengths: stringArray(website.strengths, 8, 300),
+      gaps: stringArray(website.gaps, 8, 300),
+    },
+    opportunities: opportunities.slice(0, 8).map((item) => {
+      const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const impact = AUDIT_IMPACT.includes(String(row.impact) as typeof AUDIT_IMPACT[number])
+        ? String(row.impact)
+        : "medium";
+      return {
+        title: String(row.title || "Next move").trim().slice(0, 160),
+        why: String(row.why || "").trim().slice(0, 800),
+        action: String(row.action || "").trim().slice(0, 800),
+        impact,
+      };
+    }),
+    sources: stringArray(raw.sources, 16, 300).length ? stringArray(raw.sources, 16, 300) : sources,
+    limitations: stringArray(raw.limitations, 10, 300),
+    createdBy: actor,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+async function requestAuditFromOpenAi(systemPrompt: string, userPrompt: string): Promise<Record<string, unknown>> {
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey.value()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.4,
+        max_tokens: 5000,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "marketing_audit",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "headline", "executiveSummary", "search", "ads", "social",
+                "website", "opportunities", "sources", "limitations",
+              ],
+              properties: {
+                headline: { type: "string" },
+                executiveSummary: { type: "string" },
+                search: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["demand", "match", "ranking", "queries"],
+                  properties: {
+                    demand: { type: "string" },
+                    match: { type: "string" },
+                    ranking: { type: "string" },
+                    queries: { type: "array", items: { type: "string" } },
+                  },
+                },
+                ads: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["performance", "caveats"],
+                  properties: {
+                    performance: { type: "string" },
+                    caveats: { type: "string" },
+                  },
+                },
+                social: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["performance", "popularTopics"],
+                  properties: {
+                    performance: { type: "string" },
+                    popularTopics: { type: "array", items: { type: "string" } },
+                  },
+                },
+                website: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["strengths", "gaps"],
+                  properties: {
+                    strengths: { type: "array", items: { type: "string" } },
+                    gaps: { type: "array", items: { type: "string" } },
+                  },
+                },
+                opportunities: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["title", "why", "action", "impact"],
+                    properties: {
+                      title: { type: "string" },
+                      why: { type: "string" },
+                      action: { type: "string" },
+                      impact: { type: "string", enum: ["high", "medium", "low"] },
+                    },
+                  },
+                },
+                sources: { type: "array", items: { type: "string" } },
+                limitations: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+        },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+  } catch (error) {
+    logger.error("Marketing audit OpenAI request failed", { error });
+    throw new HttpsError("unavailable", "Could not reach the AI service. Please try again.");
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    logger.error("Marketing audit OpenAI response failed", { status: response.status, detail });
+    if (response.status === 401) {
+      throw new HttpsError("failed-precondition", "The OpenAI API key is missing or invalid.");
+    }
+    throw new HttpsError("internal", "The AI service could not complete this audit.");
+  }
+  const body = await response.json() as OpenAiChatResponse;
+  const content = body.choices?.[0]?.message?.content;
+  if (!content) throw new HttpsError("internal", "The AI service returned an empty audit.");
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (!String(parsed.executiveSummary || "").trim() || !Array.isArray(parsed.opportunities)) {
+      throw new Error("Incomplete audit");
+    }
+    return parsed;
+  } catch (error) {
+    logger.error("Marketing audit JSON was invalid", { error });
+    throw new HttpsError("internal", "The AI service returned an invalid audit.");
+  }
+}
+
+export const generateMarketingAudit = onCall(
+  { secrets: [openaiApiKey], timeoutSeconds: 180, memory: "512MiB" },
+  async (request) => {
+    const auth = requireMarketingAuth(request);
+    const companyId = requireDocumentId(request.data?.companyId, "companyId");
+    await requireCompanyEditPermission(auth.uid, companyId);
+    let input;
+    try {
+      input = parseMarketingAuditInput(request.data?.request);
+    } catch (error) {
+      failValidation(error);
+    }
+
+    const db = admin.firestore();
+    const [companySnap, profileSnap, contentSnap, campaignSnap] = await Promise.all([
+      db.doc(`companies/${companyId}`).get(),
+      db.doc(`companies/${companyId}/marketing/profile`).get(),
+      db.collection(`companies/${companyId}/content`).orderBy("updatedAt", "desc").limit(24).get(),
+      db.collection(`companies/${companyId}/campaigns`).limit(20).get(),
+    ]);
+    const profile = (profileSnap.data() || {}) as MarketingBrandProfile;
+    const websiteUrl = cleanOptionalString(profile.website, 300);
+    const competitors = splitCompetitorHints(profile.competitors);
+    const extraNotes = [input.searchNotes, input.adsNotes, input.socialNotes, input.otherNotes]
+      .some((item) => item.trim().length >= 8);
+    if (
+      !hasMeaningfulMarketingProfile(profile) &&
+      !(websiteUrl && isSafePublicHttpUrl(websiteUrl)) &&
+      input.extraUrls.length === 0 &&
+      !extraNotes
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Add a website, brand guidance, extra links, or pasted Search Console / ads / social notes first."
+      );
+    }
+
+    const pageUrls = [
+      ...(websiteUrl && isSafePublicHttpUrl(websiteUrl) ? [websiteUrl] : []),
+      ...competitors.urls,
+      ...input.extraUrls,
+    ].filter((url, index, list) => list.indexOf(url) === index).slice(0, 6);
+    const publicPages = [];
+    for (const url of pageUrls) {
+      const page = await fetchPublicPage(url, url === websiteUrl ? 3500 : 1500);
+      if (page) publicPages.push(page);
+    }
+
+    const content = contentSnap.docs.map((item) => {
+      const data = item.data();
+      return {
+        topic: String(data.topic || "").slice(0, 120),
+        platform: String(data.platform || ""),
+        status: String(data.status || ""),
+        rejectionReason: String(data.rejectionReason || "").slice(0, 200),
+      };
+    });
+    const campaigns = campaignSnap.docs.map((item) => {
+      const data = item.data();
+      return {
+        name: String(data.name || "").slice(0, 120),
+        objective: String(data.objective || "").slice(0, 200),
+        status: String(data.status || ""),
+        platforms: Array.isArray(data.platforms) ? data.platforms.slice(0, 6) : [],
+      };
+    });
+
+    const sources = [
+      publicPages.length ? `${publicPages.length} public page${publicPages.length === 1 ? "" : "s"}` : "",
+      hasMeaningfulMarketingProfile(profile) ? "brand guidance" : "",
+      content.length ? "Hardy Hub social posts" : "",
+      extraNotes ? "pasted Search Console, ads or social notes" : "",
+    ].filter(Boolean);
+    const seasonal = ukSeasonalContext(new Date());
+    const generated = await requestAuditFromOpenAi(
+      buildMarketingAuditInstructions(seasonal),
+      JSON.stringify({
+        companyName: companySnap.data()?.name || "",
+        companyDescription: companySnap.data()?.description || "",
+        brandProfile: profile,
+        competitorNames: competitors.names,
+        publicPages,
+        workspaceContent: content,
+        campaigns,
+        suppliedNotes: {
+          searchConsole: input.searchNotes,
+          googleAds: input.adsNotes,
+          social: input.socialNotes,
+          other: input.otherNotes,
+        },
+        connectedLiveData: {
+          googleSearchConsole: false,
+          googleAds: false,
+          metaOrLinkedInAnalytics: false,
+        },
+      })
+    );
+
+    const audit = completeMarketingAudit(generated, sources, auth.uid);
+    const ref = db.collection(`companies/${companyId}/marketingAudits`).doc();
+    await ref.set(audit);
+    logger.info("Generated marketing audit", { companyId, uid: auth.uid, auditId: ref.id });
+    return { auditId: ref.id, headline: audit.headline };
   }
 );
 
@@ -711,59 +1176,6 @@ export const generateMarketingImage = onCall(
       throw new HttpsError("invalid-argument", "A meaningful image prompt is required.");
     }
     await requireCompanyEditPermission(auth.uid, companyId);
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey.value()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-image-1",
-        prompt,
-        size: "1024x1024",
-        quality: "medium",
-        output_format: "png",
-      }),
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      logger.error("Marketing image generation failed", { status: response.status, detail });
-      throw new HttpsError("internal", "The AI service could not generate this image.");
-    }
-    const result = await response.json() as OpenAiImageResponse;
-    const encoded = result.data?.[0]?.b64_json;
-    if (!encoded) throw new HttpsError("internal", "The AI service returned no image.");
-
-    const assetId = randomUUID();
-    const storagePath = `companies/${companyId}/marketing/${assetId}.png`;
-    const downloadToken = randomUUID();
-    const bucket = admin.storage().bucket();
-    await bucket.file(storagePath).save(Buffer.from(encoded, "base64"), {
-      contentType: "image/png",
-      metadata: {
-        metadata: {
-          firebaseStorageDownloadTokens: downloadToken,
-          generatedBy: auth.uid,
-        },
-      },
-    });
-    const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(storagePath)}?alt=media&token=${downloadToken}`;
-    await admin.firestore().doc(`companies/${companyId}/marketingAssets/${assetId}`).set({
-      name: "AI generated marketing image",
-      url,
-      storagePath,
-      mediaType: "image",
-      source: "ai_generated",
-      tags: ["ai-generated"],
-      altText: prompt.slice(0, 300),
-      usageNotes: result.data?.[0]?.revised_prompt || prompt,
-      aiProvider: "openai",
-      aiModel: "gpt-image-1",
-      createdBy: auth.uid,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    return { assetId, url, storagePath };
+    return saveGeneratedMarketingImage(companyId, auth.uid, prompt);
   }
 );

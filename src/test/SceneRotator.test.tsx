@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SceneRotator } from "@/components/display/SceneRotator";
 import type { DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_NIGHT_MODE } from "@/lib/displayNightMode";
 import type { DisplayPage } from "@/lib/displayPages";
 
 function messagePage(id: string, name: string, message: string): DisplayPage {
@@ -39,6 +40,7 @@ function deviceWith(pages: DisplayPage[]): DeviceDoc {
       overview: { enabled: false, widgets: [] },
       scenes: { rotateSeconds: 3_600 },
       pages,
+      nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false, withAlarms: false },
     },
   };
 }
@@ -100,5 +102,13 @@ describe("SceneRotator", () => {
     expect(screen.getByText("Night clock")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Home" });
     expect(screen.getByText("Morning briefing")).toBeInTheDocument();
+  });
+
+  it("covers the rotation with night mode when it is turned on", () => {
+    const device = deviceWith([messagePage("today", "Today", "Morning briefing")]);
+    device.settings.nightMode = { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false, withAlarms: false, override: "on", screen: "blank" };
+    render(<SceneRotator device={device} photos={[]} calendarEvents={[]} tasks={[]} />);
+    expect(screen.getByLabelText("Night mode, screen off")).toBeInTheDocument();
+    expect(screen.queryByText("Morning briefing")).not.toBeInTheDocument();
   });
 });

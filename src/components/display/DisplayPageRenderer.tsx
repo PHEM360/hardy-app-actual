@@ -11,6 +11,7 @@ import type { CalendarEvent, Task } from "@/types/app";
 import type { DisplayPage, DisplayWidgetLayout, PhotoFrameSettings } from "@/hooks/useDeviceSettings";
 import { displayTheme } from "@/lib/displayPages";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
+import { visibleDisplayPhotos } from "@/lib/displayPhotos";
 import { PhotoFrameScene } from "@/components/display/PhotoFrameScene";
 import { DisplayBackdrop } from "@/components/display/DisplayBackdrop";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
@@ -587,7 +588,9 @@ export function DisplayPageRenderer({
       <DisplayBackdrop kind={page.backdrop} accent={theme.accent} />
       {page.widgets.map((widget) => {
         const accent = widget.accentColor || theme.accent;
-        const selectedPhotos = widget.photoIds?.length ? photos.filter((photo) => widget.photoIds!.includes(photo.id)) : photos;
+        const selectedPhotos = visibleDisplayPhotos(
+          widget.photoIds?.length ? photos.filter((photo) => widget.photoIds!.includes(photo.id)) : photos,
+        );
         const photoSettings: PhotoFrameSettings = {
           enabled: true,
           intervalSeconds: widget.photoIntervalSeconds || 20,

@@ -6,16 +6,18 @@ import { useSharedScope } from "@/hooks/useSharedScope";
 export default function PageShareBar({
   page,
   extra,
+  access,
 }: {
   page: string;
   extra?: ReactNode;
+  access?: ReactNode;
 }) {
   const { isOwnScope } = useSharedScope(page);
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap justify-end">
       <SharedScopeSwitcher page={page} />
-      {isOwnScope && <ShareAccessButton page={page} />}
+      {isOwnScope && (access ?? <ShareAccessButton page={page} />)}
       {extra}
     </div>
   );

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Plus, Tag as TagIcon, QrCode, MapPin } from "lucide-react";
+import { Plus, Tag as TagIcon, QrCode, MapPin, Printer } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
-import { useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
+import { useAllDogTags, useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
 import { DogTagDesigner } from "@/components/pets/DogTagDesigner";
+import { DogTagPrintDialog } from "@/components/pets/DogTagPrintDialog";
 import { dogTagShapeStyle } from "@/lib/dogTagShapes";
 import type { Pet } from "@/hooks/usePets";
 
@@ -63,7 +64,15 @@ function TagCard({ tag, onEdit }: { tag: DogTag; onEdit: () => void }) {
   );
 }
 
-function PetTagsGroup({ pet }: { pet: Pet }) {
+function PetTagsGroup({
+  pet,
+  pets,
+  tagsByPet,
+}: {
+  pet: Pet;
+  pets: Pet[];
+  tagsByPet: Record<string, DogTag[]>;
+}) {
   const { user } = useAuth();
   const { tags, loading, addTag, updateTag, regenerateCode, deleteTag, claimSlug } = useDogTags(pet.id);
   const [editingTag, setEditingTag] = useState<DogTag | null>(null);
@@ -94,6 +103,8 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
           backTextSizeCm: 0.4,
           profile: DEFAULT_TAG_PROFILE,
           lastScanLocation: null,
+          notifyEmails: [],
+          notifyUids: [],
         });
       }
     } finally {
@@ -151,6 +162,8 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
             setEditingTag(null);
           }}
           onClaimSlug={(rawSlug) => claimSlug(liveEditingTag.ownerId, liveEditingTag.id, rawSlug)}
+          pets={pets}
+          tagsByPet={tagsByPet}
         />
       )}
     </div>
@@ -158,6 +171,10 @@ function PetTagsGroup({ pet }: { pet: Pet }) {
 }
 
 export function DogTagsSection({ pets }: { pets: Pet[] }) {
+  const { tagsByPet } = useAllDogTags(pets.map((pet) => pet.id));
+  const [printOpen, setPrintOpen] = useState(false);
+  const tagCount = pets.reduce((sum, pet) => sum + (tagsByPet[pet.id]?.length || 0), 0);
+
   if (pets.length === 0) return null;
 
   return (
@@ -169,14 +186,32 @@ export function DogTagsSection({ pets }: { pets: Pet[] }) {
         Dog Tags
       </h3>
       <div className="p-4 rounded-xl bg-card border border-orange-200/50 dark:border-orange-900/40 shadow-soft space-y-5">
-        <p className="text-xs text-muted-foreground -mt-1">
-          Printable QR stickers for a collar. Scanning one shows a message, phone numbers, address, vet
-          details and more — and can email you the finder's location.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <p className="min-w-0 text-xs text-muted-foreground">
+            Printable QR stickers for a collar. Scanning one shows a message, phone numbers, address, vet
+            details and more — and can email you the finder's location.
+          </p>
+          {tagCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPrintOpen(true)}
+              className="h-8 shrink-0 rounded-xl gap-1.5 text-xs"
+            >
+              <Printer className="w-3.5 h-3.5" /> Print tags
+            </Button>
+          )}
+        </div>
         {pets.map((pet) => (
-          <PetTagsGroup key={pet.id} pet={pet} />
+          <PetTagsGroup key={pet.id} pet={pet} pets={pets} tagsByPet={tagsByPet} />
         ))}
       </div>
+      <DogTagPrintDialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        pets={pets}
+        tagsByPet={tagsByPet}
+      />
     </div>
   );
 }

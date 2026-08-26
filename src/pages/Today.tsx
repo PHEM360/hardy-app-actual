@@ -1,11 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Pencil, Check, RotateCcw, Eye, EyeOff } from "lucide-react";
+import { Sun, Pencil, Check, RotateCcw, Eye, EyeOff, Palette, X } from "lucide-react";
 import { format } from "date-fns";
 import { Rnd } from "react-rnd";
 
-import { useTodayLayout, TODAY_WIDGET_LABELS, TODAY_WIDGET_ICONS } from "@/hooks/useTodayLayout";
+import { useTodayLayout, TODAY_WIDGET_LABELS, TODAY_WIDGET_ICONS, TODAY_TINT_PRESETS } from "@/hooks/useTodayLayout";
 import type { TodayWidgetItem, TodayWidgetType } from "@/hooks/useTodayLayout";
+import { HEADER_COLOR_PRESETS } from "@/lib/chromeScenes";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { TdAiWidget }          from "@/components/widgets/today/TdAiWidget";
 import { TdFocusWidget }       from "@/components/widgets/today/TdFocusWidget";
@@ -17,6 +19,19 @@ import { TdMoodWidget }        from "@/components/widgets/today/TdMoodWidget";
 import { TdNoteWidget }        from "@/components/widgets/today/TdNoteWidget";
 import { TdChecklistWidget }   from "@/components/widgets/today/TdChecklistWidget";
 import { TdReflectionWidget }  from "@/components/widgets/today/TdReflectionWidget";
+import { TdCalendarWidget }    from "@/components/widgets/today/TdCalendarWidget";
+import { TdBirthdaysWidget }   from "@/components/widgets/today/TdBirthdaysWidget";
+import { TdTomorrowWidget }    from "@/components/widgets/today/TdTomorrowWidget";
+import { TdOverdueWidget }     from "@/components/widgets/today/TdOverdueWidget";
+import { TdQuickAddWidget }    from "@/components/widgets/today/TdQuickAddWidget";
+import { TdRemindersWidget }   from "@/components/widgets/today/TdRemindersWidget";
+import { TdPhotosWidget }      from "@/components/widgets/today/TdPhotosWidget";
+import { TdWeatherWidget }     from "@/components/widgets/today/TdWeatherWidget";
+import { TdBillsWidget }       from "@/components/widgets/today/TdBillsWidget";
+import { TdFunFactWidget }     from "@/components/widgets/today/TdFunFactWidget";
+import { TdPetsCareWidget }    from "@/components/widgets/today/TdPetsCareWidget";
+import { TdWeekWidget }        from "@/components/widgets/today/TdWeekWidget";
+import { FamilyMessageBoardWidget } from "@/components/widgets/FamilyMessageBoardWidget";
 
 // ─── Widget content ────────────────────────────────────────────────────────────
 
@@ -32,6 +47,19 @@ function WidgetContent({ type }: { type: TodayWidgetType }) {
     case "note":       return <TdNoteWidget />;
     case "checklist":  return <TdChecklistWidget />;
     case "reflection": return <TdReflectionWidget />;
+    case "calendar":   return <TdCalendarWidget />;
+    case "birthdays":  return <TdBirthdaysWidget />;
+    case "tomorrow":   return <TdTomorrowWidget />;
+    case "overdue":    return <TdOverdueWidget />;
+    case "quick_add":  return <TdQuickAddWidget />;
+    case "reminders":  return <TdRemindersWidget />;
+    case "messages":   return <FamilyMessageBoardWidget />;
+    case "photos":     return <TdPhotosWidget />;
+    case "weather":    return <TdWeatherWidget />;
+    case "bills":      return <TdBillsWidget />;
+    case "fun_fact":   return <TdFunFactWidget />;
+    case "pets_care":  return <TdPetsCareWidget />;
+    case "week":       return <TdWeekWidget />;
     default:           return null;
   }
 }
@@ -64,6 +92,7 @@ function TodayWidgetShell({
   const w = item.wFrac * containerWidth;
   const leftInset = item.xFrac > 0 ? TILE_GAP / 2 : 0;
   const rightInset = item.xFrac + item.wFrac < 1 ? TILE_GAP / 2 : 0;
+  const [showPalette, setShowPalette] = useState(false);
 
   return (
     <Rnd
@@ -92,12 +121,16 @@ function TodayWidgetShell({
       style={{ zIndex: editMode ? 10 : 1 }}
     >
       <div
-        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col bg-card border shadow-card transition-all duration-200 ${
+        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col border shadow-card transition-all duration-200 ${
           editMode
             ? "border-amber-400/40 ring-2 ring-amber-300/20 shadow-md"
             : "border-border hover:shadow-elevated hover:-translate-y-0.5 cursor-pointer"
-        }`}
-        style={{ marginLeft: leftInset, width: `calc(100% - ${leftInset + rightInset}px)` }}
+        } ${!item.tintColor ? "bg-card" : ""}`}
+        style={{
+          marginLeft: leftInset,
+          width: `calc(100% - ${leftInset + rightInset}px)`,
+          ...(item.tintColor ? { backgroundColor: item.tintColor } : {}),
+        }}
       >
         {/* Edit drag handle bar */}
         {editMode && (
@@ -106,17 +139,52 @@ function TodayWidgetShell({
               <span className="text-sm">{TODAY_WIDGET_ICONS[item.type]}</span>
               <span className="text-[10px] font-semibold text-amber-700">{TODAY_WIDGET_LABELS[item.type]}</span>
             </div>
-            <button
-              className="p-1 rounded-md hover:bg-amber-100 transition-colors"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { visible: !item.visible }); }}
-              title={item.visible ? "Hide widget" : "Show widget"}
-            >
-              {item.visible
-                ? <Eye className="w-3.5 h-3.5 text-amber-600" />
-                : <EyeOff className="w-3.5 h-3.5 text-amber-400" />
-              }
-            </button>
+            <div className="flex items-center gap-0.5">
+              <div className="relative">
+                <button
+                  className="p-1 rounded-md hover:bg-amber-100 transition-colors"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setShowPalette((v) => !v); }}
+                  title="Tile colour"
+                >
+                  <Palette className="w-3.5 h-3.5 text-amber-600" />
+                </button>
+                {showPalette && (
+                  <div
+                    className="absolute top-7 right-0 z-50 bg-popover border border-border rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 w-[148px]"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    {TODAY_TINT_PRESETS.map((p) => (
+                      <button
+                        key={p.value}
+                        title={p.label}
+                        onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { tintColor: p.value }); setShowPalette(false); }}
+                        className="w-7 h-7 rounded-lg border-2"
+                        style={{ backgroundColor: p.value, borderColor: item.tintColor === p.value ? "hsl(178,62%,30%)" : "transparent" }}
+                      />
+                    ))}
+                    <button
+                      title="Default"
+                      onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { tintColor: undefined }); setShowPalette(false); }}
+                      className="w-7 h-7 rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center"
+                    >
+                      <X className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button
+                className="p-1 rounded-md hover:bg-amber-100 transition-colors"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { visible: !item.visible }); }}
+                title={item.visible ? "Hide widget" : "Show widget"}
+              >
+                {item.visible
+                  ? <Eye className="w-3.5 h-3.5 text-amber-600" />
+                  : <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                }
+              </button>
+            </div>
           </div>
         )}
 
@@ -137,7 +205,7 @@ const Today = () => {
   const [editMode, setEditMode] = useState(false);
   const [showHiddenPanel, setShowHiddenPanel] = useState(false);
 
-  const { layout, updateWidget, resetLayout } = useTodayLayout();
+  const { layout, pageStyle, updateWidget, resetLayout, setPageStyle } = useTodayLayout();
 
   useEffect(() => {
     const el = containerRef.current;
@@ -160,10 +228,13 @@ const Today = () => {
   const today = new Date();
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
       {/* Toolbar */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
-        <div className="px-3 py-2 bg-gradient-primary flex items-center justify-between">
+        <div
+          className="px-3 py-2 flex items-center justify-between"
+          style={{ background: pageStyle.headerColor || "var(--gradient-primary)" }}
+        >
           <div className="flex items-center gap-2">
             <Sun className="w-4 h-4 text-white/80" />
             <p className="text-sm font-bold text-white">Today</p>
@@ -174,6 +245,50 @@ const Today = () => {
         </div>
         <div className="flex items-center justify-end px-3 py-2">
           <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5">
+                  <Palette className="w-3.5 h-3.5" />
+                  Look
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Page header</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {HEADER_COLOR_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      title={p.label}
+                      onClick={() => setPageStyle({ headerColor: p.value })}
+                      className="h-7 min-w-7 px-1.5 rounded-lg border text-[9px] font-semibold text-white"
+                      style={{ background: p.value || "var(--gradient-primary)" }}
+                    >
+                      {p.id === "theme" ? "Theme" : ""}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Page colour</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {TODAY_TINT_PRESETS.map((p) => (
+                    <button
+                      key={p.value}
+                      title={p.label}
+                      onClick={() => setPageStyle({ canvasTint: p.value })}
+                      className="w-7 h-7 rounded-lg border"
+                      style={{ backgroundColor: p.value, borderColor: pageStyle.canvasTint === p.value ? "hsl(178,62%,30%)" : "transparent" }}
+                    />
+                  ))}
+                  <button
+                    title="Default"
+                    onClick={() => setPageStyle({ canvasTint: "" })}
+                    className="w-7 h-7 rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">In Edit, tint individual widgets too.</p>
+              </PopoverContent>
+            </Popover>
             {editMode && hiddenWidgets.length > 0 && (
               <button
                 onClick={() => setShowHiddenPanel((v) => !v)}
@@ -215,7 +330,7 @@ const Today = () => {
             exit={{ opacity: 0, height: 0 }}
             className="mx-3 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
           >
-            🖐️ Drag widgets to reposition · Drag corner to resize · Tap 👁️ to hide/show
+            🖐️ Drag widgets · resize · colour · hide. Use Look for the page colours.
           </motion.div>
         )}
       </AnimatePresence>

@@ -71,6 +71,8 @@ export interface DogTag {
   backTextSizeCm: number;
   profile: DogTagProfile;
   lastScanLocation: DogTagScanLocation | null;
+  notifyEmails: string[];
+  notifyUids: string[];
 }
 
 export const DEFAULT_TAG_PROFILE: DogTagProfile = {
@@ -100,6 +102,30 @@ export function genFieldId(): string {
 
 type TagInput = Partial<Omit<DogTag, "id" | "petId" | "ownerId" | "code" | "slug" | "lastScanLocation">>;
 
+export function dogTagFromFirestore(petId: string, id: string, data: Record<string, unknown>): DogTag {
+  return {
+    id,
+    petId,
+    ownerId: String(data.ownerId || ""),
+    label: String(data.label || "Tag"),
+    code: String(data.code || ""),
+    slug: String(data.slug || ""),
+    shape: (data.shape as DogTagShape) || "rounded",
+    bgColor: String(data.bgColor || "#ffffff"),
+    fgColor: String(data.fgColor || "#000000"),
+    stickerText: String(data.stickerText || ""),
+    sizeCm: typeof data.sizeCm === "number" ? data.sizeCm : DEFAULT_SIZE_CM,
+    qrSizeCm: typeof data.qrSizeCm === "number" ? data.qrSizeCm : DEFAULT_QR_SIZE_CM,
+    stickerTextSizeCm: typeof data.stickerTextSizeCm === "number" ? data.stickerTextSizeCm : DEFAULT_STICKER_TEXT_SIZE_CM,
+    backText: String(data.backText || ""),
+    backTextSizeCm: typeof data.backTextSizeCm === "number" ? data.backTextSizeCm : DEFAULT_BACK_TEXT_SIZE_CM,
+    profile: { ...DEFAULT_TAG_PROFILE, ...((data.profile as DogTagProfile | undefined) || {}) },
+    lastScanLocation: (data.lastScanLocation as DogTagScanLocation | null) || null,
+    notifyEmails: Array.isArray(data.notifyEmails) ? data.notifyEmails.map(String) : [],
+    notifyUids: Array.isArray(data.notifyUids) ? data.notifyUids.map(String) : [],
+  };
+}
+
 /** Dog tags for one pet — a subcollection so access inherits the pet's own owner/sharedWith rules. */
 export function useDogTags(petId: string | null) {
   const [tags, setTags] = useState<DogTag[]>([]);
@@ -114,30 +140,7 @@ export function useDogTags(petId: string | null) {
     const unsub = onSnapshot(
       collection(db, "pets", petId, "tags"),
       (snap) => {
-        setTags(
-          snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              petId,
-              ownerId: data.ownerId || "",
-              label: data.label || "Tag",
-              code: data.code || "",
-              slug: data.slug || "",
-              shape: (data.shape as DogTagShape) || "rounded",
-              bgColor: data.bgColor || "#ffffff",
-              fgColor: data.fgColor || "#000000",
-              stickerText: data.stickerText || "",
-              sizeCm: typeof data.sizeCm === "number" ? data.sizeCm : DEFAULT_SIZE_CM,
-              qrSizeCm: typeof data.qrSizeCm === "number" ? data.qrSizeCm : DEFAULT_QR_SIZE_CM,
-              stickerTextSizeCm: typeof data.stickerTextSizeCm === "number" ? data.stickerTextSizeCm : DEFAULT_STICKER_TEXT_SIZE_CM,
-              backText: data.backText || "",
-              backTextSizeCm: typeof data.backTextSizeCm === "number" ? data.backTextSizeCm : DEFAULT_BACK_TEXT_SIZE_CM,
-              profile: { ...DEFAULT_TAG_PROFILE, ...(data.profile || {}) },
-              lastScanLocation: data.lastScanLocation || null,
-            } as DogTag;
-          })
-        );
+        setTags(snap.docs.map((d) => dogTagFromFirestore(petId, d.id, d.data() as Record<string, unknown>)));
         setLoading(false);
       },
       () => {
@@ -166,6 +169,8 @@ export function useDogTags(petId: string | null) {
         backText: input.backText || "",
         backTextSizeCm: input.backTextSizeCm ?? DEFAULT_BACK_TEXT_SIZE_CM,
         profile: { ...DEFAULT_TAG_PROFILE, ...(input.profile || {}) },
+        notifyEmails: input.notifyEmails || [],
+        notifyUids: input.notifyUids || [],
         lastScanLocation: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -247,4 +252,43 @@ export function useDogTags(petId: string | null) {
   );
 
   return { tags, loading, addTag, updateTag, regenerateCode, deleteTag, claimSlug };
+}
+
+/** Live tags for every pet on the page — used to print a mixed sheet. */
+export function useAllDogTags(petIds: string[]) {
+  const [tagsByPet, setTagsByPet] = useState<Record<string, DogTag[]>>({});
+  const [loading, setLoading] = useState(petIds.length > 0);
+  const petIdsKey = petIds.join("|");
+
+  useEffect(() => {
+    const ids = petIdsKey ? petIdsKey.split("|") : [];
+    if (ids.length === 0) {
+      setTagsByPet({});
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const received = new Set<string>();
+    const unsubs = ids.map((petId) =>
+      onSnapshot(
+        collection(db, "pets", petId, "tags"),
+        (snap) => {
+          setTagsByPet((prev) => ({
+            ...prev,
+            [petId]: snap.docs.map((d) => dogTagFromFirestore(petId, d.id, d.data() as Record<string, unknown>)),
+          }));
+          received.add(petId);
+          if (received.size === ids.length) setLoading(false);
+        },
+        () => {
+          setTagsByPet((prev) => ({ ...prev, [petId]: [] }));
+          received.add(petId);
+          if (received.size === ids.length) setLoading(false);
+        },
+      )
+    );
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [petIdsKey]);
+
+  return { tagsByPet, loading };
 }

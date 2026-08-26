@@ -3,12 +3,58 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { postmarkKey, twilioSid, twilioToken, twilioFrom } from "./notifications/scheduler";
 import { sendNotification } from "./notifications/sender";
-import { resolveAllHouseholdMemberIds } from "./household";
+import {
+  buildScanNotifyTargets,
+  parseNotifyEmails,
+  parseNotifyUids,
+  petAccessUids,
+} from "./dogTagNotify";
 
 function requireAuth(request: { auth?: { uid: string } }) {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   return uid;
+}
+
+function userDisplayName(data: FirebaseFirestore.DocumentData | undefined, fallback = "Family member") {
+  if (!data) return fallback;
+  return String(data.displayName || [data.firstName, data.surname].filter(Boolean).join(" ") || data.email || fallback);
+}
+
+async function pageShareUidsForPets(ownerId: string) {
+  if (!ownerId) return [];
+  const snap = await admin.firestore().collection("pageShares")
+    .where("ownerId", "==", ownerId)
+    .where("page", "==", "pets")
+    .get();
+  return snap.docs.map((doc) => String(doc.data().targetUid || "")).filter(Boolean);
+}
+
+async function userDirectory(uids: string[]) {
+  const unique = [...new Set(uids.filter(Boolean))];
+  const users: Record<string, { email?: string; name?: string }> = {};
+  if (unique.length === 0) return users;
+  const snaps = await admin.firestore().getAll(...unique.map((id) => admin.firestore().doc(`users/${id}`)));
+  snaps.forEach((snap) => {
+    const data = snap.exists ? snap.data() : undefined;
+    users[snap.id] = {
+      email: data?.email ? String(data.email) : "",
+      name: userDisplayName(data),
+    };
+  });
+  return users;
+}
+
+async function scanNotifyTargets(petId: string, tag: FirebaseFirestore.DocumentData) {
+  const petSnap = await admin.firestore().doc(`pets/${petId}`).get();
+  const pet = petSnap.exists ? petSnap.data() || {} : {};
+  const ownerId = String(pet.ownerId || tag.ownerId || "");
+  const accessUids = petAccessUids(pet, await pageShareUidsForPets(ownerId));
+  const extraUids = parseNotifyUids(tag.notifyUids);
+  const extraEmails = parseNotifyEmails(tag.notifyEmails);
+  const users = await userDirectory([...accessUids, ...extraUids]);
+  const petName = String(pet.name || "Your pet");
+  return { petName, ownerId, accessUids, targets: buildScanNotifyTargets({ accessUids, extraUids, extraEmails, users }) };
 }
 
 /**
@@ -132,23 +178,26 @@ export const getDogTagProfileBySlug = onCall(async (request) => {
 // signed in, but doesn't need to already have access to the pet: household
 // membership isn't sensitive the way the tag's contact details are.
 export const getDogTagNotifyRecipients = onCall(async (request) => {
-  requireAuth(request);
+  const uid = requireAuth(request);
   const petId = String(request.data?.petId || "");
   if (!petId) throw new HttpsError("invalid-argument", "petId is required.");
 
   const petSnap = await admin.firestore().doc(`pets/${petId}`).get();
-  const ownerId = petSnap.exists ? String(petSnap.data()?.ownerId || "") : "";
-  if (!ownerId) return { recipients: [] };
-
-  const memberIds = await resolveAllHouseholdMemberIds(ownerId);
-  const userSnaps = await admin.firestore().getAll(...memberIds.map((id) => admin.firestore().doc(`users/${id}`)));
-  const recipients = userSnaps.map((snap, i) => {
-    const data = snap.exists ? snap.data() || {} : {};
-    const name = data.displayName || [data.firstName, data.surname].filter(Boolean).join(" ") || "Family member";
-    return { uid: memberIds[i], name };
-  });
-
-  return { recipients };
+  if (!petSnap.exists) return { recipients: [] };
+  const pet = petSnap.data() || {};
+  const ownerId = String(pet.ownerId || "");
+  const accessUids = petAccessUids(pet, await pageShareUidsForPets(ownerId));
+  if (!accessUids.includes(uid)) {
+    throw new HttpsError("permission-denied", "You do not have access to this pet.");
+  }
+  const users = await userDirectory(accessUids);
+  return {
+    recipients: accessUids.map((id) => ({
+      uid: id,
+      name: users[id]?.name || "Family member",
+      email: users[id]?.email || "",
+    })),
+  };
 });
 
 export const reportDogTagScan = onCall(
@@ -171,7 +220,6 @@ export const reportDogTagScan = onCall(
       throw new HttpsError("not-found", "This tag is no longer active.");
     }
 
-    const ownerId = String(tag.data.ownerId || "");
     const lastNotified: FirebaseFirestore.Timestamp | undefined = tag.data.lastScanNotifiedAt;
     const debounced = !!lastNotified && Date.now() - lastNotified.toMillis() < SCAN_NOTIFY_DEBOUNCE_MS;
 
@@ -181,36 +229,26 @@ export const reportDogTagScan = onCall(
         tagId,
         msSinceLastNotify: lastNotified ? Date.now() - lastNotified.toMillis() : null,
       });
-    } else if (!ownerId) {
-      logger.warn("reportDogTagScan: tag has no ownerId, skipping notification", { petId, tagId });
     } else {
-      const [petSnap, memberIds, placeName] = await Promise.all([
-        admin.firestore().doc(`pets/${petId}`).get(),
-        resolveAllHouseholdMemberIds(ownerId),
-        reverseGeocode(lat, lng),
-      ]);
-      const petName = petSnap.exists ? petSnap.data()?.name || "Your pet" : "Your pet";
-      const memberSnaps = await admin.firestore().getAll(...memberIds.map((id) => admin.firestore().doc(`users/${id}`)));
+      const placeName = await reverseGeocode(lat, lng);
+      const { petName, ownerId: petOwnerId, targets } = await scanNotifyTargets(petId, tag.data);
 
       const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
       const when = new Date().toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" });
       const locationLine = placeName ? ` near ${placeName}` : "";
 
-      const results = await Promise.allSettled(
-        memberSnaps.map((snap) => {
-          const data = snap.exists ? snap.data() || {} : {};
-          const email: string | undefined = data.email;
-          return sendNotification({
-            uid: snap.id,
-            // Push fires even without an email on file for this member — it
-            // doesn't depend on it — and is more real-time/visible, so it
-            // goes out alongside email rather than as a fallback.
-            channels: ["email", "push"],
-            emailEnabled: !!email,
-            emailTo: email || "",
+      if (targets.length === 0) {
+        logger.warn("reportDogTagScan: no notify targets", { petId, tagId, petOwnerId });
+      } else {
+        const results = await Promise.allSettled(
+          targets.map((target) => sendNotification({
+            uid: target.uid,
+            channels: target.uid ? ["email", "push"] : ["email"],
+            emailEnabled: !!target.email,
+            emailTo: target.email,
             smsEnabled: false,
             smsTo: "",
-            pushEnabled: true,
+            pushEnabled: !!target.uid,
             subject: `📍 ${petName}'s tag was scanned`,
             textBody: `${petName}'s dog tag was just scanned${locationLine} at ${when}.`,
             htmlBody: `<p><strong>${petName}'s</strong> dog tag was just scanned${locationLine}.</p><p>Time: ${when}</p>`,
@@ -222,18 +260,18 @@ export const reportDogTagScan = onCall(
             twilioSid: twilioSid.value(),
             twilioToken: twilioToken.value(),
             twilioFrom: twilioFrom.value(),
-          });
-        })
-      );
+          }))
+        );
 
-      const failures = results.filter((r) => r.status === "rejected").length;
-      logger.info("reportDogTagScan: notifications sent", {
-        petId,
-        tagId,
-        ownerId,
-        recipientCount: memberIds.length,
-        failures,
-      });
+        const failures = results.filter((r) => r.status === "rejected").length;
+        logger.info("reportDogTagScan: notifications sent", {
+          petId,
+          tagId,
+          ownerId: petOwnerId,
+          recipientCount: targets.length,
+          failures,
+        });
+      }
 
       await tag.ref.update({
         lastScanNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),

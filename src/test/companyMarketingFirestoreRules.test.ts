@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 const projectId = "hardy-hub-company-marketing-rules-test";
 let environment: RulesTestEnvironment;
@@ -54,6 +54,9 @@ describe("company marketing Firestore enforcement", () => {
           platform: "instagram",
           status: "connected",
           accountName: "Company",
+        }),
+        setDoc(doc(admin.firestore(), "companies", "company", "marketingAudits", "weekly"), {
+          headline: "Weekly PR audit",
         }),
       ]);
     });
@@ -126,6 +129,19 @@ describe("company marketing Firestore enforcement", () => {
     ));
     await assertFails(getDoc(
       doc(context("owner"), "marketingPlatformCredentials", "company_instagram"),
+    ));
+  });
+
+  it("lets editors read and delete audits but not write them from the browser", async () => {
+    await assertSucceeds(getDoc(
+      doc(context("editor"), "companies", "company", "marketingAudits", "weekly"),
+    ));
+    await assertFails(setDoc(
+      doc(context("owner"), "companies", "company", "marketingAudits", "forged"),
+      { headline: "Fake ranking report" },
+    ));
+    await assertSucceeds(deleteDoc(
+      doc(context("owner"), "companies", "company", "marketingAudits", "weekly"),
     ));
   });
 });

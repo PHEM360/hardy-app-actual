@@ -180,4 +180,28 @@ describe("DisplayPageRenderer", () => {
     expect(screen.getByText("Dentist")).toBeInTheDocument();
     expect(screen.getByText("Pack school bag")).toBeInTheDocument();
   });
+
+  it("shows uploaded photos and ignores ones that failed to load", () => {
+    const album: DisplayPage = {
+      id: "photos",
+      name: "Photos",
+      durationSeconds: 300,
+      background: "#09090b",
+      layout: "full",
+      widgets: [{ id: "photos-main", type: "photos", x: 0, y: 0, w: 12, h: 12, photoIds: [] }],
+    };
+    render(
+      <DisplayPageRenderer
+        page={album}
+        photos={[
+          { id: "ok", url: "https://cdn.example.com/garden.jpg", storagePath: "displayPhotos/owner/a.jpg", caption: "Garden", source: "upload", createdAt: null },
+          { id: "blank", url: "", storagePath: "displayPhotos/owner/b.jpg", caption: "Broken", source: "upload", createdAt: null },
+        ]}
+        calendarEvents={[]}
+        tasks={[]}
+      />,
+    );
+    expect(screen.getByAltText("Garden")).toBeInTheDocument();
+    expect(screen.queryByAltText("Broken")).not.toBeInTheDocument();
+  });
 });

@@ -27,6 +27,23 @@ import { Label } from "@/components/ui/label";
 import DogLoader from "@/components/DogLoader";
 import { toast } from "sonner";
 
+function localPasskeyNeedsDefaultPort() {
+  const { hostname, port } = window.location;
+  if (hostname !== "localhost" && hostname !== "127.0.0.1") return false;
+  return port !== "8080" && port !== "5173";
+}
+
+function LocalPasskeyPortNotice() {
+  if (!localPasskeyNeedsDefaultPort()) return null;
+  return (
+    <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+      This local copy is on port {window.location.port || "80"}. Open{" "}
+      <a className="font-semibold underline" href="http://localhost:8080/dashboard">http://localhost:8080</a>
+      {" "}to confirm your passkey.
+    </p>
+  );
+}
+
 function SecurityFrame({
   icon,
   title,
@@ -176,6 +193,7 @@ function AuthenticationPrompt({
 
   return (
     <SecurityFrame icon={<LockKeyhole className="h-7 w-7" />} title={title} description={description}>
+      <LocalPasskeyPortNotice />
       {showPasskey && (
         <>
           <Button
@@ -276,6 +294,7 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
         title="Create your passkey"
         description="A passkey is now required for every Hardy Hub account. It uses Face ID, your fingerprint, device PIN, or a security key."
       >
+        <LocalPasskeyPortNotice />
         <Button
           className="h-12 w-full rounded-xl bg-gradient-primary"
           disabled={registering || !passkeysSupported()}

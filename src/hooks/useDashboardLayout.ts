@@ -17,7 +17,8 @@ export type WidgetType =
   | "tattersalls"
   | "companies"
   | "weight"
-  | "notes";
+  | "notes"
+  | "messages";
 
 export interface WidgetLayoutItem {
   id: string;       // stable unique id (matches type for single-instance widgets)
@@ -45,6 +46,7 @@ export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { id: "companies",     type: "companies",     xFrac: 0,   wFrac: 0.5, y: 1460, h: 230,  visible: true  },
   { id: "weight",        type: "weight",        xFrac: 0.5, wFrac: 0.5, y: 1460, h: 230,  visible: true  },
   { id: "notes",         type: "notes",         xFrac: 0,   wFrac: 1.0, y: 1708, h: 230,  visible: false },
+  { id: "messages",      type: "messages",      xFrac: 0,   wFrac: 1.0, y: 1956, h: 240,  visible: true  },
 ];
 
 export const WIDGET_LABELS: Record<WidgetType, string> = {
@@ -60,6 +62,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   companies:     "Companies",
   weight:        "Health",
   notes:         "Notes",
+  messages:      "Family board",
 };
 
 export const WIDGET_ICONS: Record<WidgetType, string> = {
@@ -75,6 +78,7 @@ export const WIDGET_ICONS: Record<WidgetType, string> = {
   companies:     "🏢",
   weight:        "⚖️",
   notes:         "📝",
+  messages:      "💬",
 };
 
 // Bump whenever DEFAULT_LAYOUT's geometry (xFrac/wFrac/y/h) changes meaningfully.
@@ -86,10 +90,12 @@ const LAYOUT_VERSION = 3;
 // ─── Overlap resolution ───────────────────────────────────────────────────────
 
 const OVERLAP_GAP = 18;
+export const DASHBOARD_NOTE_WIDGET_H = 260;
 
 function resolveOverlaps(items: WidgetLayoutItem[]): WidgetLayoutItem[] {
-  // Only operate on visible items; sort by y so higher widgets take precedence
-  const sorted = [...items].sort((a, b) => a.y - b.y);
+  // Hidden widgets should not occupy space or push visible ones around.
+  const visible = items.filter((item) => item.visible);
+  const sorted = [...visible].sort((a, b) => a.y - b.y);
   const placed: WidgetLayoutItem[] = [];
 
   for (const item of sorted) {
@@ -115,6 +121,54 @@ function resolveOverlaps(items: WidgetLayoutItem[]): WidgetLayoutItem[] {
 
   // Map back preserving original order
   return items.map((orig) => placed.find((p) => p.id === orig.id) ?? orig);
+}
+
+export function isNotesPinnedFirst(layout: WidgetLayoutItem[]): boolean {
+  const notes = layout.find((w) => w.id === "notes");
+  return !!notes?.visible && notes.y === 0 && notes.wFrac === 1;
+}
+
+/** Show the notes widget full-width at the top and shift everything else down. */
+export function pinNotesWidgetFirst(layout: WidgetLayoutItem[]): WidgetLayoutItem[] {
+  const fallback = DEFAULT_LAYOUT.find((w) => w.id === "notes")!;
+  const notes = layout.find((w) => w.id === "notes") ?? fallback;
+  const others = layout.filter((w) => w.id !== "notes");
+  const alreadyFirst = notes.visible && notes.y === 0 && notes.wFrac === 1;
+  const first: WidgetLayoutItem = {
+    ...notes,
+    visible: true,
+    xFrac: 0,
+    wFrac: 1,
+    y: 0,
+    h: alreadyFirst ? notes.h : Math.max(notes.h, DASHBOARD_NOTE_WIDGET_H),
+  };
+  if (alreadyFirst) {
+    return resolveOverlaps(layout.map((w) => (w.id === "notes" ? first : w)));
+  }
+  const shifted = others.map((w) => ({ ...w, y: w.y + first.h + OVERLAP_GAP }));
+  return resolveOverlaps([first, ...shifted]);
+}
+
+/** Hide the notes widget and, if it was first, pull the rest back up. */
+export function unpinNotesWidget(layout: WidgetLayoutItem[]): WidgetLayoutItem[] {
+  const notes = layout.find((w) => w.id === "notes");
+  if (!notes) return layout;
+  const fallback = DEFAULT_LAYOUT.find((w) => w.id === "notes")!;
+  const wasFirst = notes.visible && notes.y === 0;
+  const parked: WidgetLayoutItem = {
+    ...notes,
+    visible: false,
+    xFrac: fallback.xFrac,
+    wFrac: fallback.wFrac,
+    y: fallback.y,
+    h: fallback.h,
+  };
+  const others = layout.filter((w) => w.id !== "notes");
+  if (!wasFirst) {
+    return layout.map((w) => (w.id === "notes" ? parked : w));
+  }
+  const shifted = others.map((w) => ({ ...w, y: Math.max(0, w.y - notes.h - OVERLAP_GAP) }));
+  return resolveOverlaps([parked, ...shifted]);
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -190,5 +244,30 @@ export function useDashboardLayout() {
     }
   }, [dataUid]);
 
-  return { layout, saveLayout, updateWidget, resetLayout, saving };
+  const persist = useCallback((next: WidgetLayoutItem[]) => {
+    if (dataUid) {
+      setDoc(doc(db, "dashboardLayouts", dataUid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
+    }
+  }, [dataUid]);
+
+  const pinNotesFirst = useCallback(() => {
+    setLayout((prev) => {
+      if (isNotesPinnedFirst(prev)) return prev;
+      const next = pinNotesWidgetFirst(prev);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  const unpinNotes = useCallback(() => {
+    setLayout((prev) => {
+      const notes = prev.find((w) => w.id === "notes");
+      if (!notes?.visible) return prev;
+      const next = unpinNotesWidget(prev);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  return { layout, saveLayout, updateWidget, resetLayout, pinNotesFirst, unpinNotes, saving };
 }

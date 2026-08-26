@@ -26,6 +26,7 @@ import { useNotes } from "@/hooks/useNotes";
 import { useNoteVault } from "@/hooks/useNoteVault";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useTasks } from "@/hooks/useTasks";
+import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { NoteEditor } from "@/components/notes/NoteEditor";
 import { ShareNoteDialog } from "@/components/notes/ShareNoteDialog";
 import { VaultGate } from "@/components/notes/VaultGate";
@@ -87,6 +88,7 @@ export default function Notes() {
   const vault = useNoteVault();
   const { events, addEvent, updateEvent } = useCalendar(scopeUserId ?? undefined);
   const { tasks } = useTasks(scopeUserId ?? undefined);
+  const { pinNotesFirst, unpinNotes } = useDashboardLayout();
   const canEdit = permission === "edit" && notesApi.canEdit;
 
   const [filter, setFilter] = useState<FilterId>("all");
@@ -138,6 +140,22 @@ export default function Notes() {
     }
   }, [params, setParams]);
 
+  useEffect(() => {
+    const noteId = params.get("note");
+    if (!noteId || notesApi.loading) return;
+    const found =
+      notesApi.notes.find((n) => n.id === noteId) ??
+      notesApi.sharedNotes.find((n) => n.id === noteId);
+    if (found) {
+      setCreatingKind(found.kind);
+      setActive(found);
+      setEditorOpen(true);
+    }
+    const next = new URLSearchParams(params);
+    next.delete("note");
+    setParams(next, { replace: true });
+  }, [params, setParams, notesApi.loading, notesApi.notes, notesApi.sharedNotes]);
+
   const openSecure = () => {
     setFilter("secure");
     if (!vault.unlocked) setVaultOpen(true);
@@ -186,23 +204,49 @@ export default function Notes() {
     setEditorOpen(true);
   };
 
-  const saveNote = async (patch: Partial<HubNote>) => {
+  const saveNote = async (
+    patch: Partial<HubNote>,
+    options?: { encryptWith?: string; decrypt?: boolean; showOnDashboard?: boolean },
+  ) => {
+    let noteId = active?.id;
     if (active) {
       await notesApi.updateNote(active, patch);
       if (patch.addToCalendar && (patch.dueDate || active.dueDate)) {
         await syncCalendar({ ...active, ...patch } as HubNote);
       }
+    } else {
+      noteId = await notesApi.addNote({
+        ...patch,
+        id: creatingId,
+        kind: patch.kind ?? creatingKind,
+        vault: filter === "secure",
+      });
+      if (patch.addToCalendar && patch.dueDate) {
+        await syncCalendar({ id: noteId, ownerId: notesApi.uid || "", ...patch } as HubNote);
+      }
+    }
+    if (typeof options?.showOnDashboard === "boolean" && noteId && isOwnScope) {
+      await syncDashboardNote(noteId, options.showOnDashboard);
+    }
+  };
+
+  const syncDashboardNote = async (noteId: string, on: boolean) => {
+    const current = notesApi.prefs.dashboardNoteId;
+    if (on) {
+      if (current !== noteId) await notesApi.savePrefs({ dashboardNoteId: noteId });
+      pinNotesFirst();
       return;
     }
-    const id = await notesApi.addNote({
-      ...patch,
-      id: creatingId,
-      kind: patch.kind ?? creatingKind,
-      vault: filter === "secure",
-    });
-    if (patch.addToCalendar && patch.dueDate) {
-      await syncCalendar({ id, ownerId: notesApi.uid || "", ...patch } as HubNote);
+    if (current === noteId) {
+      await notesApi.savePrefs({ dashboardNoteId: null });
+      unpinNotes();
     }
+  };
+
+  const clearDashboardNote = async (noteId: string) => {
+    if (notesApi.prefs.dashboardNoteId !== noteId) return;
+    await notesApi.savePrefs({ dashboardNoteId: null });
+    unpinNotes();
   };
 
   const syncCalendar = async (note: HubNote) => {
@@ -475,6 +519,7 @@ export default function Notes() {
                 listStyle={listStyle}
                 style={styleFor(n, i)}
                 canEdit={canEdit && !n.locked}
+                featured={notesApi.prefs.dashboardNoteId === n.id}
                 onOpen={() => openNote(n)}
                 onToggleItem={(itemId, done) => {
                   notesApi.updateNote(n, {
@@ -531,6 +576,7 @@ export default function Notes() {
                         listStyle={listStyle}
                         style={styleFor(n, i, col.notes.length)}
                         canEdit={canEdit && !n.locked}
+                        featured={notesApi.prefs.dashboardNoteId === n.id}
                         onOpen={() => openNote(n)}
                         onToggleItem={(itemId, done) => {
                           notesApi.updateNote(n, {
@@ -625,9 +671,13 @@ export default function Notes() {
         defaultKind={creatingKind}
         ownerId={active?.ownerId || notesApi.uid || ""}
         noteId={active?.id || creatingId}
+        showOnDashboard={!!active && notesApi.prefs.dashboardNoteId === active.id}
         onSave={saveNote}
         onDelete={async () => {
-          if (active) await notesApi.deleteNote(active);
+          if (active) {
+            await clearDashboardNote(active.id);
+            await notesApi.deleteNote(active);
+          }
           setEditorOpen(false);
         }}
         onShare={() => active && setShareTarget({ type: "note", note: active })}
@@ -638,6 +688,7 @@ export default function Notes() {
             toast.message("Unlock Secure Notes first, then move this note");
             return;
           }
+          await clearDashboardNote(active.id);
           await notesApi.moveNoteToVault(active);
           setEditorOpen(false);
           toast.success("Moved to Secure Notes");

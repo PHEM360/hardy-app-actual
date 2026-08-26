@@ -265,6 +265,7 @@ export interface MarketingProfile {
   disclaimers: string[];
   preferredHashtags: string[];
   competitors: string[];
+  currentThemes: string;
   platforms: SocialPlatform[];
   tradingNames: string[];
   relatedCompanyIds: string[];
@@ -361,6 +362,37 @@ export interface MarketingPlanRequest {
   platforms: SocialPlatform[];
   campaignId?: string;
   focus?: string;
+  includeImages?: boolean;
+}
+
+export interface MarketingAuditOpportunity {
+  title: string;
+  why: string;
+  action: string;
+  impact: "high" | "medium" | "low";
+}
+
+export interface MarketingAudit {
+  id?: string;
+  headline: string;
+  executiveSummary: string;
+  search: { demand: string; match: string; ranking: string; queries: string[] };
+  ads: { performance: string; caveats: string };
+  social: { performance: string; popularTopics: string[] };
+  website: { strengths: string[]; gaps: string[] };
+  opportunities: MarketingAuditOpportunity[];
+  sources: string[];
+  limitations: string[];
+  createdBy: string;
+  createdAt?: any;
+}
+
+export interface MarketingAuditRequest {
+  extraUrls: string;
+  searchNotes: string;
+  adsNotes: string;
+  socialNotes: string;
+  otherNotes: string;
 }
 
 export interface MarketingPlatformConnection {

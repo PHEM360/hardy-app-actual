@@ -25,7 +25,12 @@ describe("remote display Firestore enforcement", () => {
       await Promise.all([
         setDoc(doc(admin.firestore(), "users", "owner"), { passkeyEnrolled: true }),
         setDoc(doc(admin.firestore(), "users", "other"), { passkeyEnrolled: true }),
-        setDoc(doc(admin.firestore(), "devices", "kitchen"), { uid: "owner", revoked: false, label: "Kitchen" }),
+        setDoc(doc(admin.firestore(), "devices", "kitchen"), {
+          uid: "owner",
+          revoked: false,
+          label: "Kitchen",
+          settings: { alarms: [], nightMode: { scheduleEnabled: true, start: "21:00", end: "07:00", screen: "clock", override: "", overrideUntil: "", withAlarms: true } },
+        }),
         setDoc(doc(admin.firestore(), "displayPhotos", "owner", "items", "photo"), { url: "https://example.com/photo.jpg" }),
         setDoc(doc(admin.firestore(), "tasks", "owner", "items", "task"), { title: "Put bins out" }),
         setDoc(doc(admin.firestore(), "calendar", "owner", "events", "event"), { title: "Dentist" }),
@@ -54,6 +59,23 @@ describe("remote display Firestore enforcement", () => {
     await assertFails(getDoc(doc(display, "finance", "owner", "accounts", "main")));
     await assertFails(updateDoc(doc(display, "tasks", "owner", "items", "task"), { title: "Changed" }));
     await assertFails(updateDoc(doc(display, "devices", "kitchen"), { label: "Changed at the screen" }));
+  });
+
+  it("lets the screen itself toggle night mode without rewriting pages", async () => {
+    const display = context("owner", { deviceId: "kitchen" });
+    await assertSucceeds(updateDoc(doc(display, "devices", "kitchen"), {
+      settings: {
+        alarms: [],
+        nightMode: { scheduleEnabled: true, start: "21:00", end: "07:00", screen: "clock", override: "on", overrideUntil: "", withAlarms: true },
+      },
+    }));
+    await assertFails(updateDoc(doc(display, "devices", "kitchen"), {
+      settings: {
+        alarms: [],
+        nightMode: { scheduleEnabled: true, start: "21:00", end: "07:00", screen: "clock", override: "on", overrideUntil: "", withAlarms: true },
+        pages: [{ id: "hack" }],
+      },
+    }));
   });
 
   it("cuts off the complete display session after revocation", async () => {

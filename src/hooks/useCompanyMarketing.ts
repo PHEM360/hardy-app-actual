@@ -17,6 +17,7 @@ import { approvalResetForMarketingEdit } from "@/lib/marketingContent";
 import type {
   ContentPiece,
   MarketingAsset,
+  MarketingAudit,
   MarketingCampaign,
   MarketingPlatformConnection,
   MarketingProfile,
@@ -32,6 +33,7 @@ export const DEFAULT_MARKETING_PROFILE: MarketingProfile = {
   disclaimers: [],
   preferredHashtags: [],
   competitors: [],
+  currentThemes: "",
   platforms: ["instagram", "facebook", "linkedin"],
   tradingNames: [],
   relatedCompanyIds: [],
@@ -74,6 +76,7 @@ export function useCompanyMarketing(companyId: string | undefined) {
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [assets, setAssets] = useState<MarketingAsset[]>([]);
   const [connections, setConnections] = useState<MarketingPlatformConnection[]>([]);
+  const [audits, setAudits] = useState<MarketingAudit[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -82,7 +85,7 @@ export function useCompanyMarketing(companyId: string | undefined) {
       return;
     }
 
-    let remaining = 5;
+    let remaining = 6;
     const ready = () => {
       remaining -= 1;
       if (remaining <= 0) setLoading(false);
@@ -122,6 +125,14 @@ export function useCompanyMarketing(companyId: string | undefined) {
         collection(db, "companies", companyId, "platformConnections"),
         (snapshot) => {
           setConnections(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as MarketingPlatformConnection)));
+          ready();
+        },
+        ready,
+      ),
+      onSnapshot(
+        query(collection(db, "companies", companyId, "marketingAudits"), orderBy("createdAt", "desc")),
+        (snapshot) => {
+          setAudits(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as MarketingAudit)));
           ready();
         },
         ready,
@@ -232,12 +243,18 @@ export function useCompanyMarketing(companyId: string | undefined) {
     await deleteDoc(doc(db, "companies", companyId, "marketingAssets", asset.id));
   }, [companyId]);
 
+  const deleteAudit = useCallback(async (id: string) => {
+    if (!companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "marketingAudits", id));
+  }, [companyId]);
+
   return {
     profile,
     content,
     campaigns,
     assets,
     connections,
+    audits,
     loading,
     saveProfile,
     addCampaign,
@@ -249,5 +266,6 @@ export function useCompanyMarketing(companyId: string | undefined) {
     uploadAssets,
     updateAsset,
     deleteAsset,
+    deleteAudit,
   };
 }

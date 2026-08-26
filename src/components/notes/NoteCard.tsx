@@ -1,4 +1,4 @@
-import { CheckSquare, GitBranch, Lock, PenLine, Pin } from "lucide-react";
+import { CheckSquare, GitBranch, Home, Lock, PenLine, Pin } from "lucide-react";
 import type { HubNote, NotesListStyle } from "@/types/notes";
 import { NOTE_CATEGORIES } from "@/types/notes";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
@@ -11,6 +11,7 @@ export function NoteCard({
   onOpen,
   onToggleItem,
   canEdit,
+  featured,
 }: {
   note: HubNote;
   style?: React.CSSProperties;
@@ -18,6 +19,7 @@ export function NoteCard({
   onOpen: () => void;
   onToggleItem?: (itemId: string, done: boolean) => void;
   canEdit?: boolean;
+  featured?: boolean;
 }) {
   const filled = listStyle === "filled";
   const compact = listStyle === "compact";
@@ -39,15 +41,23 @@ export function NoteCard({
     >
       <div className={`mb-2 flex items-center gap-1.5 ${filled ? "text-stone-700/70" : "text-foreground/55"}`}>
         {note.pinned && <Pin className="h-3.5 w-3.5 fill-current" />}
+        {featured && <Home className="h-3.5 w-3.5" />}
         {note.locked && <Lock className="h-3.5 w-3.5" />}
         {items.length > 0 && <CheckSquare className="h-3.5 w-3.5" />}
         {note.diagram?.nodes?.length ? <GitBranch className="h-3.5 w-3.5" /> : null}
         {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
-        {cat && (
-          <span className="ml-auto rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-            {cat.label}
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1">
+          {featured && (
+            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+              Dashboard
+            </span>
+          )}
+          {cat && (
+            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+              {cat.label}
+            </span>
+          )}
+        </span>
       </div>
       <p className={`font-display font-bold leading-snug ${compact ? "text-sm" : "text-base"}`}>
         {note.locked ? "Locked note" : note.title || "Untitled"}
