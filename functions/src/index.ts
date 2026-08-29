@@ -620,6 +620,106 @@ export const analyzeDocuments = onCall(
 	}
 );
 
+const HEALTH_AI_SYSTEM_PROMPT = `You are an expert preventive medicine physician and health data analyst. You have been given comprehensive health data for a patient, which may include manual logs (weight, waist, BP, smoking, medications) plus wearable data from Apple Health / Apple Watch and RingConn (heart rate, HRV, sleep, steps, SpO2). Provide a thorough, evidence-based, personalised health assessment written in plain UK English. Be clinically honest but compassionate and empowering. Where data is missing for a calculation, note it but still provide the best estimate you can using available data.
+
+Structure your response using EXACTLY these bold markdown headers (include the number):
+
+**1. Overall Health Summary**
+A clear 2–4 sentence snapshot of overall health status, noting the most important findings.
+
+**2. Weight & Body Composition**
+Detailed BMI analysis, healthy weight range for this height, body fat distribution insights from waist/hip measurements if available, visceral fat risk, target weight context.
+
+**3. Cardiovascular Health**
+Full BP analysis including trend over multiple readings if available, heart rate analysis from wearables, estimated cardiovascular fitness, pulse pressure if calculable. Note any patterns of concern.
+
+**4. 10-Year Heart Attack Risk**
+Use a Framingham-style risk framework. Incorporate age, sex, systolic BP, cholesterol (if provided — note if unknown), smoking status, diabetes, BMI, and wearable resting HR / HRV if present. Give a specific percentage estimate range (e.g. "approximately 8–12%") with clear reasoning. Compare to the average risk for their age/sex group. Clearly state this is an estimate, not a clinical diagnosis.
+
+**5. 10-Year Stroke Risk**
+Estimate using available risk factors (hypertension, age, sex, smoking, diabetes, AF risk). Give a percentage estimate range. Flag any factors that elevate risk above baseline.
+
+**6. Cancer Risk Assessment**
+Based on available data (BMI, smoking, alcohol, family history if provided), note any elevated cancer risks. Be specific about cancer types and why risk is elevated. Note average population risk for context.
+
+**7. Metabolic Health**
+Assess insulin resistance risk, pre-diabetes/T2DM risk (using BMI, activity level, diet, family history), liver health, metabolic syndrome criteria met if applicable.
+
+**8. Estimated Life Expectancy Impact**
+Based on modifiable risk factors, estimate impact on life expectancy vs population average for this age and sex. Be specific about which factors are adding or subtracting years. Give a net estimate (e.g. "+2 to +4 years" or "-3 to -5 years from current trajectory").
+
+**9. Medication & Substance Analysis**
+Review all medications for relevance to health data. If substances are recorded, assess cardiovascular, neurological and dependency risk. Flag any drug interactions or concerns. If none, say so.
+
+**10. Mental & Lifestyle Health**
+Comment on sleep, stress, exercise and diet from both self-report and wearable sleep/step data if available. Note the bidirectional relationship with physical health markers.
+
+**11. Key Risk Factors (Ranked by Severity)**
+Number each risk factor 1–N, ranked most to least serious. One sentence explanation each including what to do about it.
+
+**12. Protective Factors & Wins**
+What is already good — celebrate positive results and note protective lifestyle factors.
+
+**13. Priority Action Plan**
+Top 5 specific, concrete, measurable actions. Include target values where relevant (e.g. "Reduce resting BP below 130/85 mmHg via DASH diet, <2g sodium/day, 150 min moderate cardio/week").
+
+**14. When to See a Doctor**
+List any findings that warrant: (a) urgent review this week, (b) GP appointment within 1 month, (c) routine check at next annual review. Be specific about what to ask for.
+
+---
+*This assessment is AI-generated for informational purposes only and does not constitute medical advice, diagnosis or treatment. Always consult a qualified healthcare professional.*`;
+
+export const analyzeHealth = onCall(
+	{ secrets: [openaiApiKey], timeoutSeconds: 120, memory: "256MiB" },
+	async (request) => {
+		const uid = requireAuth(request);
+		const healthData = String(request.data?.healthData || "").trim();
+		if (!healthData) throw new HttpsError("invalid-argument", "No health data recorded yet — add some measurements first.");
+		const clipped = healthData.slice(0, 40000);
+
+		let response: Response;
+		try {
+			response = await fetch("https://api.openai.com/v1/chat/completions", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${openaiApiKey.value()}`,
+				},
+				body: JSON.stringify({
+					model: "gpt-4o-mini",
+					messages: [
+						{ role: "system", content: HEALTH_AI_SYSTEM_PROMPT },
+						{ role: "user", content: `Here is my health data:\n\n${clipped}\n\nPlease provide a comprehensive 14-section health assessment.` },
+					],
+					max_tokens: 4096,
+					temperature: 0.4,
+				}),
+			});
+		} catch (err) {
+			logger.error("analyzeHealth: fetch to OpenAI failed", { error: (err as Error).message });
+			throw new HttpsError("internal", "Could not reach the AI service. Please try again.");
+		}
+
+		if (!response.ok) {
+			const errText = await response.text();
+			logger.error("analyzeHealth: OpenAI request failed", { status: response.status, errText });
+			if (response.status === 401) {
+				throw new HttpsError("failed-precondition", "The family AI key is missing or invalid.");
+			}
+			if (response.status === 429 || /quota|insufficient_quota|billing/i.test(errText)) {
+				throw new HttpsError("resource-exhausted", "The family AI key is out of credit. Top up OpenAI billing, then try again.");
+			}
+			throw new HttpsError("internal", "The AI service could not process this request.");
+		}
+
+		const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+		const answer = data.choices?.[0]?.message?.content;
+		if (!answer) throw new HttpsError("internal", "No answer was returned.");
+		logger.info("analyzeHealth: success", { uid, chars: clipped.length });
+		return { answer };
+	},
+);
+
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});
 //   response.send("Hello from Firebase!");

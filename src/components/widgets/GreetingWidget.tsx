@@ -13,7 +13,7 @@ function firstNameOf(profileFirst: string | undefined, displayName: string | und
   return (email || "").split("@")[0] || "";
 }
 
-export function GreetingWidget() {
+export function GreetingWidget({ className }: { className?: string } = {}) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const appearance = useAppearance();
@@ -37,7 +37,7 @@ export function GreetingWidget() {
 
   return (
     <div
-      className="relative w-full h-full p-4 flex items-center overflow-hidden rounded-2xl"
+      className={`relative w-full h-full p-4 flex items-center overflow-hidden rounded-2xl ${className ?? ""}`}
       style={{ background: color || "var(--gradient-hero)" }}
     >
       {photoUrl && <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none" />}

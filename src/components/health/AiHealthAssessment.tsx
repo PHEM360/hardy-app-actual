@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useAiConfig } from "@/hooks/useAiConfig";
+import { runHealthAiAssessment } from "@/lib/healthAiApi";
+import { summarizeWearableDays, type WearableDaily } from "@/lib/wearableImport";
 import { differenceInDays, startOfDay, parseISO, format } from "date-fns";
 import type { WeightEntry, HeightEntry, BPEntry, MeasurementEntry } from "@/hooks/useWeightTracker";
 import type { Medication } from "@/hooks/useMeds";
@@ -43,6 +44,7 @@ interface Props {
   medications: Medication[];
   profile?: HealthProfile;
   substanceLogs?: SubstanceLog[];
+  wearableDays?: WearableDaily[];
 }
 
 function bmiLabel(bmi: number): string {
@@ -123,9 +125,8 @@ function DataBadge({ label, value, icon }: { label: string; value: boolean; icon
 }
 
 export default function AiHealthAssessment({
-  entries, heightEntries, bpEntries, measurements, medications, profile, substanceLogs,
+  entries, heightEntries, bpEntries, measurements, medications, profile, substanceLogs, wearableDays = [],
 }: Props) {
-  const { callGemini, loading: keyLoading, apiKey } = useAiConfig();
   const [assessment, setAssessment] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +154,7 @@ export default function AiHealthAssessment({
     meds:        medications.length > 0,
     history:     !!(profile?.pastConditions?.length || profile?.familyHistory?.length),
     substances:  !!(substanceLogs && substanceLogs.length > 0),
+    wearables:   wearableDays.length > 0,
   };
   const dataCount = Object.values(dataAvailable).filter(Boolean).length;
 
@@ -249,8 +251,11 @@ export default function AiHealthAssessment({
     if (extra.pregnant)          lines.push(`Currently pregnant: Yes`);
     if (extra.recentIllness)     lines.push(`Recent illness/surgery: ${extra.recentIllness}`);
 
+    const wearableSummary = summarizeWearableDays(wearableDays);
+    if (wearableSummary) lines.push(wearableSummary);
+
     return lines.join("\n");
-  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries, profile, substanceLogs, extra, age, activeMeds]);
+  }, [latestWeight, latestHeight, bmi, latestBP, latestMeas, medications, bpEntries, entries, profile, substanceLogs, extra, age, activeMeds, wearableDays]);
 
   const run = async () => {
     setRunning(true);
@@ -263,73 +268,17 @@ export default function AiHealthAssessment({
         return;
       }
 
-      const systemPrompt = `You are an expert preventive medicine physician and health data analyst. You have been given comprehensive health data for a patient. Provide a thorough, evidence-based, personalised health assessment written in plain UK English. Be clinically honest but compassionate and empowering. Where data is missing for a calculation, note it but still provide the best estimate you can using available data.
-
-Structure your response using EXACTLY these bold markdown headers (include the number):
-
-**1. Overall Health Summary**
-A clear 2–4 sentence snapshot of overall health status, noting the most important findings.
-
-**2. Weight & Body Composition**
-Detailed BMI analysis, healthy weight range for this height, body fat distribution insights from waist/hip measurements if available, visceral fat risk, target weight context.
-
-**3. Cardiovascular Health**
-Full BP analysis including trend over multiple readings if available, heart rate analysis, estimated cardiovascular fitness, pulse pressure if calculable. Note any patterns of concern.
-
-**4. 10-Year Heart Attack Risk**
-Use a Framingham-style risk framework. Incorporate age, sex, systolic BP, cholesterol (if provided — note if unknown), smoking status, diabetes, BMI. Give a specific percentage estimate range (e.g. "approximately 8–12%") with clear reasoning. Compare to the average risk for their age/sex group. Clearly state this is an estimate, not a clinical diagnosis.
-
-**5. 10-Year Stroke Risk**
-Estimate using available risk factors (hypertension, age, sex, smoking, diabetes, AF risk). Give a percentage estimate range. Flag any factors that elevate risk above baseline.
-
-**6. Cancer Risk Assessment**
-Based on available data (BMI, smoking, alcohol, family history if provided), note any elevated cancer risks. Be specific about cancer types and why risk is elevated. Note average population risk for context.
-
-**7. Metabolic Health**
-Assess insulin resistance risk, pre-diabetes/T2DM risk (using BMI, activity level, diet, family history), liver health, metabolic syndrome criteria met if applicable.
-
-**8. Estimated Life Expectancy Impact**
-Based on modifiable risk factors, estimate impact on life expectancy vs population average for this age and sex. Be specific about which factors are adding or subtracting years. Give a net estimate (e.g. "+2 to +4 years" or "-3 to -5 years from current trajectory").
-
-**9. Medication & Substance Analysis**
-Review all medications for relevance to health data. If substances are recorded, assess cardiovascular, neurological and dependency risk. Flag any drug interactions or concerns. If none, say so.
-
-**10. Mental & Lifestyle Health**
-Comment on sleep, stress, exercise and diet if data is available. Note the bidirectional relationship with physical health markers.
-
-**11. Key Risk Factors (Ranked by Severity)**
-Number each risk factor 1–N, ranked most to least serious. One sentence explanation each including what to do about it.
-
-**12. Protective Factors & Wins**
-What is already good — celebrate positive results and note protective lifestyle factors.
-
-**13. Priority Action Plan**
-Top 5 specific, concrete, measurable actions. Include target values where relevant (e.g. "Reduce resting BP below 130/85 mmHg via DASH diet, <2g sodium/day, 150 min moderate cardio/week").
-
-**14. When to See a Doctor**
-List any findings that warrant: (a) urgent review this week, (b) GP appointment within 1 month, (c) routine check at next annual review. Be specific about what to ask for.
-
----
-*This assessment is AI-generated for informational purposes only and does not constitute medical advice, diagnosis or treatment. Always consult a qualified healthcare professional.*`;
-
-      const result = await callGemini(
-        systemPrompt,
-        `Here is my health data:\n\n${data}\n\nPlease provide a comprehensive 14-section health assessment.`,
-      );
+      const result = await runHealthAiAssessment(data);
       setAssessment(result);
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
     } catch (e: any) {
-      setError(
-        e?.message === "NO_KEY"
-          ? "Gemini API key not configured. Go to Settings → AI Configuration to add your key."
-          : (e?.message ?? "Assessment failed. Please try again."),
-      );
+      setError(e?.message ?? "Assessment failed. Please try again.");
     } finally {
       setRunning(false);
     }
   };
 
-  const hasData = !!(latestWeight || latestBP || latestHeight);
+  const hasData = !!(latestWeight || latestBP || latestHeight || wearableDays.length);
 
   return (
     <div className="space-y-5 pb-6">
@@ -357,7 +306,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
               : dataCount >= 3 ? "bg-yellow-100 text-yellow-700"
               : "bg-red-100 text-red-600"
             }`}>
-              {dataCount}/8 categories
+              {dataCount}/9 categories
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -369,6 +318,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
             <DataBadge label="Medications"  value={dataAvailable.meds}         icon={<Pill className="w-3 h-3 mr-0.5" />} />
             <DataBadge label="Med History"  value={dataAvailable.history}      icon={<ClipboardList className="w-3 h-3 mr-0.5" />} />
             <DataBadge label="Substances"   value={dataAvailable.substances}   icon={<FlaskConical className="w-3 h-3 mr-0.5" />} />
+            <DataBadge label="Watch / Ring" value={dataAvailable.wearables}    icon={<Heart className="w-3 h-3 mr-0.5" />} />
           </div>
         </div>
 
@@ -403,12 +353,6 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
         )}
 
         {/* Notices */}
-        {!apiKey && (
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mb-3 text-xs text-amber-700">
-            <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>OpenAI API key not set. Go to <strong>Settings → AI Configuration</strong> to add your key from <strong>platform.openai.com</strong>.</span>
-          </div>
-        )}
         {!hasData && (
           <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/50 border border-border/40 mb-3 text-xs text-muted-foreground">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
@@ -563,7 +507,7 @@ List any findings that warrant: (a) urgent review this week, (b) GP appointment 
 
         <Button
           onClick={run}
-          disabled={running || keyLoading || !hasData || !apiKey}
+          disabled={running || !hasData}
           className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-2 text-sm"
         >
           {running

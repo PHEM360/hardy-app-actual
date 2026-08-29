@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck, LayoutGrid } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import { useSecuritySettings } from "@/hooks/useSecuritySettings";
 import { authenticateWithPasskey, passkeyErrorMessage, registerPasskey } from "@/lib/passkeys";
 import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } from "@/types/security";
 import { toast } from "sonner";
+import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
+import type { HomeLayoutMode } from "@/lib/homeLayout";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -452,6 +454,29 @@ const Settings = () => {
           </div>
           <span className="text-muted-foreground text-lg leading-none">›</span>
         </button>
+      </div>
+
+      {/* Home layout */}
+      <div className="mb-5">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-teal-600 flex items-center justify-center text-white">
+            <LayoutGrid className="w-3 h-3" />
+          </span>
+          Home
+        </h3>
+        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft">
+          <p className="text-sm font-medium text-card-foreground">Home screen</p>
+          <p className="mb-3 text-[10px] text-muted-foreground">Today’s planner, or a welcome plus page tiles you can rearrange.</p>
+          <HomeLayoutChooser
+            title=""
+            description=""
+            value={profile?.homeLayout}
+            onChoose={(mode: HomeLayoutMode) => {
+              void saveProfile({ homeLayout: mode });
+              toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
+            }}
+          />
+        </div>
       </div>
 
       {/* Appearance */}

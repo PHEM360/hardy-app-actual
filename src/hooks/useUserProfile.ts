@@ -3,6 +3,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import type { FeatureKey } from "@/types/app";
+import type { HomeLayoutMode, HomeTilesState } from "@/lib/homeLayout";
 
 export interface UserProfile {
   uid: string;
@@ -40,6 +41,8 @@ export interface UserProfile {
     greetingMatchHeader?: boolean;
   };
   quickLinks?: string[];
+  homeLayout?: HomeLayoutMode;
+  homeTiles?: HomeTilesState;
 }
 
 export function useUserProfile() {
@@ -89,6 +92,8 @@ export function useUserProfile() {
           navItems: Array.isArray(data.navItems) ? data.navItems : undefined,
           appearance: data.appearance && typeof data.appearance === "object" ? data.appearance : undefined,
           quickLinks: Array.isArray(data.quickLinks) ? data.quickLinks : undefined,
+          homeLayout: data.homeLayout === "today" || data.homeLayout === "tiles" ? data.homeLayout : undefined,
+          homeTiles: data.homeTiles && typeof data.homeTiles === "object" ? data.homeTiles : undefined,
         });
         setLoading(false);
       },

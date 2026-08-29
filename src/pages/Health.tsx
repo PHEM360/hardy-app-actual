@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain, FolderOpen, FileText, Download, Upload } from "lucide-react";
+import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain, FolderOpen, FileText, Download, Upload, Watch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,11 @@ import HealthMeds from "@/components/health/HealthMeds";
 import HealthSubstances from "@/components/health/HealthSubstances";
 import HealthCustomTab from "@/components/health/HealthCustomTab";
 import AiHealthAssessment from "@/components/health/AiHealthAssessment";
+import HealthWearables from "@/components/health/HealthWearables";
 import { useWeightTracker } from "@/hooks/useWeightTracker";
 import { useMeds } from "@/hooks/useMeds";
+import { useSubstances } from "@/hooks/useSubstances";
+import { useWearableHealth } from "@/hooks/useWearableHealth";
 import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
 import { useHealthProfile } from "@/hooks/useHealthProfile";
 import { useDocuments } from "@/hooks/useDocuments";
@@ -117,7 +120,7 @@ function MiniSparkline({
   );
 }
 
-type CoreTab = "overview" | "metrics" | "meds" | "substances" | "ai" | "documents";
+type CoreTab = "overview" | "metrics" | "meds" | "substances" | "wearables" | "ai" | "documents";
 
 export default function Health() {
   const { scopeUserId, pageTitle, isOwnScope } = useSharedScope("health");
@@ -125,6 +128,8 @@ export default function Health() {
   const { medications } = useMeds(scopeUserId ?? undefined);
   const { tabs, addTab, deleteTab } = useHealthTabs(scopeUserId ?? undefined);
   const { profile, saveProfile } = useHealthProfile(scopeUserId ?? undefined);
+  const { logs: substanceLogs } = useSubstances();
+  const { days: wearableDays } = useWearableHealth(scopeUserId ?? undefined);
 
   // Documents aren't part of the "health" share grain (the same collection is
   // also used for non-health quick links), so this always stays scoped to self.
@@ -166,6 +171,7 @@ export default function Health() {
     { id: "metrics",     label: "Weight & Stats",  icon: <Activity className="w-4 h-4" /> },
     { id: "meds",        label: "Medications",     icon: <Pill className="w-4 h-4" /> },
     { id: "substances",  label: "Substances",      icon: <FlaskConical className="w-4 h-4" /> },
+    { id: "wearables",   label: "Watch & Ring",    icon: <Watch className="w-4 h-4" /> },
     { id: "ai",          label: "AI Analysis",     icon: <Brain className="w-4 h-4" /> },
     { id: "documents",   label: "Documents",       icon: <FolderOpen className="w-4 h-4" /> },
   ];
@@ -415,6 +421,7 @@ export default function Health() {
           {activeTab === "metrics" && <HealthMetrics scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "meds"    && <HealthMeds scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "substances" && <HealthSubstances />}
+          {activeTab === "wearables" && <HealthWearables scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "ai" && (
             <AiHealthAssessment
               entries={entries}
@@ -423,6 +430,8 @@ export default function Health() {
               measurements={measurements}
               medications={medications}
               profile={profile}
+              substanceLogs={substanceLogs}
+              wearableDays={wearableDays}
             />
           )}
 
