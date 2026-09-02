@@ -35,12 +35,14 @@ import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
 import AnnualLeave from "@/pages/AnnualLeave";
+import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
 import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
 import AiAnalysis from "@/pages/AiAnalysis";
+import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -78,7 +80,10 @@ const App = () => (
           <Route path="/p/:slug" element={<TagScanBySlug />} />
           <Route path="/l/:slug" element={<LinkRedirect />} />
           {import.meta.env.DEV && (
-            <Route path="/dev/finance-preview" element={<FinancePreview />} />
+            <>
+              <Route path="/dev/finance-preview" element={<FinancePreview />} />
+              <Route path="/dev/holidays-preview" element={<HolidaysPreview />} />
+            </>
           )}
           <Route
             element={
@@ -226,6 +231,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="annual_leave">
                   <AnnualLeave />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/holidays"
+              element={
+                <RequireFeature featureKey="holidays">
+                  <Holidays />
                 </RequireFeature>
               }
             />

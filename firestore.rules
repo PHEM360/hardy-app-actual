@@ -734,6 +734,21 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "annual_leave");
     }
 
+    // Holidays price watches - per user, shareable via pageShares
+    match /holidays/{userId}/watches/{watchId} {
+      allow read: if canViewPage(userId, "holidays");
+      allow write: if canEditPage(userId, "holidays");
+
+      match /prices/{priceId} {
+        allow read: if canViewPage(userId, "holidays");
+        allow write: if canEditPage(userId, "holidays");
+      }
+    }
+    match /holidays/{userId}/meta/{docId} {
+      allow read: if canViewPage(userId, "holidays");
+      allow write: if canEditPage(userId, "holidays");
+    }
+
     // Substances config - TOTP setup per user - strictly private, never shared
     match /substancesConfig/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();

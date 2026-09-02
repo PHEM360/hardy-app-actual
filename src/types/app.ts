@@ -15,6 +15,7 @@ export type FeatureKey =
   | "calendar"
   | "ai_analysis"
   | "annual_leave"
+  | "holidays"
   | "notes"
   | "admin";
 
@@ -165,6 +166,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "plane",
     route: "/annual-leave",
     color: "info",
+  },
+  {
+    key: "holidays",
+    label: "Holidays",
+    description: "Watch travel sites for the best holiday price",
+    icon: "palmtree",
+    route: "/holidays",
+    color: "success",
   },
   {
     key: "notes",

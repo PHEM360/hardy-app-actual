@@ -119,6 +119,9 @@ export {
 // ── Dog tags (Pets page) ──
 export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
 
+// ── Holidays price watches ──
+export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";
+
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
 	await requireSuperAdmin(uid, request.auth?.token?.email);
