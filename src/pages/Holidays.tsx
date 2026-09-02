@@ -401,6 +401,10 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
     setDefaultIntervalUnit(settings.defaultSearchIntervalUnit);
   }, [settings.defaultSearchIntervalAmount, settings.defaultSearchIntervalUnit]);
 
+  useEffect(() => {
+    if (!selectedId && watches[0]?.id) setSelectedId(watches[0].id);
+  }, [watches, selectedId]);
+
   const selected = watches.find((w) => w.id === selectedId) || null;
 
   const visible = useMemo(
@@ -604,6 +608,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                             watch={w}
                             accent={HOLIDAY_ACCENT}
                             selected={selectedId === w.id}
+                            canEdit={canEdit}
                             onSelect={() => setSelectedId(w.id || null)}
                             onEdit={() => openEdit(w)}
                             onTogglePause={() =>
