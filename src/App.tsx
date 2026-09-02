@@ -42,6 +42,7 @@ import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
 import AiAnalysis from "@/pages/AiAnalysis";
+import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -79,7 +80,10 @@ const App = () => (
           <Route path="/p/:slug" element={<TagScanBySlug />} />
           <Route path="/l/:slug" element={<LinkRedirect />} />
           {import.meta.env.DEV && (
-            <Route path="/dev/finance-preview" element={<FinancePreview />} />
+            <>
+              <Route path="/dev/finance-preview" element={<FinancePreview />} />
+              <Route path="/dev/holidays-preview" element={<HolidaysPreview />} />
+            </>
           )}
           <Route
             element={

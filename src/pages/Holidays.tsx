@@ -30,14 +30,23 @@ import { runHolidayPriceSearch } from "@/lib/holidaysApi";
 import {
   BOARD_BASIS_LABELS,
   DATE_MODE_LABELS,
+  DEFAULT_HOLIDAY_SETTINGS,
   FLIGHT_BOOKING_LABELS,
   FLIGHT_CLASS_LABELS,
   HOLIDAY_ACCENT,
   MONTH_LABELS,
+  type HolidayPriceFinding,
+  type HolidaySettings,
   type HolidayWatch,
 } from "@/types/holidays";
 
 type RailSection = "watches" | "best" | "settings";
+
+export interface HolidaysMockData {
+  watches: HolidayWatch[];
+  pricesByWatchId?: Record<string, HolidayPriceFinding[]>;
+  settings?: HolidaySettings;
+}
 
 function fmtMoney(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -75,6 +84,7 @@ function WatchCard({
   watch,
   accent,
   selected,
+  canEdit,
   onSelect,
   onEdit,
   onTogglePause,
@@ -86,6 +96,7 @@ function WatchCard({
   watch: HolidayWatch;
   accent: string;
   selected: boolean;
+  canEdit: boolean;
   onSelect: () => void;
   onEdit: () => void;
   onTogglePause: () => void;
@@ -157,40 +168,42 @@ function WatchCard({
         </div>
       </div>
 
-      <div
-        className="mt-3 flex flex-wrap gap-1.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button
-          size="sm"
-          className="h-8 rounded-xl bg-gradient-primary text-primary-foreground border-0"
-          disabled={searching || watch.status === "archived"}
-          onClick={onSearch}
+      {canEdit && (
+        <div
+          className="mt-3 flex flex-wrap gap-1.5"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Search className="mr-1 h-3.5 w-3.5" />
-          {searching ? "Searching…" : "Search now"}
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onEdit}>
-          <Pencil className="mr-1 h-3.5 w-3.5" />
-          Edit
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onTogglePause}>
-          {paused ? <Play className="mr-1 h-3.5 w-3.5" /> : <Pause className="mr-1 h-3.5 w-3.5" />}
-          {paused ? "Resume" : "Pause"}
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onArchive}>
-          <Archive className="mr-1 h-3.5 w-3.5" />
-          Archive
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 rounded-xl text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+          <Button
+            size="sm"
+            className="h-8 rounded-xl bg-gradient-primary text-primary-foreground border-0"
+            disabled={searching || watch.status === "archived"}
+            onClick={onSearch}
+          >
+            <Search className="mr-1 h-3.5 w-3.5" />
+            {searching ? "Searching…" : "Search now"}
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onEdit}>
+            <Pencil className="mr-1 h-3.5 w-3.5" />
+            Edit
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onTogglePause}>
+            {paused ? <Play className="mr-1 h-3.5 w-3.5" /> : <Pause className="mr-1 h-3.5 w-3.5" />}
+            {paused ? "Resume" : "Pause"}
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 rounded-xl" onClick={onArchive}>
+            <Archive className="mr-1 h-3.5 w-3.5" />
+            Archive
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 rounded-xl text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
     </motion.button>
   );
 }
@@ -198,10 +211,14 @@ function WatchCard({
 function PriceHistoryPanel({
   watch,
   scopeUserId,
+  mockPrices,
+  canEdit,
   onLogPrice,
 }: {
   watch: HolidayWatch;
   scopeUserId?: string;
+  mockPrices?: HolidayPriceFinding[];
+  canEdit: boolean;
   onLogPrice: (data: {
     priceGbp: number;
     sourceName: string;
@@ -209,7 +226,9 @@ function PriceHistoryPanel({
     notes?: string;
   }) => Promise<void>;
 }) {
-  const { prices, loading } = useHolidayPrices(watch.id || null, scopeUserId);
+  const live = useHolidayPrices(watch.id || null, scopeUserId);
+  const prices = mockPrices ?? live.prices;
+  const loading = mockPrices ? false : live.loading;
   const [price, setPrice] = useState("");
   const [source, setSource] = useState("");
   const [url, setUrl] = useState("");
@@ -263,46 +282,48 @@ function PriceHistoryPanel({
         )}
       </div>
 
-      <div className="mb-4 grid gap-2 rounded-xl border border-border/50 bg-muted/25 p-3 sm:grid-cols-3">
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wide">Price £</Label>
-          <Input
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="h-9 rounded-xl bg-card"
-            placeholder="1499"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wide">Source</Label>
-          <Input
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className="h-9 rounded-xl bg-card"
-            placeholder="Jet2Holidays"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wide">Link</Label>
-          <div className="flex gap-1.5">
+      {canEdit && (
+        <div className="mb-4 grid gap-2 rounded-xl border border-border/50 bg-muted/25 p-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wide">Price £</Label>
             <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
               className="h-9 rounded-xl bg-card"
-              placeholder="https://…"
+              placeholder="1499"
             />
-            <Button
-              type="button"
-              className="h-9 shrink-0 rounded-xl bg-gradient-primary text-primary-foreground border-0"
-              disabled={saving}
-              onClick={submit}
-            >
-              Log
-            </Button>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wide">Source</Label>
+            <Input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              className="h-9 rounded-xl bg-card"
+              placeholder="Jet2Holidays"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wide">Link</Label>
+            <div className="flex gap-1.5">
+              <Input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="h-9 rounded-xl bg-card"
+                placeholder="https://…"
+              />
+              <Button
+                type="button"
+                className="h-9 shrink-0 rounded-xl bg-gradient-primary text-primary-foreground border-0"
+                disabled={saving}
+                onClick={submit}
+              >
+                Log
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {loading ? (
         <DogLoader />
@@ -351,20 +372,16 @@ function PriceHistoryPanel({
   );
 }
 
-const Holidays = () => {
+const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const { scopeUserId, isOwnScope, pageTitle } = useSharedScope("holidays");
-  const {
-    watches,
-    settings,
-    loading,
-    error,
-    saveSettings,
-    addWatch,
-    updateWatch,
-    setWatchStatus,
-    deleteWatch,
-    addManualPrice,
-  } = useHolidays(scopeUserId);
+  const live = useHolidays(scopeUserId);
+  const canEdit = mockData ? false : isOwnScope;
+
+  const watches = mockData?.watches ?? live.watches;
+  const settings = mockData?.settings ?? live.settings ?? DEFAULT_HOLIDAY_SETTINGS;
+  const loading = mockData ? false : live.loading;
+  const error = mockData ? null : live.error;
+  const { saveSettings, addWatch, updateWatch, setWatchStatus, deleteWatch, addManualPrice } = live;
 
   const [section, setSection] = useState<RailSection>("watches");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -433,7 +450,7 @@ const Holidays = () => {
   };
 
   const handleSearch = async (watchId: string) => {
-    if (!isOwnScope) {
+    if (!canEdit) {
       toast.message("Only the owner can run a live search");
       return;
     }
@@ -469,9 +486,9 @@ const Holidays = () => {
           : "Shared with you"
       }
       icon={<Palmtree className="h-5 w-5" />}
-      sharePage="holidays"
+      sharePage={mockData ? undefined : "holidays"}
       action={
-        isOwnScope ? (
+        canEdit ? (
           <Button
             size="sm"
             className="rounded-xl bg-gradient-primary text-primary-foreground border-0"
@@ -568,7 +585,7 @@ const Holidays = () => {
                         Set your dates (fixed, flexible, or by month), brands, cabin and board — we’ll
                         check legitimate travel sites on your schedule and alert you on a better price.
                       </p>
-                      {isOwnScope && (
+                      {canEdit && (
                         <Button
                           className="mt-4 rounded-xl bg-gradient-primary text-primary-foreground border-0"
                           onClick={openNew}
@@ -609,6 +626,10 @@ const Holidays = () => {
                     <PriceHistoryPanel
                       watch={selected}
                       scopeUserId={scopeUserId}
+                      mockPrices={
+                        selected.id ? mockData?.pricesByWatchId?.[selected.id] : undefined
+                      }
+                      canEdit={canEdit}
                       onLogPrice={async (data) => {
                         if (!selected.id) return;
                         await addManualPrice(selected.id, {
@@ -702,7 +723,7 @@ const Holidays = () => {
                     </select>
                     <Button
                       className="h-9 rounded-xl bg-gradient-primary text-primary-foreground border-0"
-                      disabled={!isOwnScope}
+                      disabled={!canEdit}
                       onClick={async () => {
                         await saveSettings({
                           ...settings,
