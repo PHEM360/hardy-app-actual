@@ -53,6 +53,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/household-finance", label: "Household Finance" },
   { path: "/tattersalls",       label: "Tattersalls" },
   { path: "/ai-analysis",       label: "AI Analysis" },
+  { path: "/holidays",          label: "Holidays" },
   { path: "/remote-displays",   label: "Remote Displays" },
 ];
 const DEFAULT_NAV = [...DEFAULT_BOTTOM_NAV, "/more"];

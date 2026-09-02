@@ -35,6 +35,7 @@ import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
 import AnnualLeave from "@/pages/AnnualLeave";
+import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
 import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
@@ -226,6 +227,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="annual_leave">
                   <AnnualLeave />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/holidays"
+              element={
+                <RequireFeature featureKey="holidays">
+                  <Holidays />
                 </RequireFeature>
               }
             />

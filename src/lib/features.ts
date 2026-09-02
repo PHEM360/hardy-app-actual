@@ -41,6 +41,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   ai_analysis: "ai_analysis",
   calendar: "calendar",
   annual_leave: "annual_leave",
+  holidays: "holidays",
   notes: "notes",
 };
 
@@ -57,6 +58,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/ai-analysis": "ai_analysis",
   "/calendar": "calendar",
   "/annual-leave": "annual_leave",
+  "/holidays": "holidays",
   "/notes": "notes",
   "/freezer": "freezer",
   "/login-details": "login_details",

@@ -21,6 +21,7 @@ import {
   KeyRound,
   StickyNote,
   MonitorSmartphone,
+  Palmtree,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -119,6 +120,18 @@ const SECTIONS: Section[] = [
         icon: Plane,
         route: "/annual-leave",
         gradient: "linear-gradient(135deg, hsl(198,60%,50%), hsl(210,55%,44%))",
+        iconColor: "#fff",
+      },
+    ],
+  },
+  {
+    title: "Travel",
+    items: [
+      {
+        label: "Holidays",
+        icon: Palmtree,
+        route: "/holidays",
+        gradient: "linear-gradient(135deg, hsl(172,52%,42%), hsl(188,48%,36%))",
         iconColor: "#fff",
       },
     ],

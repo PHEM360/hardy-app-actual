@@ -16,6 +16,7 @@ export const PAGE_NOUNS: Record<string, string> = {
   companies: "Companies",
   login_details: "Log Ins",
   annual_leave: "Annual Leave",
+  holidays: "Holidays",
   ai_analysis: "AI Analysis",
   tattersalls: "Tattersalls",
   inheritance: "IHT Planner",

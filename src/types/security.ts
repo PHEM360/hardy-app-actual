@@ -25,6 +25,7 @@ export const SECURITY_MODULES = [
   { id: "freezer", label: "Freezer", routes: ["/freezer"] },
   { id: "tattersalls", label: "Tattersalls", routes: ["/tattersalls"] },
   { id: "annual_leave", label: "Annual Leave", routes: ["/annual-leave"] },
+  { id: "holidays", label: "Holidays", routes: ["/holidays"] },
   { id: "ai_analysis", label: "AI Analysis", routes: ["/ai-analysis"] },
   { id: "qr_codes", label: "QR Codes", routes: ["/qr-codes"] },
   { id: "remote_displays", label: "Remote Displays", routes: ["/remote-displays"] },
