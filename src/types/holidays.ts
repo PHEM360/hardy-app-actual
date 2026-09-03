@@ -118,6 +118,9 @@ export interface HolidayReviewSummary {
   sampleSize?: string;
   summary: string;
   url?: string;
+  pros?: string[];
+  cons?: string[];
+  themes?: string[];
 }
 
 export interface HolidayDiscountInfo {
@@ -125,6 +128,30 @@ export interface HolidayDiscountInfo {
   label: string;
   detail: string;
   estimatedSavingPct?: number;
+}
+
+export type HolidayBookingMode =
+  | "package"
+  | "flights_hotel_separate"
+  | "airline_holiday"
+  | "hotel_only";
+
+export interface HolidayCostLine {
+  kind: "flights" | "hotel" | "package" | "transfers" | "taxes_fees" | "discount" | "other";
+  label: string;
+  amountGbp: number;
+  estimated?: boolean;
+  perPerson?: boolean;
+}
+
+export interface HolidayCostBreakdown {
+  currency: "GBP";
+  totalGbp: number;
+  lines: HolidayCostLine[];
+  partySize?: number;
+  rooms?: number;
+  priceBasis?: "total_party" | "per_person";
+  confidence?: "live" | "partial" | "estimated";
 }
 
 export interface HolidaySearchOption {
@@ -152,6 +179,10 @@ export interface HolidaySearchOption {
   independentSummary?: string;
   discounts?: HolidayDiscountInfo[];
   whySuitable?: string[];
+  bookingMode?: HolidayBookingMode | null;
+  costBreakdown?: HolidayCostBreakdown | null;
+  researchNotes?: string[];
+  priceConfidence?: "live" | "partial" | "estimated" | null;
   notes?: string;
   manual?: boolean;
   foundAt: string;
@@ -189,6 +220,10 @@ export interface HolidayPriceFinding {
   nights?: number;
   departureAirport?: string;
   directFlight?: boolean;
+  bookingMode?: HolidayBookingMode | null;
+  costBreakdown?: HolidayCostBreakdown | null;
+  researchNotes?: string[];
+  priceConfidence?: "live" | "partial" | "estimated" | null;
 }
 
 export interface HolidaySettings {
@@ -253,6 +288,13 @@ export const BOARD_BASIS_LABELS: Record<HolidayBoardBasis, string> = {
   full_board: "Full board",
   all_inclusive: "All-inclusive",
   no_preference: "No preference",
+};
+
+export const BOOKING_MODE_LABELS: Record<HolidayBookingMode, string> = {
+  package: "Package holiday",
+  flights_hotel_separate: "Flights + hotel separate",
+  airline_holiday: "Airline holiday",
+  hotel_only: "Hotel only",
 };
 
 export const MONTH_LABELS = [

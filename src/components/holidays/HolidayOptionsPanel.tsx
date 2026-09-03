@@ -5,6 +5,9 @@ import {
   Star,
   BadgePercent,
   Filter,
+  Plane,
+  Hotel,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +21,13 @@ import {
 } from "@/components/ui/select";
 import DogLoader from "@/components/DogLoader";
 import { useHolidayPrices } from "@/hooks/useHolidays";
-import { HOLIDAY_ACCENT, type HolidayPriceFinding, type HolidayWatch } from "@/types/holidays";
+import {
+  BOOKING_MODE_LABELS,
+  HOLIDAY_ACCENT,
+  type HolidayBookingMode,
+  type HolidayPriceFinding,
+  type HolidayWatch,
+} from "@/types/holidays";
 
 function fmtMoney(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -55,6 +64,7 @@ export function HolidayOptionsPanel({
   const { prices, loading } = useHolidayPrices(watch.id || null, scopeUserId);
   const [sort, setSort] = useState<SortKey>("suitability");
   const [brandFilter, setBrandFilter] = useState("all");
+  const [modeFilter, setModeFilter] = useState("all");
   const [maxPrice, setMaxPrice] = useState("");
   const [onlyDiscounts, setOnlyDiscounts] = useState(false);
   const [price, setPrice] = useState("");
@@ -88,6 +98,7 @@ export function HolidayOptionsPanel({
   const filtered = useMemo(() => {
     let rows = [...latestBatch];
     if (brandFilter !== "all") rows = rows.filter((r) => r.sourceName === brandFilter);
+    if (modeFilter !== "all") rows = rows.filter((r) => r.bookingMode === modeFilter);
     if (onlyDiscounts) rows = rows.filter((r) => (r.discounts || []).length > 0);
     const cap = Number(maxPrice);
     if (Number.isFinite(cap) && cap > 0) rows = rows.filter((r) => r.priceGbp <= cap);
@@ -98,7 +109,7 @@ export function HolidayOptionsPanel({
       return (b.suitabilityScore || 0) - (a.suitabilityScore || 0) || a.priceGbp - b.priceGbp;
     });
     return rows.slice(0, 10);
-  }, [latestBatch, brandFilter, onlyDiscounts, maxPrice, sort]);
+  }, [latestBatch, brandFilter, modeFilter, onlyDiscounts, maxPrice, sort]);
 
   const submit = async () => {
     const n = Number(price);
@@ -128,10 +139,10 @@ export function HolidayOptionsPanel({
         <div>
           <h3 className="font-display text-base font-bold">{watch.title}</h3>
           <p className="text-xs text-muted-foreground">
-            Top matches ·{" "}
+            Ranked research · flights + hotels · package & separate paths
             {watch.scheduleMode === "once"
-              ? "one-off search"
-              : `searches every ${watch.searchIntervalAmount} ${watch.searchIntervalUnit}`}
+              ? " · one-off"
+              : ` · every ${watch.searchIntervalAmount} ${watch.searchIntervalUnit}`}
             {watch.lastSearchedAt ? ` · last ${fmtDate(watch.lastSearchedAt)}` : ""}
           </p>
         </div>
@@ -162,6 +173,20 @@ export function HolidayOptionsPanel({
               <SelectItem value="price">Price</SelectItem>
               <SelectItem value="tripadvisor">TripAdvisor</SelectItem>
               <SelectItem value="stars">Hotel stars</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase">Book as</Label>
+          <Select value={modeFilter} onValueChange={setModeFilter}>
+            <SelectTrigger className="h-8 w-[11rem] rounded-xl bg-card text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All booking paths</SelectItem>
+              <SelectItem value="package">Package</SelectItem>
+              <SelectItem value="airline_holiday">Airline holiday</SelectItem>
+              <SelectItem value="flights_hotel_separate">Flights + hotel</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -234,6 +259,7 @@ export function HolidayOptionsPanel({
           {filtered.map((p, i) => {
             const id = p.id || `${p.sourceName}-${i}`;
             const open = expanded === id;
+            const mode = p.bookingMode as HolidayBookingMode | null | undefined;
             return (
               <li
                 key={id}
@@ -259,6 +285,7 @@ export function HolidayOptionsPanel({
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {p.sourceName}
+                      {mode ? ` · ${BOOKING_MODE_LABELS[mode]}` : ""}
                       {p.officialStars != null ? ` · ${p.officialStars}★` : ""}
                       {p.tripadvisorScore != null ? ` · TA ${p.tripadvisorScore}` : ""}
                       {p.suitabilityScore != null ? ` · fit ${p.suitabilityScore}` : ""}
@@ -272,6 +299,13 @@ export function HolidayOptionsPanel({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-display text-base font-bold">{fmtMoney(p.priceGbp)}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {p.priceConfidence === "estimated"
+                        ? "Structured estimate"
+                        : p.priceConfidence === "partial"
+                          ? "Live + checked"
+                          : "Total for party"}
+                    </p>
                     {p.sourceUrl && (
                       <a
                         href={p.sourceUrl}
@@ -286,8 +320,13 @@ export function HolidayOptionsPanel({
                   </div>
                 </button>
                 {open && (
-                  <div className="space-y-2 border-t border-border/40 bg-muted/20 px-3 py-3">
+                  <div className="space-y-3 border-t border-border/40 bg-muted/20 px-3 py-3">
                     <div className="flex flex-wrap gap-2 text-[11px]">
+                      {mode && (
+                        <span className="rounded-lg bg-card px-2 py-1 font-medium">
+                          {BOOKING_MODE_LABELS[mode]}
+                        </span>
+                      )}
                       {p.officialStars != null && (
                         <span className="inline-flex items-center gap-1 rounded-lg bg-card px-2 py-1 font-medium">
                           <Star className="h-3 w-3" /> Official {p.officialStars}★
@@ -306,10 +345,57 @@ export function HolidayOptionsPanel({
                           {p.boardBasis.replace(/_/g, " ")}
                         </span>
                       )}
+                      {p.departureAirport && (
+                        <span className="rounded-lg bg-card px-2 py-1 font-medium">
+                          From {p.departureAirport}
+                        </span>
+                      )}
                     </div>
-                    {p.independentSummary && (
-                      <p className="text-xs text-foreground/90">{p.independentSummary}</p>
+
+                    {p.costBreakdown && (
+                      <div className="rounded-xl border border-border/40 bg-card p-3">
+                        <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          <PoundSterling className="h-3.5 w-3.5" /> Cost breakdown
+                          {p.costBreakdown.confidence ? ` · ${p.costBreakdown.confidence}` : ""}
+                        </p>
+                        <ul className="space-y-1.5">
+                          {p.costBreakdown.lines.map((line) => (
+                            <li key={`${line.kind}-${line.label}`} className="flex items-start justify-between gap-3 text-xs">
+                              <span className="min-w-0 text-foreground/90">
+                                <span className="mr-1.5 inline-flex text-muted-foreground">
+                                  {line.kind === "flights" ? (
+                                    <Plane className="h-3.5 w-3.5" />
+                                  ) : line.kind === "hotel" || line.kind === "package" ? (
+                                    <Hotel className="h-3.5 w-3.5" />
+                                  ) : null}
+                                </span>
+                                {line.label}
+                                {line.estimated ? (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">(est.)</span>
+                                ) : null}
+                              </span>
+                              <span className={`shrink-0 font-semibold ${line.amountGbp < 0 ? "text-primary" : ""}`}>
+                                {fmtMoney(line.amountGbp)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2 text-sm font-bold">
+                          <span>Total for party</span>
+                          <span>{fmtMoney(p.costBreakdown.totalGbp || p.priceGbp)}</span>
+                        </div>
+                      </div>
                     )}
+
+                    {p.independentSummary && (
+                      <div className="rounded-xl border border-border/40 bg-card p-3">
+                        <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          <ClipboardList className="h-3.5 w-3.5" /> Independent review summary
+                        </p>
+                        <p className="text-xs leading-relaxed text-foreground/90">{p.independentSummary}</p>
+                      </div>
+                    )}
+
                     {(p.reviewSummaries || []).map((r) => (
                       <div key={r.source} className="rounded-lg border border-border/40 bg-card px-2.5 py-2">
                         <p className="text-[11px] font-bold">
@@ -318,8 +404,24 @@ export function HolidayOptionsPanel({
                           {r.sampleSize ? ` · ${r.sampleSize}` : ""}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">{r.summary}</p>
+                        {!!(r.pros || []).length && (
+                          <p className="mt-1 text-[11px] text-foreground/80">
+                            <span className="font-semibold text-primary">Pros:</span> {(r.pros || []).join("; ")}
+                          </p>
+                        )}
+                        {!!(r.cons || []).length && (
+                          <p className="mt-0.5 text-[11px] text-foreground/80">
+                            <span className="font-semibold">Watch-outs:</span> {(r.cons || []).join("; ")}
+                          </p>
+                        )}
+                        {!!(r.themes || []).length && (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            Themes: {(r.themes || []).join(" · ")}
+                          </p>
+                        )}
                       </div>
                     ))}
+
                     {(p.discounts || []).length > 0 && (
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -333,10 +435,19 @@ export function HolidayOptionsPanel({
                         ))}
                       </div>
                     )}
+
+                    {(p.researchNotes || []).length > 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Research steps: {(p.researchNotes || []).join(" · ")}
+                      </p>
+                    )}
                     {(p.whySuitable || []).length > 0 && (
                       <p className="text-[11px] text-muted-foreground">
                         Why it ranked: {(p.whySuitable || []).join(" · ")}
                       </p>
+                    )}
+                    {p.notes && (
+                      <p className="text-[11px] text-muted-foreground">{p.notes}</p>
                     )}
                   </div>
                 )}
@@ -346,12 +457,11 @@ export function HolidayOptionsPanel({
         </ul>
       )}
 
-      {!filtered.length && !loading && (
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <PoundSterling className="h-3.5 w-3.5" />
-          Results are capped at 10 and ranked by suitability against your watch.
-        </div>
-      )}
+      <div className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+        <PoundSterling className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        Options are capped at 10 and ranked by fit. Totals are for the whole party. Live site numbers
+        that look like deposits or fragments are discarded; structured flight + hotel estimates are used instead.
+      </div>
     </div>
   );
 }

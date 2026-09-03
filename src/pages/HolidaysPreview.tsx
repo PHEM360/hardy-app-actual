@@ -124,24 +124,52 @@ export default function HolidaysPreview() {
         destinationLabel: "Crete",
         nights: 7,
         boardBasis: "all_inclusive",
+        bookingMode: "package",
+        priceConfidence: "estimated",
+        costBreakdown: {
+          currency: "GBP",
+          totalGbp: 3480,
+          partySize: 4,
+          rooms: 2,
+          priceBasis: "total_party",
+          confidence: "estimated",
+          lines: [
+            { kind: "package", label: "Package holiday (flights + hotel)", amountGbp: 3480, estimated: true },
+            { kind: "discount", label: "Package vs separate booking saving", amountGbp: -320, estimated: true },
+          ],
+        },
         officialStars: 4.5,
         tripadvisorScore: 4.6,
         reviewSummaries: [
           {
-            source: "TripAdvisor",
+            source: "TripAdvisor (aggregated)",
             score: 4.6,
             sampleSize: "2,100+ reviews",
-            summary: "Guests praise cleanliness, kids club and beach access; a minority mention evening noise.",
+            summary:
+              "Across 2,100+ reviews, travellers rate Crete Beach Club about 4.6/5. Common themes: staff and beach access; a minority mention evening noise.",
+            pros: ["Kids club and family facilities get consistent praise", "Staff and housekeeping scored highly"],
+            cons: ["Some evening noise near entertainment areas", "Sunbeds can run short in peak season"],
+            themes: ["cleanliness: ~4.6/5", "location: ~4.7/5", "food: ~4.4/5"],
           },
           {
-            source: "Booking.com",
+            source: "Booking.com (aggregated)",
             score: 8.9,
-            sampleSize: "Guest reviews",
-            summary: "Recent guests highlight breakfast and pool; a few mention walking distance to the village.",
+            sampleSize: "640 reviews",
+            summary: "Guest score averages 8.9/10. Location and pool lead; a minority mention village walk time.",
+            pros: ["Breakfast and pool frequently praised"],
+            cons: ["A few mention walking distance to the village"],
+          },
+          {
+            source: "Google / Maps reviews (aggregated)",
+            score: 4.5,
+            sampleSize: "380 reviews",
+            summary: "Google reviews average 4.5/5. Recent visitors highlight the Mediterranean setting and resort facilities.",
+            pros: ["Location praised for beach access"],
+            cons: ["Occasional queues at buffet peak times"],
           },
         ],
         independentSummary:
-          "Independent guest feedback averages about 4.6/5 with Booking.com guests typically scoring around 8.9/10. Official star rating sits at the premium end. Worth checking Jet2 free child places and NHS/Blue Light before you book.",
+          "Independent picture for Crete Beach Club (4.5★): TripAdvisor-style average ~4.6/5, Booking.com ~8.9/10, Google ~4.5/5. What guests agree on: kids club and family facilities; staff and housekeeping. Watch-outs: evening noise near entertainment; sunbeds in peak season. Theme scores synthesised across sites favour location and cleanliness. Always open the live review pages before you book.",
         discounts: [
           {
             type: "loyalty",
@@ -157,6 +185,12 @@ export default function HolidaysPreview() {
           },
         ],
         whySuitable: ["Within your max budget", "Matches your #1 brand", "Meets 4★ minimum"],
+        researchNotes: [
+          "Compared flight haul band for Mediterranean and 7-night stay length",
+          "Cross-checked hotel quality gates against watch filters",
+          "Built cost model for package vs separate booking paths",
+          "Aggregated independent review themes (not single cherry-picked quotes)",
+        ],
         foundAt: "2026-09-01T10:00:00.000Z",
       },
       {

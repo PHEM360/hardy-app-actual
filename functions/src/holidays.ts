@@ -10,6 +10,12 @@ import { logger } from "firebase-functions";
 import { postmarkKey, twilioSid, twilioToken, twilioFrom } from "./notifications/scheduler";
 import { sendNotification } from "./notifications/sender";
 import type { NotificationPrefs } from "./notifications/types";
+import {
+  assembleSearchOptions,
+  minimumPlausibleTotal,
+  type BookingMode,
+  type SourceLink,
+} from "./holidaySearchEngine";
 
 /** Only these hostnames are contacted or linked as price sources. */
 export const LEGITIMATE_TRAVEL_HOSTS = [
@@ -49,6 +55,12 @@ type AlertChannel = "push" | "email";
 interface HolidayWatchDoc {
   title: string;
   destination: string;
+  destinationPrefs?: {
+    filterMode?: string;
+    region?: string;
+    country?: string;
+    destination?: string;
+  };
   departureAirports?: string[];
   dates?: {
     mode?: DateMode;
@@ -84,222 +96,7 @@ interface HolidayWatchDoc {
   nextSearchAt?: string | null;
 }
 
-interface ReviewSummary {
-  source: string;
-  score?: number;
-  sampleSize?: string;
-  summary: string;
-  url?: string;
-}
-
-interface DiscountInfo {
-  type: "nhs_bluelight" | "student" | "loyalty" | "senior" | "military" | "other";
-  label: string;
-  detail: string;
-  estimatedSavingPct?: number;
-}
-
-interface PriceFinding {
-  priceGbp: number;
-  sourceName: string;
-  sourceUrl: string;
-  packageLabel?: string;
-  hotelName?: string;
-  destinationLabel?: string;
-  outboundDate?: string;
-  returnDate?: string;
-  nights?: number;
-  boardBasis?: string;
-  flightClass?: string;
-  departureAirport?: string;
-  directFlight?: boolean;
-  notes?: string;
-  suitabilityScore?: number;
-  rank?: number;
-  officialStars?: number | null;
-  tripadvisorScore?: number | null;
-  reviewSummaries?: ReviewSummary[];
-  independentSummary?: string;
-  discounts?: DiscountInfo[];
-  whySuitable?: string[];
-}
-
-const BRAND_DISCOUNTS: Record<string, DiscountInfo[]> = {
-  "British Airways Holidays": [
-    { type: "loyalty", label: "Executive Club / Avios", detail: "Avios discounts and companion vouchers on selected packages.", estimatedSavingPct: 8 },
-    { type: "nhs_bluelight", label: "Blue Light / NHS", detail: "Occasional Blue Light partner offers via BA Holidays promotions.", estimatedSavingPct: 5 },
-  ],
-  Jet2Holidays: [
-    { type: "loyalty", label: "Jet2 free child places", detail: "Seasonal free child place promotions on package holidays.", estimatedSavingPct: 15 },
-    { type: "nhs_bluelight", label: "NHS / Blue Light", detail: "Periodic healthcare worker offers via partner portals.", estimatedSavingPct: 5 },
-  ],
-  TUI: [
-    { type: "loyalty", label: "TUI Blue / club offers", detail: "Member pricing and free kid places on selected dates.", estimatedSavingPct: 10 },
-    { type: "senior", label: "Over 50s", detail: "Selected TUI deals marketed to older travellers.", estimatedSavingPct: 5 },
-  ],
-  "easyJet Holidays": [
-    { type: "student", label: "Student Beans / UNiDAYS", detail: "Occasional student codes on easyJet Holidays.", estimatedSavingPct: 5 },
-    { type: "loyalty", label: "easyJet Plus / Flight Club", detail: "Bundle savings when pairing flights with hotels.", estimatedSavingPct: 4 },
-  ],
-  Loveholidays: [
-    { type: "nhs_bluelight", label: "Blue Light Card", detail: "Loveholidays regularly lists Blue Light exclusive deals.", estimatedSavingPct: 7 },
-    { type: "student", label: "Student discount", detail: "Partner student codes appear seasonally.", estimatedSavingPct: 5 },
-  ],
-  "On the Beach": [
-    { type: "nhs_bluelight", label: "NHS / Blue Light", detail: "Partner offers via Blue Light Card portal.", estimatedSavingPct: 5 },
-  ],
-  Trailfinders: [
-    { type: "loyalty", label: "Trailfinders loyalty", detail: "Repeat-booker and ATOL-protected package value.", estimatedSavingPct: 3 },
-  ],
-  "Virgin Atlantic Holidays": [
-    { type: "loyalty", label: "Flying Club", detail: "Flying Club points and companion offers.", estimatedSavingPct: 8 },
-  ],
-  Kuoni: [
-    { type: "loyalty", label: "Kuoni club", detail: "Repeat-booker extras and ATOL-protected tailor-made value.", estimatedSavingPct: 4 },
-  ],
-  "Lastminute.com": [
-    { type: "student", label: "Student / youth", detail: "Occasional partner student codes on last-minute packages.", estimatedSavingPct: 5 },
-  ],
-  "Travel Republic": [
-    { type: "nhs_bluelight", label: "Blue Light Card", detail: "Periodic Blue Light exclusive hotel + flight deals.", estimatedSavingPct: 6 },
-  ],
-  "Secret Escapes": [
-    { type: "loyalty", label: "Member rates", detail: "Members-only flash sale pricing on luxury hotels.", estimatedSavingPct: 12 },
-  ],
-  "Saga Holidays": [
-    { type: "senior", label: "Over 50s", detail: "Saga packages are built for travellers aged 50+.", estimatedSavingPct: 5 },
-  ],
-  Ryanair: [
-    { type: "loyalty", label: "Ryanair Rooms / Holidays", detail: "Bundle savings when pairing Ryanair flights with hotels.", estimatedSavingPct: 4 },
-  ],
-};
-
-function stableHash(input: string): number {
-  let h = 0;
-  for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-function enrichOption(watch: HolidayWatchDoc, base: PriceFinding, index: number): PriceFinding {
-  const seed = stableHash(`${watch.destination}|${base.sourceName}|${base.priceGbp}|${index}`);
-  const starsPool = [3, 3.5, 4, 4, 4.5, 5];
-  const taPool = [3.5, 3.8, 4.0, 4.2, 4.5, 4.7, 4.8];
-  const officialStars = starsPool[seed % starsPool.length];
-  const tripadvisorScore = taPool[(seed >> 3) % taPool.length];
-  const nights = nightsFromWatch(watch);
-  const hotelName = `${watch.destination} ${["Resort", "Hotel", "Beach Club", "Suites"][seed % 4]}`;
-
-  const brandKey =
-    Object.keys(BRAND_DISCOUNTS).find((k) =>
-      base.sourceName.toLowerCase().includes(k.toLowerCase().split(" ")[0]),
-    ) || base.sourceName;
-  const discounts = BRAND_DISCOUNTS[brandKey] || BRAND_DISCOUNTS[base.sourceName] || [];
-
-  const reviewSummaries: ReviewSummary[] = [
-    {
-      source: "TripAdvisor",
-      score: tripadvisorScore,
-      sampleSize: `${800 + (seed % 4200)}+ reviews`,
-      summary:
-        tripadvisorScore >= 4.5
-          ? "Guests praise cleanliness, staff and location; a minority mention evening noise."
-          : tripadvisorScore >= 4
-            ? "Solid overall scores for rooms and food; some notes on queues at check-in."
-            : "Mixed reviews — good value flagged often, with occasional maintenance comments.",
-      url: "https://www.tripadvisor.co.uk/",
-    },
-    {
-      source: "Booking.com",
-      score: Math.min(9.5, Math.round((tripadvisorScore * 1.9 + (seed % 10) / 10) * 10) / 10),
-      sampleSize: "Guest reviews",
-      summary:
-        "Recent guests highlight breakfast and pool; a few mention walking distance to the beach.",
-      url: "https://www.booking.com/",
-    },
-  ];
-
-  const whySuitable: string[] = [];
-  let suitability = 70;
-  if (watch.maxBudgetGbp != null && base.priceGbp <= watch.maxBudgetGbp) {
-    suitability += 10;
-    whySuitable.push("Within your max budget");
-  } else if (watch.maxBudgetGbp != null && base.priceGbp > watch.maxBudgetGbp) {
-    suitability -= 15;
-  }
-  if (watch.targetPriceGbp != null && base.priceGbp <= watch.targetPriceGbp) {
-    suitability += 8;
-    whySuitable.push("At or under your alert price");
-  }
-  const ranked = [...(watch.brands || [])].sort((a, b) => a.rank - b.rank);
-  const brandIdx = ranked.findIndex((b) =>
-    base.sourceName.toLowerCase().includes(b.name.toLowerCase().split(" ")[0]),
-  );
-  if (brandIdx === 0) {
-    suitability += 12;
-    whySuitable.push("Matches your #1 brand");
-  } else if (brandIdx > 0) {
-    suitability += Math.max(2, 10 - brandIdx * 2);
-    whySuitable.push(`Matches preferred brand #${brandIdx + 1}`);
-  } else if (watch.includeAllBrands) {
-    suitability += 2;
-  }
-  if (watch.hotelStarsMin != null && officialStars >= watch.hotelStarsMin) {
-    suitability += 6;
-    whySuitable.push(`Meets ${watch.hotelStarsMin}★ minimum`);
-  } else if (watch.hotelStarsMin != null && officialStars < watch.hotelStarsMin) {
-    suitability -= 20;
-  }
-  if (watch.tripadvisorMin != null && tripadvisorScore >= watch.tripadvisorMin) {
-    suitability += 6;
-    whySuitable.push(`TripAdvisor ${tripadvisorScore}+`);
-  } else if (watch.tripadvisorMin != null && tripadvisorScore < watch.tripadvisorMin) {
-    suitability -= 18;
-  }
-  if (watch.directFlightsOnly) {
-    suitability += 4;
-    whySuitable.push("Direct-flight preference applied");
-  }
-  if (watch.boardBasis && watch.boardBasis !== "no_preference") {
-    suitability += 3;
-    whySuitable.push(`Board: ${watch.boardBasis.replace(/_/g, " ")}`);
-  }
-  if (discounts.length) {
-    suitability += 3;
-    whySuitable.push(`${discounts.length} discount route(s) to check`);
-  }
-  suitability = Math.max(0, Math.min(100, suitability - index * 2));
-
-  const independentSummary = [
-    `Independent guest feedback averages about ${tripadvisorScore}/5 on TripAdvisor-style scores`,
-    `with Booking.com guests typically scoring around ${reviewSummaries[1].score}/10.`,
-    officialStars >= 4.5
-      ? "Official star rating sits at the premium end of the market."
-      : officialStars >= 4
-        ? "Official star rating is mid-to-upper tier for this destination."
-        : "Official star rating is more value-focused.",
-    discounts.length
-      ? `Worth checking ${discounts.map((d) => d.label).join(", ")} before you book.`
-      : "No standing NHS/student/loyalty schemes were flagged for this operator — still ask at checkout.",
-  ].join(" ");
-
-  return {
-    ...base,
-    hotelName,
-    destinationLabel: watch.destination,
-    nights,
-    flightClass: watch.flightClass,
-    departureAirport: (watch.departureAirports || []).filter((c) => c !== "LON")[0] || "LON",
-    directFlight: !!watch.directFlightsOnly,
-    officialStars,
-    tripadvisorScore,
-    reviewSummaries,
-    independentSummary,
-    discounts,
-    whySuitable,
-    suitabilityScore: suitability,
-    packageLabel: `${hotelName} · ${base.sourceName}`,
-  };
-}
+type PriceFinding = import("./holidaySearchEngine").SearchOption;
 
 function requireAuth(context: { auth?: { uid: string; token: any } }) {
   const uid = context.auth?.uid;
@@ -385,8 +182,8 @@ function dateHint(watch: HolidayWatchDoc): { out?: string; back?: string; months
   return {};
 }
 
-/** Build deep-link search URLs for allowlisted operators. */
-export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: string }[] {
+/** Build deep-link search URLs for allowlisted operators, tagged by booking mode. */
+export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
   const dest = watch.destination || "holiday";
   const from = departureCode(watch);
   const nights = nightsFromWatch(watch);
@@ -398,86 +195,107 @@ export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: s
   const includeAll = !!watch.includeAllBrands;
   const brandNames = (watch.brands || []).map((b) => b.name.toLowerCase());
 
-  const catalog: { name: string; url: string; modes: FlightBooking[] }[] = [
+  const catalog: {
+    name: string;
+    url: string;
+    modes: FlightBooking[];
+    bookingMode: BookingMode;
+  }[] = [
     {
       name: "British Airways Holidays",
       url: `https://www.britishairways.com/travel/holiday/public/en_gb?destination=${q}`,
       modes: ["british_airways", "no_preference", "travel_agent_package"],
+      bookingMode: "airline_holiday",
     },
     {
       name: "British Airways Flights",
       url: `https://www.britishairways.com/travel/search/flights/public/en_gb?departurePoint=${encode(from)}`,
       modes: ["british_airways", "book_separately", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
     {
       name: "Jet2Holidays",
       url: `https://www.jet2holidays.com/search?destination=${q}&nights=${nights}&adults=${adults}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "TUI",
       url: `https://www.tui.co.uk/destinations/search?q=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "First Choice",
       url: `https://www.firstchoice.co.uk/destinations/search?q=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "easyJet Holidays",
       url: `https://www.easyjet.com/en/holidays?destination=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Loveholidays",
       url: `https://www.loveholidays.com/holidays/?destination=${q}&nights=${nights}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "On the Beach",
       url: `https://www.onthebeach.co.uk/holidays?destination=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Trailfinders",
       url: `https://www.trailfinders.com/holidays?query=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Kuoni",
       url: `https://www.kuoni.co.uk/search?query=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Virgin Atlantic Holidays",
       url: `https://www.virginatlantic.com/gb/en/holidays.html?destination=${q}`,
       modes: ["travel_agent_package", "british_airways", "no_preference"],
+      bookingMode: "airline_holiday",
     },
     {
       name: "Lastminute.com",
       url: `https://www.lastminute.com/holidays?destination=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Travel Republic",
       url: `https://www.travelrepublic.co.uk/holidays?destination=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Secret Escapes",
       url: `https://www.secretescapes.com/?q=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Saga Holidays",
       url: `https://www.saga.co.uk/holidays?query=${q}`,
       modes: ["travel_agent_package", "no_preference"],
+      bookingMode: "package",
     },
     {
       name: "Ryanair",
       url: `https://www.ryanair.com/gb/en?destination=${q}&origin=${encode(from)}`,
       modes: ["book_separately", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
     {
       name: "Skyscanner",
@@ -487,6 +305,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: s
         watch.directFlightsOnly ? "true" : "false"
       }&outboundaltsenabled=false&inboundaltsenabled=false&ref=home`,
       modes: ["book_separately", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
     {
       name: "Kayak",
@@ -494,26 +313,29 @@ export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: s
         back || "flexible"
       }?sort=bestflight_a&fs=cfc=1`,
       modes: ["book_separately", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
     {
       name: "Expedia",
       url: `https://www.expedia.co.uk/Hotel-Search?destination=${q}&adults=${adults}&children=${children}`,
       modes: ["book_separately", "travel_agent_package", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
     {
       name: "Booking.com",
       url: `https://www.booking.com/searchresults.html?ss=${q}&group_adults=${adults}&group_children=${children}`,
       modes: ["book_separately", "no_preference"],
+      bookingMode: "flights_hotel_separate",
     },
   ];
 
   const preferBa =
     booking === "british_airways" || brandNames.some((n) => /british airways/.test(n));
 
-  const links: { name: string; url: string }[] = [];
+  const links: SourceLink[] = [];
   const seen = new Set<string>();
 
-  const push = (item: { name: string; url: string }) => {
+  const push = (item: { name: string; url: string; bookingMode: BookingMode }) => {
     if (seen.has(item.name)) return;
     seen.add(item.name);
     links.push(item);
@@ -534,27 +356,27 @@ export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: s
     }
   }
 
-  // Ensure a solid package + meta set when include-all or results are sparse
-  if (includeAll || links.length < 6) {
-    for (const name of [
-      "Jet2Holidays",
-      "TUI",
-      "Loveholidays",
-      "On the Beach",
-      "easyJet Holidays",
-      "Trailfinders",
-      "British Airways Holidays",
-      "Skyscanner",
-      "Expedia",
-    ]) {
-      const item = catalog.find((c) => c.name === name);
-      if (item && (includeAll || item.modes.includes(booking) || item.modes.includes("no_preference"))) {
-        push(item);
-      }
-    }
+  // Always include a mix of package + separate booking paths for thorough comparison
+  const ensure: { name: string; mode?: FlightBooking }[] = [
+    { name: "Jet2Holidays" },
+    { name: "TUI" },
+    { name: "Loveholidays" },
+    { name: "On the Beach" },
+    { name: "easyJet Holidays" },
+    { name: "British Airways Holidays" },
+    { name: "Trailfinders" },
+    { name: "Skyscanner" },
+    { name: "Kayak" },
+    { name: "Expedia" },
+    { name: "Booking.com" },
+    { name: "British Airways Flights" },
+  ];
+  for (const row of ensure) {
+    if (links.length >= 12) break;
+    const item = catalog.find((c) => c.name === row.name);
+    if (item) push(item);
   }
 
-  // Ranked brand preference: promote matching hosts to the front
   const ranked = [...(watch.brands || [])].sort((a, b) => a.rank - b.rank).map((b) => b.name.toLowerCase());
   if (ranked.length) {
     links.sort((a, b) => {
@@ -564,25 +386,17 @@ export function buildSearchLinks(watch: HolidayWatchDoc): { name: string; url: s
     });
   }
 
-  return links.filter((l) => isAllowlistedUrl(l.url)).slice(0, 14);
-}
-
-/** Extract £ prices from HTML — best-effort; sites often block bots. */
-function extractGbpPrices(html: string): number[] {
-  const prices = new Set<number>();
-  const patterns = [
-    /£\s*([0-9]{2,6}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/g,
-    /"price"(?:\s*:\s*|\s*=\s*)"?([0-9]{2,6}(?:\.[0-9]{2})?)"?/gi,
-    /GBP\s*([0-9]{2,6}(?:\.[0-9]{2})?)/gi,
-  ];
-  for (const re of patterns) {
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) !== null) {
-      const n = Number(String(m[1]).replace(/,/g, ""));
-      if (Number.isFinite(n) && n >= 50 && n <= 50000) prices.add(Math.round(n));
-    }
+  // Prefer diversity of booking modes in the first slots
+  const packages = links.filter((l) => l.bookingMode === "package" || l.bookingMode === "airline_holiday");
+  const separate = links.filter((l) => l.bookingMode === "flights_hotel_separate");
+  const mixed: SourceLink[] = [];
+  for (let i = 0; i < 14; i++) {
+    if (i % 2 === 0 && packages.length) mixed.push(packages.shift()!);
+    else if (separate.length) mixed.push(separate.shift()!);
+    else if (packages.length) mixed.push(packages.shift()!);
   }
-  return [...prices].sort((a, b) => a - b);
+
+  return mixed.filter((l) => isAllowlistedUrl(l.url)).slice(0, 12);
 }
 
 async function fetchAllowlistedPage(url: string): Promise<string | null> {
@@ -603,10 +417,6 @@ async function fetchAllowlistedPage(url: string): Promise<string | null> {
     });
     clearTimeout(timer);
     if (!res.ok) return null;
-    const ctype = res.headers.get("content-type") || "";
-    if (!/text\/html|application\/xhtml|text\/plain|json/i.test(ctype) && ctype) {
-      // still try — some CDNs omit types
-    }
     const text = await res.text();
     if (text.length > 2_000_000) return text.slice(0, 2_000_000);
     return text;
@@ -616,61 +426,41 @@ async function fetchAllowlistedPage(url: string): Promise<string | null> {
   }
 }
 
+/**
+ * Flights → hotels → booking-mode combine → research → rank.
+ * Live scrapes are validated against destination/nights floors so deposits
+ * and junk £50-style numbers cannot become "best deals".
+ */
 export async function searchWatchPrices(watch: HolidayWatchDoc): Promise<{
   findings: PriceFinding[];
   sourcesChecked: string[];
 }> {
   const links = buildSearchLinks(watch).slice(0, 10);
-  const raw: PriceFinding[] = [];
-  const sourcesChecked: string[] = [];
   const { out, back } = dateHint(watch);
-  const board = watch.boardBasis && watch.boardBasis !== "no_preference" ? watch.boardBasis : undefined;
-  const nights = nightsFromWatch(watch);
+  const htmlBySource: Record<string, string | null> = {};
 
-  for (const link of links) {
-    sourcesChecked.push(link.name);
-    const html = await fetchAllowlistedPage(link.url);
-    let best: number | null = null;
-    if (html) {
-      const prices = extractGbpPrices(html);
-      if (prices.length) best = prices[0];
-    }
-    // Always keep a scored option for each allowlisted source so the UI can
-    // show up to 10 ranked choices even when bots are blocked — price may be
-    // marked from a prior parse or estimated from budget context.
-    if (best == null) {
-      const seed = stableHash(`${watch.destination}|${link.name}`);
-      const base = watch.maxBudgetGbp != null ? watch.maxBudgetGbp : 2500;
-      best = Math.round(base * (0.72 + (seed % 40) / 100));
-    }
-    if (watch.maxBudgetGbp != null && best > watch.maxBudgetGbp * 1.35) continue;
+  await Promise.all(
+    links.map(async (link) => {
+      htmlBySource[link.name] = await fetchAllowlistedPage(link.url);
+    }),
+  );
 
-    raw.push({
-      priceGbp: best,
-      sourceName: link.name,
-      sourceUrl: link.url,
-      packageLabel: `${watch.destination} · ${link.name}`,
-      outboundDate: out,
-      returnDate: back,
-      nights,
-      boardBasis: board,
-      notes: html ? "Live parse of allowlisted site" : "Source checked — price estimated pending live parse",
-    });
-  }
-
-  let enriched = raw.map((f, i) => enrichOption(watch, f, i));
-
-  // Filter against optional quality gates
-  enriched = enriched.filter((f) => {
-    if (watch.hotelStarsMin != null && (f.officialStars ?? 0) < watch.hotelStarsMin) return false;
-    if (watch.tripadvisorMin != null && (f.tripadvisorScore ?? 0) < watch.tripadvisorMin) return false;
-    return true;
+  const assembled = assembleSearchOptions({
+    watch,
+    links,
+    htmlBySource,
+    outboundDate: out,
+    returnDate: back,
   });
 
-  enriched.sort((a, b) => (b.suitabilityScore || 0) - (a.suitabilityScore || 0) || a.priceGbp - b.priceGbp);
-  enriched = enriched.slice(0, 10).map((f, i) => ({ ...f, rank: i + 1 }));
+  logger.info("Holiday search assembled", {
+    destination: watch.destination,
+    floorGbp: minimumPlausibleTotal(watch),
+    findings: assembled.findings.length,
+    sourcesChecked: assembled.sourcesChecked.length,
+  });
 
-  return { findings: enriched, sourcesChecked };
+  return assembled;
 }
 
 async function alertPriceDrop(
@@ -794,6 +584,10 @@ async function processOneWatch(
       independentSummary: finding.independentSummary || null,
       discounts: finding.discounts || [],
       whySuitable: finding.whySuitable || [],
+      bookingMode: finding.bookingMode || null,
+      costBreakdown: finding.costBreakdown || null,
+      researchNotes: finding.researchNotes || [],
+      priceConfidence: finding.priceConfidence || null,
       manual: false,
       foundAt: nowIso,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -837,6 +631,11 @@ async function processOneWatch(
       independentSummary: f.independentSummary,
       discounts: f.discounts,
       whySuitable: f.whySuitable,
+      bookingMode: f.bookingMode || null,
+      costBreakdown: f.costBreakdown || null,
+      researchNotes: f.researchNotes || [],
+      priceConfidence: f.priceConfidence || null,
+      notes: f.notes || null,
       foundAt: nowIso,
     })),
   };
