@@ -246,6 +246,11 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      // 1Password Connect credentials for bidirectional login sync (owner-only).
+      match /integrations/{integrationId} {
+        allow read, write: if isOwner(userId);
+      }
+
       // Each user controls their own app/session and per-module requirements.
       match /security/{securityDoc} {
         allow read: if isFirebaseOwner(userId);

@@ -125,6 +125,9 @@ export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";
 // ── Security posture scans (Admin dashboard) ──
 export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans } from "./securityScan";
 
+// ── 1Password Connect sync ──
+export { onePasswordConnect } from "./onePassword";
+
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
 	await requireSuperAdmin(uid, request.auth?.token?.email);

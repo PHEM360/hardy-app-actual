@@ -23,6 +23,7 @@ import { useSecuritySettings } from "@/hooks/useSecuritySettings";
 import { authenticateWithPasskey, passkeyErrorMessage, registerPasskey } from "@/lib/passkeys";
 import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } from "@/types/security";
 import { ChangeVaultPinCard } from "@/components/passwords/ChangeVaultPinCard";
+import { OnePasswordConnectCard } from "@/components/passwords/OnePasswordConnectCard";
 import { toast } from "sonner";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
@@ -772,6 +773,8 @@ const Settings = () => {
           </div>
 
           <ChangeVaultPinCard />
+
+          <OnePasswordConnectCard />
 
           {!showChangePassword ? (
             <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2" onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(false); }}>

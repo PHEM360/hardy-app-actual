@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Fingerprint, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ interface PasswordVaultGateProps {
   ) => Promise<void>;
   onUnlock: (privateKey: JsonWebKey) => void;
 }
+
+type UnlockMode = "choose" | "passkey" | "pin";
 
 function PinInput({
   value,
@@ -70,22 +72,6 @@ function isUserCancelError(error: unknown) {
   return /cancel|abort|not allowed|dismiss/i.test(message);
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(label)), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
 export default function PasswordVaultGate({
   config,
   loading,
@@ -96,15 +82,12 @@ export default function PasswordVaultGate({
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [addBiometrics, setAddBiometrics] = useState(passwordVaultBiometricsAvailable());
-  const [busy, setBusy] = useState<"pin" | "biometric" | "setup" | null>(null);
+  const [busy, setBusy] = useState<"pin" | "passkey" | "setup" | null>(null);
   const [blockedUntil, setBlockedUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const autoPromptStarted = useRef(false);
-  const unlockedRef = useRef(false);
-  const onUnlockRef = useRef(onUnlock);
-  onUnlockRef.current = onUnlock;
+  const [mode, setMode] = useState<UnlockMode>("choose");
   const blockedFor = Math.max(0, blockedUntil - now);
-  const biometricsReady = !!config?.biometric && passwordVaultBiometricsAvailable();
+  const passkeyAvailable = !!config?.biometric && passwordVaultBiometricsAvailable();
 
   useEffect(() => {
     if (!dataUid) return;
@@ -117,40 +100,13 @@ export default function PasswordVaultGate({
     return () => window.clearInterval(timer);
   }, [blockedFor]);
 
-  // Auto-present device biometrics (Touch ID / Face ID / fingerprint / Windows Hello).
-  // Never block the passcode: PIN stays usable the whole time.
   useEffect(() => {
-    if (loading || !config || !biometricsReady || autoPromptStarted.current) return;
-    autoPromptStarted.current = true;
-    let active = true;
-    setBusy("biometric");
-
-    const run = async () => {
-      try {
-        await new Promise((resolve) => window.setTimeout(resolve, 50));
-        if (!active || unlockedRef.current) return;
-        const key = await withTimeout(
-          unlockPasswordVaultWithBiometrics(config),
-          12_000,
-          "Biometric prompt timed out",
-        );
-        if (!active || unlockedRef.current) return;
-        unlockedRef.current = true;
-        onUnlockRef.current(key);
-      } catch {
-        // Cancel / timeout / unsupported — fall through to passcode.
-      } finally {
-        if (active) setBusy((current) => (current === "biometric" ? null : current));
-      }
-    };
-
-    void run();
-    return () => {
-      active = false;
-      // Clear stuck "Checking…" if the effect is torn down (e.g. Strict Mode).
-      setBusy((current) => (current === "biometric" ? null : current));
-    };
-  }, [loading, config, biometricsReady]);
+    // Fresh unlock screen each time the gate mounts — user chooses deliberately.
+    setMode("choose");
+    setPin("");
+    setConfirmPin("");
+    setBusy(null);
+  }, [config?.pinSalt]);
 
   const setup = async () => {
     if (!dataUid || pin.length !== 4 || pin !== confirmPin) {
@@ -177,7 +133,7 @@ export default function PasswordVaultGate({
   };
 
   const unlockWithPin = async () => {
-    if (!config || !dataUid || pin.length !== 4 || busy === "pin") return;
+    if (!config || !dataUid || pin.length !== 4 || busy) return;
     const remaining = pinThrottleRemaining(dataUid);
     if (remaining > 0) {
       setBlockedUntil(Date.now() + remaining);
@@ -186,9 +142,7 @@ export default function PasswordVaultGate({
     }
     setBusy("pin");
     try {
-      const key = await unlockPasswordVaultWithPin(pin, config);
-      unlockedRef.current = true;
-      onUnlock(key);
+      onUnlock(await unlockPasswordVaultWithPin(pin, config));
       clearPinThrottle(dataUid);
       setBlockedUntil(0);
       setPin("");
@@ -202,23 +156,17 @@ export default function PasswordVaultGate({
     }
   };
 
-  const unlockWithBiometrics = async () => {
-    if (!config || busy === "pin") return;
-    setBusy("biometric");
+  const unlockWithPasskey = async () => {
+    if (!config || busy) return;
+    setBusy("passkey");
     try {
-      const key = await withTimeout(
-        unlockPasswordVaultWithBiometrics(config),
-        60_000,
-        "Biometric prompt timed out",
-      );
-      unlockedRef.current = true;
-      onUnlock(key);
+      onUnlock(await unlockPasswordVaultWithBiometrics(config));
     } catch (error) {
       if (!isUserCancelError(error)) {
-        toast.error(error instanceof Error ? error.message : "Could not unlock the vault");
+        toast.error(error instanceof Error ? error.message : "Could not unlock with passkey");
       }
     } finally {
-      setBusy((current) => (current === "biometric" ? null : current));
+      setBusy(null);
     }
   };
 
@@ -232,8 +180,6 @@ export default function PasswordVaultGate({
   }
 
   const isSetup = !config;
-  const pinBusy = busy === "pin" || busy === "setup";
-
   return (
     <div className="mx-auto max-w-xl overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-card">
       <div className="bg-[color-mix(in_srgb,hsl(var(--primary))_14%,hsl(var(--card)))] px-6 py-7 text-center">
@@ -246,11 +192,7 @@ export default function PasswordVaultGate({
         <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
           {isSetup
             ? "Your passwords are encrypted on this device before they are saved."
-            : biometricsReady
-              ? busy === "biometric"
-                ? "Waiting for this device’s unlock (Touch ID, Face ID, fingerprint, or Windows Hello)…"
-                : "Device unlock opens automatically — or enter your 4-digit passcode anytime."
-              : "Enter your 4-digit passcode once to open your encrypted logins."}
+            : "Choose passkey or your 4-digit code — nothing runs until you pick one."}
         </p>
       </div>
 
@@ -273,7 +215,7 @@ export default function PasswordVaultGate({
                   <Fingerprint className="h-5 w-5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">Enable device unlock</span>
+                  <span className="block text-sm font-semibold">Also enable passkey unlock</span>
                   <span className="block text-xs text-muted-foreground">
                     Touch ID, Face ID, fingerprint, Windows Hello — whatever this device supports
                   </span>
@@ -292,36 +234,58 @@ export default function PasswordVaultGate({
               {busy === "setup" ? "Securing your vault…" : "Create secure vault"}
             </Button>
           </>
+        ) : mode === "choose" ? (
+          <>
+            {passkeyAvailable ? (
+              <Button
+                className="h-12 w-full rounded-xl bg-gradient-primary"
+                disabled={busy !== null}
+                onClick={() => {
+                  setMode("passkey");
+                  void unlockWithPasskey();
+                }}
+              >
+                <Fingerprint className="mr-2 h-5 w-5" />
+                Unlock with passkey
+              </Button>
+            ) : (
+              <p className="rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Passkey unlock isn’t set up on this device. Use your 4-digit code, or enable passkey in Settings.
+              </p>
+            )}
+            <Button
+              variant="outline"
+              className="h-12 w-full rounded-xl"
+              disabled={busy !== null}
+              onClick={() => setMode("pin")}
+            >
+              <KeyRound className="mr-2 h-5 w-5" />
+              Unlock with 4-digit code
+            </Button>
+          </>
+        ) : mode === "passkey" ? (
+          <>
+            <Button
+              className="h-12 w-full rounded-xl bg-gradient-primary"
+              disabled={busy !== null}
+              onClick={() => void unlockWithPasskey()}
+            >
+              <Fingerprint className="mr-2 h-5 w-5" />
+              {busy === "passkey" ? "Waiting for passkey…" : "Try passkey again"}
+            </Button>
+            <Button variant="ghost" className="w-full rounded-xl" disabled={busy !== null} onClick={() => setMode("choose")}>
+              Back to options
+            </Button>
+            <Button variant="outline" className="w-full rounded-xl" disabled={busy !== null} onClick={() => setMode("pin")}>
+              Use 4-digit code instead
+            </Button>
+          </>
         ) : (
           <>
-            {biometricsReady && (
-              <>
-                <Button
-                  className="h-12 w-full rounded-xl bg-gradient-primary"
-                  disabled={pinBusy}
-                  onClick={() => void unlockWithBiometrics()}
-                >
-                  <Fingerprint className="mr-2 h-5 w-5" />
-                  {busy === "biometric" ? "Waiting for device unlock…" : "Unlock with device biometrics"}
-                </Button>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  or 4-digit passcode
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-              </>
-            )}
-            <PinInput
-              value={pin}
-              onChange={setPin}
-              label="4-digit passcode"
-              autoFocus
-              disabled={pinBusy}
-            />
+            <PinInput value={pin} onChange={setPin} label="4-digit passcode" autoFocus disabled={busy === "pin"} />
             <Button
-              variant={biometricsReady ? "outline" : "default"}
-              className={`h-11 w-full rounded-xl ${biometricsReady ? "" : "bg-gradient-primary text-primary-foreground border-0"}`}
-              disabled={pinBusy || pin.length !== 4 || blockedFor > 0}
+              className="h-11 w-full rounded-xl bg-gradient-primary text-primary-foreground border-0"
+              disabled={busy !== null || pin.length !== 4 || blockedFor > 0}
               onClick={() => void unlockWithPin()}
             >
               <KeyRound className="mr-2 h-4 w-4" />
@@ -331,16 +295,14 @@ export default function PasswordVaultGate({
                   ? `Try again in ${Math.ceil(blockedFor / 1000)}s`
                   : "Unlock with passcode"}
             </Button>
-            {busy === "biometric" && (
-              <p className="text-center text-[11px] text-muted-foreground">
-                You can still type your passcode while device unlock is waiting.
-              </p>
-            )}
+            <Button variant="ghost" className="w-full rounded-xl" disabled={busy !== null} onClick={() => setMode("choose")}>
+              Back to options
+            </Button>
           </>
         )}
         <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          You only unlock once here. Passwords stay end-to-end encrypted — Hardy Hub cannot read them.
+          Passwords stay end-to-end encrypted — Hardy Hub cannot read them.
         </div>
       </div>
     </div>

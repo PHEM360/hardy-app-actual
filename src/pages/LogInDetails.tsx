@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
@@ -19,8 +19,7 @@ import {
   Share2,
   ShieldCheck,
   Trash2,
-  Upload,
-  Download,
+  RefreshCw,
   User,
   X,
 } from "lucide-react";
@@ -46,10 +45,14 @@ import { useAuth } from "@/auth/AuthContext";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import PasswordVaultGate from "@/components/passwords/PasswordVaultGate";
 import {
-  downloadTextFile,
-  exportOnePasswordCsv,
-  parseOnePasswordCsv,
-} from "@/lib/onePasswordCsv";
+  credentialToOnePasswordLogin,
+  deleteOnePasswordLogin,
+  getOnePasswordSettings,
+  listOnePasswordLogins,
+  onePasswordLoginToCredential,
+  sameLoginContent,
+  upsertOnePasswordLogin,
+} from "@/lib/onePasswordConnect";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +92,8 @@ interface EncryptedCredentialDoc {
   individualShares?: IndividualShare[];
   individualAccess?: string[];
   individualEditors?: string[];
+  onePasswordItemId?: string | null;
+  onePasswordUpdatedAt?: string | null;
   legacy?: Partial<PlainCredential>;
 }
 
@@ -102,6 +107,8 @@ interface VaultCredential extends PlainCredential {
   individualShares: IndividualShare[];
   individualAccess: string[];
   individualEditors: string[];
+  onePasswordItemId?: string | null;
+  onePasswordUpdatedAt?: string | null;
 }
 
 const EMPTY: PlainCredential = {
@@ -185,6 +192,8 @@ function toEncryptedDoc(snapshot: QueryDocumentSnapshot<DocumentData>): Encrypte
     individualShares: data.individualShares,
     individualAccess: data.individualAccess,
     individualEditors: data.individualEditors,
+    onePasswordItemId: data.onePasswordItemId || null,
+    onePasswordUpdatedAt: data.onePasswordUpdatedAt || null,
     legacy: data.encrypted === true ? undefined : {
       name: data.name,
       url: data.url,
@@ -333,7 +342,9 @@ export default function LogInDetails() {
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("All");
   const [search, setSearch] = useState("");
-  const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [opConfigured, setOpConfigured] = useState(false);
+  const syncRanRef = useRef(false);
 
   const unlocked = !!privateKey;
   const ownerId = scopeUserId || dataUid;
@@ -383,7 +394,10 @@ export default function LogInDetails() {
   }, [dataUid, unlock]);
 
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked) {
+      syncRanRef.current = false;
+      return;
+    }
     const lock = () => setPrivateKey(null);
     const timer = window.setTimeout(lock, 10 * 60 * 1000);
     const visibility = () => {
@@ -454,6 +468,8 @@ export default function LogInDetails() {
             individualShares: item.individualShares || [],
             individualAccess: item.individualAccess || [],
             individualEditors: item.individualEditors || [],
+            onePasswordItemId: item.onePasswordItemId || null,
+            onePasswordUpdatedAt: item.onePasswordUpdatedAt || null,
           } satisfies VaultCredential;
         } catch {
           return null;
@@ -612,7 +628,10 @@ export default function LogInDetails() {
       category: form.category || "",
     };
     try {
+      let targetOwnerId = dataUid;
+      let targetId = editCredential?.id;
       if (editCredential) {
+        targetOwnerId = editCredential.ownerId;
         await updateDoc(doc(db, "users", editCredential.ownerId, "credentials", editCredential.id), {
           cipher: await encryptCredentialWithItemKey(cleaned, editCredential.itemKey),
           updatedAt: serverTimestamp(),
@@ -621,7 +640,7 @@ export default function LogInDetails() {
         const profile = await getDoc(doc(db, "vaultPublicKeys", dataUid));
         if (!profile.exists()) throw new Error("Your vault key is missing");
         const encrypted = await encryptCredential(cleaned, dataUid, (profile.data() as VaultPublicKey).publicKey);
-        await addDoc(collection(db, "users", dataUid, "credentials"), {
+        const ref = await addDoc(collection(db, "users", dataUid, "credentials"), {
           ownerId: dataUid,
           ...encrypted,
           sharedWith: [],
@@ -632,9 +651,38 @@ export default function LogInDetails() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        targetId = ref.id;
       }
       setDialogOpen(false);
       toast.success(editCredential ? "Login updated" : "Login saved securely");
+
+      if (isOwnScope && opConfigured && targetId) {
+        try {
+          const pushed = await upsertOnePasswordLogin(
+            credentialToOnePasswordLogin({
+              onePasswordItemId: editCredential?.onePasswordItemId,
+              name: cleaned.name,
+              username: cleaned.username || cleaned.email,
+              password: cleaned.password,
+              url: cleaned.url,
+              notes: cleaned.notes,
+              category: cleaned.category,
+            }),
+          );
+          if (pushed.login.id) {
+            await updateDoc(doc(db, "users", targetOwnerId, "credentials", targetId), {
+              onePasswordItemId: pushed.login.id,
+              onePasswordUpdatedAt: pushed.login.updatedAt || new Date().toISOString(),
+            });
+          }
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `Saved locally, but 1Password sync failed: ${error.message}`
+              : "Saved locally, but 1Password sync failed",
+          );
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save this login");
     } finally {
@@ -642,66 +690,186 @@ export default function LogInDetails() {
     }
   };
 
-  const exportToOnePassword = () => {
-    if (!credentials.length) {
-      toast.error("Nothing to export yet");
-      return;
-    }
-    const csv = exportOnePasswordCsv(
-      credentials.map((c) => ({
-        name: c.name,
-        url: c.url,
-        username: c.username || c.email,
-        password: c.password,
-        notes: c.notes,
-        category: c.category,
-      })),
-    );
-    downloadTextFile(`hardy-hub-logins-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    toast.success("Exported CSV — import it in 1Password (File → Import)");
-  };
-
-  const importFromOnePassword = async (file: File) => {
-    if (!dataUid || !isOwnScope) return;
-    setImporting(true);
+  const syncWithOnePassword = useCallback(async (silent = false) => {
+    if (!dataUid || !isOwnScope || !privateKey) return;
+    setSyncing(true);
     try {
-      const text = await file.text();
-      const items = parseOnePasswordCsv(text);
-      if (!items.length) {
-        toast.error("No login rows found in that CSV");
+      const settings = await getOnePasswordSettings();
+      setOpConfigured(!!settings.configured && settings.enabled !== false);
+      if (!settings.configured || settings.enabled === false) {
+        if (!silent) {
+          toast.message(
+            settings.configured
+              ? "1Password sync is turned off in Settings"
+              : "Connect 1Password in Settings to keep logins in sync",
+          );
+        }
         return;
       }
+
       const profile = await getDoc(doc(db, "vaultPublicKeys", dataUid));
       if (!profile.exists()) throw new Error("Your vault key is missing");
       const publicKey = (profile.data() as VaultPublicKey).publicKey;
-      let saved = 0;
-      for (const item of items) {
-        const encrypted = await encryptCredential(item, dataUid, publicKey);
-        await addDoc(collection(db, "users", dataUid, "credentials"), {
-          ownerId: dataUid,
-          ...encrypted,
-          sharedWith: [],
-          editors: [],
-          individualShares: [],
-          individualAccess: [],
-          individualEditors: [],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        saved += 1;
+
+      const { logins: remote } = await listOnePasswordLogins();
+      const localOwned = credentials.filter((c) => c.ownerId === dataUid);
+      const byOpId = new Map(
+        localOwned.filter((c) => c.onePasswordItemId).map((c) => [c.onePasswordItemId as string, c]),
+      );
+      const remoteIds = new Set(remote.map((r) => r.id).filter(Boolean) as string[]);
+
+      let pulled = 0;
+      let pushed = 0;
+      let updated = 0;
+
+      for (const item of remote) {
+        if (!item.id) continue;
+        const local = byOpId.get(item.id);
+        const plain = onePasswordLoginToCredential(item);
+        if (!local) {
+          const encrypted = await encryptCredential(plain, dataUid, publicKey);
+          await addDoc(collection(db, "users", dataUid, "credentials"), {
+            ownerId: dataUid,
+            ...encrypted,
+            onePasswordItemId: item.id,
+            onePasswordUpdatedAt: item.updatedAt || new Date().toISOString(),
+            sharedWith: [],
+            editors: [],
+            individualShares: [],
+            individualAccess: [],
+            individualEditors: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          pulled += 1;
+          continue;
+        }
+        if (
+          !sameLoginContent(
+            {
+              name: local.name,
+              username: local.username || local.email,
+              password: local.password,
+              url: local.url,
+              notes: local.notes,
+            },
+            item,
+          )
+        ) {
+          // Prefer newer remote timestamp when available; otherwise pull remote.
+          const remoteMs = item.updatedAt ? Date.parse(item.updatedAt) : 0;
+          const localMs = local.onePasswordUpdatedAt ? Date.parse(local.onePasswordUpdatedAt) : 0;
+          if (!localMs || remoteMs >= localMs) {
+            await updateDoc(doc(db, "users", dataUid, "credentials", local.id), {
+              cipher: await encryptCredentialWithItemKey(plain, local.itemKey),
+              onePasswordUpdatedAt: item.updatedAt || new Date().toISOString(),
+              updatedAt: serverTimestamp(),
+            });
+            updated += 1;
+          } else {
+            const pushedLogin = await upsertOnePasswordLogin(
+              credentialToOnePasswordLogin({
+                onePasswordItemId: local.onePasswordItemId,
+                name: local.name,
+                username: local.username || local.email,
+                password: local.password,
+                url: local.url,
+                notes: local.notes,
+                category: local.category,
+              }),
+            );
+            await updateDoc(doc(db, "users", dataUid, "credentials", local.id), {
+              onePasswordItemId: pushedLogin.login.id || local.onePasswordItemId,
+              onePasswordUpdatedAt: pushedLogin.login.updatedAt || new Date().toISOString(),
+            });
+            pushed += 1;
+          }
+        }
       }
-      toast.success(`Imported ${saved} login${saved === 1 ? "" : "s"} from 1Password CSV`);
+
+      for (const local of localOwned) {
+        if (local.onePasswordItemId) {
+          if (!remoteIds.has(local.onePasswordItemId)) {
+            // Removed in 1Password — remove locally to stay in sync
+            await deleteDoc(doc(db, "users", dataUid, "credentials", local.id));
+            updated += 1;
+          }
+          continue;
+        }
+        const created = await upsertOnePasswordLogin(
+          credentialToOnePasswordLogin({
+            name: local.name,
+            username: local.username || local.email,
+            password: local.password,
+            url: local.url,
+            notes: local.notes,
+            category: local.category,
+          }),
+        );
+        if (created.login.id) {
+          await updateDoc(doc(db, "users", dataUid, "credentials", local.id), {
+            onePasswordItemId: created.login.id,
+            onePasswordUpdatedAt: created.login.updatedAt || new Date().toISOString(),
+          });
+          pushed += 1;
+        }
+      }
+
+      if (!silent || pulled || pushed || updated) {
+        toast.success(
+          `1Password synced · +${pulled} from 1Password · ${pushed} to 1Password · ${updated} updated`,
+        );
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not import CSV");
+      if (!silent) {
+        toast.error(error instanceof Error ? error.message : "1Password sync failed");
+      }
     } finally {
-      setImporting(false);
+      setSyncing(false);
     }
-  };
+  }, [credentials, dataUid, isOwnScope, privateKey]);
+
+  useEffect(() => {
+    if (!unlocked || !isOwnScope || loading) {
+      if (!unlocked) syncRanRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = await getOnePasswordSettings();
+        if (cancelled) return;
+        const ready = !!settings.configured && settings.enabled !== false;
+        setOpConfigured(ready);
+        if (ready && !syncRanRef.current) {
+          syncRanRef.current = true;
+          await syncWithOnePassword(true);
+        }
+      } catch {
+        if (!cancelled) setOpConfigured(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked, isOwnScope, loading, syncWithOnePassword]);
 
   const remove = async (credential: VaultCredential) => {
     if (credential.ownerId !== dataUid) return;
     if (!window.confirm(`Delete ${credential.name}? This cannot be undone.`)) return;
     await deleteDoc(doc(db, "users", credential.ownerId, "credentials", credential.id));
+    if (credential.onePasswordItemId && opConfigured) {
+      try {
+        await deleteOnePasswordLogin(credential.onePasswordItemId);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? `Deleted locally, but 1Password delete failed: ${error.message}`
+            : "Deleted locally, but 1Password delete failed",
+        );
+        return;
+      }
+    }
     toast.success("Login deleted");
   };
 
@@ -787,25 +955,11 @@ export default function LogInDetails() {
                       variant="outline"
                       size="sm"
                       className="rounded-xl"
-                      disabled={importing}
-                      onClick={() => document.getElementById("onepassword-csv-import")?.click()}
+                      disabled={syncing}
+                      onClick={() => void syncWithOnePassword(false)}
                     >
-                      <Upload className="mr-1.5 h-3.5 w-3.5" />
-                      {importing ? "Importing…" : "Import 1Password"}
-                    </Button>
-                    <input
-                      id="onepassword-csv-import"
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (file) void importFromOnePassword(file);
-                      }}
-                    />
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={exportToOnePassword}>
-                      <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+                      <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                      {syncing ? "Syncing…" : opConfigured ? "Sync 1Password" : "Connect 1Password"}
                     </Button>
                     <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
                       <Plus className="mr-1.5 h-3.5 w-3.5" /> Add login
@@ -816,9 +970,9 @@ export default function LogInDetails() {
             </div>
             {isOwnScope && (
               <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-                Live two-way sync with 1Password needs a self-hosted Connect server (not practical for a family vault).
-                Use <span className="font-semibold text-foreground">Import / Export CSV</span> to move logins both ways —
-                export from 1Password → import here, or export here → import in 1Password.
+                {opConfigured
+                  ? "Log Ins stay in sync with your 1Password Connect vault — changes here or there update both sides."
+                  : <>Set up <span className="font-semibold text-foreground">1Password Connect</span> in Settings for live two-way sync. Personal 1Password has no public sync API.</>}
               </p>
             )}
           </div>
