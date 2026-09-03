@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Shield, Users, AlertTriangle, CheckCircle, Activity, ChevronDown, ChevronUp, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye, Fingerprint } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Shield, Users, AlertTriangle, CheckCircle, Activity, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye, Fingerprint } from "lucide-react";
+import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
+import SecurityReportPanel from "@/components/admin/SecurityReportPanel";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -42,32 +43,6 @@ interface MockUser {
 // start with an empty list and show empty states.
 const MOCK_USERS: MockUser[] = [];
 
-type EventType = "login" | "password_change" | "alert" | "settings_change";
-type EventStatus = "success" | "failed" | "suspicious";
-
-interface SecurityEvent {
-  id: string;
-  type: EventType;
-  user: string;
-  description: string;
-  ip: string;
-  status: EventStatus;
-  timestamp: string;
-}
-
-// Demo/test events removed.
-const MOCK_EVENTS: SecurityEvent[] = [];
-
-const STATUS_STYLES: Record<EventStatus, string> = {
-  success: "bg-success/10 text-success",
-  failed: "bg-destructive/10 text-destructive",
-  suspicious: "bg-warning/10 text-warning",
-};
-
-const TYPE_LABELS: Record<EventType, string> = {
-  login: "Login", password_change: "Password", alert: "Alert", settings_change: "Settings",
-};
-
 const STATS = [
   { label: "Active Users",  value: "—",              icon: Users,         gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
   { label: "Login Events",  value: "—",              icon: Activity,      gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))" },
@@ -81,9 +56,6 @@ const Admin = () => {
   const { user, startViewAs, viewAs } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState<AdminView>("main");
-  const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [users, setUsers] = useState(MOCK_USERS);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -423,88 +395,19 @@ const Admin = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUser, allHouseholds]);
 
-  const filteredEvents = MOCK_EVENTS.filter((e) => {
-    if (filterType !== "all" && e.type !== filterType) return false;
-    if (filterStatus !== "all" && e.status !== filterStatus) return false;
-    return true;
-  });
-
   const currentUser = selectedUser ? users.find(u => u.id === selectedUser) : null;
 
   if (view === "security") {
     return (
-      <FeaturePageShell title="Security Dashboard" subtitle="Login events, alerts & audit log" icon={<Shield className="w-5 h-5" />}>
+      <FeaturePageShell
+        title="Security Dashboard"
+        subtitle="Posture score, vulnerabilities & scheduled scans"
+        icon={<Shield className="w-5 h-5" />}
+      >
         <button onClick={() => setView("main")} className="flex items-center gap-1.5 text-xs text-primary font-medium mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Admin
         </button>
-
-        {/* Filters */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="h-8 rounded-lg text-xs w-28"><SelectValue placeholder="Type" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="login">Logins</SelectItem>
-              <SelectItem value="password_change">Passwords</SelectItem>
-              <SelectItem value="alert">Alerts</SelectItem>
-              <SelectItem value="settings_change">Settings</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="h-8 rounded-lg text-xs w-28"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="suspicious">Suspicious</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="text-[10px] text-muted-foreground ml-auto">{filteredEvents.length} events</span>
-        </div>
-
-        {/* Event Log */}
-        <div className="space-y-2">
-          {filteredEvents.map((event, i) => {
-            const expanded = expandedEvent === event.id;
-            return (
-              <motion.div key={event.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i }} className="rounded-xl bg-card border border-border/50 overflow-hidden">
-                <button onClick={() => setExpandedEvent(expanded ? null : event.id)} className="w-full flex items-center gap-2.5 p-3 text-left">
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${STATUS_STYLES[event.status]}`}>
-                    {event.status === "success" ? "✓" : event.status === "failed" ? "✗" : "⚠"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-card-foreground truncate">{event.description}</p>
-                    <p className="text-[10px] text-muted-foreground">{event.user} · {TYPE_LABELS[event.type]}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {new Date(event.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </span>
-                  {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                </button>
-                <AnimatePresence>
-                  {expanded && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                      <div className="px-3 pb-3 space-y-1.5 border-t border-border/30 pt-2">
-                        {[
-                          ["IP Address", event.ip],
-                          ["Status", event.status.charAt(0).toUpperCase() + event.status.slice(1)],
-                          ["Type", TYPE_LABELS[event.type]],
-                          ["Time", new Date(event.timestamp).toLocaleString("en-GB")],
-                          ["User", event.user],
-                        ].map(([label, value]) => (
-                          <div key={label} className="flex justify-between">
-                            <span className="text-[10px] text-muted-foreground">{label}</span>
-                            <span className="text-[10px] font-medium text-card-foreground">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
-        </div>
+        <SecurityReportPanel />
       </FeaturePageShell>
     );
   }
@@ -801,7 +704,7 @@ const Admin = () => {
         <Shield className="w-5 h-5 text-primary-foreground" />
         <div>
           <p className="text-sm font-semibold text-primary-foreground">Security Dashboard</p>
-          <p className="text-[10px] text-primary-foreground/70">View login events, alerts & audit log</p>
+          <p className="text-[10px] text-primary-foreground/70">Score, vulnerabilities, scan & schedule</p>
         </div>
       </button>
 
