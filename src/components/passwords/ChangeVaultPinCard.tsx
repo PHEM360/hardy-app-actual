@@ -120,7 +120,7 @@ export function ChangeVaultPinCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Change Log Ins passcode</p>
           <p className="text-[11px] text-muted-foreground">
-            This 4-digit code unlocks your encrypted logins. Face ID / fingerprint unlock (if enabled) stays the same.
+            This 4-digit code unlocks your encrypted logins. Device biometric unlock (if enabled) stays the same.
           </p>
         </div>
       </div>

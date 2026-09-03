@@ -731,7 +731,7 @@ const Settings = () => {
             <div>
               <p className="text-sm font-semibold">Page security</p>
               <p className="text-[11px] text-muted-foreground">
-                Protected pages reuse a passkey presented within your chosen period. Log Ins uses its own vault passcode / Face ID instead of a second page passkey.
+                Protected pages reuse a passkey presented within your chosen period. Log Ins uses its own vault passcode / device biometrics instead of a second page passkey.
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
