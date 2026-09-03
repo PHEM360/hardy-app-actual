@@ -835,6 +835,16 @@ service cloud.firestore {
       allow write: if false; // Cloud Functions only
     }
 
+    // Security posture reports — written by Cloud Functions; readable by admins
+    match /securityReports/{reportId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /securityScanPrefs/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // General document store - per user, shareable via pageShares
     match /documents/{userId}/items/{docId} {
       allow read: if canViewPage(userId, "documents");

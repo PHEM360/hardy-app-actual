@@ -122,6 +122,9 @@ export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients,
 // ── Holidays price watches ──
 export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";
 
+// ── Security posture scans (Admin dashboard) ──
+export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans } from "./securityScan";
+
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
 	await requireSuperAdmin(uid, request.auth?.token?.email);
