@@ -1,9 +1,11 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
+import type { HolidaySearchOption } from "@/types/holidays";
 
 export interface HolidaySearchResult {
   watchId: string;
   findings: number;
+  options?: HolidaySearchOption[];
   bestPriceGbp: number | null;
   cheaperThanBefore: boolean;
   sourcesChecked: string[];

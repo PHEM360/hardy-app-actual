@@ -20,11 +20,11 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import DogLoader from "@/components/DogLoader";
 import { HolidayWatchForm, type HolidayWatchFormValue } from "@/components/holidays/HolidayWatchForm";
-import { useHolidays, useHolidayPrices } from "@/hooks/useHolidays";
+import { HolidayOptionsPanel } from "@/components/holidays/HolidayOptionsPanel";
+import { useHolidays } from "@/hooks/useHolidays";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { runHolidayPriceSearch } from "@/lib/holidaysApi";
 import {
@@ -36,6 +36,7 @@ import {
   HOLIDAY_ACCENT,
   MONTH_LABELS,
   type HolidayPriceFinding,
+  type HolidaySearchOption,
   type HolidaySettings,
   type HolidayWatch,
 } from "@/types/holidays";
@@ -44,7 +45,7 @@ type RailSection = "watches" | "best" | "settings";
 
 export interface HolidaysMockData {
   watches: HolidayWatch[];
-  pricesByWatchId?: Record<string, HolidayPriceFinding[]>;
+  pricesByWatchId?: Record<string, HolidaySearchOption[] | HolidayPriceFinding[]>;
   settings?: HolidaySettings;
 }
 
@@ -208,170 +209,6 @@ function WatchCard({
   );
 }
 
-function PriceHistoryPanel({
-  watch,
-  scopeUserId,
-  mockPrices,
-  canEdit,
-  onLogPrice,
-}: {
-  watch: HolidayWatch;
-  scopeUserId?: string;
-  mockPrices?: HolidayPriceFinding[];
-  canEdit: boolean;
-  onLogPrice: (data: {
-    priceGbp: number;
-    sourceName: string;
-    sourceUrl: string;
-    notes?: string;
-  }) => Promise<void>;
-}) {
-  const live = useHolidayPrices(watch.id || null, scopeUserId);
-  const prices = mockPrices ?? live.prices;
-  const loading = mockPrices ? false : live.loading;
-  const [price, setPrice] = useState("");
-  const [source, setSource] = useState("");
-  const [url, setUrl] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const submit = async () => {
-    const n = Number(price);
-    if (!Number.isFinite(n) || n <= 0 || !source.trim()) {
-      toast.error("Enter a price and source");
-      return;
-    }
-    setSaving(true);
-    try {
-      await onLogPrice({
-        priceGbp: n,
-        sourceName: source.trim(),
-        sourceUrl: url.trim() || `https://www.google.com/search?q=${encodeURIComponent(source)}`,
-        notes: "Logged manually",
-      });
-      setPrice("");
-      setSource("");
-      setUrl("");
-      toast.success("Price saved");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="rounded-2xl border border-border/50 bg-card p-4 shadow-card"
-      style={{ borderLeftWidth: 4, borderLeftColor: HOLIDAY_ACCENT }}
-    >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <h3 className="font-display text-base font-bold">{watch.title}</h3>
-          <p className="text-xs text-muted-foreground">
-            Searches every {watch.searchIntervalAmount} {watch.searchIntervalUnit}
-            {watch.lastSearchedAt ? ` · last ${fmtDate(watch.lastSearchedAt)}` : ""}
-          </p>
-        </div>
-        {watch.bestPriceUrl && (
-          <a
-            href={watch.bestPriceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-xl bg-gradient-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
-          >
-            Open best deal <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-      </div>
-
-      {canEdit && (
-        <div className="mb-4 grid gap-2 rounded-xl border border-border/50 bg-muted/25 p-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Price £</Label>
-            <Input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="h-9 rounded-xl bg-card"
-              placeholder="1499"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Source</Label>
-            <Input
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="h-9 rounded-xl bg-card"
-              placeholder="Jet2Holidays"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Link</Label>
-            <div className="flex gap-1.5">
-              <Input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="h-9 rounded-xl bg-card"
-                placeholder="https://…"
-              />
-              <Button
-                type="button"
-                className="h-9 shrink-0 rounded-xl bg-gradient-primary text-primary-foreground border-0"
-                disabled={saving}
-                onClick={submit}
-              >
-                Log
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <DogLoader />
-      ) : prices.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No prices yet. Tap Search now, or log a deal you found.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {prices.map((p, i) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-3 rounded-xl border border-border/40 bg-card px-3 py-2.5"
-              style={{
-                background:
-                  i === 0
-                    ? `color-mix(in srgb, ${HOLIDAY_ACCENT} 12%, var(--card))`
-                    : undefined,
-              }}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                <PoundSterling className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{fmtMoney(p.priceGbp)}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {p.sourceName}
-                  {p.manual ? " · manual" : ""} · {fmtDate(p.foundAt)}
-                </p>
-              </div>
-              {p.sourceUrl && (
-                <a
-                  href={p.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const { scopeUserId, isOwnScope, pageTitle } = useSharedScope("holidays");
   const live = useHolidays(scopeUserId);
@@ -455,18 +292,18 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
 
   const handleSearch = async (watchId: string) => {
     if (!canEdit) {
-      toast.message("Only the owner can run a live search");
+      toast("Only the owner can run a live search");
       return;
     }
     setSearchingId(watchId);
     try {
       const res = await runHolidayPriceSearch(watchId);
       if (res.findings === 0) {
-        toast.message(res.message || "No live prices parsed — try logging a deal manually");
+        toast(res.message || "No options matched your filters");
       } else if (res.cheaperThanBefore) {
-        toast.success(`New best price: ${fmtMoney(res.bestPriceGbp)}`);
+        toast.success(`${res.findings} options · new best ${fmtMoney(res.bestPriceGbp)}`);
       } else {
-        toast.success(`Checked ${res.sourcesChecked.length} sites · best ${fmtMoney(res.bestPriceGbp)}`);
+        toast.success(`${res.findings} options ranked · best ${fmtMoney(res.bestPriceGbp)}`);
       }
     } catch (err) {
       toast.error((err as Error).message || "Search failed");
@@ -628,12 +465,16 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                   )}
 
                   {selected && (
-                    <PriceHistoryPanel
-                      watch={selected}
-                      scopeUserId={scopeUserId}
-                      mockPrices={
-                        selected.id ? mockData?.pricesByWatchId?.[selected.id] : undefined
+                    <HolidayOptionsPanel
+                      watch={
+                        selected.id && mockData?.pricesByWatchId?.[selected.id]
+                          ? {
+                              ...selected,
+                              lastOptions: mockData.pricesByWatchId[selected.id],
+                            }
+                          : selected
                       }
+                      scopeUserId={scopeUserId}
                       canEdit={canEdit}
                       onLogPrice={async (data) => {
                         if (!selected.id) return;
@@ -757,7 +598,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent
           aria-describedby={undefined}
-          className="max-h-[90vh] max-w-lg overflow-y-auto mx-4"
+          className="max-h-[min(90vh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1.5rem))] max-w-lg overflow-y-auto mx-4"
         >
           <DialogHeader>
             <DialogTitle className="font-display">
