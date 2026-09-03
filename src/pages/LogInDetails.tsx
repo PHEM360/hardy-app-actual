@@ -19,6 +19,8 @@ import {
   Share2,
   ShieldCheck,
   Trash2,
+  Upload,
+  Download,
   User,
   X,
 } from "lucide-react";
@@ -43,6 +45,11 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import PasswordVaultGate from "@/components/passwords/PasswordVaultGate";
+import {
+  downloadTextFile,
+  exportOnePasswordCsv,
+  parseOnePasswordCsv,
+} from "@/lib/onePasswordCsv";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -326,6 +333,7 @@ export default function LogInDetails() {
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("All");
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const unlocked = !!privateKey;
   const ownerId = scopeUserId || dataUid;
@@ -634,6 +642,62 @@ export default function LogInDetails() {
     }
   };
 
+  const exportToOnePassword = () => {
+    if (!credentials.length) {
+      toast.error("Nothing to export yet");
+      return;
+    }
+    const csv = exportOnePasswordCsv(
+      credentials.map((c) => ({
+        name: c.name,
+        url: c.url,
+        username: c.username || c.email,
+        password: c.password,
+        notes: c.notes,
+        category: c.category,
+      })),
+    );
+    downloadTextFile(`hardy-hub-logins-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    toast.success("Exported CSV — import it in 1Password (File → Import)");
+  };
+
+  const importFromOnePassword = async (file: File) => {
+    if (!dataUid || !isOwnScope) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const items = parseOnePasswordCsv(text);
+      if (!items.length) {
+        toast.error("No login rows found in that CSV");
+        return;
+      }
+      const profile = await getDoc(doc(db, "vaultPublicKeys", dataUid));
+      if (!profile.exists()) throw new Error("Your vault key is missing");
+      const publicKey = (profile.data() as VaultPublicKey).publicKey;
+      let saved = 0;
+      for (const item of items) {
+        const encrypted = await encryptCredential(item, dataUid, publicKey);
+        await addDoc(collection(db, "users", dataUid, "credentials"), {
+          ownerId: dataUid,
+          ...encrypted,
+          sharedWith: [],
+          editors: [],
+          individualShares: [],
+          individualAccess: [],
+          individualEditors: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        saved += 1;
+      }
+      toast.success(`Imported ${saved} login${saved === 1 ? "" : "s"} from 1Password CSV`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import CSV");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const remove = async (credential: VaultCredential) => {
     if (credential.ownerId !== dataUid) return;
     if (!window.confirm(`Delete ${credential.name}? This cannot be undone.`)) return;
@@ -713,17 +777,50 @@ export default function LogInDetails() {
                   <span className="block text-xs text-muted-foreground">Passwords lock automatically after 10 minutes</span>
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setPrivateKey(null)}>
                   <LockKeyhole className="mr-1.5 h-3.5 w-3.5" /> Lock now
                 </Button>
                 {isOwnScope && (
-                  <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
-                    <Plus className="mr-1.5 h-3.5 w-3.5" /> Add login
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={importing}
+                      onClick={() => document.getElementById("onepassword-csv-import")?.click()}
+                    >
+                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                      {importing ? "Importing…" : "Import 1Password"}
+                    </Button>
+                    <input
+                      id="onepassword-csv-import"
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void importFromOnePassword(file);
+                      }}
+                    />
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={exportToOnePassword}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+                    </Button>
+                    <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add login
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
+            {isOwnScope && (
+              <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                Live two-way sync with 1Password needs a self-hosted Connect server (not practical for a family vault).
+                Use <span className="font-semibold text-foreground">Import / Export CSV</span> to move logins both ways —
+                export from 1Password → import here, or export here → import in 1Password.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[12rem_minmax(0,1fr)]">
@@ -825,6 +922,22 @@ export default function LogInDetails() {
                       value={field.value}
                       onChange={(event) => updateField(field.id, { value: event.target.value })}
                       placeholder={`Enter ${field.label.toLowerCase()}`}
+                      autoComplete={
+                        field.type === "username" || field.type === "email" || field.type === "userId"
+                          ? "username"
+                          : field.type === "password"
+                            ? "new-password"
+                            : field.type === "website"
+                              ? "url"
+                              : "off"
+                      }
+                      name={
+                        field.type === "username" || field.type === "email" || field.type === "userId"
+                          ? "username"
+                          : field.type === "password"
+                            ? "password"
+                            : undefined
+                      }
                       className={`rounded-xl bg-card ${secretField(field.type) ? "pr-10" : ""}`}
                     />
                     {secretField(field.type) && (

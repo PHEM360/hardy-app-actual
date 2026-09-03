@@ -356,7 +356,14 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moduleId = moduleForPath(location.pathname);
-  const requirement = moduleId ? settings.moduleRequirements[moduleId] || "none" : "none";
+  // Log Ins has its own vault unlock (PIN or Face ID) — do not stack a second
+  // account-passkey prompt in front of it.
+  const requirement =
+    moduleId === "passwords"
+      ? "none"
+      : moduleId
+        ? settings.moduleRequirements[moduleId] || "none"
+        : "none";
   const verificationKey = `${moduleId || "none"}:${location.key}`;
   const [verifiedKey, setVerifiedKey] = useState("");
   const verified = useMemo(() => verifiedKey === verificationKey, [verificationKey, verifiedKey]);

@@ -108,6 +108,10 @@ service cloud.firestore {
     }
 
     function meetsModuleSecurity(moduleId) {
+      // Log Ins vault is end-to-end encrypted and unlocked with a vault PIN /
+      // device biometrics. Requiring a separate page passkey caused a double
+      // prompt and blocked PIN-only unlock from reading ciphertext.
+      if (moduleId == "passwords") return isAuthenticated();
       let requirement = moduleRequirement(moduleId);
       return requirement == "none" ||
         (requirement == "passkey" && hasFreshModulePasskey()) ||

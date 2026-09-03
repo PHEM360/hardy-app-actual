@@ -166,6 +166,25 @@ export async function unlockPasswordVaultWithPin(pin: string, config: PasswordVa
   }
 }
 
+/** Re-wrap the vault private key with a new 4-digit PIN (keeps Face ID unlock if enrolled). */
+export async function changePasswordVaultPin(
+  currentPin: string,
+  newPin: string,
+  config: PasswordVaultConfig,
+): Promise<PasswordVaultConfig> {
+  if (!/^\d{4}$/.test(newPin)) throw new Error("New passcode must be exactly 4 digits");
+  if (currentPin === newPin) throw new Error("Choose a different passcode");
+  const privateKey = await unlockPasswordVaultWithPin(currentPin, config);
+  const pinSalt = randomBytes(16);
+  const pinKey = await derivePinKey(newPin, pinSalt);
+  const encryptedPrivateKeyPin = await encryptWithKey(pinKey, JSON.stringify(privateKey));
+  return {
+    ...config,
+    pinSalt: toB64(pinSalt),
+    encryptedPrivateKeyPin,
+  };
+}
+
 type PrfExtensionResult = {
   prf?: {
     enabled?: boolean;
@@ -229,16 +248,24 @@ export async function enrollVaultBiometrics(
 }
 
 export async function unlockPasswordVaultWithBiometrics(config: PasswordVaultConfig) {
-  if (!config.biometric) throw new Error("Biometric unlock has not been set up");
-  const secret = await getPrfSecret(
-    fromB64(config.biometric.credentialId),
-    fromB64(config.biometric.prfSalt),
-  );
+  if (!config.biometric) {
+    throw new Error("Face ID / fingerprint unlock is not set up for this vault. Use your 4-digit passcode.");
+  }
   try {
+    const secret = await getPrfSecret(
+      fromB64(config.biometric.credentialId),
+      fromB64(config.biometric.prfSalt),
+    );
     const key = await keyFromSecret(secret);
     return JSON.parse(await decryptWithKey(key, config.biometric.encryptedPrivateKey)) as JsonWebKey;
-  } catch {
-    throw new Error("Biometric unlock failed");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/not allowed|cancel|abort/i.test(message)) {
+      throw new Error("Biometric unlock was cancelled. You can use your 4-digit passcode instead.");
+    }
+    throw new Error(
+      "Face ID / fingerprint unlock failed on this device. Use your 4-digit passcode, or re-enable biometrics when you next set up the vault.",
+    );
   }
 }
 

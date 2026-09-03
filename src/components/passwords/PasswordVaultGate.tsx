@@ -165,12 +165,14 @@ export default function PasswordVaultGate({
           {isSetup ? <ShieldCheck className="h-7 w-7" /> : <LockKeyhole className="h-7 w-7" />}
         </div>
         <h2 className="mt-4 font-display text-xl font-bold">
-          {isSetup ? "Create your private vault" : "Unlock your password vault"}
+          {isSetup ? "Create your private vault" : "Unlock Log Ins"}
         </h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
           {isSetup
             ? "Your passwords are encrypted on this device before they are saved."
-            : "Use your device biometrics or your 4-digit passcode."}
+            : config?.biometric
+              ? "Confirm once with Face ID / fingerprint, or your 4-digit passcode."
+              : "Enter your 4-digit passcode once to open your encrypted logins."}
         </p>
       </div>
 
@@ -220,19 +222,19 @@ export default function PasswordVaultGate({
                   onClick={() => void unlockWithBiometrics()}
                 >
                   <Fingerprint className="mr-2 h-5 w-5" />
-                  {busy === "biometric" ? "Checking…" : "Use Face ID or fingerprint"}
+                  {busy === "biometric" ? "Checking…" : "Unlock with Face ID / fingerprint"}
                 </Button>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="h-px flex-1 bg-border" />
-                  or use your passcode
+                  or 4-digit passcode
                   <span className="h-px flex-1 bg-border" />
                 </div>
               </>
             )}
-            <PinInput value={pin} onChange={setPin} label="4-digit passcode" autoFocus />
+            <PinInput value={pin} onChange={setPin} label="4-digit passcode" autoFocus={!config.biometric} />
             <Button
               variant={config.biometric ? "outline" : "default"}
-              className="h-11 w-full rounded-xl"
+              className={`h-11 w-full rounded-xl ${config.biometric ? "" : "bg-gradient-primary text-primary-foreground border-0"}`}
               disabled={busy !== null || pin.length !== 4 || blockedFor > 0}
               onClick={() => void unlockWithPin()}
             >
@@ -247,7 +249,7 @@ export default function PasswordVaultGate({
         )}
         <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          Passwords are end-to-end encrypted. Hardy Hub administrators and Firebase cannot read them.
+          You only unlock once here. Passwords stay end-to-end encrypted — Hardy Hub cannot read them.
         </div>
       </div>
     </div>
