@@ -33,6 +33,8 @@ export type HolidayBoardBasis =
 
 export type HolidaySearchUnit = "hours" | "days" | "weeks" | "months";
 
+export type HolidayWatchScheduleMode = "once" | "scheduled";
+
 export type HolidayWatchStatus = "active" | "paused" | "archived";
 
 export type HolidayAlertChannel = "push" | "email";
@@ -93,6 +95,8 @@ export interface HolidayWatch {
   poolRequired: boolean;
   keyFeatures?: HolidayKeyFeatureId[];
   notes?: string;
+  /** once = run a single search; scheduled = keep checking on an interval */
+  scheduleMode?: HolidayWatchScheduleMode;
   searchIntervalAmount: number;
   searchIntervalUnit: HolidaySearchUnit;
   alertChannels: HolidayAlertChannel[];

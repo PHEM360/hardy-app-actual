@@ -111,20 +111,27 @@ export function useHolidays(scopeUserId?: string) {
     ) => {
       if (!uid) return;
       const now = new Date();
-      await addDoc(
+      const once = data.scheduleMode === "once";
+      const ref = await addDoc(
         collection(db, "holidays", uid, "watches"),
         stripUndefined({
           ...data,
+          scheduleMode: once ? "once" : "scheduled",
           bestPriceGbp: null,
           bestPriceSource: null,
           bestPriceUrl: null,
           bestPriceFoundAt: null,
           lastSearchedAt: null,
-          nextSearchAt: nextHolidaySearchAt(now, data.searchIntervalAmount, data.searchIntervalUnit),
+          // One-off: due immediately so scheduler / client search can run it.
+          // Scheduled: first automatic check after the interval.
+          nextSearchAt: once
+            ? now.toISOString()
+            : nextHolidaySearchAt(now, data.searchIntervalAmount, data.searchIntervalUnit),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }),
       );
+      return ref.id;
     },
     [uid],
   );

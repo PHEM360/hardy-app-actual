@@ -137,7 +137,7 @@ function WatchCard({
                   : "bg-muted text-muted-foreground"
               }`}
             >
-              {watch.status}
+              {watch.scheduleMode === "once" ? "one-off" : watch.status}
             </Badge>
           </div>
           <p className="mt-0.5 text-sm text-foreground/80">{watch.destination}</p>
@@ -280,12 +280,56 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
     setSaving(true);
     try {
       if (editing?.id) {
-        await updateWatch(editing.id, value);
-        toast.success("Watch updated");
+        const once = value.scheduleMode === "once";
+        await updateWatch(editing.id, {
+          ...value,
+          nextSearchAt: once
+            ? null
+            : editing.scheduleMode === "once" || !editing.nextSearchAt
+              ? new Date().toISOString()
+              : editing.nextSearchAt,
+          status: once ? editing.status : editing.status === "paused" && editing.scheduleMode === "once" ? "active" : editing.status,
+        });
+        toast.success(once ? "Saved as one-off search" : "Watch updated");
+        if (once && canEdit) {
+          setSearchingId(editing.id);
+          try {
+            const res = await runHolidayPriceSearch(editing.id);
+            toast.success(
+              res.findings
+                ? `${res.findings} options · best ${fmtMoney(res.bestPriceGbp)}`
+                : res.message || "One-off search finished",
+            );
+          } catch (err) {
+            toast.error((err as Error).message || "Search failed");
+          } finally {
+            setSearchingId(null);
+          }
+        }
       } else {
-        await addWatch(value);
-        toast.success("Watching for deals");
-        setSection("watches");
+        const id = await addWatch(value);
+        if (value.scheduleMode === "once") {
+          toast.success("Running one-off search…");
+          setSection("watches");
+          if (id && canEdit) {
+            setSearchingId(id);
+            try {
+              const res = await runHolidayPriceSearch(id);
+              toast.success(
+                res.findings
+                  ? `${res.findings} options · best ${fmtMoney(res.bestPriceGbp)}`
+                  : res.message || "One-off search finished",
+              );
+            } catch (err) {
+              toast.error((err as Error).message || "Search failed");
+            } finally {
+              setSearchingId(null);
+            }
+          }
+        } else {
+          toast.success("Watching for deals");
+          setSection("watches");
+        }
       }
       setFormOpen(false);
       setEditing(null);
@@ -604,7 +648,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent
           aria-describedby={undefined}
-          className="max-h-[min(90vh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1.5rem))] max-w-lg overflow-y-auto mx-4"
+          className="w-[calc(100%-1.5rem)] max-w-lg overflow-y-auto sm:mx-4"
         >
           <DialogHeader>
             <DialogTitle className="font-display">

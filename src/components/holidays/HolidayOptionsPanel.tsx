@@ -128,7 +128,10 @@ export function HolidayOptionsPanel({
         <div>
           <h3 className="font-display text-base font-bold">{watch.title}</h3>
           <p className="text-xs text-muted-foreground">
-            Top matches · searches every {watch.searchIntervalAmount} {watch.searchIntervalUnit}
+            Top matches ·{" "}
+            {watch.scheduleMode === "once"
+              ? "one-off search"
+              : `searches every ${watch.searchIntervalAmount} ${watch.searchIntervalUnit}`}
             {watch.lastSearchedAt ? ` · last ${fmtDate(watch.lastSearchedAt)}` : ""}
           </p>
         </div>

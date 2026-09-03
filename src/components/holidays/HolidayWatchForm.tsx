@@ -37,9 +37,11 @@ import {
   LONDON_ALL_VALUE,
   UK_AIRPORTS,
   destinationsForFilter,
+  isRegionAnyDestinationId,
   type DestinationFilterMode,
   type HolidayKeyFeatureId,
 } from "@/lib/holidayCatalog";
+import type { HolidayWatchScheduleMode } from "@/types/holidays";
 
 export type HolidayWatchFormValue = Omit<
   HolidayWatch,
@@ -90,6 +92,7 @@ function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
     poolRequired: false,
     keyFeatures: [],
     notes: "",
+    scheduleMode: "scheduled",
     searchIntervalAmount: settings.defaultSearchIntervalAmount,
     searchIntervalUnit: settings.defaultSearchIntervalUnit,
     alertChannels: [...settings.defaultAlertChannels],
@@ -136,6 +139,7 @@ function fromWatch(w: HolidayWatch): HolidayWatchFormValue {
     poolRequired: !!w.poolRequired,
     keyFeatures: w.keyFeatures || [],
     notes: w.notes || "",
+    scheduleMode: w.scheduleMode === "once" ? "once" : "scheduled",
     searchIntervalAmount: w.searchIntervalAmount || 1,
     searchIntervalUnit: w.searchIntervalUnit || "days",
     alertChannels: w.alertChannels?.length ? [...w.alertChannels] : ["push"],
@@ -302,10 +306,11 @@ export function HolidayWatchForm({
   };
 
   const mode = form.dates.mode;
+  const scheduleMode = form.scheduleMode === "once" ? "once" : "scheduled";
   const valid =
     form.destination.trim().length > 0 &&
     form.departureAirports.length > 0 &&
-    form.searchIntervalAmount >= 1 &&
+    (scheduleMode === "once" || form.searchIntervalAmount >= 1) &&
     form.alertChannels.length > 0 &&
     (form.includeAllBrands || form.brands.length > 0) &&
     (mode === "no_preference" ||
@@ -324,6 +329,8 @@ export function HolidayWatchForm({
       ...form,
       title,
       destination: form.destination.trim(),
+      scheduleMode,
+      searchIntervalAmount: Math.max(1, form.searchIntervalAmount || 1),
       destinationPrefs: {
         filterMode,
         destinationId: form.destinationPrefs?.destinationId || "",
@@ -425,7 +432,14 @@ export function HolidayWatchForm({
             />
           </Field>
         ) : (
-          <Field label="Destination *">
+          <Field
+            label={filterMode === "region" ? "Country *" : "Destination *"}
+            hint={
+              filterMode === "region"
+                ? "Pick Any for the whole region, or narrow to one country."
+                : undefined
+            }
+          >
             <Select
               value={form.destinationPrefs?.destinationId || ""}
               onValueChange={(id) => {
@@ -433,23 +447,29 @@ export function HolidayWatchForm({
                   destOptions.find((d) => d.id === id) ||
                   HOLIDAY_DESTINATIONS.find((d) => d.id === id);
                 if (!opt) return;
-                patch({ destination: opt.label });
+                const destinationLabel = isRegionAnyDestinationId(opt.id)
+                  ? opt.region || opt.label
+                  : opt.label;
+                patch({ destination: destinationLabel });
                 patchDest({
                   destinationId: opt.id,
-                  destination: opt.label,
-                  country: opt.country,
-                  region: opt.region,
+                  destination: destinationLabel,
+                  country: isRegionAnyDestinationId(opt.id) ? undefined : opt.country,
+                  region: opt.region || form.destinationPrefs?.region,
                 });
               }}
             >
               <SelectTrigger className="h-9 rounded-xl">
-                <SelectValue placeholder="Select destination…" />
+                <SelectValue
+                  placeholder={
+                    filterMode === "region" ? "Any or a country…" : "Select destination…"
+                  }
+                />
               </SelectTrigger>
               <SelectContent className="max-h-64">
                 {destOptions.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
                     {d.label}
-                    {filterMode === "region" ? ` · ${d.country}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -550,7 +570,20 @@ export function HolidayWatchForm({
               <Input type="date" value={form.dates.endDate || ""} onChange={(e) => patchDates({ endDate: e.target.value })} className="h-9 rounded-xl" />
             </Field>
             <Field label="Or nights">
-              <Input type="number" min={1} max={60} value={form.dates.nights ?? ""} onChange={(e) => patchDates({ nights: e.target.value ? Number(e.target.value) : undefined })} className="h-9 rounded-xl" />
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={60}
+                value={form.dates.nights ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  patchDates({
+                    nights: raw === "" ? undefined : Math.max(1, Math.min(60, Number(raw) || 0)) || undefined,
+                  });
+                }}
+                className="h-9 rounded-xl"
+              />
             </Field>
             {mode === "flexible_days" && (
               <Field label="± flexible days">
@@ -586,7 +619,21 @@ export function HolidayWatchForm({
               })}
             </div>
             <Field label="Nights">
-              <Input type="number" min={1} max={60} value={form.dates.nights ?? 7} onChange={(e) => patchDates({ nights: Number(e.target.value) || 7 })} className="h-9 rounded-xl" />
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={60}
+                value={form.dates.nights ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  patchDates({
+                    nights: raw === "" ? undefined : Math.max(1, Math.min(60, Number(raw) || 0)) || undefined,
+                  });
+                }}
+                placeholder="e.g. 7"
+                className="h-9 rounded-xl"
+              />
             </Field>
           </div>
         )}
@@ -720,20 +767,66 @@ export function HolidayWatchForm({
       </Section>
 
       <Section title="Watch schedule">
-        <Field label="Search every">
-          <div className="flex gap-2">
-            <Input type="number" min={1} max={90} value={form.searchIntervalAmount} onChange={(e) => patch({ searchIntervalAmount: Number(e.target.value) || 1 })} className="h-9 w-24 rounded-xl" />
-            <Select value={form.searchIntervalUnit} onValueChange={(v) => patch({ searchIntervalUnit: v as HolidaySearchUnit })}>
-              <SelectTrigger className="h-9 flex-1 rounded-xl"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hours">Hours</SelectItem>
-                <SelectItem value="days">Days</SelectItem>
-                <SelectItem value="weeks">Weeks</SelectItem>
-                <SelectItem value="months">Months</SelectItem>
-              </SelectContent>
-            </Select>
+        <Field label="How often">
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { id: "once" as const, label: "One-off search", hint: "Run once, then stop" },
+                { id: "scheduled" as const, label: "On a schedule", hint: "Keep checking" },
+              ] as const
+            ).map((opt) => {
+              const on = scheduleMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => patch({ scheduleMode: opt.id as HolidayWatchScheduleMode })}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                    on
+                      ? "border-primary/45 bg-primary/10 text-foreground"
+                      : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{opt.label}</span>
+                  <span className="block text-[11px] opacity-80">{opt.hint}</span>
+                </button>
+              );
+            })}
           </div>
         </Field>
+        {scheduleMode === "scheduled" && (
+          <Field label="Search every">
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={90}
+                value={form.searchIntervalAmount || ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  patch({
+                    searchIntervalAmount: raw === "" ? 0 : Math.max(1, Number(raw) || 0),
+                  });
+                }}
+                className="h-9 w-24 rounded-xl"
+              />
+              <Select
+                value={form.searchIntervalUnit}
+                onValueChange={(v) => patch({ searchIntervalUnit: v as HolidaySearchUnit })}
+              >
+                <SelectTrigger className="h-9 flex-1 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hours">Hours</SelectItem>
+                  <SelectItem value="days">Days</SelectItem>
+                  <SelectItem value="weeks">Weeks</SelectItem>
+                  <SelectItem value="months">Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </Field>
+        )}
         <Field label="Alert me via">
           <div className="flex flex-wrap gap-3">
             <label className="flex items-center gap-2 text-sm">
@@ -757,7 +850,13 @@ export function HolidayWatchForm({
           disabled={!valid || saving}
           className="flex-1 rounded-xl bg-gradient-primary text-primary-foreground border-0"
         >
-          {saving ? "Saving…" : initial ? "Save changes" : "Start watching"}
+          {saving
+            ? "Saving…"
+            : initial
+              ? "Save changes"
+              : scheduleMode === "once"
+                ? "Run one-off search"
+                : "Start watching"}
         </Button>
       </div>
     </form>

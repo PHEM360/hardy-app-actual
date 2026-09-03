@@ -17,10 +17,14 @@ describe("holidayCatalog", () => {
     expect(codes).not.toContain(LONDON_ALL_VALUE);
   });
 
-  it("filters destinations by region", () => {
+  it("filters destinations by region with Any + countries", () => {
     const caribbean = destinationsForFilter("region", "Caribbean");
-    expect(caribbean.length).toBeGreaterThan(0);
-    expect(caribbean.every((d) => d.region === "Caribbean")).toBe(true);
+    expect(caribbean[0]?.id).toBe("any:Caribbean");
+    expect(caribbean[0]?.label).toMatch(/Any in Caribbean/i);
+    expect(caribbean.slice(1).every((d) => d.region === "Caribbean")).toBe(true);
+    expect(caribbean.some((d) => d.label === "Barbados")).toBe(true);
+    // Countries only — not resort-level rows like "Cancún"
+    expect(caribbean.every((d) => d.id.startsWith("any:") || d.id.startsWith("country:"))).toBe(true);
   });
 
   it("dedupes countries for country filter", () => {

@@ -75,6 +75,7 @@ interface HolidayWatchDoc {
   notes?: string;
   searchIntervalAmount?: number;
   searchIntervalUnit?: SearchUnit;
+  scheduleMode?: "once" | "scheduled";
   alertChannels?: AlertChannel[];
   status?: string;
   bestPriceGbp?: number | null;
@@ -755,9 +756,12 @@ async function processOneWatch(
 
   const { findings, sourcesChecked } = await searchWatchPrices(watch);
   const nowIso = new Date().toISOString();
-  const nextAt = new Date(
-    Date.now() + intervalMs(watch.searchIntervalAmount || 1, watch.searchIntervalUnit || "days"),
-  ).toISOString();
+  const once = watch.scheduleMode === "once";
+  const nextAt = once
+    ? null
+    : new Date(
+        Date.now() + intervalMs(watch.searchIntervalAmount || 1, watch.searchIntervalUnit || "days"),
+      ).toISOString();
 
   let best = previousBest;
   let bestFinding: PriceFinding | null = null;
@@ -836,6 +840,12 @@ async function processOneWatch(
       foundAt: nowIso,
     })),
   };
+
+  // One-off searches should not keep re-queuing on the scheduler.
+  if (once) {
+    patch.status = "paused";
+    patch.scheduleMode = "once";
+  }
 
   if (bestFinding) {
     patch.bestPriceGbp = bestFinding.priceGbp;

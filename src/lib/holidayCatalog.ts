@@ -203,12 +203,43 @@ export function resolveDepartureAirports(selected: string[]): string[] {
   return [...set];
 }
 
+export function regionAnyDestinationId(region: string) {
+  return `any:${region}`;
+}
+
+export function isRegionAnyDestinationId(id?: string | null) {
+  return !!id && id.startsWith("any:");
+}
+
+/** Destinations for the form picker. Region mode: Any + countries in that region. */
 export function destinationsForFilter(
   mode: DestinationFilterMode,
   region?: string,
 ): HolidayDestinationOption[] {
   if (mode === "region" && region) {
-    return HOLIDAY_DESTINATIONS.filter((d) => d.region === region);
+    const inRegion = HOLIDAY_DESTINATIONS.filter((d) => d.region === region);
+    const countries: HolidayDestinationOption[] = [];
+    const seen = new Set<string>();
+    for (const d of inRegion) {
+      if (seen.has(d.country)) continue;
+      seen.add(d.country);
+      countries.push({
+        id: `country:${d.country}`,
+        label: d.country,
+        country: d.country,
+        region,
+      });
+    }
+    countries.sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      {
+        id: regionAnyDestinationId(region),
+        label: `Any in ${region}`,
+        country: "Any",
+        region,
+      },
+      ...countries,
+    ];
   }
   if (mode === "country") {
     const seen = new Set<string>();
