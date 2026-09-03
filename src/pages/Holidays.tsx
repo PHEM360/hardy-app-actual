@@ -212,7 +212,7 @@ function WatchCard({
 const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const { scopeUserId, isOwnScope, pageTitle } = useSharedScope("holidays");
   const live = useHolidays(scopeUserId);
-  const canEdit = mockData ? false : isOwnScope;
+  const canEdit = mockData ? true : isOwnScope;
 
   const watches = mockData?.watches ?? live.watches;
   const settings = mockData?.settings ?? live.settings ?? DEFAULT_HOLIDAY_SETTINGS;
@@ -271,6 +271,12 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   };
 
   const handleSave = async (value: HolidayWatchFormValue) => {
+    if (mockData) {
+      toast.success("Preview only — not saved");
+      setFormOpen(false);
+      setEditing(null);
+      return;
+    }
     setSaving(true);
     try {
       if (editing?.id) {

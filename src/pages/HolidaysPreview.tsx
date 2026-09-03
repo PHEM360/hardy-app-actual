@@ -247,7 +247,14 @@ export default function HolidaysPreview() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      style={{
+        // Simulate installed PWA / notch so preview checks status-bar clearance
+        paddingTop: "env(safe-area-inset-top, 47px)",
+        paddingBottom: "env(safe-area-inset-bottom, 34px)",
+      }}
+    >
       <Holidays
         mockData={{
           watches: watches.map((w) =>
