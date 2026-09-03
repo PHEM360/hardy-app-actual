@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Fingerprint, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,11 @@ function PinInput({
   );
 }
 
+function isUserCancelError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /cancel|abort|not allowed|dismiss/i.test(message);
+}
+
 export default function PasswordVaultGate({
   config,
   loading,
@@ -75,7 +80,14 @@ export default function PasswordVaultGate({
   const [busy, setBusy] = useState<"pin" | "biometric" | "setup" | null>(null);
   const [blockedUntil, setBlockedUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
+  const [autoPromptTried, setAutoPromptTried] = useState(false);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const onUnlockRef = useRef(onUnlock);
+  onUnlockRef.current = onUnlock;
   const blockedFor = Math.max(0, blockedUntil - now);
+  const canAutoBiometric =
+    !!config?.biometric && passwordVaultBiometricsAvailable() && !loading;
 
   useEffect(() => {
     if (!dataUid) return;
@@ -87,6 +99,33 @@ export default function PasswordVaultGate({
     const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
   }, [blockedFor]);
+
+  // iOS-style: opening Log Ins immediately presents Face ID / fingerprint when enrolled.
+  // Failures/cancels fall through quietly to the passcode UI (no toast spam).
+  useEffect(() => {
+    if (!canAutoBiometric || autoPromptTried || busyRef.current) return;
+    let cancelled = false;
+    setAutoPromptTried(true);
+    setBusy("biometric");
+    const run = async () => {
+      try {
+        // Brief paint so the unlock card is visible behind the system prompt.
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        if (cancelled || !config) return;
+        const key = await unlockPasswordVaultWithBiometrics(config);
+        if (cancelled) return;
+        onUnlockRef.current(key);
+      } catch {
+        // Stay on unlock screen for passcode / manual retry.
+      } finally {
+        if (!cancelled) setBusy(null);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [canAutoBiometric, autoPromptTried, config]);
 
   const setup = async () => {
     if (!dataUid || pin.length !== 4 || pin !== confirmPin) {
@@ -142,7 +181,9 @@ export default function PasswordVaultGate({
     try {
       onUnlock(await unlockPasswordVaultWithBiometrics(config));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not unlock the vault");
+      if (!isUserCancelError(error)) {
+        toast.error(error instanceof Error ? error.message : "Could not unlock the vault");
+      }
     } finally {
       setBusy(null);
     }
@@ -171,7 +212,9 @@ export default function PasswordVaultGate({
           {isSetup
             ? "Your passwords are encrypted on this device before they are saved."
             : config?.biometric
-              ? "Confirm once with Face ID / fingerprint, or your 4-digit passcode."
+              ? busy === "biometric"
+                ? "Waiting for Face ID / fingerprint…"
+                : "Face ID opens automatically — or use your 4-digit passcode."
               : "Enter your 4-digit passcode once to open your encrypted logins."}
         </p>
       </div>
@@ -222,7 +265,7 @@ export default function PasswordVaultGate({
                   onClick={() => void unlockWithBiometrics()}
                 >
                   <Fingerprint className="mr-2 h-5 w-5" />
-                  {busy === "biometric" ? "Checking…" : "Unlock with Face ID / fingerprint"}
+                  {busy === "biometric" ? "Checking Face ID…" : "Unlock with Face ID / fingerprint"}
                 </Button>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="h-px flex-1 bg-border" />
