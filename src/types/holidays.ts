@@ -1,5 +1,8 @@
 /** Holidays price-watch feature types. */
 
+import { UK_REPUTABLE_BRANDS } from "@/lib/holidayCatalog";
+import type { DestinationFilterMode, HolidayKeyFeatureId } from "@/lib/holidayCatalog";
+
 export type HolidayDateMode =
   | "fixed"
   | "flexible_days"
@@ -42,17 +45,11 @@ export interface HolidayTravellers {
 
 export interface HolidayDatePrefs {
   mode: HolidayDateMode;
-  /** ISO date — used for fixed / flexible_days */
   startDate?: string;
-  /** ISO date — used for fixed / flexible_days */
   endDate?: string;
-  /** Nights, when duration is preferred over an end date */
   nights?: number;
-  /** ± days when mode is flexible_days */
   flexDays?: number;
-  /** Calendar months 1–12 when mode is months */
   months?: number[];
-  /** Optional year for month-based searches */
   year?: number;
 }
 
@@ -61,27 +58,40 @@ export interface HolidayBrandPref {
   rank: number;
 }
 
+export interface HolidayDestinationPrefs {
+  filterMode: DestinationFilterMode;
+  /** Selected catalogue id or country / region label */
+  destinationId?: string;
+  destination: string;
+  region?: string;
+  country?: string;
+}
+
 export interface HolidayWatch {
   id?: string;
   title: string;
   destination: string;
+  destinationPrefs?: HolidayDestinationPrefs;
   departureAirports: string[];
   dates: HolidayDatePrefs;
   travellers: HolidayTravellers;
   brands: HolidayBrandPref[];
+  includeAllBrands?: boolean;
   flightBooking: HolidayFlightBooking;
   flightClass: HolidayFlightClass;
   boardBasis: HolidayBoardBasis;
   directFlightsOnly: boolean;
   maxStops?: number;
-  hotelStarsMin?: number;
-  /** Soft upper budget in GBP; null = no cap */
+  /** Optional minimum hotel star rating 1–5 */
+  hotelStarsMin?: number | null;
+  /** Optional minimum TripAdvisor score 1–5 */
+  tripadvisorMin?: number | null;
   maxBudgetGbp?: number | null;
-  /** Alert when price is at or below this */
   targetPriceGbp?: number | null;
   includeTransfers: boolean;
   kidsClub: boolean;
   poolRequired: boolean;
+  keyFeatures?: HolidayKeyFeatureId[];
   notes?: string;
   searchIntervalAmount: number;
   searchIntervalUnit: HolidaySearchUnit;
@@ -93,10 +103,58 @@ export interface HolidayWatch {
   bestPriceFoundAt?: string | null;
   lastSearchedAt?: string | null;
   nextSearchAt?: string | null;
+  lastOptions?: HolidaySearchOption[];
   createdAt?: any;
   updatedAt?: any;
 }
 
+export interface HolidayReviewSummary {
+  source: string;
+  score?: number;
+  sampleSize?: string;
+  summary: string;
+  url?: string;
+}
+
+export interface HolidayDiscountInfo {
+  type: "nhs_bluelight" | "student" | "loyalty" | "senior" | "military" | "other";
+  label: string;
+  detail: string;
+  estimatedSavingPct?: number;
+}
+
+export interface HolidaySearchOption {
+  id?: string;
+  watchId: string;
+  rank: number;
+  suitabilityScore: number;
+  priceGbp: number;
+  currency: "GBP";
+  sourceName: string;
+  sourceUrl: string;
+  packageLabel: string;
+  hotelName?: string;
+  destinationLabel?: string;
+  outboundDate?: string;
+  returnDate?: string;
+  nights?: number;
+  boardBasis?: string;
+  flightClass?: string;
+  departureAirport?: string;
+  directFlight?: boolean;
+  officialStars?: number | null;
+  tripadvisorScore?: number | null;
+  reviewSummaries?: HolidayReviewSummary[];
+  independentSummary?: string;
+  discounts?: HolidayDiscountInfo[];
+  whySuitable?: string[];
+  notes?: string;
+  manual?: boolean;
+  foundAt: string;
+  createdAt?: any;
+}
+
+/** @deprecated prefer HolidaySearchOption — kept for older price docs */
 export interface HolidayPriceFinding {
   id?: string;
   watchId: string;
@@ -110,10 +168,23 @@ export interface HolidayPriceFinding {
   boardBasis?: string;
   flightClass?: string;
   notes?: string;
-  /** true when entered by the user rather than the automated searcher */
   manual?: boolean;
   foundAt: string;
   createdAt?: any;
+  /** Newer fields may appear on price docs after upgrade */
+  suitabilityScore?: number;
+  rank?: number;
+  officialStars?: number | null;
+  tripadvisorScore?: number | null;
+  reviewSummaries?: HolidayReviewSummary[];
+  independentSummary?: string;
+  discounts?: HolidayDiscountInfo[];
+  whySuitable?: string[];
+  hotelName?: string;
+  destinationLabel?: string;
+  nights?: number;
+  departureAirport?: string;
+  directFlight?: boolean;
 }
 
 export interface HolidaySettings {
@@ -136,28 +207,13 @@ export const DEFAULT_HOLIDAY_SETTINGS: HolidaySettings = {
     "easyJet Holidays",
     "Loveholidays",
     "On the Beach",
+    "Trailfinders",
+    "Virgin Atlantic Holidays",
   ],
-  preferredDepartureAirports: ["LHR", "LGW", "STN", "LTN", "MAN", "BHX", "EDI"],
+  preferredDepartureAirports: ["LON", "MAN", "BHX", "EDI"],
 };
 
-export const HOLIDAY_BRAND_OPTIONS = [
-  "British Airways Holidays",
-  "British Airways",
-  "Jet2Holidays",
-  "Jet2",
-  "TUI",
-  "easyJet Holidays",
-  "easyJet",
-  "Loveholidays",
-  "On the Beach",
-  "Lastminute.com",
-  "Expedia",
-  "Booking.com",
-  "Ryanair",
-  "Virgin Atlantic",
-  "Kuoni",
-  "Trailfinders",
-];
+export const HOLIDAY_BRAND_OPTIONS = UK_REPUTABLE_BRANDS;
 
 export const HOLIDAY_ACCENT = "hsl(172,48%,38%)";
 export const HOLIDAY_GRADIENT =
@@ -200,7 +256,6 @@ export const MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/** Milliseconds for a search interval. */
 export function holidaySearchIntervalMs(amount: number, unit: HolidaySearchUnit): number {
   const n = Math.max(1, Math.floor(amount || 1));
   switch (unit) {

@@ -78,7 +78,7 @@ const TopBar = () => {
       className="sticky top-0 z-40 border-b border-white/5 overflow-hidden"
       style={{
         background: headerColor || "var(--chrome-header, var(--gradient-hero))",
-        paddingTop: "env(safe-area-inset-top)",
+        paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
       {headerPhotoUrl && (
