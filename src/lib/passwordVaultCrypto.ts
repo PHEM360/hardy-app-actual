@@ -266,9 +266,27 @@ export async function unlockPasswordVaultWithBiometrics(config: PasswordVaultCon
       throw new Error("Biometric unlock was cancelled. You can use your 4-digit passcode instead.");
     }
     throw new Error(
-      "Device biometric unlock failed. Use your 4-digit passcode, or re-enable biometrics when you next set up the vault.",
+      "Device biometric unlock failed. Use your 4-digit passcode, or re-enable biometrics in Settings.",
     );
   }
+}
+
+/** Unlock with the current PIN, then enrol this device’s platform authenticator. */
+export async function enableVaultBiometricsWithPin(
+  pin: string,
+  config: PasswordVaultConfig,
+  userId: string,
+  displayName: string,
+): Promise<PasswordVaultConfig> {
+  const privateKey = await unlockPasswordVaultWithPin(pin, config);
+  const biometric = await enrollVaultBiometrics(userId, displayName, privateKey);
+  return { ...config, biometric };
+}
+
+/** Remove biometric unlock from the vault config (PIN still works). */
+export function clearVaultBiometrics(config: PasswordVaultConfig): PasswordVaultConfig {
+  const { biometric: _removed, ...rest } = config;
+  return rest;
 }
 
 export function passwordVaultBiometricsAvailable() {
