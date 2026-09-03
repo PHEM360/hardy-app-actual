@@ -166,6 +166,25 @@ export async function unlockPasswordVaultWithPin(pin: string, config: PasswordVa
   }
 }
 
+/** Re-wrap the vault private key with a new 4-digit PIN (keeps biometric unlock if enrolled). */
+export async function changePasswordVaultPin(
+  currentPin: string,
+  newPin: string,
+  config: PasswordVaultConfig,
+): Promise<PasswordVaultConfig> {
+  if (!/^\d{4}$/.test(newPin)) throw new Error("New passcode must be exactly 4 digits");
+  if (currentPin === newPin) throw new Error("Choose a different passcode");
+  const privateKey = await unlockPasswordVaultWithPin(currentPin, config);
+  const pinSalt = randomBytes(16);
+  const pinKey = await derivePinKey(newPin, pinSalt);
+  const encryptedPrivateKeyPin = await encryptWithKey(pinKey, JSON.stringify(privateKey));
+  return {
+    ...config,
+    pinSalt: toB64(pinSalt),
+    encryptedPrivateKeyPin,
+  };
+}
+
 type PrfExtensionResult = {
   prf?: {
     enabled?: boolean;
@@ -194,7 +213,9 @@ export async function enrollVaultBiometrics(
   displayName: string,
   privateKey: JsonWebKey,
 ) {
-  if (!passwordVaultBiometricsAvailable()) throw new Error("Face ID or fingerprint unlock is not available on this device");
+  if (!passwordVaultBiometricsAvailable()) {
+    throw new Error("Device biometric unlock is not available in this browser. Use your passcode instead.");
+  }
   const prfSalt = randomBytes(32);
   const credential = await navigator.credentials.create({
     publicKey: {
@@ -229,17 +250,43 @@ export async function enrollVaultBiometrics(
 }
 
 export async function unlockPasswordVaultWithBiometrics(config: PasswordVaultConfig) {
-  if (!config.biometric) throw new Error("Biometric unlock has not been set up");
-  const secret = await getPrfSecret(
-    fromB64(config.biometric.credentialId),
-    fromB64(config.biometric.prfSalt),
-  );
+  if (!config.biometric) {
+    throw new Error("Device biometric unlock is not set up for this vault. Use your 4-digit passcode.");
+  }
   try {
+    const secret = await getPrfSecret(
+      fromB64(config.biometric.credentialId),
+      fromB64(config.biometric.prfSalt),
+    );
     const key = await keyFromSecret(secret);
     return JSON.parse(await decryptWithKey(key, config.biometric.encryptedPrivateKey)) as JsonWebKey;
-  } catch {
-    throw new Error("Biometric unlock failed");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/not allowed|cancel|abort/i.test(message)) {
+      throw new Error("Biometric unlock was cancelled. You can use your 4-digit passcode instead.");
+    }
+    throw new Error(
+      "Device biometric unlock failed. Use your 4-digit passcode, or re-enable biometrics in Settings.",
+    );
   }
+}
+
+/** Unlock with the current PIN, then enrol this device’s platform authenticator. */
+export async function enableVaultBiometricsWithPin(
+  pin: string,
+  config: PasswordVaultConfig,
+  userId: string,
+  displayName: string,
+): Promise<PasswordVaultConfig> {
+  const privateKey = await unlockPasswordVaultWithPin(pin, config);
+  const biometric = await enrollVaultBiometrics(userId, displayName, privateKey);
+  return { ...config, biometric };
+}
+
+/** Remove biometric unlock from the vault config (PIN still works). */
+export function clearVaultBiometrics(config: PasswordVaultConfig): PasswordVaultConfig {
+  const { biometric: _removed, ...rest } = config;
+  return rest;
 }
 
 export function passwordVaultBiometricsAvailable() {

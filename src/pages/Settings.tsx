@@ -22,6 +22,8 @@ import { useMyDevices } from "@/hooks/useMyDevices";
 import { useSecuritySettings } from "@/hooks/useSecuritySettings";
 import { authenticateWithPasskey, passkeyErrorMessage, registerPasskey } from "@/lib/passkeys";
 import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } from "@/types/security";
+import { ChangeVaultPinCard } from "@/components/passwords/ChangeVaultPinCard";
+import { OnePasswordConnectCard } from "@/components/passwords/OnePasswordConnectCard";
 import { toast } from "sonner";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
@@ -729,29 +731,38 @@ const Settings = () => {
           <div className="rounded-2xl border border-border/60 bg-card p-4 space-y-3">
             <div>
               <p className="text-sm font-semibold">Page security</p>
-              <p className="text-[11px] text-muted-foreground">Protected pages reuse a passkey presented within your chosen period. Sensitive approvals can still require a fresh check.</p>
+              <p className="text-[11px] text-muted-foreground">
+                Protected pages reuse a passkey presented within your chosen period. Log Ins uses its own vault passcode / device biometrics instead of a second page passkey.
+              </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {SECURITY_MODULES.map((module) => {
                 const requirement = securityDraft.moduleRequirements[module.id] || "none";
+                const isLogins = module.id === "passwords";
                 return (
                   <label key={module.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
                     <span className="min-w-0 flex-1 truncate text-xs font-semibold">{module.label}</span>
-                    <select
-                      value={requirement}
-                      onChange={(event) => {
-                        const value = event.target.value as SecurityRequirement;
-                        setSecurityDraft((current) => ({
-                          ...current,
-                          moduleRequirements: { ...current.moduleRequirements, [module.id]: value },
-                        }));
-                      }}
-                      className="rounded-lg border border-border bg-card px-2 py-1 text-[10px]"
-                    >
-                      <option value="none">No extra check</option>
-                      <option value="passkey">Passkey</option>
-                      <option value="password">Password</option>
-                    </select>
+                    {isLogins ? (
+                      <span className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
+                        Vault unlock
+                      </span>
+                    ) : (
+                      <select
+                        value={requirement}
+                        onChange={(event) => {
+                          const value = event.target.value as SecurityRequirement;
+                          setSecurityDraft((current) => ({
+                            ...current,
+                            moduleRequirements: { ...current.moduleRequirements, [module.id]: value },
+                          }));
+                        }}
+                        className="rounded-lg border border-border bg-card px-2 py-1 text-[10px]"
+                      >
+                        <option value="none">No extra check</option>
+                        <option value="passkey">Passkey</option>
+                        <option value="password">Password</option>
+                      </select>
+                    )}
                   </label>
                 );
               })}
@@ -760,6 +771,10 @@ const Settings = () => {
               {securitySaving ? "Saving…" : "Save security settings"}
             </Button>
           </div>
+
+          <ChangeVaultPinCard />
+
+          <OnePasswordConnectCard />
 
           {!showChangePassword ? (
             <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2" onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(false); }}>

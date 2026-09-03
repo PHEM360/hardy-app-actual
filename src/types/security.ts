@@ -41,7 +41,8 @@ export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
   appUnlockIntervalDays: 7,
   moduleRequirements: {
     personal_finance: "passkey",
-    passwords: "passkey",
+    // Log Ins uses the vault PIN / Face ID gate instead of a page passkey.
+    passwords: "none",
     remote_displays: "passkey",
   },
 };
@@ -65,6 +66,8 @@ export function normalizeSecuritySettings(value?: StoredSecuritySettings | null)
     moduleRequirements: {
       ...DEFAULT_SECURITY_SETTINGS.moduleRequirements,
       ...(value?.moduleRequirements || {}),
+      // Always vault-gated — never stack a page passkey in front of Log Ins.
+      passwords: "none",
     },
   };
 }

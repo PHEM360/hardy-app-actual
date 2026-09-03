@@ -108,10 +108,17 @@ service cloud.firestore {
     }
 
     function meetsModuleSecurity(moduleId) {
+      // Log Ins vault is end-to-end encrypted and unlocked with a vault PIN /
+      // device biometrics. Requiring a separate page passkey caused a double
+      // prompt and blocked PIN-only unlock from reading ciphertext.
       let requirement = moduleRequirement(moduleId);
-      return requirement == "none" ||
-        (requirement == "passkey" && hasFreshModulePasskey()) ||
-        (requirement == "password" && hasRecentPassword());
+      return moduleId == "passwords"
+        ? isAuthenticated()
+        : (
+          requirement == "none" ||
+          (requirement == "passkey" && hasFreshModulePasskey()) ||
+          (requirement == "password" && hasRecentPassword())
+        );
     }
 
     function moduleForPage(page) {
@@ -236,6 +243,11 @@ service cloud.firestore {
       // Password-vault configuration contains the encrypted private key and is
       // deliberately owner-only. Admin status never bypasses this boundary.
       match /vault/{vaultDoc} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // 1Password Connect credentials for bidirectional login sync (owner-only).
+      match /integrations/{integrationId} {
         allow read, write: if isOwner(userId);
       }
 
