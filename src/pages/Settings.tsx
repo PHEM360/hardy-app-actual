@@ -53,7 +53,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/weight",            label: "Health" },
   { path: "/households",        label: "Households" },
   { path: "/household-finance", label: "Household Finance" },
-  { path: "/tattersalls",       label: "Tattersalls" },
+  { path: "/tattersalls",       label: "Flats" },
   { path: "/ai-analysis",       label: "AI Analysis" },
   { path: "/holidays",          label: "Holidays" },
   { path: "/remote-displays",   label: "Remote Displays" },

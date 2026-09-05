@@ -27,7 +27,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/health":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
   "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,65%,54%),hsl(20,58%,47%))" },
   "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,58%,44%),hsl(150,53%,37%))" },
-  "/tattersalls":       { icon: Building2,     label: "Tattersalls",color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
+  "/tattersalls":       { icon: Building2,     label: "Flats",      color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
   "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: "hsl(220,60%,55%)",  gradient: "linear-gradient(135deg,hsl(218,63%,58%),hsl(230,58%,50%))" },
   "/notes":             { icon: StickyNote,    label: "Notes",      color: "hsl(42,85%,48%)",   gradient: "linear-gradient(135deg,hsl(42,92%,52%),hsl(28,85%,48%))" },
   "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },

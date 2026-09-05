@@ -161,7 +161,7 @@ const SECTIONS: Section[] = [
         iconColor: "#fff",
       },
       {
-        label: "Tattersalls",
+        label: "Flats",
         icon: Building,
         route: "/tattersalls",
         gradient: "linear-gradient(135deg, hsl(192,52%,46%), hsl(202,48%,40%))",

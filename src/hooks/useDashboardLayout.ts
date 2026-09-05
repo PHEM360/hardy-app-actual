@@ -58,7 +58,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   finance:       "Finance",
   households:    "Households",
   pets:          "Pets",
-  tattersalls:   "Tattersalls",
+  tattersalls:   "Flats",
   companies:     "Companies",
   weight:        "Health",
   notes:         "Notes",

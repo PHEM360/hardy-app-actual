@@ -84,6 +84,10 @@ service firebase.storage {
       allow read, write: if isInteractiveUser();
     }
 
+    match /flats/{flatId}/{allPaths=**} {
+      allow read, write: if isInteractiveUser();
+    }
+
     // Company files use the same owner/share model as the company document.
     match /companies/{companyId}/receipts/{fileName} {
       allow read: if canViewCompanyStorage(companyId);

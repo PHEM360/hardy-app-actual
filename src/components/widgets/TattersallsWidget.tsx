@@ -38,7 +38,7 @@ export function TattersallsWidget() {
         <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
           <Building2 className="w-3.5 h-3.5" />
         </span>
-        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Tattersalls</span>
+        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Flats</span>
         <ChevronRight className="w-3 h-3 text-white/50 ml-auto group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" />
       </div>
 

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote,
+  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -27,6 +27,7 @@ import AccountTypesSettings from "@/components/finance/AccountTypesSettings";
 import BankSyncSettings from "@/components/finance/BankSyncSettings";
 import DisplayStatsSettings from "@/components/finance/DisplayStatsSettings";
 import FinanceSummary from "@/components/finance/FinanceSummary";
+import FinanceTaxPanel from "@/components/finance/FinanceTaxPanel";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
@@ -179,12 +180,13 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "settings";
+type ViewMode = "chart" | "table" | "summary" | "tax" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
   { id: "table", label: "Table", Icon: Table2 },
   { id: "summary", label: "Summary", Icon: BarChart3 },
+  { id: "tax", label: "Tax", Icon: Calculator },
   { id: "settings", label: "Settings", Icon: Settings2 },
 ];
 
@@ -1077,6 +1079,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             colorFor={colorFor}
             show={showStat}
           />
+        </motion.div>
+      )}
+
+      {viewMode === "tax" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <FinanceTaxPanel />
         </motion.div>
       )}
 

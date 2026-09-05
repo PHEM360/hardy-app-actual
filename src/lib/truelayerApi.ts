@@ -64,3 +64,17 @@ export async function disconnectBank(connectionId: string) {
   const call = httpsCallable<{ connectionId: string }, { ok: boolean }>(functions, "disconnectTrueLayer");
   await call({ connectionId });
 }
+
+export async function importFlatBankTransactions(input: {
+  flatId: string;
+  connectionId: string;
+  bankAccountId: string;
+  days?: number;
+}) {
+  const call = httpsCallable<typeof input, { imported: number; scanned: number }>(
+    functions,
+    "importFlatBankTransactions",
+  );
+  const res = await call(input);
+  return res.data;
+}

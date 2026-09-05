@@ -113,8 +113,8 @@ export const FEATURE_MODULES: FeatureModule[] = [
   },
   {
     key: "tattersalls",
-    label: "Tattersalls",
-    description: "Flat management & expenses",
+    label: "Flats",
+    description: "Rental tracking, yields & tax",
     icon: "building",
     route: "/tattersalls",
     color: "info",
