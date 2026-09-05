@@ -5,6 +5,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# The Firebase emulator suite needs a JRE. It ships in the default base image,
+# but guard against a future image that lacks it so the setup stays self-healing.
+if ! command -v java >/dev/null 2>&1; then
+  echo "==> Installing a Java runtime (required by the Firebase emulators)"
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends default-jre-headless
+fi
+
 echo "==> Installing web app dependencies (npm ci)"
 npm ci
 
