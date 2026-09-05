@@ -52,7 +52,7 @@ export const HOME_TILES: HomeTileDef[] = [
   { id: "companies", label: "Companies", route: "/companies", icon: Building2, accent: "hsl(210,50%,50%)", gradient: "linear-gradient(135deg,hsl(210,53%,54%),hsl(220,48%,47%))" },
   { id: "health", label: "Health", route: "/weight", icon: Activity, accent: "hsl(152,55%,40%)", gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
   { id: "logins", label: "Log Ins", route: "/login-details", icon: KeyRound, accent: "hsl(265,55%,55%)", gradient: "linear-gradient(135deg,hsl(265,58%,58%),hsl(275,53%,50%))" },
-  { id: "tattersalls", label: "Tattersalls", route: "/tattersalls", icon: Building, accent: "hsl(195,50%,45%)", gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
+  { id: "tattersalls", label: "Flats", route: "/tattersalls", icon: Building, accent: "hsl(195,50%,45%)", gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
   { id: "freezer", label: "Freezer", route: "/freezer", icon: Snowflake, accent: "hsl(198,75%,50%)", gradient: "linear-gradient(135deg,hsl(198,75%,55%),hsl(215,70%,48%))" },
   { id: "inheritance", label: "IHT Planner", route: "/inheritance", icon: Calculator, accent: "hsl(0,60%,52%)", gradient: "linear-gradient(135deg,hsl(0,60%,52%),hsl(340,55%,46%))" },
   { id: "leave", label: "Annual Leave", route: "/annual-leave", icon: Plane, accent: "hsl(198,60%,50%)", gradient: "linear-gradient(135deg,hsl(198,60%,50%),hsl(210,55%,44%))" },

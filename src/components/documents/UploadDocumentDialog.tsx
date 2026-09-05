@@ -34,7 +34,7 @@ interface PageFile {
 const DESTINATIONS: Destination[] = [
   { key: "general",    label: "General",    icon: Folder,    color: "text-slate-600",    bg: "bg-slate-100 dark:bg-slate-800" },
   { key: "households", label: "Households", icon: Home,      color: "text-blue-600",     bg: "bg-blue-50 dark:bg-blue-950/40" },
-  { key: "tattersalls",label: "Tattersalls",icon: Building2, color: "text-purple-600",   bg: "bg-purple-50 dark:bg-purple-950/40" },
+  { key: "tattersalls",label: "Flats",icon: Building2, color: "text-purple-600",   bg: "bg-purple-50 dark:bg-purple-950/40" },
   { key: "pets",       label: "Pets",       icon: Heart,     color: "text-pink-600",     bg: "bg-pink-50 dark:bg-pink-950/40" },
   { key: "health",     label: "Health",     icon: Activity,  color: "text-emerald-600",  bg: "bg-emerald-50 dark:bg-emerald-950/40" },
   { key: "fitness",    label: "Fitness",    icon: Dumbbell,  color: "text-orange-600",   bg: "bg-orange-50 dark:bg-orange-950/40" },
@@ -43,7 +43,7 @@ const DESTINATIONS: Destination[] = [
 const DESTINATION_LABELS: Record<string, string> = {
   general:     "General Documents",
   households:  "Household Documents",
-  tattersalls: "Tattersalls Documents",
+  tattersalls: "Flats Documents",
   pets:        "Pet Documents",
   health:      "Health Documents",
   fitness:     "Fitness Documents",

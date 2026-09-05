@@ -23,7 +23,7 @@ export const SECURITY_MODULES = [
   { id: "calendar", label: "Calendar", routes: ["/calendar"] },
   { id: "inheritance", label: "IHT Planner", routes: ["/inheritance"] },
   { id: "freezer", label: "Freezer", routes: ["/freezer"] },
-  { id: "tattersalls", label: "Tattersalls", routes: ["/tattersalls"] },
+  { id: "tattersalls", label: "Flats", routes: ["/tattersalls"] },
   { id: "annual_leave", label: "Annual Leave", routes: ["/annual-leave"] },
   { id: "holidays", label: "Holidays", routes: ["/holidays"] },
   { id: "ai_analysis", label: "AI Analysis", routes: ["/ai-analysis"] },
