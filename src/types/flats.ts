@@ -4,6 +4,48 @@ export type FlatOwnership = "personal" | "sole_trader" | "ltd_company";
 
 export type FlatLedgerKind = "income" | "expense";
 
+export interface FlatInvestmentOneOff {
+  id: string;
+  label: string;
+  amountGbp: number;
+  /** Year index when the cost hits (0 = this year). */
+  year: number;
+}
+
+export interface FlatInvestmentInputs {
+  marketValueGbp: number;
+  offerPriceGbp: number;
+  mortgageBalanceGbp: number;
+
+  rentMonthlyGbp: number;
+  voidMonthsPerYear: number;
+
+  serviceChargeAnnualGbp: number;
+  maintenanceAnnualGbp: number;
+  insuranceAnnualGbp: number;
+  groundRentAnnualGbp: number;
+  lettingFeesPctOfRent: number;
+  otherAnnualCostsGbp: number;
+  mortgageInterestAnnualGbp: number;
+
+  oneOffs: FlatInvestmentOneOff[];
+
+  sellingCostsPct: number;
+  sellingFixedGbp: number;
+
+  capitalGrowthPctPa: number;
+  rentGrowthPctPa: number;
+  costGrowthPctPa: number;
+  alternativeReturnPctPa: number;
+
+  /** Marginal income-tax rate on taxable rental profit (0–100). */
+  incomeTaxRatePct: number;
+  /** Portion of mortgage interest that qualifies for basic-rate (20%) tax reduction. */
+  financeCostReliefPct: number;
+
+  horizonYears: number;
+}
+
 export interface FlatTenant {
   name: string;
   email?: string;
@@ -103,6 +145,8 @@ export interface FlatRecord {
   documentCategories: string[];
   balanceHistory: FlatBalanceRecord[];
   ledger: FlatLedgerEntry[];
+  /** Saved sell / hold / rent investment model inputs for this flat. */
+  investmentModel?: Partial<FlatInvestmentInputs> | null;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
