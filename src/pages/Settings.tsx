@@ -45,6 +45,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/dashboard",         label: "Home" },
   { path: "/tasks",             label: "Tasks" },
   { path: "/notes",             label: "Notes" },
+  { path: "/photos",            label: "Photos" },
   { path: "/finance",           label: "Finance" },
   { path: "/pets",              label: "Pets" },
   { path: "/admin",             label: "Admin" },

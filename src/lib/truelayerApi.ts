@@ -17,6 +17,15 @@ export function bankRedirectUri() {
   return `${window.location.origin}/api/truelayer/callback`;
 }
 
+export async function getBankConnectStatus() {
+  const call = httpsCallable<Record<string, never>, { configured: boolean; sandbox: boolean }>(functions, "getTrueLayerStatus");
+  try {
+    return (await call({})).data;
+  } catch {
+    return { configured: false, sandbox: true };
+  }
+}
+
 export async function startBankConnect() {
   const call = httpsCallable<{ redirectUri: string }, { authUrl: string }>(functions, "startTrueLayerConnect");
   const result = await call({ redirectUri: bankRedirectUri() });

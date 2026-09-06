@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import RemoteDisplays from "@/pages/RemoteDisplays";
 import { DEFAULT_DISPLAY_PAGES, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
@@ -67,6 +68,16 @@ vi.mock("@/hooks/useRemoteDisplayPhotos", () => ({
     deletePhoto: vi.fn(),
   }),
 }));
+vi.mock("@/hooks/usePhotos", () => ({
+  useOwnPhotoLibrary: () => ({
+    photos: [],
+    albums: [],
+    items: [],
+    sharedAlbums: [],
+    sharedItems: [],
+    loading: false,
+  }),
+}));
 vi.mock("@/hooks/useTasks", () => ({
   useTasks: () => ({
     tasks: [{ id: "task-1", title: "Put bins out", status: "todo", priority: "medium", category: "Home", isToday: true, tags: [] }],
@@ -93,7 +104,7 @@ describe("RemoteDisplays", () => {
 
   it("adds a ready-made page from a preset and saves it", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /Add page/ }));
@@ -107,7 +118,7 @@ describe("RemoteDisplays", () => {
 
   it("lets a page be scheduled to overnight hours only", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
     await vi.advanceTimersByTimeAsync(400);
@@ -120,7 +131,7 @@ describe("RemoteDisplays", () => {
 
   it("chooses what fills each area of the page", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "photos" } });
     await vi.advanceTimersByTimeAsync(400);
@@ -132,7 +143,7 @@ describe("RemoteDisplays", () => {
 
   it("switches the layout so two widgets sit side by side", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     fireEvent.click(screen.getByRole("button", { name: /Side by side/ }));
     fireEvent.change(screen.getByLabelText("Widget for area 2"), { target: { value: "tasks" } });
@@ -145,7 +156,7 @@ describe("RemoteDisplays", () => {
 
   it("never writes an undefined field, which Firestore would reject", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
     fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
@@ -166,7 +177,7 @@ describe("RemoteDisplays", () => {
 
   it("opens a widget’s settings from its Settings button", async () => {
     vi.useFakeTimers();
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
     fireEvent.click(screen.getByRole("button", { name: /Close widget settings/ }));
@@ -180,15 +191,15 @@ describe("RemoteDisplays", () => {
 
   it("revokes a linked display from its management page", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<RemoteDisplays />);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: /Disconnect/ }));
     expect(mocks.forgetDevice).toHaveBeenCalledWith("kitchen");
   });
 
   it("explains how to fill the photo library without using Firebase storage", () => {
-    render(<RemoteDisplays />);
-    expect(screen.getByRole("heading", { name: "Photo library" })).toBeTruthy();
-    expect(screen.getByText(/Linked Drive or web photos stay where they are/)).toBeTruthy();
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    expect(screen.getByRole("heading", { name: "Quick library" })).toBeTruthy();
+    expect(screen.getByText(/For albums, sharing and Drive folders use the Photos page/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Night mode" })).toBeTruthy();
   });
 });

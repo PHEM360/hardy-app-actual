@@ -22,6 +22,7 @@ import {
   StickyNote,
   MonitorSmartphone,
   Palmtree,
+  Images,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -54,6 +55,13 @@ const SECTIONS: Section[] = [
         icon: StickyNote,
         route: "/notes",
         gradient: "linear-gradient(135deg, hsl(42,92%,52%), hsl(28,85%,48%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Photos",
+        icon: Images,
+        route: "/photos",
+        gradient: "linear-gradient(135deg, hsl(330,58%,52%), hsl(345,52%,44%))",
         iconColor: "#fff",
       },
       {

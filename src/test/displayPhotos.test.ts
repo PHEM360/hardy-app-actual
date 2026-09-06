@@ -18,6 +18,7 @@ describe("display photo links", () => {
     expect(isGoogleDriveFolderUrl("https://drive.google.com/drive/folders/xyz")).toBe(true);
     expect(displayPhotoSrcFromLink("https://drive.google.com/drive/folders/xyz")).toBeNull();
     expect(displayPhotoSrcFromLink("http://localhost/secret.jpg")).toBeNull();
+    expect(displayPhotoSrcFromLink("https://photos.app.goo.gl/FamilyHoliday")).toBeNull();
   });
 
   it("collects several pasted links and counts Drive folders separately", () => {
@@ -32,7 +33,17 @@ describe("display photo links", () => {
         "https://cdn.example.com/one.jpg",
       ],
       folderCount: 1,
+      photosAlbumCount: 0,
       skippedCount: 1,
+    });
+  });
+
+  it("counts a Google Photos album link separately from image URLs", () => {
+    expect(parseDisplayPhotoLinks("https://photos.app.goo.gl/FamilyHoliday")).toEqual({
+      urls: [],
+      folderCount: 0,
+      photosAlbumCount: 1,
+      skippedCount: 0,
     });
   });
 

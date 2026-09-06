@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/auth/AuthContext";
 import { useBankConnections } from "@/hooks/useBankConnections";
+import { useBankConnectStatus } from "@/hooks/useBankConnectStatus";
 import { useFlat } from "@/hooks/useFlats";
 import { computeFlatReturns, estimateFlatTax, fmtGbp, fmtPct } from "@/lib/flatFinance";
 import { importFlatBankTransactions, startBankConnect } from "@/lib/truelayerApi";
@@ -126,6 +127,7 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
     deleteNote,
   } = useFlat(flatId);
   const { connections, loading: banksLoading } = useBankConnections(dataUid);
+  const { configured: bankConfigured } = useBankConnectStatus();
 
   const year = new Date().getFullYear();
   const [ledgerYear, setLedgerYear] = useState(year);
@@ -271,6 +273,10 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
   };
 
   const connectBank = async () => {
+    if (bankConfigured === false) {
+      toast.error("Bank linking is not set up yet. A TrueLayer sandbox app still needs to be added.");
+      return;
+    }
     setBusy("connect");
     try {
       const url = await startBankConnect();
@@ -612,7 +618,7 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
               <Button
                 size="sm"
                 className="h-8 rounded-lg bg-gradient-primary text-xs gap-1.5"
-                disabled={!!busy}
+                disabled={!!busy || bankConfigured === false}
                 onClick={() => void connectBank()}
               >
                 {busy === "connect" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Landmark className="h-3.5 w-3.5" />}
@@ -653,7 +659,11 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
               ))}
             </ul>
           ) : (
-            <p className="mb-4 text-sm text-muted-foreground">No bank account linked to this flat yet.</p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {bankConfigured === false
+                ? "Bank linking is waiting on a TrueLayer app, so Connect bank cannot open the bank login yet."
+                : "No bank account linked to this flat yet."}
+            </p>
           )}
 
           {canEdit && (

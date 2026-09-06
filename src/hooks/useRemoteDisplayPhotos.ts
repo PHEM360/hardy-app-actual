@@ -11,6 +11,8 @@ export interface RemoteDisplayPhoto {
   caption: string;
   source: DisplayPhotoSource;
   createdAt: unknown;
+  ownerId?: string;
+  albumId?: string;
 }
 
 async function resolvePhotoUrl(photo: Omit<RemoteDisplayPhoto, "url"> & { url?: string }): Promise<string> {
@@ -86,7 +88,7 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
   }, [uid]);
 
   const addLinkedPhotos = useCallback(async (text: string) => {
-    if (!uid) return { added: 0, folderCount: 0, skippedCount: 0 };
+    if (!uid) return { added: 0, folderCount: 0, photosAlbumCount: 0, skippedCount: 0 };
     const parsed = parseDisplayPhotoLinks(text);
     for (const url of parsed.urls) {
       await addDoc(collection(db, "displayPhotos", uid, "items"), {
@@ -97,7 +99,7 @@ export function useRemoteDisplayPhotos(uid: string | null | undefined) {
         createdAt: serverTimestamp(),
       });
     }
-    return { added: parsed.urls.length, folderCount: parsed.folderCount, skippedCount: parsed.skippedCount };
+    return { added: parsed.urls.length, folderCount: parsed.folderCount, photosAlbumCount: parsed.photosAlbumCount, skippedCount: parsed.skippedCount };
   }, [uid]);
 
   const updateCaption = useCallback(async (photoId: string, caption: string) => {

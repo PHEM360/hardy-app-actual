@@ -14,6 +14,30 @@
         }
       },
       {
+        "source": "/api/google-drive/callback",
+        "function": {
+          "functionId": "googleDriveCallback"
+        }
+      },
+      {
+        "source": "/api/drive-photo",
+        "function": {
+          "functionId": "drivePhoto"
+        }
+      },
+      {
+        "source": "/api/google-photos/callback",
+        "function": {
+          "functionId": "googlePhotosCallback"
+        }
+      },
+      {
+        "source": "/api/gphotos-photo",
+        "function": {
+          "functionId": "gphotosPhoto"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

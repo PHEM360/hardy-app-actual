@@ -12,6 +12,7 @@ import type { DisplayPage, DisplayWidgetLayout, PhotoFrameSettings } from "@/hoo
 import { displayTheme } from "@/lib/displayPages";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import { visibleDisplayPhotos } from "@/lib/displayPhotos";
+import { resolveDisplayPhotos } from "@/lib/photoSelection";
 import { PhotoFrameScene } from "@/components/display/PhotoFrameScene";
 import { DisplayBackdrop } from "@/components/display/DisplayBackdrop";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
@@ -589,7 +590,11 @@ export function DisplayPageRenderer({
       {page.widgets.map((widget) => {
         const accent = widget.accentColor || theme.accent;
         const selectedPhotos = visibleDisplayPhotos(
-          widget.photoIds?.length ? photos.filter((photo) => widget.photoIds!.includes(photo.id)) : photos,
+          resolveDisplayPhotos(photos, {
+            photoAlbumIds: widget.photoAlbumIds,
+            photoIds: widget.photoIds,
+            photoRefs: widget.photoRefs,
+          }),
         );
         const photoSettings: PhotoFrameSettings = {
           enabled: true,

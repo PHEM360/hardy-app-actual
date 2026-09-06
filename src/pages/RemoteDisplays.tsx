@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Clock, ExternalLink, ImagePlus, MapPin, MonitorSmartphone,
+import { Link } from "react-router-dom";
+import { Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
   Moon, Palette, Plus, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
@@ -14,6 +15,8 @@ import {
   type DisplayBackdropKind, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
+import { useOwnPhotoLibrary } from "@/hooks/usePhotos";
+import { DisplayAlbumPicker } from "@/components/display/DisplayAlbumPicker";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
 import { RemoteLayoutEditor } from "@/components/display/RemoteLayoutEditor";
@@ -105,6 +108,18 @@ export default function RemoteDisplays() {
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode } = useDeviceSettings(selectedDeviceId);
   const { photos, loading: photosLoading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
+  const photoLibrary = useOwnPhotoLibrary();
+  const albumPhotos = useMemo(() => photoLibrary.photos.map((photo) => ({
+    id: `${photo.ownerId}:${photo.id}`,
+    url: photo.url,
+    storagePath: photo.storagePath,
+    caption: photo.caption,
+    source: photo.source === "upload" ? "upload" as const : "link" as const,
+    createdAt: photo.createdAt,
+    ownerId: photo.ownerId,
+    albumId: photo.albumId,
+  })), [photoLibrary.photos]);
+  const previewPhotos = useMemo(() => [...albumPhotos, ...photos], [albumPhotos, photos]);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const calendarCategories = useMemo(
@@ -218,7 +233,6 @@ export default function RemoteDisplays() {
   };
 
   const scheduled = !!selectedPage?.activeFrom && !!selectedPage?.activeTo && selectedPage.activeFrom !== selectedPage.activeTo;
-  const photoIds = useMemo(() => new Set(selectedWidget?.photoIds || []), [selectedWidget?.photoIds]);
 
   const selectDevice = (id: string) => {
     if (id === selectedDeviceId) return;
@@ -378,7 +392,7 @@ export default function RemoteDisplays() {
                         )}
                       </div>
                       <div className="relative aspect-video w-full">
-                        <DisplayPageRenderer page={selectedPage} photos={photos} calendarEvents={calendarEvents} tasks={tasks} />
+                        <DisplayPageRenderer page={selectedPage} photos={previewPhotos} calendarEvents={calendarEvents} tasks={tasks} />
                       </div>
                     </div>
 
@@ -601,36 +615,16 @@ export default function RemoteDisplays() {
                             <div className="space-y-2">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-xs font-semibold text-white/80">Photos</p>
-                                <label className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-white/15 bg-white/10 px-2 text-[11px] font-semibold text-white transition hover:bg-white/20">
-                                  <ImagePlus className="h-3.5 w-3.5" /> Upload
-                                  <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => {
-                                    if (event.target.files?.length) void addPhotos(Array.from(event.target.files));
-                                    event.target.value = "";
-                                  }} />
-                                </label>
+                                <Link to="/photos" className="text-[11px] font-semibold text-primary-foreground/90 underline-offset-2 hover:underline">
+                                  Open Photos
+                                </Link>
                               </div>
-                              <p className="text-[10px] text-white/40">Select none to use the whole library.</p>
-                              {photosLoading ? <p className="text-xs text-white/50">Loading photos…</p> : (
-                                <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">
-                                  {photos.map((photo) => (
-                                    <button
-                                      key={photo.id}
-                                      type="button"
-                                      onClick={() => {
-                                        const next = new Set(photoIds);
-                                        if (next.has(photo.id)) next.delete(photo.id); else next.add(photo.id);
-                                        updateWidget({ photoIds: [...next] });
-                                      }}
-                                      className={`relative overflow-hidden rounded-lg border-2 ${photoIds.has(photo.id) ? "border-primary" : "border-transparent"}`}
-                                    >
-                                      <img src={photo.url} alt={photo.caption} className="h-16 w-full object-cover" />
-                                      {photoIds.has(photo.id) && (
-                                        <span className="absolute right-0.5 top-0.5 rounded-md bg-primary p-0.5 text-primary-foreground"><Check className="h-2.5 w-2.5" /></span>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
+                              <DisplayAlbumPicker
+                                albums={photoLibrary.albums}
+                                photos={photoLibrary.photos}
+                                widget={selectedWidget}
+                                onChange={updateWidget}
+                              />
                               <label className="flex items-center gap-2 text-xs text-white">
                                 Change every
                                 <input
@@ -642,31 +636,6 @@ export default function RemoteDisplays() {
                                 />
                                 secs
                               </label>
-                              {photos.length > 0 && (
-                                <details className="rounded-xl border border-white/10 bg-white/[0.04] p-2">
-                                  <summary className="cursor-pointer text-[11px] font-semibold text-white/70">Captions and deleting</summary>
-                                  <div className="mt-2 space-y-1.5">
-                                    {photos.map((photo) => (
-                                      <div key={photo.id} className="flex items-center gap-1.5">
-                                        <input
-                                          value={photo.caption}
-                                          onChange={(event) => void updateCaption(photo.id, event.target.value)}
-                                          placeholder="Caption"
-                                          className={`${FIELD} h-8 text-xs`}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => void deletePhoto(photo)}
-                                          aria-label={`Delete ${photo.caption || "photo"}`}
-                                          className="rounded-lg p-1.5 text-white/50 transition hover:bg-red-500/20 hover:text-red-200"
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </details>
-                              )}
                             </div>
                           )}
 

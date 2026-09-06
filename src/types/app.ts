@@ -17,6 +17,7 @@ export type FeatureKey =
   | "annual_leave"
   | "holidays"
   | "notes"
+  | "photos"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -182,6 +183,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "sticky-note",
     route: "/notes",
     color: "warning",
+  },
+  {
+    key: "photos",
+    label: "Photos",
+    description: "Albums, Google Drive and photo frames",
+    icon: "images",
+    route: "/photos",
+    color: "secondary",
   },
 ];
 

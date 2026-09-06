@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBankConnections } from "@/hooks/useBankConnections";
+import { useBankConnectStatus } from "@/hooks/useBankConnectStatus";
 import type { Account } from "@/hooks/useFinance";
 import {
   disconnectBank,
@@ -33,9 +34,14 @@ export default function BankSyncSettings({
   accounts: Account[];
 }) {
   const { connections, loading } = useBankConnections(scopeUserId);
+  const { configured } = useBankConnectStatus();
   const [busy, setBusy] = useState<string | null>(null);
 
   const connect = async () => {
+    if (configured === false) {
+      toast.error("Bank linking is not set up yet. A TrueLayer sandbox app still needs to be added.");
+      return;
+    }
     setBusy("connect");
     try {
       const url = await startBankConnect();
@@ -70,7 +76,7 @@ export default function BankSyncSettings({
           </p>
         </div>
         {canEdit && (
-          <Button size="sm" className="h-8 rounded-lg text-xs gap-1.5 bg-gradient-primary flex-shrink-0" disabled={!!busy} onClick={() => void connect()}>
+          <Button size="sm" className="h-8 rounded-lg text-xs gap-1.5 bg-gradient-primary flex-shrink-0" disabled={!!busy || configured === false} onClick={() => void connect()}>
             {busy === "connect" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />}
             Connect bank
           </Button>
@@ -80,7 +86,11 @@ export default function BankSyncSettings({
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading connections…</p>
       ) : connections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No banks connected yet. You’ll need a TrueLayer app (sandbox is fine to start) before Connect bank will work.</p>
+        <p className="text-sm text-muted-foreground">
+          {configured === false
+            ? "Bank linking is waiting on a TrueLayer app. Create one at console.truelayer.com (Sandbox is fine), add the Hardy Hub redirect URLs, then put the client ID and secret in Firebase secrets."
+            : "No banks connected yet. Connect once, then pick which account belongs here."}
+        </p>
       ) : (
         <div className="space-y-4">
           {connections.map((conn) => (

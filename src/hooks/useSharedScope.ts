@@ -21,6 +21,7 @@ export const PAGE_NOUNS: Record<string, string> = {
   tattersalls: "Flats",
   inheritance: "IHT Planner",
   notes: "Notes",
+  photos: "Photos",
 };
 
 export interface ScopeOption {

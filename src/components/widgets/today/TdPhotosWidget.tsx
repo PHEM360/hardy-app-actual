@@ -25,7 +25,7 @@ export function TdPhotosWidget() {
           emoji="🖼️"
           title="Photos"
           action={
-            <button type="button" onClick={() => navigate("/households")} className="text-[11px] text-primary font-medium">
+            <button type="button" onClick={() => navigate("/photos")} className="text-[11px] text-primary font-medium">
               Album
             </button>
           }
@@ -34,8 +34,8 @@ export function TdPhotosWidget() {
       <div className="flex-1 min-h-0 mx-3 mb-3 rounded-xl overflow-hidden bg-muted">
         {loading && <p className="text-xs text-muted-foreground p-3">Loading…</p>}
         {!loading && !photo && (
-          <button type="button" onClick={() => navigate("/households")} className="w-full h-full text-xs text-muted-foreground">
-            No household photos yet
+          <button type="button" onClick={() => navigate("/photos")} className="w-full h-full text-xs text-muted-foreground">
+            No photos yet — open Photos
           </button>
         )}
         {photo && (

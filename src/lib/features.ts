@@ -43,6 +43,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   annual_leave: "annual_leave",
   holidays: "holidays",
   notes: "notes",
+  photos: "photos",
 };
 
 /** Route path -> pageShares.page value (includes ungated pages like freezer). */
@@ -60,6 +61,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/annual-leave": "annual_leave",
   "/holidays": "holidays",
   "/notes": "notes",
+  "/photos": "photos",
   "/freezer": "freezer",
   "/login-details": "login_details",
   "/qr-codes": "qrcodes",
@@ -73,6 +75,7 @@ export function canAccessRoute(
   sharedPages?: Set<string>,
 ): boolean {
   if (path === "/admin") return role === "admin" || role === "superadmin";
+  if (path === "/photos") return true;
   const key = ROUTE_FEATURE_KEY[path];
   if (!key) return true;
   if (hasFeatureAccess(role, enabledFeatures, key)) return true;

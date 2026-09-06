@@ -126,6 +126,26 @@ service firebase.storage {
       allow write: if canEditPageStorage(userId, "ai_analysis");
     }
 
+    match /photos/{userId}/{albumId}/{fileName} {
+      allow read: if canViewPageStorage(userId, "photos") || isActiveDisplayFor(userId) ||
+        (isInteractiveUser() &&
+          firestore.exists(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)) &&
+          request.auth.uid in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data.sharedWith);
+      allow create, update: if request.resource.size < 20 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*') && (
+          canEditPageStorage(userId, "photos") ||
+          (isInteractiveUser() &&
+            firestore.exists(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)) &&
+            'editors' in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data &&
+            request.auth.uid in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data.editors)
+        );
+      allow delete: if canEditPageStorage(userId, "photos") ||
+        (isInteractiveUser() &&
+          firestore.exists(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)) &&
+          'editors' in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data &&
+          request.auth.uid in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data.editors);
+    }
+
     match /displayPhotos/{userId}/{fileName} {
       allow read: if (isInteractiveUser() && request.auth.uid == userId) || isActiveDisplayFor(userId);
       allow create, update: if isInteractiveUser() &&

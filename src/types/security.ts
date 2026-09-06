@@ -16,6 +16,7 @@ export const SECURITY_MODULES = [
   { id: "passwords", label: "Log Ins & Passwords", routes: ["/login-details"] },
   { id: "health", label: "Health", routes: ["/health", "/weight"] },
   { id: "notes", label: "Notes", routes: ["/notes"] },
+  { id: "photos", label: "Photos", routes: ["/photos"] },
   { id: "companies", label: "Companies", routes: ["/companies"] },
   { id: "households", label: "Households", routes: ["/households", "/household-finance"] },
   { id: "pets", label: "Pets", routes: ["/pets"] },

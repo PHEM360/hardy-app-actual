@@ -28,6 +28,8 @@ export interface DisplayWidgetLayout {
   showSeconds?: boolean;
   showDate?: boolean;
   photoIds?: string[];
+  photoAlbumIds?: string[];
+  photoRefs?: { id: string; url: string; caption?: string }[];
   photoIntervalSeconds?: number;
   calendarView?: DisplayCalendarView;
   calendarEventStyle?: DisplayEventStyle;

@@ -37,6 +37,7 @@ import CalendarPage from "@/pages/Calendar";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
+import Photos from "@/pages/Photos";
 import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
@@ -260,6 +261,7 @@ const App = () => (
                 </RequireFeature>
               }
             />
+            <Route path="/photos" element={<Photos />} />
             <Route path="/email" element={<Email />} />
             <Route path="/widget" element={<HubWidget />} />
             <Route path="/widget/:kind" element={<HubWidget />} />

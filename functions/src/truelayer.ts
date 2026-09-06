@@ -22,13 +22,25 @@ type TlTx = {
   running_balance?: { amount?: number };
 };
 
-const ALLOWED_REDIRECTS = new Set([
-  `${APP_HOST}/finance/bank-callback`,
-  `${APP_HOST}/api/truelayer/callback`,
-  "https://hardyhub-7b30d.firebaseapp.com/finance/bank-callback",
-  "https://hardyhub-7b30d.firebaseapp.com/api/truelayer/callback",
-  "http://localhost:8080/finance/bank-callback",
+const ALLOWED_REDIRECT_HOSTS = new Set([
+  "hardyhub-7b30d.web.app",
+  "hardyhub-7b30d.firebaseapp.com",
+  "hardyapp.co.uk",
+  "www.hardyapp.co.uk",
 ]);
+
+function isAllowedRedirect(uri: string) {
+  try {
+    const url = new URL(uri);
+    const pathOk = url.pathname === "/finance/bank-callback" || url.pathname === "/api/truelayer/callback";
+    if (!pathOk) return false;
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return url.protocol === "http:";
+    return url.protocol === "https:" && ALLOWED_REDIRECT_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+}
 
 type TlAccount = {
   account_id: string;
@@ -73,13 +85,19 @@ function apiBase() {
   return isSandbox() ? "https://api.truelayer-sandbox.com" : "https://api.truelayer.com";
 }
 
+function credentialsConfigured() {
+  const clientId = truelayerClientId.value();
+  const clientSecret = truelayerClientSecret.value();
+  return Boolean(clientId && clientSecret && clientId !== "UNSET" && clientSecret !== "UNSET");
+}
+
 function credentials() {
   const clientId = truelayerClientId.value();
   const clientSecret = truelayerClientSecret.value();
-  if (!clientId || !clientSecret) {
+  if (!credentialsConfigured()) {
     throw new HttpsError(
       "failed-precondition",
-      "TrueLayer is not configured yet. Add TRUELAYER_CLIENT_ID and TRUELAYER_CLIENT_SECRET in Firebase secrets."
+      "Bank linking is not set up yet. Add the TrueLayer client ID and secret to Firebase secrets.",
     );
   }
   return { clientId, clientSecret };
@@ -377,11 +395,16 @@ async function syncConnection(
   return { updated, months };
 }
 
+export const getTrueLayerStatus = onCall(SECRET_OPTS, async (request) => {
+  requireUid(request.auth);
+  return { configured: credentialsConfigured(), sandbox: isSandbox() };
+});
+
 export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const { clientId } = credentials();
   const redirectUri = String(request.data?.redirectUri || `${APP_HOST}/finance/bank-callback`);
-  if (!ALLOWED_REDIRECTS.has(redirectUri)) {
+  if (!isAllowedRedirect(redirectUri)) {
     throw new HttpsError("invalid-argument", "That redirect URI is not allowed.");
   }
   const state = randomUUID();

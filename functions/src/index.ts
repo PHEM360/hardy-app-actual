@@ -75,6 +75,7 @@ export { onTaskWrite } from "./notifications/scheduler";
 export { processScheduledNotifications, scheduleDailyDigests } from "./notifications/processor";
 
 export {
+	getTrueLayerStatus,
 	startTrueLayerConnect,
 	completeTrueLayerConnect,
 	listTrueLayerAccounts,
@@ -128,6 +129,25 @@ export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans }
 // ── 1Password Connect sync ──
 export { onePasswordConnect } from "./onePassword";
 export { importFlatBankTransactions } from "./flatBankImport";
+
+export {
+	startGoogleDriveConnect,
+	googleDriveCallback,
+	listGoogleDriveFolders,
+	syncGoogleDriveAlbum,
+	disconnectGoogleDrive,
+	drivePhoto,
+} from "./googleDrive";
+
+export {
+	startGooglePhotosConnect,
+	googlePhotosCallback,
+	startGooglePhotosPicker,
+	pollGooglePhotosPicker,
+	syncGooglePhotosAlbum,
+	disconnectGooglePhotos,
+	gphotosPhoto,
+} from "./googlePhotos";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);

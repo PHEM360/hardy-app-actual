@@ -16,7 +16,7 @@ export function DisplayPhotoLibrary({
   loading: boolean;
   hasPhotoPage: boolean;
   onUpload: (files: File[]) => Promise<void>;
-  onAddLinks: (text: string) => Promise<{ added: number; folderCount: number; skippedCount: number }>;
+  onAddLinks: (text: string) => Promise<{ added: number; folderCount: number; photosAlbumCount?: number; skippedCount: number }>;
   onDelete: (photo: RemoteDisplayPhoto) => Promise<void>;
   onAddPhotoPage: () => void;
 }) {
@@ -45,11 +45,14 @@ export function DisplayPhotoLibrary({
       if (result.folderCount) {
         toast.error("Google Drive folders cannot be listed from here. Open the folder, then paste each photo's share link.");
       }
+      if (result.photosAlbumCount) {
+        toast.error("Link a Google Photos album from the Photos page, then pick it for this frame.");
+      }
       if (result.added) {
         toast.success(result.added === 1 ? "Linked photo added." : `${result.added} linked photos added.`);
         setLinkText("");
         if (!hasPhotoPage) toast.message("Add a Digital photo frame page so this screen shows them.");
-      } else if (!result.folderCount) {
+      } else if (!result.folderCount && !result.photosAlbumCount) {
         toast.error("Paste https image links, or Google Drive file share links.");
       }
     } catch (error) {
@@ -66,9 +69,9 @@ export function DisplayPhotoLibrary({
           <ImagePlus className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <h2 className="font-display text-base font-bold">Photo library</h2>
+          <h2 className="font-display text-base font-bold">Quick library</h2>
           <p className="text-[11px] text-muted-foreground">
-            Uploads sit in Hardy Hub. Linked Drive or web photos stay where they are — only the address is saved.
+            For albums, sharing and Drive folders use the Photos page. This box is a spare upload list for this screen.
           </p>
         </div>
       </div>
