@@ -135,6 +135,31 @@ service firebase.storage {
       allow delete: if isInteractiveUser() && request.auth.uid == userId;
     }
 
+    // Picture album image cache. Callables enforce edit permission when registering.
+    match /pictureAlbums/{albumId}/{fileName} {
+      function pictureAlbumDoc() {
+        return firestore.get(/databases/(default)/documents/pictureAlbums/$(albumId)).data;
+      }
+      function canReadPictureAlbum() {
+        return request.auth != null && (
+          pictureAlbumDoc().ownerId == request.auth.uid ||
+          request.auth.uid in pictureAlbumDoc().get('shareUids', [])
+        );
+      }
+      function canWritePictureAlbum() {
+        return isInteractiveUser() && (
+          pictureAlbumDoc().ownerId == request.auth.uid ||
+          request.auth.uid in pictureAlbumDoc().get('shareUids', [])
+        );
+      }
+
+      allow read: if canReadPictureAlbum();
+      allow create, update: if canWritePictureAlbum() &&
+        request.resource.size < 25 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow delete: if canWritePictureAlbum();
+    }
+
     match /hubNotes/{userId}/media/{noteId}/{fileName} {
       allow read: if canViewPageStorage(userId, "notes") ||
         (isInteractiveUser() &&

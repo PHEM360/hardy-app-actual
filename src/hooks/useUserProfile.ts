@@ -43,6 +43,10 @@ export interface UserProfile {
   quickLinks?: string[];
   homeLayout?: HomeLayoutMode;
   homeTiles?: HomeTilesState;
+  /** Route opened after login (e.g. /today, /dashboard, /tasks). */
+  defaultLandingPath?: string;
+  /** True once the user has answered the default-landing chooser. */
+  hasChosenDefaultLanding?: boolean;
 }
 
 export function useUserProfile() {
@@ -94,6 +98,9 @@ export function useUserProfile() {
           quickLinks: Array.isArray(data.quickLinks) ? data.quickLinks : undefined,
           homeLayout: data.homeLayout === "today" || data.homeLayout === "tiles" ? data.homeLayout : undefined,
           homeTiles: data.homeTiles && typeof data.homeTiles === "object" ? data.homeTiles : undefined,
+          defaultLandingPath:
+            typeof data.defaultLandingPath === "string" ? data.defaultLandingPath : undefined,
+          hasChosenDefaultLanding: data.hasChosenDefaultLanding === true,
         });
         setLoading(false);
       },

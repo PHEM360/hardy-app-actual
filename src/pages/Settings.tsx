@@ -26,6 +26,8 @@ import { ChangeVaultPinCard } from "@/components/passwords/ChangeVaultPinCard";
 import { OnePasswordConnectCard } from "@/components/passwords/OnePasswordConnectCard";
 import { toast } from "sonner";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
+import { DefaultLandingChooser } from "@/components/home/DefaultLandingChooser";
+import { useAccessibleLandingPages } from "@/hooks/useAccessibleLandingPages";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
 
 // ── Avatar constants ──
@@ -84,6 +86,11 @@ const Settings = () => {
   const { profile, saveProfile, loading: profileLoading } = useUserProfile();
   const { role, loading: roleLoading } = useEffectiveRole();
   const { pages: sharedPages, loading: sharesLoading } = useIncomingPageShares();
+  const {
+    options: landingOptions,
+    loading: landingLoading,
+    currentPath: landingPath,
+  } = useAccessibleLandingPages();
   const existingHouseholdNames = useHouseholdNames();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [firstName, setFirstName] = useState(user?.displayName || "");
@@ -467,18 +474,46 @@ const Settings = () => {
           </span>
           Home
         </h3>
-        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft">
-          <p className="text-sm font-medium text-card-foreground">Home screen</p>
-          <p className="mb-3 text-[10px] text-muted-foreground">Today’s planner, or a welcome plus page tiles you can rearrange.</p>
-          <HomeLayoutChooser
-            title=""
-            description=""
-            value={profile?.homeLayout}
-            onChoose={(mode: HomeLayoutMode) => {
-              void saveProfile({ homeLayout: mode });
-              toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
-            }}
-          />
+        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
+          <div>
+            <p className="text-sm font-medium text-card-foreground">Default page after login</p>
+            <p className="mb-3 text-[10px] text-muted-foreground">
+              Today, Home and Tasks are listed first. Change this anytime — movable widgets keep your last layout.
+            </p>
+            {landingLoading ? (
+              <p className="text-xs text-muted-foreground">Loading pages…</p>
+            ) : (
+              <DefaultLandingChooser
+                options={landingOptions}
+                value={landingPath}
+                confirmLabel="Save default page"
+                title=""
+                description=""
+                onChoose={async (path) => {
+                  await saveProfile({
+                    defaultLandingPath: path,
+                    hasChosenDefaultLanding: true,
+                  });
+                  toast.success("Default login page updated");
+                }}
+              />
+            )}
+          </div>
+          <div className="border-t border-border/40 pt-4">
+            <p className="text-sm font-medium text-card-foreground">Home screen</p>
+            <p className="mb-3 text-[10px] text-muted-foreground">
+              When Home is your landing page (or you open Home), choose Today’s planner or rearrangeable tiles.
+            </p>
+            <HomeLayoutChooser
+              title=""
+              description=""
+              value={profile?.homeLayout}
+              onChoose={(mode: HomeLayoutMode) => {
+                void saveProfile({ homeLayout: mode });
+                toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
+              }}
+            />
+          </div>
         </div>
       </div>
 

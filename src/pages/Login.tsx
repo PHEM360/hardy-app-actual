@@ -69,7 +69,7 @@ const Login = () => {
   useEffect(() => {
     if (initializing || !user) return;
     const from = (location.state as { from?: string } | null)?.from;
-    const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+    const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/start";
     navigate(target, { replace: true });
   }, [user, initializing, location.state, navigate]);
 
@@ -89,7 +89,7 @@ const Login = () => {
       markSecurityAuthentication(credential.user.uid, "password");
       markOpenSessionSatisfied(credential.user.uid);
       const from = (location.state as { from?: string } | null)?.from;
-      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/start";
       navigate(target, { replace: true });
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
@@ -105,7 +105,7 @@ const Login = () => {
       const signedInUser = await authenticateWithPasskey(false);
       markOpenSessionSatisfied(signedInUser.uid);
       const from = (location.state as { from?: string } | null)?.from;
-      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
+      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/start";
       navigate(target, { replace: true });
     } catch (caught) {
       setError(passkeyErrorMessage(caught));

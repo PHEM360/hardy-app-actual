@@ -28,6 +28,8 @@ export interface DisplayWidgetLayout {
   showSeconds?: boolean;
   showDate?: boolean;
   photoIds?: string[];
+  /** Picture albums from the Pictures page to include in this frame. */
+  albumIds?: string[];
   photoIntervalSeconds?: number;
   calendarView?: DisplayCalendarView;
   calendarEventStyle?: DisplayEventStyle;
@@ -208,6 +210,7 @@ export function createDisplayWidget(type: DisplayWidgetType): DisplayWidgetLayou
     showSeconds: false,
     showDate: true,
     photoIds: [],
+    albumIds: [],
     photoIntervalSeconds: 20,
     calendarView: type === "calendar" ? "month" : "agenda",
     calendarEventStyle: "titles",

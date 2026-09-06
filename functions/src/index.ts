@@ -128,6 +128,18 @@ export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans }
 // ── 1Password Connect sync ──
 export { onePasswordConnect } from "./onePassword";
 export { importFlatBankTransactions } from "./flatBankImport";
+export {
+  startGoogleDriveConnect,
+  googleDriveOAuthCallback,
+  disconnectGoogleDrive,
+  createPictureAlbum,
+  updatePictureAlbum,
+  deletePictureAlbum,
+  uploadPicturePhotos,
+  deletePicturePhoto,
+  syncGoogleDrivePictures,
+  scheduledGoogleDrivePictureSync,
+} from "./googleDrive";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);

@@ -13,7 +13,8 @@ import {
   applyPageLayout, durationLabel, isPageActiveAt, pageScheduleLabel,
   type DisplayBackdropKind, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
-import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
+import { useRemoteDisplayPhotos, type RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
+import { usePictureAlbums, useAlbumPhotoUrls } from "@/hooks/usePictures";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
 import { RemoteLayoutEditor } from "@/components/display/RemoteLayoutEditor";
@@ -105,6 +106,7 @@ export default function RemoteDisplays() {
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode } = useDeviceSettings(selectedDeviceId);
   const { photos, loading: photosLoading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
+  const { albums } = usePictureAlbums();
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const calendarCategories = useMemo(
@@ -219,6 +221,29 @@ export default function RemoteDisplays() {
 
   const scheduled = !!selectedPage?.activeFrom && !!selectedPage?.activeTo && selectedPage.activeFrom !== selectedPage.activeTo;
   const photoIds = useMemo(() => new Set(selectedWidget?.photoIds || []), [selectedWidget?.photoIds]);
+  const albumIds = useMemo(() => new Set(selectedWidget?.albumIds || []), [selectedWidget?.albumIds]);
+  const previewAlbumIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const page of editorPages) {
+      for (const widget of page.widgets || []) {
+        if (widget.type === "photos") (widget.albumIds || []).forEach((id) => ids.add(id));
+      }
+    }
+    return [...ids];
+  }, [editorPages]);
+  const { photos: albumPhotos } = useAlbumPhotoUrls(previewAlbumIds);
+  const previewPhotos = useMemo<RemoteDisplayPhoto[]>(() => {
+    const fromAlbums = albumPhotos.map((photo) => ({
+      id: `album:${photo.albumId}:${photo.id}`,
+      url: photo.url,
+      albumId: photo.albumId,
+      storagePath: photo.storagePath || "",
+      caption: photo.name || "",
+      source: "album" as const,
+      createdAt: photo.createdAt,
+    }));
+    return [...photos, ...fromAlbums];
+  }, [photos, albumPhotos]);
 
   const selectDevice = (id: string) => {
     if (id === selectedDeviceId) return;
@@ -378,7 +403,7 @@ export default function RemoteDisplays() {
                         )}
                       </div>
                       <div className="relative aspect-video w-full">
-                        <DisplayPageRenderer page={selectedPage} photos={photos} calendarEvents={calendarEvents} tasks={tasks} />
+                        <DisplayPageRenderer page={selectedPage} photos={previewPhotos} calendarEvents={calendarEvents} tasks={tasks} />
                       </div>
                     </div>
 
@@ -599,8 +624,36 @@ export default function RemoteDisplays() {
 
                           {selectedWidget.type === "photos" && (
                             <div className="space-y-2">
+                              {albums.length > 0 && (
+                                <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-2.5">
+                                  <p className="text-xs font-semibold text-white/80">Picture albums</p>
+                                  <p className="text-[10px] text-white/40">Choose albums from Pictures to show on this frame.</p>
+                                  <div className="flex max-h-36 flex-col gap-1 overflow-y-auto">
+                                    {albums.map((album) => {
+                                      const on = albumIds.has(album.id);
+                                      return (
+                                        <button
+                                          key={album.id}
+                                          type="button"
+                                          onClick={() => {
+                                            const next = new Set(albumIds);
+                                            if (next.has(album.id)) next.delete(album.id); else next.add(album.id);
+                                            updateWidget({ albumIds: [...next] });
+                                          }}
+                                          className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${
+                                            on ? "border-primary/50 bg-primary/15 text-white" : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10"
+                                          }`}
+                                        >
+                                          <span className="min-w-0 truncate font-medium">{album.name}</span>
+                                          <span className="shrink-0 text-[10px] text-white/45">{album.photoCount} pics</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-white/80">Photos</p>
+                                <p className="text-xs font-semibold text-white/80">Library photos</p>
                                 <label className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-white/15 bg-white/10 px-2 text-[11px] font-semibold text-white transition hover:bg-white/20">
                                   <ImagePlus className="h-3.5 w-3.5" /> Upload
                                   <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => {
