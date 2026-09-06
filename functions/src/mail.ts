@@ -7,6 +7,12 @@ import {FieldValue} from "firebase-admin/firestore";
 import {ImapFlow} from "imapflow";
 import nodemailer from "nodemailer";
 import {
+  APP_HOST,
+  GOOGLE_SECRET_OPTS,
+  googleAuthUrl,
+  loadGoogleCredentials,
+} from "./googleOAuth";
+import {
   buildRfc822,
   decodeBase64Url,
   encodeBase64Url,
@@ -24,7 +30,6 @@ import {
   splitAddressList,
 } from "./mailParse";
 
-const APP_HOST = "https://hardyhub-7b30d.web.app";
 const CALLBACK = `${APP_HOST}/api/mail/callback`;
 const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
@@ -32,10 +37,8 @@ const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
-const googleClientId = defineSecret("GOOGLE_DRIVE_CLIENT_ID");
-const googleClientSecret = defineSecret("GOOGLE_DRIVE_CLIENT_SECRET");
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
-const GOOGLE_OPTS = {secrets: [googleClientId, googleClientSecret]};
+const GOOGLE_OPTS = GOOGLE_SECRET_OPTS;
 const AI_OPTS = {secrets: [openaiApiKey], timeoutSeconds: 120, memory: "512MiB" as const};
 
 type MailFolder = "inbox" | "sent" | "drafts" | "trash";
@@ -101,16 +104,8 @@ async function requireMailAccess(uid: string, ownerUid: string, mode: "view" | "
   }
 }
 
-function googleCredentials() {
-  const clientId = googleClientId.value();
-  const clientSecret = googleClientSecret.value();
-  if (!clientId || !clientSecret || clientId === "UNSET" || clientSecret === "UNSET") {
-    throw new HttpsError(
-      "failed-precondition",
-      "Gmail is not set up yet. Add GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET, plus the Email callback URL in Google Cloud.",
-    );
-  }
-  return {clientId, clientSecret};
+async function googleCredentials() {
+  return loadGoogleCredentials();
 }
 
 async function formPost(url: string, body: Record<string, string>) {
@@ -142,7 +137,7 @@ async function gmailAccessToken(ownerUid: string, accountId: string) {
   const expiresAt = Number(secret.accessExpiresAt || 0);
   if (secret.accessToken && expiresAt > Date.now() + 60_000) return String(secret.accessToken);
   if (!secret.refreshToken) throw new HttpsError("failed-precondition", "Link Gmail again.");
-  const {clientId, clientSecret} = googleCredentials();
+  const {clientId, clientSecret} = await googleCredentials();
   const token = await formPost("https://oauth2.googleapis.com/token", {
     client_id: clientId,
     client_secret: clientSecret,
@@ -258,24 +253,14 @@ export const startGmailConnect = onCall(GOOGLE_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const ownerUid = ownerFrom(uid, request.data?.ownerUid);
   await requireMailAccess(uid, ownerUid, "owner");
-  const {clientId} = googleCredentials();
+  const {clientId} = await googleCredentials();
   const state = randomUUID();
   await db().doc(`mailOAuth/${state}`).set({
     uid: ownerUid,
     createdAt: FieldValue.serverTimestamp(),
     expiresAt: Date.now() + 15 * 60 * 1000,
   });
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: CALLBACK,
-    response_type: "code",
-    scope: GMAIL_SCOPES,
-    access_type: "offline",
-    prompt: "consent",
-    state,
-    include_granted_scopes: "true",
-  });
-  return {authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params}`};
+  return {authUrl: googleAuthUrl(clientId, CALLBACK, GMAIL_SCOPES, state)};
 });
 
 export const mailOAuthCallback = onRequest(GOOGLE_OPTS, async (req, res) => {
@@ -298,7 +283,7 @@ export const mailOAuthCallback = onRequest(GOOGLE_OPTS, async (req, res) => {
     return;
   }
   try {
-    const {clientId, clientSecret} = googleCredentials();
+    const {clientId, clientSecret} = await googleCredentials();
     const token = await formPost("https://oauth2.googleapis.com/token", {
       code,
       client_id: clientId,

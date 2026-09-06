@@ -13,7 +13,7 @@ export async function startGooglePhotosConnect(): Promise<string> {
     if (!result.data.authUrl) throw new Error("Could not start Google Photos.");
     return result.data.authUrl;
   } catch (err) {
-    throw new Error(friendly(err, "Could not start Google Photos. The family Google key may not be set up yet."));
+    throw new Error(friendly(err, "Finish the family setup at the top of Settings, then try Connect again."));
   }
 }
 

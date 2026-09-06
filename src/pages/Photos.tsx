@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { FolderPlus, ImagePlus, Images, Link2, Lock, RefreshCw, Share2, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +25,14 @@ import type { DriveFolderOption, PhotoAlbum } from "@/types/photos";
 
 type RailId = "all" | "shared" | string;
 
+type TransferState = {
+  title: string;
+  done: number;
+  total: number;
+  status: "running" | "done" | "error";
+  detail: string;
+};
+
 function railClass(active: boolean) {
   return `flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-semibold transition-colors ${
     active
@@ -45,11 +54,17 @@ export default function Photos() {
   const [driveOpen, setDriveOpen] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const [photosShareUrl, setPhotosShareUrl] = useState("");
+  const [photosTarget, setPhotosTarget] = useState("new");
+  const [photosAlbumName, setPhotosAlbumName] = useState("");
   const [pickerSession, setPickerSession] = useState<string | null>(null);
+  const [pickerAlbumId, setPickerAlbumId] = useState<string | null>(null);
+  const [pickerAlbumName, setPickerAlbumName] = useState("");
   const [folders, setFolders] = useState<DriveFolderOption[]>([]);
   const [busy, setBusy] = useState(false);
+  const [transfer, setTransfer] = useState<TransferState | null>(null);
   const [params, setParams] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
+  const transferClear = useRef<number>(0);
 
   useEffect(() => {
     if (params.get("drive") === "connected") {
@@ -58,6 +73,7 @@ export default function Photos() {
     }
     if (params.get("gphotos") === "connected") {
       toast.success("Google Photos linked");
+      setPhotosTarget(selectedAlbum?.ownerId === scopeUserId ? selectedAlbum.id : "new");
       setPhotosOpen(true);
     }
     if (params.get("drive") === "error") toast.error("Google Drive did not finish linking");
@@ -87,6 +103,22 @@ export default function Photos() {
 
   const albumCanEdit = selectedAlbum ? photos.canEditAlbum(selectedAlbum) : canEdit;
 
+  useEffect(() => () => window.clearTimeout(transferClear.current), []);
+
+  const showTransfer = useCallback((next: TransferState) => {
+    window.clearTimeout(transferClear.current);
+    setTransfer(next);
+    if (next.status !== "running") {
+      transferClear.current = window.setTimeout(() => setTransfer(null), 5000);
+    }
+  }, []);
+
+  const findAlbumByName = (name: string) => {
+    const wanted = name.trim().toLowerCase();
+    if (!wanted) return undefined;
+    return photos.albums.find((album) => album.name.trim().toLowerCase() === wanted);
+  };
+
   const makeAlbum = async () => {
     if (!albumName.trim()) return;
     setBusy(true);
@@ -104,20 +136,48 @@ export default function Photos() {
   };
 
   const upload = async (files: File[]) => {
-    if (!canEdit) return;
+    if (!canEdit || !files.length) return;
+    if (transfer?.status === "running") {
+      toast.message("Let the current upload finish first.");
+      return;
+    }
     let albumId = selectedAlbum?.id;
     if (!albumId) {
       albumId = photos.albums[0]?.id || await photos.createAlbum("Family");
       setRail(albumLibraryKey({ id: albumId, ownerId: scopeUserId || undefined }));
     }
-    setBusy(true);
+    showTransfer({
+      title: "Uploading photos",
+      done: 0,
+      total: files.length,
+      status: "running",
+      detail: `0 of ${files.length} uploaded`,
+    });
     try {
-      await photos.addFiles(albumId, files);
-      toast.success(files.length === 1 ? "Photo added" : `${files.length} photos added`);
+      await photos.addFiles(albumId, files, (done, total, fileName) => {
+        showTransfer({
+          title: "Uploading photos",
+          done,
+          total,
+          status: "running",
+          detail: `${done} of ${total} uploaded${fileName ? ` · ${fileName}` : ""}`,
+        });
+      });
+      showTransfer({
+        title: "Upload complete",
+        done: files.length,
+        total: files.length,
+        status: "done",
+        detail: files.length === 1 ? "1 photo uploaded" : `${files.length} photos uploaded`,
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add those photos");
-    } finally {
-      setBusy(false);
+      showTransfer({
+        title: "Upload failed",
+        done: 0,
+        total: files.length,
+        status: "error",
+        detail: err instanceof Error ? err.message : "Could not add those photos",
+      });
     }
   };
 
@@ -175,19 +235,40 @@ export default function Photos() {
   };
 
   const syncFolder = async (folder: DriveFolderOption) => {
-    if (!selectedAlbum || selectedAlbum.ownerId !== scopeUserId) {
-      toast.error("Open one of your albums, then sync a Drive folder into it.");
+    if (transfer?.status === "running") {
+      toast.message("Let the current transfer finish first.");
       return;
     }
-    setBusy(true);
+    const named = findAlbumByName(folder.name);
+    const albumId = named?.id || await photos.createAlbum(folder.name);
+    setRail(`${scopeUserId}:${albumId}`);
+    setDriveOpen(false);
+    showTransfer({
+      title: folder.name,
+      done: 0,
+      total: 1,
+      status: "running",
+      detail: "Importing from Google Drive…",
+    });
     try {
-      const added = await syncGoogleDriveAlbum(selectedAlbum.id, folder.id, folder.name);
-      toast.success(added ? `Synced ${added} photo${added === 1 ? "" : "s"} from Drive` : "Drive folder is already up to date");
-      setDriveOpen(false);
+      const added = await syncGoogleDriveAlbum(albumId, folder.id, folder.name);
+      showTransfer({
+        title: folder.name,
+        done: 1,
+        total: 1,
+        status: "done",
+        detail: added
+          ? `Imported ${added} photo${added === 1 ? "" : "s"} into ${folder.name}`
+          : `${folder.name} is already up to date`,
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sync that folder");
-    } finally {
-      setBusy(false);
+      showTransfer({
+        title: folder.name,
+        done: 0,
+        total: 1,
+        status: "error",
+        detail: err instanceof Error ? err.message : "Could not sync that folder",
+      });
     }
   };
 
@@ -214,65 +295,156 @@ export default function Photos() {
     }
   };
 
+  const importDestination = () => {
+    if (photosOpen) return photosTarget;
+    if (selectedAlbum?.ownerId === scopeUserId) return selectedAlbum.id;
+    return "new";
+  };
+
+  const ensureOwnAlbum = async (preferredName = ""): Promise<{ id: string; created: boolean }> => {
+    const dest = importDestination();
+    if (dest !== "new") {
+      const album = photos.albums.find((item) => item.id === dest);
+      if (album) {
+        setRail(albumLibraryKey(album));
+        return { id: album.id, created: false };
+      }
+    }
+    const named = findAlbumByName(preferredName);
+    if (named) {
+      setRail(albumLibraryKey(named));
+      return { id: named.id, created: false };
+    }
+    const id = await photos.createAlbum(preferredName.trim() || "Google Photos");
+    setRail(`${scopeUserId}:${id}`);
+    return { id, created: true };
+  };
+
+  const nameImportedAlbum = async (albumId: string, created: boolean, title?: string) => {
+    const name = title?.trim();
+    if (!name || !created) return name;
+    const existing = findAlbumByName(name);
+    if (existing && existing.id !== albumId) return name;
+    await photos.renameAlbum(albumId, name);
+    return name;
+  };
+
+  const openPhotosImport = () => {
+    setPhotosTarget(selectedAlbum?.ownerId === scopeUserId ? selectedAlbum.id : "new");
+    setPhotosAlbumName(selectedAlbum?.ownerId === scopeUserId ? selectedAlbum.name : "");
+    setPhotosShareUrl(selectedAlbum?.googlePhotosShareUrl || "");
+    setPhotosOpen(true);
+  };
+
   const syncPhotosAlbum = async (shareUrl?: string) => {
-    if (!selectedAlbum || selectedAlbum.ownerId !== scopeUserId) {
-      toast.error("Open one of your albums, then link a Google Photos album into it.");
-      return;
-    }
-    const url = (shareUrl || photosShareUrl || selectedAlbum.googlePhotosShareUrl || "").trim();
+    const url = (shareUrl || photosShareUrl || selectedAlbum?.googlePhotosShareUrl || "").trim();
     if (!url) {
-      toast.error("Paste a shared Google Photos album link.");
+      toast.error("Paste a shared Google Photos album link, or pick photos from your library.");
       return;
     }
-    setBusy(true);
+    if (transfer?.status === "running") {
+      toast.message("Let the current transfer finish first.");
+      return;
+    }
+    const { id, created } = await ensureOwnAlbum(photosAlbumName);
+    setPhotosOpen(false);
+    showTransfer({
+      title: photosAlbumName.trim() || "Google Photos",
+      done: 0,
+      total: 1,
+      status: "running",
+      detail: "Importing album…",
+    });
     try {
-      const result = await syncGooglePhotosAlbum(selectedAlbum.id, url);
-      toast.success(
-        result.added
-          ? `Synced ${result.added} photo${result.added === 1 ? "" : "s"}${result.title ? ` from ${result.title}` : ""}`
-          : "Google Photos album is already up to date",
-      );
+      const result = await syncGooglePhotosAlbum(id, url);
+      const albumName = (await nameImportedAlbum(id, created, result.title)) || photosAlbumName.trim() || "Google Photos";
+      setRail(`${scopeUserId}:${id}`);
       setPhotosShareUrl("");
-      setPhotosOpen(false);
+      showTransfer({
+        title: albumName,
+        done: 1,
+        total: 1,
+        status: "done",
+        detail: result.added
+          ? `Imported ${result.added} photo${result.added === 1 ? "" : "s"} into ${albumName}`
+          : `${albumName} is already up to date`,
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not sync that album");
-    } finally {
-      setBusy(false);
+      showTransfer({
+        title: "Import failed",
+        done: 0,
+        total: 1,
+        status: "error",
+        detail: err instanceof Error ? err.message : "Could not sync that album",
+      });
     }
   };
 
   const pickFromPhotos = async () => {
-    if (!selectedAlbum || selectedAlbum.ownerId !== scopeUserId) {
-      toast.error("Open one of your albums, then pick photos into it.");
+    if (transfer?.status === "running") {
+      toast.message("Let the current transfer finish first.");
       return;
     }
-    setBusy(true);
+    if (importDestination() === "new" && !photosAlbumName.trim()) {
+      setPhotosOpen(true);
+      toast.message("Name the album first — use the same name as in Google Photos.");
+      return;
+    }
     try {
-      const session = await startGooglePhotosPicker(selectedAlbum.id);
+      const { id } = await ensureOwnAlbum(photosAlbumName);
+      const albumName = photosAlbumName.trim() || photos.albums.find((album) => album.id === id)?.name || "Google Photos";
+      const session = await startGooglePhotosPicker(id);
+      setPickerAlbumId(id);
+      setPickerAlbumName(albumName);
+      setRail(`${scopeUserId}:${id}`);
       setPickerSession(session.sessionId);
-      window.open(session.pickerUri, "hardy-gphotos", "noopener,width=480,height=780");
-      toast.message("Pick the album photos in Google, then come back here.");
+      setPhotosOpen(false);
+      window.open(session.pickerUri, "hardy-gphotos", "noopener,width=1100,height=820");
+      showTransfer({
+        title: albumName,
+        done: 0,
+        total: 1,
+        status: "running",
+        detail: "Choose photos in Google, then we’ll import them.",
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not open Google Photos");
-    } finally {
-      setBusy(false);
     }
   };
 
   useEffect(() => {
-    if (!pickerSession || !selectedAlbum) return;
+    const albumId = pickerAlbumId || selectedAlbum?.id;
+    if (!pickerSession || !albumId) return;
     let cancelled = false;
     const tick = async () => {
       try {
-        const result = await pollGooglePhotosPicker(selectedAlbum.id, pickerSession);
+        const result = await pollGooglePhotosPicker(albumId, pickerSession);
         if (cancelled || !result.done) return;
         setPickerSession(null);
-        toast.success(result.added ? `Added ${result.added} photo${result.added === 1 ? "" : "s"} from Google Photos` : "No new Photos were picked");
+        setPickerAlbumId(null);
+        setRail(`${scopeUserId}:${albumId}`);
         setPhotosOpen(false);
+        const albumName = pickerAlbumName || "Google Photos";
+        showTransfer({
+          title: albumName,
+          done: 1,
+          total: 1,
+          status: "done",
+          detail: result.added
+            ? `Imported ${result.added} photo${result.added === 1 ? "" : "s"} into ${albumName}`
+            : `No new photos were added to ${albumName}`,
+        });
       } catch (err) {
         if (!cancelled) {
           setPickerSession(null);
-          toast.error(err instanceof Error ? err.message : "Could not finish that Google Photos pick");
+          setPickerAlbumId(null);
+          showTransfer({
+            title: "Import failed",
+            done: 0,
+            total: 1,
+            status: "error",
+            detail: err instanceof Error ? err.message : "Could not finish that Google Photos pick",
+          });
         }
       }
     };
@@ -282,7 +454,7 @@ export default function Photos() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [pickerSession, selectedAlbum]);
+  }, [pickerAlbumId, pickerAlbumName, pickerSession, scopeUserId, showTransfer]);
 
   return (
     <FeaturePageShell
@@ -355,8 +527,8 @@ export default function Photos() {
                 <p className="font-display text-base font-bold">Google Drive</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {photos.drive.connected
-                    ? `Linked as ${photos.drive.email || "Google"}. Sync a folder into the album you have open.`
-                    : "Link Drive so a folder of holiday photos stays on Google, then syncs into an album here."}
+                    ? `Linked as ${photos.drive.email || "Google"}. Pick a folder — we make an album with the same name.`
+                    : "Link Drive so a folder of holiday photos stays on Google, then syncs into an album with the same name."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {photos.drive.connected ? (
@@ -380,20 +552,20 @@ export default function Photos() {
                 <p className="font-display text-base font-bold">Google Photos</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {photos.gphotos.connected
-                    ? `Linked as ${photos.gphotos.email || "Google"}. Open an album, then pick from Photos or paste a shared album link.`
-                    : "Connect your own Google Photos in this app. Each person signs in with their Google account — the family only needs one Web client set up in Settings."}
+                    ? `Linked as ${photos.gphotos.email || "Google"}. Choose photos or an album from your library — they stay yours until you share the Hardy Hub album.`
+                    : "Connect here or in Settings, then sign in with your own Google account and pick albums."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => {
-                    setPhotosShareUrl(selectedAlbum?.googlePhotosShareUrl || "");
-                    setPhotosOpen(true);
-                  }}>
-                    Link album
+                  <Button size="sm" variant="secondary" disabled={busy} onClick={openPhotosImport}>
+                    Choose photos
                   </Button>
                   {photos.gphotos.connected ? (
                     <>
-                      <Button size="sm" variant="secondary" disabled={busy || !!pickerSession} onClick={() => void pickFromPhotos()}>
-                        Pick from Photos
+                      <Button size="sm" variant="secondary" disabled={busy || !!pickerSession} onClick={() => {
+                        if (selectedAlbum?.ownerId === scopeUserId) void pickFromPhotos();
+                        else openPhotosImport();
+                      }}>
+                        Open my Google library
                       </Button>
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void disconnectGooglePhotos().then(() => toast.success("Google Photos disconnected"))}>
                         Disconnect
@@ -413,7 +585,7 @@ export default function Photos() {
             </p>
             {selectedAlbum && albumCanEdit && (
               <>
-                <Button size="sm" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
+                <Button size="sm" variant="secondary" disabled={transfer?.status === "running"} onClick={() => fileRef.current?.click()}>
                   <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => setLinkOpen(true)}>
@@ -456,7 +628,7 @@ export default function Photos() {
               </>
             )}
             {rail === "all" && canEdit && (
-              <Button size="sm" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
+              <Button size="sm" variant="secondary" disabled={transfer?.status === "running"} onClick={() => fileRef.current?.click()}>
                 <ImagePlus className="mr-1.5 h-3.5 w-3.5" /> Add photos
               </Button>
             )}
@@ -471,8 +643,13 @@ export default function Photos() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {rail === "shared"
                   ? "When someone shares an album with you, it will land here."
-                  : "Upload, paste a link, or sync Drive / Google Photos into an album."}
+                  : "Open your Google library, search the album you want, and pick the pictures to bring here."}
               </p>
+              {isOwnScope && photos.gphotos.connected && rail !== "shared" && (
+                <Button className="mt-4" disabled={busy} onClick={openPhotosImport}>
+                  Open my Google library
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
@@ -537,41 +714,67 @@ export default function Photos() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={photosOpen} onOpenChange={(open) => { setPhotosOpen(open); if (!open) setPickerSession(null); }}>
+      <Dialog open={photosOpen} onOpenChange={(open) => setPhotosOpen(open)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Google Photos album</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            In Google Photos, open the album, tap Share, and copy the link. Hardy Hub keeps the picture list here and pulls in new ones when you sync — same idea as a Drive folder.
+          <DialogHeader><DialogTitle>Choose from your Google Photos</DialogTitle></DialogHeader>
+          <p className="text-sm text-foreground/80">
+            Google no longer lets apps list your albums here. It opens your library instead. Search the album name at the top, tap the photos you want (or select all), then Done.
           </p>
-          <Label htmlFor="gphotos-url">Shared album link</Label>
-          <Input
-            id="gphotos-url"
-            value={photosShareUrl}
-            onChange={(event) => setPhotosShareUrl(event.target.value)}
-            placeholder="https://photos.app.goo.gl/…"
-          />
-          <Button disabled={busy || !photosShareUrl.trim()} onClick={() => void syncPhotosAlbum()}>
-            Sync album
-          </Button>
+          <Label htmlFor="gphotos-target">Save them into</Label>
+          <select
+            id="gphotos-target"
+            value={photosTarget}
+            onChange={(event) => setPhotosTarget(event.target.value)}
+            className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+          >
+            <option value="new">New Hardy Hub album</option>
+            {photos.albums.map((album) => (
+              <option key={album.id} value={album.id}>{album.name}</option>
+            ))}
+          </select>
+          {photosTarget === "new" && (
+            <Input
+              value={photosAlbumName}
+              onChange={(event) => setPhotosAlbumName(event.target.value)}
+              placeholder="Same name as the Google album"
+            />
+          )}
           {photos.gphotos.connected && (
-            <div className="rounded-xl bg-card p-3 shadow-card">
-              <p className="text-sm text-muted-foreground">
+            <div className="rounded-xl border border-border/40 bg-background p-3">
+              <p className="text-sm text-foreground/80">
                 {pickerSession
-                  ? "Waiting for you to finish in Google Photos…"
-                  : "Or pick photos from an album in your library. Google no longer lets apps watch a private album live, so pick again later to add new ones."}
+                  ? "Waiting for you to finish in Google Photos. Leave this page open."
+                  : "Opens your Google library in a new window. Recent photos show first — search the album if you want a whole album."}
               </p>
-              <Button className="mt-2" size="sm" variant="secondary" disabled={busy || !!pickerSession} onClick={() => void pickFromPhotos()}>
-                Pick from Photos
+              <Button className="mt-2" disabled={busy || !!pickerSession} onClick={() => void pickFromPhotos()}>
+                Open my Google library
               </Button>
             </div>
           )}
+          <details className="rounded-xl border border-border/40 bg-background px-3 py-2">
+            <summary className="cursor-pointer text-sm font-semibold">I have a share link instead</summary>
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-foreground/80">
+                Only works if the album is shared with a link anyone can view. We name the Hardy Hub album after the Google album.
+              </p>
+              <Input
+                id="gphotos-url"
+                value={photosShareUrl}
+                onChange={(event) => setPhotosShareUrl(event.target.value)}
+                placeholder="https://photos.app.goo.gl/…"
+              />
+              <Button variant="secondary" disabled={busy || !photosShareUrl.trim()} onClick={() => void syncPhotosAlbum()}>
+                Import shared link
+              </Button>
+            </div>
+          </details>
         </DialogContent>
       </Dialog>
 
       <Dialog open={driveOpen} onOpenChange={setDriveOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Drive folder</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Photos stay on Google Drive. Hardy Hub stores the file list and shows them in this album and on displays.</p>
+          <p className="text-sm text-muted-foreground">Photos stay on Google Drive. We create a Hardy Hub album with the folder’s name, or add to one that already matches.</p>
           {folders.length === 0 ? (
             <Button disabled={busy} onClick={() => void loadFolders()}>Load folders</Button>
           ) : (
@@ -590,6 +793,43 @@ export default function Photos() {
           )}
         </DialogContent>
       </Dialog>
+
+      {transfer && createPortal(
+        <div
+          className="fixed inset-x-0 z-40 mx-auto w-[min(36rem,calc(100%-1.5rem))] rounded-2xl border border-border/40 p-3 shadow-card"
+          style={{
+            bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
+            background:
+              transfer.status === "error"
+                ? "color-mix(in srgb, hsl(0,70%,46%) 16%, hsl(var(--card)))"
+                : "color-mix(in srgb, hsl(330,55%,48%) 14%, hsl(var(--card)))",
+            borderLeftWidth: 4,
+            borderLeftColor:
+              transfer.status === "error"
+                ? "hsl(0,70%,46%)"
+                : transfer.status === "done"
+                  ? "hsl(145,42%,36%)"
+                  : "hsl(330,55%,48%)",
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate font-display text-sm font-bold">{transfer.title}</p>
+            <p className="shrink-0 text-xs font-semibold tabular-nums">
+              {transfer.done} of {transfer.total}
+            </p>
+          </div>
+          <p className="mt-0.5 truncate text-xs text-foreground/80">{transfer.detail}</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
+            <div
+              className="h-full rounded-full bg-gradient-primary transition-[width] duration-300"
+              style={{ width: `${transfer.total ? Math.round((transfer.done / transfer.total) * 100) : 0}%` }}
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
 
       <AlbumShareDialog
         album={shareAlbum ? photos.albums.find((album) => album.id === shareAlbum.id) || shareAlbum : null}

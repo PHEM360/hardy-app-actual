@@ -52,7 +52,7 @@ export async function loadGoogleCredentials() {
   if (!isGoogleWebClientId(clientId) || !clientSecret || clientSecret === "UNSET") {
     throw new HttpsError(
       "failed-precondition",
-      "Google login is not set up for the family yet. An admin adds one Web client in Settings. Each person then signs in with their own Google account in the app.",
+      "Finish the one-time family setup at the top of Settings, then tap Connect and sign in with your own Google account.",
     );
   }
   return { clientId, clientSecret };

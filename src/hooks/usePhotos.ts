@@ -238,8 +238,14 @@ export function usePhotos(scopeUserId?: string | null) {
     await deleteDoc(doc(db, "photos", uid, "albums", album.id));
   }, [uid, items, outgoingGrants, removePhotoDoc]);
 
-  const addFiles = useCallback(async (albumId: string, files: File[]) => {
+  const addFiles = useCallback(async (
+    albumId: string,
+    files: File[],
+    onProgress?: (done: number, total: number, fileName: string) => void,
+  ) => {
     if (!uid) throw new Error("Sign in first.");
+    const total = files.length;
+    let done = 0;
     for (const file of files) {
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `photos/${uid}/${albumId}/${crypto.randomUUID()}-${safeName}`;
@@ -255,6 +261,8 @@ export function usePhotos(scopeUserId?: string | null) {
         source: "upload",
         createdAt: serverTimestamp(),
       });
+      done += 1;
+      onProgress?.(done, total, file.name);
     }
   }, [uid]);
 

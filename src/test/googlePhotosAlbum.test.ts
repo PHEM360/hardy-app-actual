@@ -31,4 +31,11 @@ describe("Google Photos album links", () => {
       "https://lh3.googleusercontent.com/pw/AP1GczFamilyOne=w1600",
     );
   });
+
+  it("reads escaped Google Photos URLs from a modern share page", () => {
+    const html = `<script>AF_initDataCallback({data:["https:\\/\\/lh3.googleusercontent.com\\/pw\\/APSHHfamilyHoliday"]})</script>`;
+    expect(extractGooglePhotosFromHtml(html).urls).toEqual([
+      "https://lh3.googleusercontent.com/pw/APSHHfamilyHoliday=w1600",
+    ]);
+  });
 });

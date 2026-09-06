@@ -11,6 +11,7 @@ import { useAuth } from "@/auth/AuthContext";
 import DogLoader from "@/components/DogLoader";
 import { authenticateWithPasskey, passkeyErrorMessage, passkeysSupported } from "@/lib/passkeys";
 import { markOpenSessionSatisfied, markSecurityAuthentication } from "@/lib/securitySession";
+import { landingPathForUser } from "@/lib/startPage";
 
 function getAuthErrorMessage(err: any): string {
   const code = String(err?.code || "");
@@ -68,9 +69,12 @@ const Login = () => {
 
   useEffect(() => {
     if (initializing || !user) return;
+    let cancelled = false;
     const from = (location.state as { from?: string } | null)?.from;
-    const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
-    navigate(target, { replace: true });
+    void landingPathForUser(user.uid, from).then((target) => {
+      if (!cancelled) navigate(target, { replace: true });
+    });
+    return () => { cancelled = true; };
   }, [user, initializing, location.state, navigate]);
 
   // Keep the splash duration in one place so we can compute stagger when
@@ -89,8 +93,7 @@ const Login = () => {
       markSecurityAuthentication(credential.user.uid, "password");
       markOpenSessionSatisfied(credential.user.uid);
       const from = (location.state as { from?: string } | null)?.from;
-      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
-      navigate(target, { replace: true });
+      navigate(await landingPathForUser(credential.user.uid, from), { replace: true });
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -105,8 +108,7 @@ const Login = () => {
       const signedInUser = await authenticateWithPasskey(false);
       markOpenSessionSatisfied(signedInUser.uid);
       const from = (location.state as { from?: string } | null)?.from;
-      const target = from && from.startsWith("/") && !from.startsWith("//") ? from : "/dashboard";
-      navigate(target, { replace: true });
+      navigate(await landingPathForUser(signedInUser.uid, from), { replace: true });
     } catch (caught) {
       setError(passkeyErrorMessage(caught));
     } finally {

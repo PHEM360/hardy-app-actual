@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -180,46 +180,55 @@ export function useDashboardLayout() {
 
   useEffect(() => {
     if (!dataUid) return;
-    const ref = doc(db, "dashboardLayouts", dataUid);
+    const ref = doc(db, "users", dataUid);
     const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (Array.isArray(data?.layout) && data.layout.length > 0) {
-          const saved: WidgetLayoutItem[] = data.layout;
-          const savedVersion: number = data.layoutVersion ?? 0;
+      const stored = snap.data()?.dashboardLayout;
+      if (stored && Array.isArray(stored.layout) && stored.layout.length > 0) {
+        const saved: WidgetLayoutItem[] = stored.layout;
+        const savedVersion: number = stored.layoutVersion ?? 0;
 
-          if (savedVersion < LAYOUT_VERSION) {
-            // Geometry has moved on since this was saved — take fresh
-            // xFrac/wFrac/y/h from the current defaults, but keep this
-            // account's own visibility and tint choices where they exist.
-            const savedById = new Map(saved.map((w) => [w.id, w]));
-            const refreshed = DEFAULT_LAYOUT.map((def) => {
-              const prev = savedById.get(def.id);
-              return prev ? { ...def, visible: prev.visible, tintColor: prev.tintColor } : def;
-            });
-            const resolved = resolveOverlaps(refreshed);
-            setLayout(resolved);
-            setDoc(ref, { layout: resolved, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
-            return;
-          }
-
-          // Merge saved layout with defaults for any new widget types not yet in saved data
-          const savedIds = new Set(saved.map((w) => w.id));
-          const newDefaults = DEFAULT_LAYOUT.filter((d) => !savedIds.has(d.id));
-          setLayout(resolveOverlaps([...saved, ...newDefaults]));
+        if (savedVersion < LAYOUT_VERSION) {
+          const savedById = new Map(saved.map((w) => [w.id, w]));
+          const refreshed = DEFAULT_LAYOUT.map((def) => {
+            const prev = savedById.get(def.id);
+            return prev ? { ...def, visible: prev.visible, tintColor: prev.tintColor } : def;
+          });
+          const resolved = resolveOverlaps(refreshed);
+          setLayout(resolved);
+          setDoc(ref, { dashboardLayout: { layout: resolved, layoutVersion: LAYOUT_VERSION } }, { merge: true }).catch(() => {});
           return;
         }
+
+        const savedIds = new Set(saved.map((w) => w.id));
+        const newDefaults = DEFAULT_LAYOUT.filter((d) => !savedIds.has(d.id));
+        setLayout(resolveOverlaps([...saved, ...newDefaults]));
+        return;
       }
-      setLayout(DEFAULT_LAYOUT);
+      void getDoc(doc(db, "dashboardLayouts", dataUid)).then((legacy) => {
+        const data = legacy.data();
+        if (!legacy.exists() || !Array.isArray(data?.layout) || !data.layout.length) return;
+        setDoc(ref, {
+          dashboardLayout: { layout: data.layout, layoutVersion: data.layoutVersion ?? 0 },
+        }, { merge: true }).catch(() => {});
+      }).catch(() => {});
     });
     return unsub;
+  }, [dataUid]);
+
+  const persist = useCallback((next: WidgetLayoutItem[]) => {
+    if (!dataUid) return;
+    setDoc(doc(db, "users", dataUid), {
+      dashboardLayout: { layout: next, layoutVersion: LAYOUT_VERSION },
+    }, { merge: true }).catch(() => {});
   }, [dataUid]);
 
   const saveLayout = useCallback(async (newLayout: WidgetLayoutItem[]) => {
     if (!dataUid) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "dashboardLayouts", dataUid), { layout: newLayout, layoutVersion: LAYOUT_VERSION }, { merge: true });
+      await setDoc(doc(db, "users", dataUid), {
+        dashboardLayout: { layout: newLayout, layoutVersion: LAYOUT_VERSION },
+      }, { merge: true });
     } finally {
       setSaving(false);
     }
@@ -229,26 +238,15 @@ export function useDashboardLayout() {
     setLayout((prev) => {
       const patched = prev.map((w) => w.id === id ? { ...w, ...patch } : w);
       const next = resolveOverlaps(patched);
-      // Fire-and-forget save
-      if (dataUid) {
-        setDoc(doc(db, "dashboardLayouts", dataUid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
-      }
+      persist(next);
       return next;
     });
-  }, [dataUid]);
+  }, [persist]);
 
   const resetLayout = useCallback(() => {
     setLayout(DEFAULT_LAYOUT);
-    if (dataUid) {
-      setDoc(doc(db, "dashboardLayouts", dataUid), { layout: DEFAULT_LAYOUT, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
-    }
-  }, [dataUid]);
-
-  const persist = useCallback((next: WidgetLayoutItem[]) => {
-    if (dataUid) {
-      setDoc(doc(db, "dashboardLayouts", dataUid), { layout: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
-    }
-  }, [dataUid]);
+    persist(DEFAULT_LAYOUT);
+  }, [persist]);
 
   const pinNotesFirst = useCallback(() => {
     setLayout((prev) => {

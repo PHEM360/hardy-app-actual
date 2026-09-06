@@ -998,6 +998,15 @@ service cloud.firestore {
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Home widget layouts. The app now also stores these on users/{uid}, but
+    // keep the collections readable so older saved grids are not locked out.
+    match /todayLayouts/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+    match /dashboardLayouts/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

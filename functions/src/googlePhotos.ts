@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import {
   extractGooglePhotosFromHtml,
   googlePhotosMediaId,
+  googlePhotosShareLooksPrivate,
   isGooglePhotosShareUrl,
   sizedGooglePhotoUrl,
 } from "./googlePhotosAlbum";
@@ -332,11 +333,17 @@ export const syncGooglePhotosAlbum = onCall({ timeoutSeconds: 180 }, async (requ
     throw new HttpsError("failed-precondition", "Could not open that Google Photos album.");
   }
   const html = await fetched.text();
+  if (googlePhotosShareLooksPrivate(html)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "That album is still private. Use Choose from Google Photos and search the album name, or in Google Photos tap Share and create a link anyone can view.",
+    );
+  }
   const parsed = extractGooglePhotosFromHtml(html);
   if (!parsed.urls.length) {
     throw new HttpsError(
       "failed-precondition",
-      "No pictures found. In Google Photos, open the album, tap Share, and create a link anyone can view.",
+      "Google did not include the pictures in that link. Use Choose from Google Photos, search the album name, select the photos, then Done.",
     );
   }
   const known = await knownGooglePhotoIds(uid, albumId);

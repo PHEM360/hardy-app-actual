@@ -7,10 +7,15 @@ export function isGooglePhotosShareUrl(value: string): boolean {
     const host = url.hostname.replace(/^www\./, "").toLowerCase();
     if (SHORT_HOSTS.has(host) && url.pathname.length > 1) return true;
     if (!PHOTOS_HOSTS.has(host)) return false;
-    return /\/(share|album|u\/\d+\/(?:share|album))\//.test(url.pathname);
+    return /\/(share|album|photolist|u\/\d+\/(?:share|album|photolist))\//.test(url.pathname);
   } catch {
     return false;
   }
+}
+
+export function googlePhotosShareLooksPrivate(html: string): boolean {
+  const text = html.toLowerCase();
+  return text.includes("accounts.google.com") && (text.includes("sign in") || text.includes("signin"));
 }
 
 export function googlePhotosMediaId(url: string): string {
@@ -36,12 +41,9 @@ export function extractGooglePhotosFromHtml(html: string): {
   urls: string[];
 } {
   const title = albumTitleFromHtml(html);
-  const pw = collectUrls(html, /https:\/\/lh3\.googleusercontent\.com\/pw\/[A-Za-z0-9_\-]+/g);
-  if (pw.length) return { title, urls: pw };
-  return {
-    title,
-    urls: collectUrls(html, /https:\/\/lh3\.googleusercontent\.com\/[A-Za-z0-9_\-]{24,}/g),
-  };
+  const blob = unescapeGooglePhotoUrl(html);
+  const urls = collectUrls(blob, /https:\/\/lh[0-9]\.googleusercontent\.com\/(?:pw\/)?[A-Za-z0-9_-]{10,}/g);
+  return { title, urls };
 }
 
 function albumTitleFromHtml(html: string): string {
@@ -57,6 +59,7 @@ function collectUrls(html: string, pattern: RegExp): string[] {
   for (const match of html.matchAll(pattern)) {
     const raw = unescapeGooglePhotoUrl(match[0]);
     if (raw.length < 40) continue;
+    if (/\/s[0-9]{2,3}(-c)?\//.test(raw)) continue;
     found.add(sizedGooglePhotoUrl(raw));
   }
   return [...found];

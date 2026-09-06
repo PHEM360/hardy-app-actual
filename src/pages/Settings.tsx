@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck, LayoutGrid } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck, LayoutGrid, Copy } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -25,9 +25,16 @@ import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } 
 import { ChangeVaultPinCard } from "@/components/passwords/ChangeVaultPinCard";
 import { OnePasswordConnectCard } from "@/components/passwords/OnePasswordConnectCard";
 import { toast } from "sonner";
-import { googleOAuthStatus, saveGoogleOAuthClient } from "@/lib/googleCalendarApi";
+import { disconnectGoogleCalendar, googleOAuthStatus, saveGoogleOAuthClient, startGoogleCalendarConnect } from "@/lib/googleCalendarApi";
+import { disconnectGoogleDrive, startGoogleDriveConnect } from "@/lib/googleDriveApi";
+import { disconnectGooglePhotos, startGooglePhotosConnect } from "@/lib/googlePhotosApi";
+import { disconnectMailAccount, startGmailConnect } from "@/lib/mailApi";
+import { useCalendar } from "@/hooks/useCalendar";
+import { useMail } from "@/hooks/useMail";
+import { usePhotos } from "@/hooks/usePhotos";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
+import { DEFAULT_START_PAGE, START_PAGE_OPTIONS } from "@/lib/startPage";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -61,6 +68,17 @@ const ALL_NAV_OPTIONS = [
   { path: "/remote-displays",   label: "Remote Displays" },
 ];
 const DEFAULT_NAV = [...DEFAULT_BOTTOM_NAV, "/more"];
+const OWNER_EMAIL = "chris.hardy.07@googlemail.com";
+const FAMILY_GOOGLE_REDIRECTS = [
+  "https://hardyhub-7b30d.web.app/api/google-photos/callback",
+  "https://hardyhub-7b30d.web.app/api/google-drive/callback",
+  "https://hardyhub-7b30d.web.app/api/mail/callback",
+  "https://hardyhub-7b30d.web.app/api/calendar/callback",
+  "https://hardyapp.co.uk/api/google-photos/callback",
+  "https://hardyapp.co.uk/api/google-drive/callback",
+  "https://hardyapp.co.uk/api/mail/callback",
+  "https://hardyapp.co.uk/api/calendar/callback",
+];
 
 // ── Avatar preview component ──
 const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }: {
@@ -79,6 +97,38 @@ const AvatarPreview = ({ type, emoji, initials, bgColor, textColor, firstName }:
     </div>
   );
 };
+
+function GoogleLinkRow({
+  title,
+  detail,
+  connected,
+  busy,
+  setupNeeded,
+  onConnect,
+  onDisconnect,
+}: {
+  title: string;
+  detail: string;
+  connected: boolean;
+  busy: boolean;
+  setupNeeded: boolean;
+  onConnect: () => void;
+  onDisconnect?: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-border/40 bg-background px-3 py-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-card-foreground">{title}</p>
+        <p className="mt-0.5 text-xs text-foreground/80">{detail}</p>
+      </div>
+      {connected ? (
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onDisconnect}>Disconnect</Button>
+      ) : (
+        <Button size="sm" disabled={busy} onClick={onConnect}>Connect</Button>
+      )}
+    </div>
+  );
+}
 
 const Settings = () => {
   const { user } = useAuth();
@@ -124,21 +174,43 @@ const Settings = () => {
   const [geminiSaved, setGeminiSaved] = useState(false);
   useEffect(() => { if (savedApiKey) setGeminiKeyInput(savedApiKey); }, [savedApiKey]);
 
-  const isAdmin = role === "admin" || role === "superadmin";
+  const isAdmin =
+    role === "admin" ||
+    role === "superadmin" ||
+    String(user?.email || "").toLowerCase() === OWNER_EMAIL;
+  const photos = usePhotos(user?.uid);
+  const { settings: calendarSettings } = useCalendar(user?.uid);
+  const mail = useMail(user?.uid);
+  const gmailAccounts = mail.accounts.filter((account) => account.provider === "gmail");
   const [googleClientIdInput, setGoogleClientIdInput] = useState("");
   const [googleClientSecretInput, setGoogleClientSecretInput] = useState("");
   const [googleOauthHint, setGoogleOauthHint] = useState("");
   const [googleOauthReady, setGoogleOauthReady] = useState(false);
-  const [googleRedirects, setGoogleRedirects] = useState<string[]>([]);
+  const [googleRedirects, setGoogleRedirects] = useState<string[]>(FAMILY_GOOGLE_REDIRECTS);
   const [googleOauthSaving, setGoogleOauthSaving] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState<string | null>(null);
   useEffect(() => {
-    if (!isAdmin) return;
     void googleOAuthStatus().then((status) => {
       setGoogleOauthReady(status.configured);
       setGoogleOauthHint(status.clientHint);
       setGoogleRedirects(status.redirects);
+      setGoogleRedirects(status.redirects?.length ? status.redirects : FAMILY_GOOGLE_REDIRECTS);
+    }).catch(() => {
+      setGoogleOauthReady(false);
+      setGoogleRedirects(FAMILY_GOOGLE_REDIRECTS);
     });
-  }, [isAdmin]);
+  }, []);
+
+  const runGoogleLink = async (key: string, action: () => Promise<void>) => {
+    setGoogleBusy(key);
+    try {
+      await action();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not do that");
+    } finally {
+      setGoogleBusy(null);
+    }
+  };
 
   // Linked Displays
   const { devices, loading: devicesLoading, renameDevice, forgetDevice } = useMyDevices();
@@ -294,6 +366,178 @@ const Settings = () => {
 
   return (
     <FeaturePageShell title="Settings" subtitle="Account & app preferences" icon={<SettingsIcon className="w-5 h-5" />}>
+      <div className="mb-5">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">
+          Google accounts
+        </h3>
+        <div
+          className="space-y-3 rounded-2xl border border-border/40 p-4 shadow-card"
+          style={{ background: "color-mix(in srgb, hsl(210,55%,46%) 10%, hsl(var(--card)))", borderLeftWidth: 4, borderLeftColor: "hsl(210,55%,46%)" }}
+        >
+          <p className="text-sm text-foreground/80">
+            Each person links their own Google account. Chris imports from his Photos or Drive, Sue from hers. Nothing is shared until you share an album in Hardy Hub.
+          </p>
+          {!googleOauthReady && (
+            <p className="text-xs text-foreground">
+              Connect will work after the one-time form below is saved. That is Hardy Hub registering with Google — not your Photos login.
+            </p>
+          )}
+          <GoogleLinkRow
+            title="Google Photos"
+            detail={photos.gphotos.connected ? `Linked as ${photos.gphotos.email || "Google"}` : "Sign in, then pick albums on Photos"}
+            connected={Boolean(photos.gphotos.connected)}
+            busy={googleBusy === "photos"}
+            setupNeeded={!googleOauthReady}
+            onConnect={() => void runGoogleLink("photos", async () => {
+              window.location.href = await startGooglePhotosConnect();
+            })}
+            onDisconnect={() => void runGoogleLink("photos", async () => {
+              await disconnectGooglePhotos();
+              toast.success("Google Photos disconnected");
+            })}
+          />
+          <GoogleLinkRow
+            title="Google Drive"
+            detail={photos.drive.connected ? `Linked as ${photos.drive.email || "Google"}` : "Sign in, then choose a folder on Photos"}
+            connected={Boolean(photos.drive.connected)}
+            busy={googleBusy === "drive"}
+            setupNeeded={!googleOauthReady}
+            onConnect={() => void runGoogleLink("drive", async () => {
+              window.location.href = await startGoogleDriveConnect();
+            })}
+            onDisconnect={() => void runGoogleLink("drive", async () => {
+              await disconnectGoogleDrive();
+              toast.success("Google Drive disconnected");
+            })}
+          />
+          <GoogleLinkRow
+            title="Google Calendar"
+            detail={calendarSettings.google?.connected ? `Linked as ${calendarSettings.google.email || "Google"}` : "Keep Hardy Hub in sync with your calendars"}
+            connected={Boolean(calendarSettings.google?.connected)}
+            busy={googleBusy === "calendar"}
+            setupNeeded={!googleOauthReady}
+            onConnect={() => void runGoogleLink("calendar", async () => {
+              window.location.href = await startGoogleCalendarConnect();
+            })}
+            onDisconnect={() => void runGoogleLink("calendar", async () => {
+              await disconnectGoogleCalendar();
+              toast.success("Google Calendar disconnected");
+            })}
+          />
+          {gmailAccounts.length ? gmailAccounts.map((account) => (
+            <GoogleLinkRow
+              key={account.id}
+              title="Gmail"
+              detail={`Linked as ${account.email}`}
+              connected
+              busy={googleBusy === `gmail-${account.id}`}
+              setupNeeded={!googleOauthReady}
+              onConnect={() => undefined}
+              onDisconnect={() => void runGoogleLink(`gmail-${account.id}`, async () => {
+                await disconnectMailAccount(user?.uid, account.id);
+                toast.success("Gmail disconnected");
+              })}
+            />
+          )) : (
+            <GoogleLinkRow
+              title="Gmail"
+              detail="Read and send from your mailbox in Email"
+              connected={false}
+              busy={googleBusy === "gmail"}
+              setupNeeded={!googleOauthReady}
+              onConnect={() => void runGoogleLink("gmail", async () => {
+                window.location.href = await startGmailConnect(user?.uid);
+              })}
+            />
+          )}
+        </div>
+
+        {(isAdmin || !googleOauthReady) && (
+          <div className="mt-3 space-y-3 rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+            <p className="text-sm font-semibold text-card-foreground">
+              One-time family setup {googleOauthReady ? `(ready · …${googleOauthHint})` : ""}
+            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-foreground/80">
+                Hardy Hub is already live. Google still has its own “Testing” switch, which is why family members get blocked. Publish that once so anyone in the family can link their own Photos or Drive.
+              </p>
+              <p className="rounded-xl border border-border/40 bg-background px-3 py-2 text-sm text-foreground">
+                Open{" "}
+                <a className="underline" href="https://console.cloud.google.com/auth/audience?project=hardyhub-7b30d" target="_blank" rel="noreferrer">
+                  Google audience
+                </a>
+                {" "}and tap <span className="font-semibold">Publish app</span>. After that, each person uses Connect with their own Google login. Google may show “not verified” — tap Advanced, then continue. Do not start a verification review unless you want the warning gone.
+              </p>
+              <ol className="list-decimal space-y-2 pl-4 text-sm text-foreground/80">
+                <li>
+                  Open{" "}
+                  <a className="underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+                    Google Cloud credentials
+                  </a>
+                  {" "}while signed into the Google account that owns this app.
+                </li>
+                <li>Create credentials → OAuth client ID → application type <span className="font-semibold">Web application</span>.</li>
+                <li>
+                  Google asks for “Authorised redirect URIs”. That just means: after someone signs in, send them back to Hardy Hub. Click Add URI and paste each address below.
+                </li>
+                <li>Copy the Client ID and Client secret into the boxes, then tap Save.</li>
+              </ol>
+              <div className="rounded-xl border border-border/40 bg-background p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-foreground">Return addresses to paste in Google Cloud</p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!googleRedirects.length}
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(googleRedirects.join("\n"));
+                      toast.success("Copied the return addresses");
+                    }}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy all
+                  </Button>
+                </div>
+                <ul className="space-y-0.5">
+                  {googleRedirects.map((url) => (
+                    <li key={url} className="break-all font-mono text-[10px] text-foreground">{url}</li>
+                  ))}
+                </ul>
+              </div>
+              <Input
+                placeholder="123-abc.apps.googleusercontent.com"
+                value={googleClientIdInput}
+                onChange={(event) => setGoogleClientIdInput(event.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Client secret"
+                value={googleClientSecretInput}
+                onChange={(event) => setGoogleClientSecretInput(event.target.value)}
+                autoComplete="new-password"
+              />
+              <Button
+                disabled={googleOauthSaving}
+                onClick={async () => {
+                  setGoogleOauthSaving(true);
+                  try {
+                    await saveGoogleOAuthClient(googleClientIdInput, googleClientSecretInput);
+                    setGoogleOauthReady(true);
+                    setGoogleClientSecretInput("");
+                    toast.success("Family Google setup saved");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not save that");
+                  } finally {
+                    setGoogleOauthSaving(false);
+                  }
+                }}
+              >
+                Save family setup
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Profile */}
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
@@ -485,18 +729,41 @@ const Settings = () => {
           </span>
           Home
         </h3>
-        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft">
-          <p className="text-sm font-medium text-card-foreground">Home screen</p>
-          <p className="mb-3 text-[10px] text-muted-foreground">Today’s planner, or a welcome plus page tiles you can rearrange.</p>
-          <HomeLayoutChooser
-            title=""
-            description=""
-            value={profile?.homeLayout}
-            onChoose={(mode: HomeLayoutMode) => {
-              void saveProfile({ homeLayout: mode });
-              toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
-            }}
-          />
+        <div className="space-y-3 p-4 rounded-xl bg-card border border-border/50 shadow-soft">
+          <div>
+            <p className="text-sm font-medium text-card-foreground">Open this page when I log in</p>
+            <p className="mb-2 text-[10px] text-muted-foreground">We’ll take you here after sign-in. A link you were sent still wins.</p>
+            <select
+              value={profile?.defaultRoute || DEFAULT_START_PAGE}
+              onChange={(event) => {
+                const defaultRoute = event.target.value;
+                void saveProfile({ defaultRoute });
+                const label = START_PAGE_OPTIONS.find((item) => item.path === defaultRoute)?.label || "Home";
+                toast.success(`You’ll open ${label} next time you log in`);
+              }}
+              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+            >
+              {START_PAGE_OPTIONS.filter((item) => {
+                if (roleLoading || profileLoading || sharesLoading) return item.path === DEFAULT_START_PAGE;
+                return canAccessRoute(role, profile?.enabledFeatures ?? [], item.path, sharedPages);
+              }).map((item) => (
+                <option key={item.path} value={item.path}>{item.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-card-foreground">Home screen</p>
+            <p className="mb-3 text-[10px] text-muted-foreground">Today’s planner, or a welcome plus page tiles you can rearrange. Widget and tile layouts are saved to your account.</p>
+            <HomeLayoutChooser
+              title=""
+              description=""
+              value={profile?.homeLayout}
+              onChoose={(mode: HomeLayoutMode) => {
+                void saveProfile({ homeLayout: mode });
+                toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -610,64 +877,6 @@ const Settings = () => {
           })}
         </div>
       </div>
-
-      {isAdmin && (
-        <div className="mb-5">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">
-            Family Google login
-          </h3>
-          <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4 shadow-soft">
-            <p className="text-sm text-muted-foreground">
-              Add one Google Web client here. Everyone then connects Photos, Drive, Gmail or Calendar with their own Google account in the app.
-            </p>
-            <p className="text-xs text-foreground">
-              {googleOauthReady
-                ? `Ready. Current client ends with ${googleOauthHint}.`
-                : "Not set yet — that is why Google says “OAuth client was not found”."}
-            </p>
-            <Input
-              placeholder="123-abc.apps.googleusercontent.com"
-              value={googleClientIdInput}
-              onChange={(event) => setGoogleClientIdInput(event.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Web client secret"
-              value={googleClientSecretInput}
-              onChange={(event) => setGoogleClientSecretInput(event.target.value)}
-              autoComplete="new-password"
-            />
-            <Button
-              disabled={googleOauthSaving}
-              onClick={async () => {
-                setGoogleOauthSaving(true);
-                try {
-                  await saveGoogleOAuthClient(googleClientIdInput, googleClientSecretInput);
-                  setGoogleOauthReady(true);
-                  setGoogleClientSecretInput("");
-                  toast.success("Family Google login saved");
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save that");
-                } finally {
-                  setGoogleOauthSaving(false);
-                }
-              }}
-            >
-              Save Google client
-            </Button>
-            {googleRedirects.length > 0 && (
-              <div>
-                <p className="text-[11px] font-semibold text-muted-foreground">In Google Cloud, add these redirect URLs to that Web client</p>
-                <ul className="mt-1 space-y-0.5">
-                  {googleRedirects.map((url) => (
-                    <li key={url} className="break-all font-mono text-[10px] text-foreground">{url}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* AI Configuration */}
       <div className="mb-5">

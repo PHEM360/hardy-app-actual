@@ -43,6 +43,7 @@ export interface UserProfile {
   quickLinks?: string[];
   homeLayout?: HomeLayoutMode;
   homeTiles?: HomeTilesState;
+  defaultRoute?: string;
 }
 
 export function useUserProfile() {
@@ -94,6 +95,7 @@ export function useUserProfile() {
           quickLinks: Array.isArray(data.quickLinks) ? data.quickLinks : undefined,
           homeLayout: data.homeLayout === "today" || data.homeLayout === "tiles" ? data.homeLayout : undefined,
           homeTiles: data.homeTiles && typeof data.homeTiles === "object" ? data.homeTiles : undefined,
+          defaultRoute: typeof data.defaultRoute === "string" ? data.defaultRoute : undefined,
         });
         setLoading(false);
       },

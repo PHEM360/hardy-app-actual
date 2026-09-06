@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -140,16 +140,32 @@ export function useTodayLayout() {
   const [layout, setLayout] = useState<TodayWidgetItem[]>(DEFAULT_TODAY_LAYOUT);
   const [pageStyle, setPageStyleState] = useState<TodayPageStyle>({});
   const [saving, setSaving] = useState(false);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
 
   useEffect(() => {
     if (!dataUid) return;
-    const ref = doc(db, "todayLayouts", dataUid);
+    const ref = doc(db, "users", dataUid);
     const unsub = onSnapshot(ref, (snap) => {
       if (!snap.exists()) return;
-      const data = snap.data();
-      const saved: TodayWidgetItem[] = data.layout ?? [];
-      const savedVersion: number = data.layoutVersion ?? 0;
-      const style = (data.pageStyle && typeof data.pageStyle === "object") ? data.pageStyle as TodayPageStyle : {};
+      const stored = snap.data()?.todayLayout;
+      if (!stored || typeof stored !== "object") {
+        void getDoc(doc(db, "todayLayouts", dataUid)).then((legacy) => {
+          const data = legacy.data();
+          if (!legacy.exists() || !Array.isArray(data?.layout)) return;
+          setDoc(ref, {
+            todayLayout: {
+              layout: data.layout,
+              layoutVersion: data.layoutVersion ?? 0,
+              pageStyle: data.pageStyle && typeof data.pageStyle === "object" ? data.pageStyle : {},
+            },
+          }, { merge: true }).catch(() => {});
+        }).catch(() => {});
+        return;
+      }
+      const saved: TodayWidgetItem[] = Array.isArray(stored.layout) ? stored.layout : [];
+      const savedVersion: number = stored.layoutVersion ?? 0;
+      const style = (stored.pageStyle && typeof stored.pageStyle === "object") ? stored.pageStyle as TodayPageStyle : {};
       setPageStyleState(style);
 
       if (savedVersion < LAYOUT_VERSION) {
@@ -159,7 +175,7 @@ export function useTodayLayout() {
           return prev ? { ...def, visible: prev.visible, tintColor: prev.tintColor } : def;
         });
         setLayout(refreshed);
-        setDoc(ref, { layout: refreshed, layoutVersion: LAYOUT_VERSION, pageStyle: style }, { merge: true }).catch(() => {});
+        setDoc(ref, { todayLayout: { layout: refreshed, layoutVersion: LAYOUT_VERSION, pageStyle: style } }, { merge: true }).catch(() => {});
         return;
       }
 
@@ -176,10 +192,12 @@ export function useTodayLayout() {
     if (!dataUid) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, "todayLayouts", dataUid), {
-        layout: next,
-        layoutVersion: LAYOUT_VERSION,
-        pageStyle: style ?? pageStyle,
+      await setDoc(doc(db, "users", dataUid), {
+        todayLayout: {
+          layout: next,
+          layoutVersion: LAYOUT_VERSION,
+          pageStyle: style ?? pageStyle,
+        },
       }, { merge: true });
     } finally {
       setSaving(false);
@@ -203,7 +221,9 @@ export function useTodayLayout() {
     setPageStyleState((prev) => {
       const next = { ...prev, ...patch };
       if (dataUid) {
-        setDoc(doc(db, "todayLayouts", dataUid), { pageStyle: next, layoutVersion: LAYOUT_VERSION }, { merge: true }).catch(() => {});
+        setDoc(doc(db, "users", dataUid), {
+          todayLayout: { layout: layoutRef.current, layoutVersion: LAYOUT_VERSION, pageStyle: next },
+        }, { merge: true }).catch(() => {});
       }
       return next;
     });
