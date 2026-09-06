@@ -44,6 +44,7 @@ import Freezer from "@/pages/Freezer";
 import AiAnalysis from "@/pages/AiAnalysis";
 import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
+import FlatsInvestmentPreview from "@/pages/FlatsInvestmentPreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
@@ -83,6 +84,7 @@ const App = () => (
             <>
               <Route path="/dev/finance-preview" element={<FinancePreview />} />
               <Route path="/dev/holidays-preview" element={<HolidaysPreview />} />
+              <Route path="/dev/flats-investment-preview" element={<FlatsInvestmentPreview />} />
             </>
           )}
           <Route

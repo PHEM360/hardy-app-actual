@@ -222,16 +222,35 @@ function WealthTooltip({
 export default function FlatInvestmentModelPanel({
   flats,
   initialFlatId,
+  localOnly = false,
 }: {
   flats: FlatRecord[];
   initialFlatId?: string;
+  /** Skip Firestore — keep inputs in memory (dev preview). */
+  localOnly?: boolean;
 }) {
   const [flatId, setFlatId] = useState(initialFlatId || flats[0]?.id || "");
-  const { flat, loading, saveFlat } = useFlat(flatId || null);
+  const live = useFlat(localOnly ? null : flatId || null);
+  const [localFlats, setLocalFlats] = useState(flats);
+  const flat = localOnly
+    ? localFlats.find((f) => f.id === flatId) || localFlats[0] || null
+    : live.flat;
+  const loading = localOnly ? false : live.loading;
+  const saveFlat = localOnly
+    ? async (patch: Partial<FlatRecord>) => {
+        setLocalFlats((prev) =>
+          prev.map((f) => (f.id === flatId ? { ...f, ...patch } : f)),
+        );
+      }
+    : live.saveFlat;
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<FormState>(() => inputsToForm(defaultInvestmentInputs()));
   const [oneOffs, setOneOffs] = useState<FlatInvestmentOneOff[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (localOnly) setLocalFlats(flats);
+  }, [flats, localOnly]);
 
   useEffect(() => {
     if (initialFlatId && initialFlatId !== flatId) {
@@ -341,7 +360,7 @@ export default function FlatInvestmentModelPanel({
                 }}
                 className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
               >
-                {flats.map((f) => (
+                {(localOnly ? localFlats : flats).map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
                   </option>
