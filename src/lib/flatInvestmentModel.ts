@@ -283,10 +283,10 @@ export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvest
     rent: last.rentWealthGbp,
   };
 
+  const actionable: FlatInvestmentStrategy[] = ["sell_offer", "hold_vacant", "rent"];
   let recommendation: FlatInvestmentStrategy = "sell_offer";
   let best = -Infinity;
-  const strategies = Object.keys(wealthAtHorizon) as FlatInvestmentStrategy[];
-  for (const k of strategies) {
+  for (const k of actionable) {
     if (wealthAtHorizon[k] > best) {
       best = wealthAtHorizon[k];
       recommendation = k;
@@ -326,13 +326,15 @@ export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvest
     rentMinusVacantGbp: last.rentWealthGbp - last.holdVacantWealthGbp,
   };
 
+  const marketBeatsRent = last.sellMarketWealthGbp > last.rentWealthGbp;
   let recommendationDetail = "";
   if (recommendation === "rent") {
     recommendationDetail = `At ${horizon} years, renting leaves you ${fmtDelta(gaps.rentMinusOfferGbp)} ahead of taking the current offer (after selling costs, tax, growth and alternative returns on cash).`;
+    if (marketBeatsRent) {
+      recommendationDetail += ` Achieving full market value on a sale would still edge renting by ${fmtDelta(last.sellMarketWealthGbp - last.rentWealthGbp)} — only count that if the price is realistic.`;
+    }
   } else if (recommendation === "sell_offer") {
     recommendationDetail = `At ${horizon} years, taking the offer and investing the proceeds beats renting by ${fmtDelta(-gaps.rentMinusOfferGbp)}.`;
-  } else if (recommendation === "sell_market") {
-    recommendationDetail = `A full-market sale beats the other paths at ${horizon} years — only useful if that price is realistically achievable.`;
   } else {
     recommendationDetail =
       "Holding vacant is rarely optimal; costs without rent drag on wealth versus selling or letting.";

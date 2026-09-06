@@ -391,7 +391,8 @@ export default function FlatInvestmentModelPanel({
             <Section title="Verdict" icon={<Scale className="h-4 w-4" />}>
               <div className="mb-3 rounded-2xl border border-primary/35 bg-primary/10 px-4 py-3">
                 <p className="font-display text-base font-bold text-foreground">
-                  Best at {result.inputs.horizonYears} years: {result.recommendationLabel}
+                  Best actionable path at {result.inputs.horizonYears} years:{" "}
+                  {result.recommendationLabel}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">{result.recommendationDetail}</p>
               </div>
@@ -403,6 +404,7 @@ export default function FlatInvestmentModelPanel({
                   >
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {STRATEGY_LABELS[s]}
+                      {s === "sell_market" ? " (if achievable)" : ""}
                     </p>
                     <p className="mt-1 font-display text-lg font-bold text-foreground">
                       {fmtGbp(result.wealthAtHorizon[s])}

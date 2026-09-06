@@ -30,9 +30,7 @@ describe("flatInvestmentModel", () => {
       }),
     );
     expect(result.annualGrossRentGbp).toBeCloseTo(400 * 11, 0);
-    expect(result.recommendation === "sell_offer" || result.recommendation === "sell_market").toBe(
-      true,
-    );
+    expect(result.recommendation).toBe("sell_offer");
     expect(result.years).toHaveLength(5);
   });
 
@@ -60,7 +58,9 @@ describe("flatInvestmentModel", () => {
     expect(result.breakEvenSalePriceGbp).not.toBeNull();
     expect(result.breakEvenSalePriceGbp!).toBeGreaterThan(result.inputs.offerPriceGbp);
     expect(result.differencesAtHorizon.rentMinusOfferGbp).toBeGreaterThan(0);
+    // Primary verdict ignores aspirational "sell at market"
     expect(result.recommendation).toBe("rent");
+    expect(["sell_offer", "hold_vacant", "rent"]).toContain(result.recommendation);
   });
 
   it("projects growing property value and cash piles", () => {
