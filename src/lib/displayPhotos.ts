@@ -1,4 +1,4 @@
-export type DisplayPhotoSource = "upload" | "link" | "local";
+export type DisplayPhotoSource = "upload" | "link" | "local" | "album";
 
 const DRIVE_FILE = /\/file\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_ID = /[?&]id=([a-zA-Z0-9_-]+)/;
@@ -56,4 +56,21 @@ export function parseDisplayPhotoLinks(text: string): {
 
 export function visibleDisplayPhotos<T extends { url?: string }>(photos: T[]): T[] {
   return photos.filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
+}
+
+/** Pick library and/or album photos for a photos widget. */
+export function photosForDisplayWidget<T extends { id: string; albumId?: string }>(
+  photos: T[],
+  widget: { photoIds?: string[]; albumIds?: string[] },
+): T[] {
+  const albumIds = widget.albumIds || [];
+  const photoIds = widget.photoIds || [];
+  if (!albumIds.length && !photoIds.length) {
+    return photos.filter((photo) => !photo.albumId);
+  }
+  return photos.filter((photo) => {
+    if (albumIds.length && photo.albumId && albumIds.includes(photo.albumId)) return true;
+    if (photoIds.length && photoIds.includes(photo.id)) return true;
+    return false;
+  });
 }

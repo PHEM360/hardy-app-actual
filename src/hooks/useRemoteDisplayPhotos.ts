@@ -7,6 +7,8 @@ import { parseDisplayPhotoLinks, type DisplayPhotoSource } from "@/lib/displayPh
 export interface RemoteDisplayPhoto {
   id: string;
   url: string;
+  /** Set when this photo comes from a Pictures album. */
+  albumId?: string;
   storagePath: string;
   caption: string;
   source: DisplayPhotoSource;

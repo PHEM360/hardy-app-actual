@@ -43,6 +43,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   annual_leave: "annual_leave",
   holidays: "holidays",
   notes: "notes",
+  pictures: "pictures",
 };
 
 /** Route path -> pageShares.page value (includes ungated pages like freezer). */
@@ -60,6 +61,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/annual-leave": "annual_leave",
   "/holidays": "holidays",
   "/notes": "notes",
+  "/pictures": "pictures",
   "/freezer": "freezer",
   "/login-details": "login_details",
   "/qr-codes": "qrcodes",

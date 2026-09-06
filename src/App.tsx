@@ -41,6 +41,8 @@ import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
 import NotFound from "@/pages/NotFound";
 import Freezer from "@/pages/Freezer";
+import Start from "@/pages/Start";
+import Pictures from "@/pages/Pictures";
 import AiAnalysis from "@/pages/AiAnalysis";
 import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
@@ -97,7 +99,16 @@ const App = () => (
             }
           >
             {/* Make the root domain show the login page. Move dashboard to /dashboard */}
+            <Route path="/start" element={<Start />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route
+              path="/pictures"
+              element={
+                <RequireFeature featureKey="pictures">
+                  <Pictures />
+                </RequireFeature>
+              }
+            />
             <Route
               path="/finance"
               element={

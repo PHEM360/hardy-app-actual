@@ -251,10 +251,42 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      // OAuth tokens and other secrets — Admin SDK / Cloud Functions only.
+      match /secrets/{secretId} {
+        allow read, write: if false;
+      }
+
       // Each user controls their own app/session and per-module requirements.
       match /security/{securityDoc} {
         allow read: if isFirebaseOwner(userId);
         allow write: if isOwner(userId) && hasRecentPasskey();
+      }
+    }
+
+    // Short-lived Google Drive OAuth state — Functions only.
+    match /googleDriveOAuthStates/{stateId} {
+      allow read, write: if false;
+    }
+
+    // Picture albums (Google Drive sync). Metadata writes go through callables;
+    // interactive users and paired displays may read albums they own or are shared into.
+    match /pictureAlbums/{albumId} {
+      function albumReadable() {
+        return isFirebaseAuthenticated() && (
+          resource.data.ownerId == request.auth.uid ||
+          request.auth.uid in resource.data.get('shareUids', [])
+        );
+      }
+
+      allow read: if albumReadable();
+      allow write: if false;
+
+      match /photos/{photoId} {
+        allow read: if isFirebaseAuthenticated() && (
+          get(/databases/$(database)/documents/pictureAlbums/$(albumId)).data.ownerId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/pictureAlbums/$(albumId)).data.get('shareUids', [])
+        );
+        allow write: if false;
       }
     }
 
