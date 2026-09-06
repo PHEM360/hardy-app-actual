@@ -66,6 +66,30 @@ export async function getMarketingConnectionUrl(companyId: string, platform: str
   return (await call({ companyId, platform })).data;
 }
 
+export async function saveMarketingSocialLink(
+  companyId: string,
+  platform: string,
+  profileUrl: string,
+  accountName?: string,
+) {
+  const call = httpsCallable<
+    { companyId: string; platform: string; profileUrl: string; accountName?: string },
+    { ok: boolean }
+  >(functions, "saveMarketingSocialLink");
+  return (await call({ companyId, platform, profileUrl, accountName })).data;
+}
+
+export async function bulkApproveMarketingContent(
+  companyId: string,
+  items: Array<{ contentId: string; approvalVersion: number }>,
+) {
+  const call = httpsCallable<
+    { companyId: string; items: Array<{ contentId: string; approvalVersion: number }> },
+    { approved: number }
+  >(functions, "bulkApproveMarketingContent");
+  return (await call({ companyId, items })).data;
+}
+
 export async function generateMarketingImage(companyId: string, prompt: string) {
   const call = httpsCallable<
     { companyId: string; prompt: string },

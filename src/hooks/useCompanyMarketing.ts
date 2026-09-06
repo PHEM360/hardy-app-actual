@@ -14,6 +14,7 @@ import {
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { approvalResetForMarketingEdit } from "@/lib/marketingContent";
+import { defaultCadence } from "@/lib/socialPlatforms";
 import type {
   ContentPiece,
   MarketingAsset,
@@ -42,6 +43,13 @@ export const DEFAULT_MARKETING_PROFILE: MarketingProfile = {
   defaultPlanDays: 30,
   postsPerWeek: 3,
   approvalRequired: true,
+  cadence: defaultCadence(),
+  controversialTheme: "",
+  socialUrls: {},
+  textProvider: "auto",
+  textModel: "auto",
+  imageProvider: "auto",
+  imageModel: "auto",
 };
 
 function safeFileName(name: string) {
@@ -204,21 +212,26 @@ export function useCompanyMarketing(companyId: string | undefined) {
   const uploadAssets = useCallback(async (files: File[]) => {
     if (!companyId) return;
     for (const file of files) {
-      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-        throw new Error(`${file.name} is not an image or video.`);
+      const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|avif)$/i.test(file.name);
+      const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+      const isDoc = file.type.startsWith("application/") || /\.(pdf|ppt|pptx)$/i.test(file.name);
+      if (!isImage && !isVideo && !isDoc) {
+        throw new Error(`${file.name} needs to be an image, video or PDF.`);
       }
-      if (file.size > 50 * 1024 * 1024) {
-        throw new Error(`${file.name} is larger than 50 MB.`);
+      if (file.size > 80 * 1024 * 1024) {
+        throw new Error(`${file.name} is larger than 80 MB.`);
       }
       const storagePath = companyMarketingAssetPath(companyId, file.name);
       const objectRef = ref(storage, storagePath);
-      await uploadBytes(objectRef, file, { contentType: file.type });
+      const contentType = file.type
+        || (isVideo ? "video/mp4" : isDoc ? "application/pdf" : "image/jpeg");
+      await uploadBytes(objectRef, file, { contentType });
       const url = await getDownloadURL(objectRef);
       await addDoc(collection(db, "companies", companyId, "marketingAssets"), {
         name: file.name,
         url,
         storagePath,
-        mediaType: file.type.startsWith("video/") ? "video" : "image",
+        mediaType: isVideo ? "video" : isDoc ? "document" : "image",
         source: "uploaded",
         tags: [],
         altText: "",

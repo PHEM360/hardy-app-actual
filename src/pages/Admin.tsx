@@ -401,7 +401,7 @@ const Admin = () => {
     return (
       <FeaturePageShell
         title="Security Dashboard"
-        subtitle="Posture score, vulnerabilities & scheduled scans"
+        subtitle="Plain-English health check — what it means and what to do"
         icon={<Shield className="w-5 h-5" />}
       >
         <button onClick={() => setView("main")} className="flex items-center gap-1.5 text-xs text-primary font-medium mb-4">

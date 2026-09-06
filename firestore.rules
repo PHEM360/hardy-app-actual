@@ -65,7 +65,7 @@ service cloud.firestore {
     }
 
     function defaultModuleRequirement(moduleId) {
-      return moduleId == "personal_finance" || moduleId == "passwords" ? "passkey" : "none";
+      return moduleId == "personal_finance" || moduleId == "passwords" || moduleId == "remote_displays" ? "passkey" : "none";
     }
 
     function moduleRequirement(moduleId) {
@@ -482,23 +482,23 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // Tattersalls - shared flat management data
+    // Flats (and the old Tattersalls path) — family-wide page, still passkey-gated.
     match /tattersalls/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls");
       
       match /documents/{documentId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls");
       }
       
       match /notes/{noteId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls");
       }
     }
 
     match /flats/{flatId} {
-      allow read, write: if isAuthenticated();
-      match /documents/{documentId} { allow read, write: if isAuthenticated(); }
-      match /notes/{noteId} { allow read, write: if isAuthenticated(); }
+      allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls");
+      match /documents/{documentId} { allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls"); }
+      match /notes/{noteId} { allow read, write: if isAuthenticated() && meetsModuleSecurity("tattersalls"); }
     }
 
     // Tasks - per user, shareable via pageShares
@@ -755,6 +755,47 @@ service cloud.firestore {
     match /photos/{userId}/gphotosFiles/{fileId} {
       allow read, write: if false;
     }
+    match /mail/{userId}/accounts/{accountId} {
+      allow read: if canViewPage(userId, "email");
+      allow write: if false;
+    }
+    match /mail/{userId}/messages/{messageId} {
+      allow read: if canViewPage(userId, "email");
+      allow create, update: if canEditPage(userId, "email");
+      allow delete: if canEditPage(userId, "email");
+    }
+    match /mail/{userId}/settings/{docId} {
+      allow read: if canViewPage(userId, "email");
+      allow write: if canEditPage(userId, "email");
+    }
+    match /mailSecrets/{secretId} {
+      allow read, write: if false;
+    }
+    match /mailOAuth/{stateId} {
+      allow read, write: if false;
+    }
+    match /internalSecrets/{docId} {
+      allow read, write: if false;
+    }
+    match /photosSecrets/{secretId} {
+      allow read, write: if false;
+    }
+    match /driveSecrets/{secretId} {
+      allow read, write: if false;
+    }
+    match /calendarSecrets/{secretId} {
+      allow read, write: if false;
+    }
+    match /googlePhotosOAuth/{stateId} {
+      allow read, write: if false;
+    }
+    match /googleDriveOAuth/{stateId} {
+      allow read, write: if false;
+    }
+    match /calendarOAuth/{stateId} {
+      allow read, write: if false;
+    }
+
     match /photoGrants/{grantId} {
       allow read: if isAuthenticated() && (
         resource.data.targetUid == request.auth.uid ||
@@ -836,9 +877,11 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "health");
     }
 
-    // App-wide config (e.g. Gemini API key) - readable/writable by any authenticated user
+    // Shared app config. The AI key is still readable by signed-in family
+    // members so in-app chat works; only admins may change it.
     match /appConfig/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isOwnerAccount();
     }
 
     // Custom health tabs - per user, bundled into the "health" page share

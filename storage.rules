@@ -96,8 +96,11 @@ service firebase.storage {
     match /companies/{companyId}/marketing/{fileName} {
       allow read: if canViewCompanyStorage(companyId);
       allow create, update: if canEditCompanyStorage(companyId) &&
-        request.resource.size < 50 * 1024 * 1024 &&
-        request.resource.contentType.matches('(image|video)/.*');
+        request.resource.size < 80 * 1024 * 1024 &&
+        (
+          request.resource.contentType.matches('(image|video|application)/.*') ||
+          request.resource.contentType.size() < 1
+        );
       allow delete: if canEditCompanyStorage(companyId);
     }
     match /companies/{companyId}/taxreturns/{fileName} {

@@ -14,7 +14,7 @@ const AppLayout = () => {
 
   if (hideChrome) {
     return (
-      <div className="min-h-[100dvh] bg-background">
+      <div className="min-h-[100dvh] bg-background safe-top">
         <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
       </div>
     );

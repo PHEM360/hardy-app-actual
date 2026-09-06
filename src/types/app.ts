@@ -18,6 +18,7 @@ export type FeatureKey =
   | "holidays"
   | "notes"
   | "photos"
+  | "email"
   | "admin";
 
 export type AvatarType = "initials" | "emoji" | "image";
@@ -192,6 +193,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     route: "/photos",
     color: "secondary",
   },
+  {
+    key: "email",
+    label: "Email",
+    description: "Your mailboxes, replies and AI sorting",
+    icon: "mail",
+    route: "/email",
+    color: "info",
+  },
 ];
 
 // Helper to get the name to display
@@ -257,7 +266,21 @@ export interface TaskSettings {
 
 // ─── Marketing ────────────────────────────────────────────────────────────────
 
-export type SocialPlatform = "instagram" | "linkedin" | "facebook";
+export type SocialPlatform =
+  | "instagram"
+  | "linkedin"
+  | "facebook"
+  | "x"
+  | "tiktok"
+  | "youtube"
+  | "google";
+
+export interface MarketingCadenceRule {
+  postsPerMonth: number;
+  articlesPerMonth: number;
+  controversialCount: number;
+  tone: string;
+}
 export type ContentStatus =
   | "suggestion"
   | "draft"
@@ -292,6 +315,13 @@ export interface MarketingProfile {
   defaultPlanDays: number;
   postsPerWeek: number;
   approvalRequired: boolean;
+  cadence?: Partial<Record<SocialPlatform, MarketingCadenceRule>>;
+  controversialTheme?: string;
+  socialUrls?: Partial<Record<SocialPlatform, string>>;
+  textProvider?: "auto" | "openai" | "gemini";
+  textModel?: string;
+  imageProvider?: "auto" | "openai" | "gemini";
+  imageModel?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -316,7 +346,7 @@ export interface MarketingAsset {
   name: string;
   url: string;
   storagePath: string;
-  mediaType: "image" | "video";
+  mediaType: "image" | "video" | "document";
   source: MarketingAssetSource;
   tags: string[];
   altText: string;
@@ -381,6 +411,12 @@ export interface MarketingPlanRequest {
   campaignId?: string;
   focus?: string;
   includeImages?: boolean;
+  includeArticles?: boolean;
+  controversialTheme?: string;
+  textProvider?: "auto" | "openai" | "gemini";
+  textModel?: string;
+  imageProvider?: "auto" | "openai" | "gemini";
+  imageModel?: string;
 }
 
 export interface MarketingAuditOpportunity {
@@ -388,6 +424,15 @@ export interface MarketingAuditOpportunity {
   why: string;
   action: string;
   impact: "high" | "medium" | "low";
+}
+
+export interface MarketingBrandSuggestion {
+  brandVoice: string;
+  targetAudience: string;
+  industry: string;
+  objectives: string[];
+  keyMessages: string[];
+  preferredHashtags: string[];
 }
 
 export interface MarketingAudit {
@@ -399,6 +444,7 @@ export interface MarketingAudit {
   social: { performance: string; popularTopics: string[] };
   website: { strengths: string[]; gaps: string[] };
   opportunities: MarketingAuditOpportunity[];
+  suggestedBrand?: MarketingBrandSuggestion;
   sources: string[];
   limitations: string[];
   createdBy: string;
@@ -418,6 +464,8 @@ export interface MarketingPlatformConnection {
   platform: SocialPlatform;
   accountName: string;
   accountId: string;
+  profileUrl?: string;
+  kind?: "oauth" | "profile";
   status: "not_connected" | "connected" | "expired" | "error";
   capabilities: string[];
   lastCheckedAt: string;
@@ -753,14 +801,27 @@ export interface CalendarEvent {
   invitees?: string[];         // household member names
   createdBy?: string;          // user UID
   notifications?: CalendarNotificationPref[];
+  source?: "local" | "google" | "import";
+  googleEventId?: string;
+  googleCalendarId?: string;
   createdAt?: any;
   updatedAt?: any;
+}
+
+export interface GoogleCalendarLink {
+  connected?: boolean;
+  email?: string;
+  calendarId?: string;
+  selectedCalendarIds?: string[];
+  lastSyncAt?: string | null;
+  lastError?: string | null;
 }
 
 export interface CalendarSettings {
   defaultView: "month" | "week";
   canManage?: string[];        // user UIDs allowed to manage settings (empty = admins only)
   memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
+  google?: GoogleCalendarLink;
   autoImport?: {
     pets?: boolean;            // show pet flea/worming due dates
     petInsurance?: boolean;    // show pet insurance renewal dates

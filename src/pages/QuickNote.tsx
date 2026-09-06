@@ -40,11 +40,14 @@ export default function QuickNote() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-background px-4 py-6">
+    <div
+      className="min-h-[100dvh] bg-background px-4 py-6"
+      style={{ paddingTop: "max(1.5rem, calc(env(safe-area-inset-top, 0px) + 0.75rem))" }}
+    >
       <button
         type="button"
         onClick={() => navigate("/notes")}
-        className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground"
+        className="page-back mb-4 text-muted-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Notes
       </button>

@@ -1,10 +1,7 @@
-import type { ContentPiece, MarketingProfile, SocialPlatform } from "@/types/app";
+import { SOCIAL_PLATFORM_LABELS } from "@/lib/socialPlatforms";
+import type { Company, ContentPiece, MarketingProfile, SocialPlatform } from "@/types/app";
 
-const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  instagram: "Instagram",
-  facebook: "Facebook",
-  linkedin: "LinkedIn",
-};
+const PLATFORM_LABELS = SOCIAL_PLATFORM_LABELS;
 
 function meaningfulString(value: unknown): boolean {
   return typeof value === "string" && value.trim().length >= 3;
@@ -21,6 +18,28 @@ export function isMarketingProfileReady(profile: Partial<MarketingProfile> | und
   const positioning = meaningfulString(profile.brandVoice) && meaningfulString(profile.targetAudience);
   const substance = meaningfulList(profile.objectives) || meaningfulList(profile.keyMessages);
   return identity && positioning && substance;
+}
+
+function asHttps(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+/** Fill empty brand fields from the company record so guidance is not blank. */
+export function seedMarketingProfileFromCompany(
+  profile: MarketingProfile,
+  company: Pick<Company, "name" | "description"> & { contact?: Company["contact"] },
+): MarketingProfile {
+  const website = profile.website.trim() || asHttps(company.contact?.website);
+  const tradingNames = profile.tradingNames.length ? profile.tradingNames : (company.name ? [company.name] : []);
+  const currentThemes = profile.currentThemes.trim() || String(company.description || "").trim();
+  return {
+    ...profile,
+    website,
+    tradingNames,
+    currentThemes,
+  };
 }
 
 export function formatMarketingPostForShare(item: ContentPiece) {

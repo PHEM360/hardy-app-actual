@@ -27,6 +27,7 @@ export const ROUTE_FEATURE_KEY: Record<string, FeatureKey> = {
   ...Object.fromEntries(FEATURE_MODULES.map((m) => [m.route, m.key])),
   "/health": "weight_tracking", // Health page is also served at /weight
   "/notes/quick": "notes",
+  "/companies/social": "companies",
 };
 
 /** FeatureKey -> pageShares.page value. Invitees can open the route even without the feature enabled. */
@@ -44,6 +45,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   holidays: "holidays",
   notes: "notes",
   photos: "photos",
+  email: "email",
 };
 
 /** Route path -> pageShares.page value (includes ungated pages like freezer). */
@@ -56,12 +58,14 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/tattersalls": "tattersalls",
   "/tasks": "tasks",
   "/companies": "companies",
+  "/companies/social": "companies",
   "/ai-analysis": "ai_analysis",
   "/calendar": "calendar",
   "/annual-leave": "annual_leave",
   "/holidays": "holidays",
   "/notes": "notes",
   "/photos": "photos",
+  "/email": "email",
   "/freezer": "freezer",
   "/login-details": "login_details",
   "/qr-codes": "qrcodes",
@@ -75,7 +79,7 @@ export function canAccessRoute(
   sharedPages?: Set<string>,
 ): boolean {
   if (path === "/admin") return role === "admin" || role === "superadmin";
-  if (path === "/photos") return true;
+  if (path === "/photos" || path === "/email") return true;
   const key = ROUTE_FEATURE_KEY[path];
   if (!key) return true;
   if (hasFeatureAccess(role, enabledFeatures, key)) return true;

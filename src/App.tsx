@@ -19,6 +19,7 @@ import Tattersalls from "@/pages/Tattersalls";
 import Tasks from "@/pages/Tasks";
 import Today from "@/pages/Today";
 import Companies from "@/pages/Companies";
+import CompanySocial from "@/pages/CompanySocial";
 import CompanyDetail from "@/pages/CompanyDetail";
 import More from "@/pages/More";
 import Settings from "@/pages/Settings";
@@ -194,6 +195,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="companies">
                   <Companies />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/companies/social"
+              element={
+                <RequireFeature featureKey="companies">
+                  <CompanySocial />
                 </RequireFeature>
               }
             />

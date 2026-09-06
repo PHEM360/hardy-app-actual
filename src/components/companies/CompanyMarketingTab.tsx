@@ -40,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCompanyMarketing } from "@/hooks/useCompanyMarketing";
 import { CompanyMarketingAudit } from "@/components/companies/CompanyMarketingAudit";
 import { copyMarketingPost, downloadMarketingPost, isMarketingProfileReady } from "@/lib/marketingContent";
+import { SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABELS } from "@/lib/socialPlatforms";
 import {
   approveMarketingContent,
   generateMarketingImage,
@@ -62,12 +63,8 @@ import type {
 type MarketingState = ReturnType<typeof useCompanyMarketing>;
 type SectionId = "overview" | "planner" | "review" | "campaigns" | "media" | "brand" | "audit" | "connections" | "adviser";
 
-const PLATFORMS: SocialPlatform[] = ["instagram", "facebook", "linkedin"];
-const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  instagram: "Instagram",
-  facebook: "Facebook",
-  linkedin: "LinkedIn",
-};
+const PLATFORMS: SocialPlatform[] = SOCIAL_PLATFORMS;
+const PLATFORM_LABELS = SOCIAL_PLATFORM_LABELS;
 const STATUS_LABELS: Record<ContentStatus, string> = {
   suggestion: "Suggestion",
   draft: "Draft",

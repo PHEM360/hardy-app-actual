@@ -18,7 +18,6 @@ import {
   parseApprovalVersion,
   parseMarketingAuditInput,
   parseMarketingPlanInput,
-  parsePlatform,
   splitCompetitorHints,
   stringList,
   ukSeasonalContext,
@@ -27,8 +26,8 @@ import {
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const MODEL = "gpt-4o-mini";
 const TIMEZONE = "Europe/London";
-const MAX_GENERATED_PIECES = 40;
-const MAX_PLAN_IMAGES = 14;
+const MAX_GENERATED_PIECES = 120;
+const MAX_PLAN_IMAGES = 24;
 const IMAGE_CONCURRENCY = 2;
 
 interface CallableAuth {
@@ -68,6 +67,15 @@ interface MarketingJob {
   status: string;
   dueAt?: Timestamp;
   attempts?: number;
+}
+
+function companyWebsiteFromRecord(company: Record<string, unknown>): string | undefined {
+  const contact = company.contact && typeof company.contact === "object"
+    ? company.contact as Record<string, unknown>
+    : {};
+  const raw = cleanOptionalString(contact.website, 300);
+  if (!raw) return undefined;
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
 function failValidation(error: unknown): never {
@@ -198,7 +206,8 @@ function completeContentPiece(
 async function requestJsonFromOpenAi(
   systemPrompt: string,
   userPrompt: string,
-  pieceCount: number
+  pieceCount: number,
+  model = MODEL,
 ): Promise<GeneratedPiece[]> {
   let response: Response;
   try {
@@ -209,7 +218,7 @@ async function requestJsonFromOpenAi(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         temperature: 0.65,
         max_tokens: 12000,
         response_format: {
@@ -236,7 +245,7 @@ async function requestJsonFromOpenAi(
                     ],
                     properties: {
                       type: { type: "string", enum: ["social_post", "article", "campaign_idea", "advert"] },
-                      platform: { type: "string", enum: ["facebook", "instagram", "linkedin"] },
+                      platform: { type: "string", enum: ["facebook", "instagram", "linkedin", "x", "tiktok", "youtube", "google"] },
                       topic: { type: "string" },
                       objective: { type: "string" },
                       audience: { type: "string" },
@@ -451,6 +460,10 @@ export const generateMarketingPlan = onCall(
       recentRejectionNotes(companyId),
     ]);
     const profile = (profileSnap.data() || {}) as MarketingBrandProfile;
+    const companyWebsite = String((companySnap.data()?.contact as { website?: string } | undefined)?.website || "");
+    if (!String(profile.website || "").trim() && companyWebsite) {
+      profile.website = /^https?:\/\//i.test(companyWebsite) ? companyWebsite : `https://${companyWebsite}`;
+    }
     if (!profileSnap.exists || !hasMeaningfulMarketingProfile(profile)) {
       throw new HttpsError(
         "failed-precondition",
@@ -467,7 +480,8 @@ export const generateMarketingPlan = onCall(
     );
     const company = companySnap.data() || {};
     const competitors = splitCompetitorHints(profile.competitors);
-    const websiteUrl = cleanOptionalString(profile.website, 300);
+    const websiteUrl = cleanOptionalString(profile.website, 300) ||
+      companyWebsiteFromRecord(company);
     const pageUrls = [
       ...competitors.urls,
       ...(websiteUrl && isSafePublicHttpUrl(websiteUrl) ? [websiteUrl] : []),
@@ -479,6 +493,7 @@ export const generateMarketingPlan = onCall(
       companyName: company.name || "",
       companyDescription: company.description || "",
       brandProfile: profile,
+      cadence: (profile as { cadence?: unknown }).cadence || null,
       competitorNames: competitors.names,
       publicPageSnapshots: pageSnapshots,
       currentThemes: cleanOptionalString(profile.currentThemes, 2000) || "",
@@ -489,9 +504,16 @@ export const generateMarketingPlan = onCall(
       notes: [
         "Public page snapshots are homepage text only. Do not invent Instagram or Facebook posts you have not seen.",
         "If rejection feedback is present, do not repeat those mistakes.",
-      ],
+        input.includeArticles ? "Include LinkedIn or long-form articles where the cadence asks for them." : "",
+        input.controversialTheme ? `Include professional opinion pieces on: ${input.controversialTheme}` : "",
+      ].filter(Boolean),
     });
-    const generated = await requestJsonFromOpenAi(systemPrompt, userPrompt, count);
+    const generated = await requestJsonFromOpenAi(
+      systemPrompt,
+      userPrompt,
+      count,
+      input.textModel === "gpt-4o" ? "gpt-4o" : MODEL,
+    );
 
     const collectionRef = db.collection(`companies/${companyId}/content`);
     const batch = db.batch();
@@ -532,6 +554,33 @@ export const generateMarketingPlan = onCall(
       });
     }
 
+    if ((profileSnap.data() as { approvalRequired?: boolean } | undefined)?.approvalRequired === false) {
+      for (const item of created) {
+        const pieceRef = db.doc(`companies/${companyId}/content/${item.id}`);
+        const piece = (await pieceRef.get()).data() || {};
+        const scheduled = new Date(String(piece.scheduledFor || "")).getTime() > Date.now();
+        await pieceRef.update({
+          status: scheduled ? "scheduled" : "approved",
+          approvedVersion: 1,
+          approvedAt: new Date().toISOString(),
+          approvedBy: auth.uid,
+        });
+        if (scheduled) {
+          await db.doc(`marketingPublishJobs/${companyId}_${item.id}_v1`).set({
+            companyId,
+            contentId: item.id,
+            platform: piece.platform,
+            approvalVersion: 1,
+            status: "queued",
+            dueAt: Timestamp.fromDate(new Date(String(piece.scheduledFor))),
+            attempts: 0,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      }
+    }
+
     logger.info("Generated marketing plan", {
       companyId,
       uid: auth.uid,
@@ -543,11 +592,43 @@ export const generateMarketingPlan = onCall(
         ? `, with ${imagesCreated} picture${imagesCreated === 1 ? "" : "s"}`
         : ". Pictures could not be attached this time"
       : "";
+    const skipReview = profileSnap.data()?.approvalRequired === false;
+    if (skipReview) {
+      for (const item of created) {
+        const pieceSnap = await db.doc(`companies/${companyId}/content/${item.id}`).get();
+        const piece = pieceSnap.data() || {};
+        const scheduledFor = String(piece.scheduledFor || "");
+        const when = new Date(scheduledFor).getTime();
+        const status = when > Date.now() ? "scheduled" : "approved";
+        await pieceSnap.ref.update({
+          status,
+          approvedVersion: 1,
+          approvedAt: new Date().toISOString(),
+          approvedBy: auth.uid,
+        });
+        if (when > Date.now()) {
+          await db.doc(`marketingPublishJobs/${companyId}_${item.id}_v1`).set({
+            companyId,
+            contentId: item.id,
+            platform: piece.platform || input.platforms[0],
+            approvalVersion: 1,
+            status: "queued",
+            dueAt: Timestamp.fromDate(new Date(scheduledFor)),
+            attempts: 0,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      }
+    }
+
     return {
       created: created.length,
       contentIds: created.map((item) => item.id),
       imagesCreated,
-      summary: `Created ${created.length} posts for review over ${input.periodDays} days${imageNote}.`,
+      summary: skipReview
+        ? `Created ${created.length} posts and queued them over ${input.periodDays} days${imageNote}.`
+        : `Created ${created.length} posts for review over ${input.periodDays} days${imageNote}.`,
     };
   }
 );
@@ -556,6 +637,36 @@ const AUDIT_IMPACT = ["high", "medium", "low"] as const;
 
 function stringArray(value: unknown, maximumItems: number, maximumLength: number): string[] {
   return stringList(value, maximumItems, maximumLength);
+}
+
+function suggestedBrandFromAudit(value: unknown) {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    brandVoice: String(raw.brandVoice || "").trim().slice(0, 2000),
+    targetAudience: String(raw.targetAudience || "").trim().slice(0, 2000),
+    industry: String(raw.industry || "").trim().slice(0, 200),
+    objectives: stringArray(raw.objectives, 8, 200),
+    keyMessages: stringArray(raw.keyMessages, 8, 200),
+    preferredHashtags: stringArray(raw.preferredHashtags, 16, 80),
+  };
+}
+
+function applySuggestedBrand(
+  current: Record<string, unknown>,
+  suggested: ReturnType<typeof suggestedBrandFromAudit>,
+) {
+  const next = { ...current };
+  const emptyString = (value: unknown) => typeof value !== "string" || value.trim().length < 3;
+  const emptyList = (value: unknown) => !Array.isArray(value) || value.length === 0;
+  if (emptyString(next.brandVoice) && suggested.brandVoice) next.brandVoice = suggested.brandVoice;
+  if (emptyString(next.targetAudience) && suggested.targetAudience) next.targetAudience = suggested.targetAudience;
+  if (emptyString(next.industry) && suggested.industry) next.industry = suggested.industry;
+  if (emptyList(next.objectives) && suggested.objectives.length) next.objectives = suggested.objectives;
+  if (emptyList(next.keyMessages) && suggested.keyMessages.length) next.keyMessages = suggested.keyMessages;
+  if (emptyList(next.preferredHashtags) && suggested.preferredHashtags.length) {
+    next.preferredHashtags = suggested.preferredHashtags;
+  }
+  return next;
 }
 
 function completeMarketingAudit(raw: Record<string, unknown>, sources: string[], actor: string) {
@@ -585,6 +696,7 @@ function completeMarketingAudit(raw: Record<string, unknown>, sources: string[],
       strengths: stringArray(website.strengths, 8, 300),
       gaps: stringArray(website.gaps, 8, 300),
     },
+    suggestedBrand: suggestedBrandFromAudit(raw.suggestedBrand),
     opportunities: opportunities.slice(0, 8).map((item) => {
       const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
       const impact = AUDIT_IMPACT.includes(String(row.impact) as typeof AUDIT_IMPACT[number])
@@ -628,7 +740,7 @@ async function requestAuditFromOpenAi(systemPrompt: string, userPrompt: string):
               additionalProperties: false,
               required: [
                 "headline", "executiveSummary", "search", "ads", "social",
-                "website", "opportunities", "sources", "limitations",
+                "website", "opportunities", "suggestedBrand", "sources", "limitations",
               ],
               properties: {
                 headline: { type: "string" },
@@ -683,6 +795,22 @@ async function requestAuditFromOpenAi(systemPrompt: string, userPrompt: string):
                       action: { type: "string" },
                       impact: { type: "string", enum: ["high", "medium", "low"] },
                     },
+                  },
+                },
+                suggestedBrand: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "brandVoice", "targetAudience", "industry",
+                    "objectives", "keyMessages", "preferredHashtags",
+                  ],
+                  properties: {
+                    brandVoice: { type: "string" },
+                    targetAudience: { type: "string" },
+                    industry: { type: "string" },
+                    objectives: { type: "array", items: { type: "string" } },
+                    keyMessages: { type: "array", items: { type: "string" } },
+                    preferredHashtags: { type: "array", items: { type: "string" } },
                   },
                 },
                 sources: { type: "array", items: { type: "string" } },
@@ -745,7 +873,8 @@ export const generateMarketingAudit = onCall(
       db.collection(`companies/${companyId}/campaigns`).limit(20).get(),
     ]);
     const profile = (profileSnap.data() || {}) as MarketingBrandProfile;
-    const websiteUrl = cleanOptionalString(profile.website, 300);
+    const websiteUrl = cleanOptionalString(profile.website, 300) ||
+      companyWebsiteFromRecord(companySnap.data() || {});
     const competitors = splitCompetitorHints(profile.competitors);
     const extraNotes = [input.searchNotes, input.adsNotes, input.socialNotes, input.otherNotes]
       .some((item) => item.trim().length >= 8);
@@ -825,8 +954,19 @@ export const generateMarketingAudit = onCall(
     const audit = completeMarketingAudit(generated, sources, auth.uid);
     const ref = db.collection(`companies/${companyId}/marketingAudits`).doc();
     await ref.set(audit);
+    const profileRef = db.doc(`companies/${companyId}/marketing/profile`);
+    const applied = applySuggestedBrand(profileSnap.data() || {}, audit.suggestedBrand);
+    const tradingNames = Array.isArray(applied.tradingNames) && applied.tradingNames.length
+      ? applied.tradingNames
+      : [String(companySnap.data()?.name || "").trim()].filter(Boolean);
+    await profileRef.set({
+      ...applied,
+      website: websiteUrl || applied.website || "",
+      tradingNames,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
     logger.info("Generated marketing audit", { companyId, uid: auth.uid, auditId: ref.id });
-    return { auditId: ref.id, headline: audit.headline };
+    return { auditId: ref.id, headline: audit.headline, brandApplied: true };
   }
 );
 
@@ -988,6 +1128,71 @@ async function finishBlockedJob(
   });
 }
 
+async function publishToSocialPlatform(
+  platform: string,
+  credential: Record<string, unknown>,
+  caption: string,
+): Promise<{ id: string; url: string }> {
+  const provider = String(credential.provider || "");
+  const token = String(credential.accessToken || "");
+  if (provider === "test") {
+    return {
+      id: `test_${Date.now()}`,
+      url: `https://example.invalid/marketing/${Date.now()}`,
+    };
+  }
+  if (!token) {
+    throw new Error("This account is saved as a profile only. Tap Connect in app so Hardy Hub can post.");
+  }
+  if (provider === "linkedin" || platform === "linkedin") {
+    const me = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const profile = await me.json() as { sub?: string };
+    if (!me.ok || !profile.sub) throw new Error("LinkedIn login expired. Connect LinkedIn again.");
+    const posted = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        author: `urn:li:person:${profile.sub}`,
+        lifecycleState: "PUBLISHED",
+        specificContent: {
+          "com.linkedin.ugc.ShareContent": {
+            shareCommentary: { text: caption.slice(0, 3000) },
+            shareMediaCategory: "NONE",
+          },
+        },
+        visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+      }),
+    });
+    if (!posted.ok) throw new Error("LinkedIn did not accept that post.");
+    const id = posted.headers.get("x-restli-id") || `linkedin_${Date.now()}`;
+    return { id, url: `https://www.linkedin.com/feed/update/${encodeURIComponent(id)}` };
+  }
+  if (provider === "meta" || platform === "facebook" || platform === "instagram") {
+    const accounts = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${encodeURIComponent(token)}`);
+    const pages = await accounts.json() as { data?: Array<{ id: string; access_token: string; instagram_business_account?: { id: string } }> };
+    const page = pages.data?.[0];
+    if (!accounts.ok || !page) throw new Error("No Facebook Page found on that login. Connect a Page, then try again.");
+    if (platform === "instagram") {
+      throw new Error("Instagram posting needs a photo on the post. Attach media, then Post now.");
+    }
+    const posted = await fetch(`https://graph.facebook.com/v21.0/${page.id}/feed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: caption.slice(0, 5000), access_token: page.access_token }),
+    });
+    const body = await posted.json() as { id?: string; error?: { message?: string } };
+    if (!posted.ok || !body.id) throw new Error(body.error?.message || "Facebook did not accept that post.");
+    return { id: body.id, url: `https://www.facebook.com/${body.id}` };
+  }
+  throw new Error(`Autopost for ${platform} is not live yet. The post is approved — copy it from the queue or connect that app.`);
+}
+
 async function processClaimedJob(
   jobRef: admin.firestore.DocumentReference,
   job: MarketingJob,
@@ -1022,27 +1227,36 @@ async function processClaimedJob(
   const credential = directCredential.exists ?
     directCredential.data() :
     companyCredentials.docs.find((snapshot) => snapshot.data().platform === job.platform)?.data();
-  if (connection?.status !== "connected" || !credential) {
+  if (connection?.status !== "connected") {
     await finishBlockedJob(
       jobRef,
       contentRef,
       claimId,
-      "No connected account or server-side credential is configured for this platform."
-    );
-    return;
-  }
-  if (credential.provider !== "test") {
-    await finishBlockedJob(
-      jobRef,
-      contentRef,
-      claimId,
-      "Publishing for this provider is not configured. No post was sent."
+      "Link this account in Social & Ads (Connect in app), then approve again."
     );
     return;
   }
 
-  const externalPostId = `test_${jobRef.id}`;
-  const externalPostUrl = `https://example.invalid/marketing/${encodeURIComponent(externalPostId)}`;
+  let externalPostId = "";
+  let externalPostUrl = "";
+  try {
+    const posted = await publishToSocialPlatform(
+      String(job.platform),
+      credential || {},
+      String(content.refinedDraft || content.draft || ""),
+    );
+    externalPostId = posted.id;
+    externalPostUrl = posted.url;
+  } catch (error) {
+    logger.error("Social publish failed", { jobId: jobRef.id, error });
+    await finishBlockedJob(
+      jobRef,
+      contentRef,
+      claimId,
+      error instanceof Error ? error.message : "Publishing failed. No post was sent."
+    );
+    return;
+  }
   await db.runTransaction(async (transaction) => {
     const [latestJob, latestContent] = await Promise.all([
       transaction.get(jobRef),
@@ -1150,21 +1364,6 @@ export const processMarketingPublishJobs = onSchedule(
   { schedule: "every 1 minutes", timeZone: TIMEZONE, timeoutSeconds: 60 },
   processDueMarketingJobs
 );
-
-export const startMarketingPlatformConnection = onCall(async (request) => {
-  const auth = requireMarketingAuth(request);
-  const companyId = requireDocumentId(request.data?.companyId, "companyId");
-  try {
-    parsePlatform(request.data?.platform);
-  } catch (error) {
-    failValidation(error);
-  }
-  await requireCompanyEditPermission(auth.uid, companyId);
-  return {
-    available: false,
-    reason: "Social publishing is not available until Meta or LinkedIn OAuth credentials are configured.",
-  };
-});
 
 export const generateMarketingImage = onCall(
   { secrets: [openaiApiKey], timeoutSeconds: 180, memory: "1GiB" },

@@ -182,10 +182,13 @@ export function DogTagDesigner({
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
       {/* Top bar */}
-      <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 shadow-md bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500">
+      <div
+        className="flex h-14 flex-shrink-0 items-center gap-3 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 shadow-md"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
+      >
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-sm font-medium text-white/90 hover:text-white transition-colors mr-1"
+          className="page-back mr-1 font-medium text-white/90 hover:text-white"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>

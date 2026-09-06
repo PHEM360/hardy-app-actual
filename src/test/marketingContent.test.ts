@@ -3,6 +3,7 @@ import {
   approvalResetForMarketingEdit,
   formatMarketingPostForShare,
   isMarketingProfileReady,
+  seedMarketingProfileFromCompany,
 } from "@/lib/marketingContent";
 import type { ContentPiece, MarketingProfile } from "@/types/app";
 
@@ -56,6 +57,21 @@ describe("marketing profile readiness", () => {
     postsPerWeek: 3,
     approvalRequired: true,
   };
+
+  it("lifts website and trading name from the company record when brand fields are empty", () => {
+    const seeded = seedMarketingProfileFromCompany(ready, {
+      name: "Hardy Studio",
+      description: "Family consultancy",
+      contact: { website: "hardystudio.co.uk" },
+    });
+    expect(seeded.website).toBe("https://hardystudio.co.uk");
+    expect(seeded.tradingNames).toEqual(["Hardy Studio"]);
+    expect(seeded.currentThemes).toBe("Family consultancy");
+    expect(seedMarketingProfileFromCompany({ ...ready, website: "https://kept.example" }, {
+      name: "Hardy Studio",
+      contact: { website: "other.com" },
+    }).website).toBe("https://kept.example");
+  });
 
   it("matches the server: identity, positioning and substance are all required", () => {
     expect(isMarketingProfileReady(ready)).toBe(true);

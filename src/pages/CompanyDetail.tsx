@@ -2121,7 +2121,7 @@ const CompanyDetail = () => {
   if (!company) {
     return (
       <div className="px-4 py-5">
-        <button onClick={() => navigate("/companies")} className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4"><ArrowLeft className="w-4 h-4" /> Back</button>
+        <button onClick={() => navigate("/companies")} className="page-back mb-4 text-muted-foreground"><ArrowLeft className="w-4 h-4" /> Back</button>
         <p className="text-sm text-muted-foreground">Company not found.</p>
       </div>
     );
@@ -2136,10 +2136,12 @@ const CompanyDetail = () => {
       }}
     >
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <button onClick={() => navigate("/companies")} className="group mb-3 flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-          Companies
-        </button>
+        <div className="sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-1 backdrop-blur-sm">
+          <button onClick={() => navigate("/companies")} className="page-back group text-muted-foreground transition-colors hover:bg-card hover:text-primary">
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+            Companies
+          </button>
+        </div>
         <div
           className="flex items-center gap-3 rounded-2xl border border-border/40 p-3.5 shadow-card"
           style={{
@@ -2214,7 +2216,26 @@ const CompanyDetail = () => {
             >
               {activeTab === "overview"   && <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />}
               {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
-              {activeTab === "marketing"  && <CompanyMarketingTab companyId={id!} company={company} />}
+              {activeTab === "marketing"  && (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/companies/social?company=${id}`)}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/40 p-4 text-left shadow-card"
+                    style={{
+                      background: `color-mix(in srgb, ${company.color} 12%, hsl(var(--card)))`,
+                      borderLeft: `4px solid ${company.color}`,
+                    }}
+                  >
+                    <div>
+                      <p className="font-display font-bold">Open the Social & Ads dashboard</p>
+                      <p className="mt-1 text-sm text-muted-foreground">See every company, filter this one, and work the calendar from one page.</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  </button>
+                  <CompanyMarketingTab companyId={id!} company={company} />
+                </div>
+              )}
               {activeTab === "logins"     && <LoginsTab companyId={id!} />}
               {activeTab === "services"   && <ServicesTab companyId={id!} />}
               {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}

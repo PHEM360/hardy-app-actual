@@ -30,6 +30,11 @@ interface Finding {
   recommendation: string;
   actionPath?: string;
   evidence?: string;
+  summary?: string;
+  meaning?: string;
+  impact?: string;
+  fix?: string;
+  dealLabel?: "Fix now" | "Fix soon" | "Worth doing" | "Nice to have" | "Looking good";
 }
 
 interface ScanPrefs {
@@ -49,12 +54,37 @@ const HOSTING_URL = "https://hardyhub-7b30d.web.app";
 const APP_URL = "https://hardyapp.co.uk";
 
 const WEIGHT: Record<Severity, number> = {
-  critical: 20,
+  critical: 18,
   high: 10,
   medium: 5,
   low: 2,
   info: 0,
 };
+
+const DEAL: Record<Severity, Finding["dealLabel"]> = {
+  critical: "Fix now",
+  high: "Fix soon",
+  medium: "Worth doing",
+  low: "Nice to have",
+  info: "Looking good",
+};
+
+function withPlain(finding: Finding): Finding {
+  return {
+    ...finding,
+    dealLabel: finding.dealLabel || DEAL[finding.severity],
+    summary: finding.summary || finding.title,
+    meaning: finding.meaning || finding.description,
+    impact: finding.impact || (
+      finding.severity === "critical" ? "Fix this first. The wrong person could see or change family data."
+      : finding.severity === "high" ? "A signed-in person, or a stolen family login, could do more than they should."
+      : finding.severity === "medium" ? "Worth doing. This is not a stranger on the internet breaking in."
+      : finding.severity === "low" ? "A tidy-up. The family is not in danger because of this alone."
+      : "A note, not a problem."
+    ),
+    fix: finding.fix || finding.recommendation,
+  };
+}
 
 const SENSITIVE_MODULES = [
   "personal_finance",
@@ -97,8 +127,41 @@ function gradeFor(score: number): "A" | "B" | "C" | "D" | "F" {
 }
 
 function computeScore(findings: Finding[]): number {
-  const penalty = findings.reduce((s, f) => s + (WEIGHT[f.severity] || 0), 0);
-  return Math.max(0, Math.min(100, 100 - penalty));
+  let other = 0;
+  let headers = 0;
+  for (const finding of findings) {
+    const weight = WEIGHT[finding.severity] || 0;
+    if (finding.id.startsWith("hdr-")) headers += weight;
+    else other += weight;
+  }
+  return Math.max(0, Math.min(100, 100 - other - Math.min(12, headers)));
+}
+
+function scoreHeadline(score: number): string {
+  if (score >= 90) return "In good shape";
+  if (score >= 75) return "Solid, with a few tidy-ups";
+  if (score >= 60) return "Fine for a private family app, with work still worth doing";
+  if (score >= 40) return "Needs attention, but this is not an emergency";
+  return "Needs prompt work";
+}
+
+function scoreWhy(score: number, findings: Finding[], passkeyMissing: number): string {
+  const critical = findings.filter((f) => f.severity === "critical").length;
+  const high = findings.filter((f) => f.severity === "high").length;
+  const medium = findings.filter((f) => f.severity === "medium").length;
+  const parts: string[] = [];
+  if (critical + high === 0 && medium === 0) {
+    parts.push("The score is high because nothing here lets the wrong person in.");
+  } else if (critical + high === 0) {
+    parts.push(`The score is ${score} because of ${medium} item${medium === 1 ? "" : "s"} worth doing — seatbelts and tidy-ups, not a break-in.`);
+  } else {
+    parts.push(`The score is ${score} mainly because of ${critical + high} more serious item${critical + high === 1 ? "" : "s"} (Fix now / Fix soon).`);
+  }
+  parts.push("100 is a clean bill of health. The same missing header on two web addresses is not counted twice. Notes marked Looking good do not lower the score.");
+  if (passkeyMissing > 0) {
+    parts.push(`${passkeyMissing} account${passkeyMissing === 1 ? " has" : "s have"} not finished passkey setup yet.`);
+  }
+  return parts.join(" ");
 }
 
 function categoryScore(findings: Finding[], category: Category): number {
@@ -135,11 +198,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-csp",
         severity: "medium",
         category: "infrastructure",
-        title: "No Content-Security-Policy header",
-        description: `${url} does not send a CSP header, which increases XSS blast radius if a script injection ever lands.`,
-        recommendation:
-          "Add a Firebase Hosting header for Content-Security-Policy that locks script/style sources to your origin and trusted CDNs.",
+        title: "The website does not tell the browser which scripts are allowed",
+        description: `${url} is missing a Content-Security-Policy header.`,
+        recommendation: "Keep the Content-Security-Policy header in firebase.json and deploy hosting.",
         evidence: url,
+        summary: "The website does not tell the browser which scripts are allowed.",
+        meaning: "If a bad script ever got onto a page, the browser would have fewer brakes.",
+        impact: "Worth doing. It is a seatbelt, not a sign that anyone is in.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
     if (!xfo && !csp?.includes("frame-ancestors")) {
@@ -147,10 +213,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-xfo",
         severity: "low",
         category: "infrastructure",
-        title: "Clickjacking protection missing",
+        title: "Other sites could try to show Hardy Hub inside a frame",
         description: `${url} has neither X-Frame-Options nor CSP frame-ancestors.`,
-        recommendation: "Set X-Frame-Options: DENY (or SAMEORIGIN) in firebase.json hosting headers.",
+        recommendation: "Keep X-Frame-Options: DENY in firebase.json hosting headers.",
         evidence: url,
+        summary: "Other sites could try to show Hardy Hub inside a frame.",
+        meaning: "That is a click-jacking trick. Unlikely on a private family site.",
+        impact: "Nice to have.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
     if (!xcto || xcto.toLowerCase() !== "nosniff") {
@@ -158,10 +228,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-xcto",
         severity: "low",
         category: "infrastructure",
-        title: "X-Content-Type-Options not set to nosniff",
-        description: "Browsers may MIME-sniff responses without this header.",
-        recommendation: "Add X-Content-Type-Options: nosniff to Firebase Hosting headers.",
+        title: "The site should tell browsers not to guess file types",
+        description: `${url} is missing X-Content-Type-Options: nosniff.`,
+        recommendation: "Keep X-Content-Type-Options: nosniff in firebase.json.",
         evidence: url,
+        summary: "The site should tell browsers not to guess file types.",
+        meaning: "Without this, a browser might treat a file as a script by mistake.",
+        impact: "Nice to have.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
     if (!referrer) {
@@ -169,10 +243,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-referrer",
         severity: "info",
         category: "infrastructure",
-        title: "Referrer-Policy not set",
-        description: "Outbound navigations may leak full URLs in the Referer header.",
-        recommendation: "Set Referrer-Policy: strict-origin-when-cross-origin (or stricter).",
+        title: "Links out could include the full Hardy Hub address",
+        description: `${url} has no Referrer-Policy header.`,
+        recommendation: "Keep Referrer-Policy in firebase.json.",
         evidence: url,
+        summary: "Links out could include the full Hardy Hub address.",
+        meaning: "Another site might see which page you came from.",
+        impact: "A tidy-up, not a break-in risk.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
     if (!hsts) {
@@ -180,10 +258,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-hsts",
         severity: "medium",
         category: "infrastructure",
-        title: "HSTS header missing on this host",
+        title: "This address did not insist on HTTPS",
         description: `${url} did not return Strict-Transport-Security.`,
-        recommendation: "Ensure HTTPS redirects and HSTS are enabled for all production hosts.",
+        recommendation: "Keep the HSTS header on Firebase Hosting and always open hardyapp.co.uk over https.",
         evidence: url,
+        summary: "This address did not insist on HTTPS.",
+        meaning: "On public Wi‑Fi, a fake network could try to serve a non-secure copy.",
+        impact: "Worth doing for the public web address. Firebase usually already forces HTTPS.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
     if (!permissions) {
@@ -191,10 +273,14 @@ async function checkSecurityHeaders(url: string): Promise<Finding[]> {
         id: "hdr-permissions",
         severity: "info",
         category: "infrastructure",
-        title: "Permissions-Policy not set",
-        description: "Browser features (camera, mic, geolocation) are not explicitly restricted.",
-        recommendation: "Add a Permissions-Policy header locking unused powerful APIs.",
+        title: "The site does not list which phone features it will not use",
+        description: `${url} has no Permissions-Policy header.`,
+        recommendation: "Keep the Permissions-Policy header in firebase.json.",
         evidence: url,
+        summary: "The site does not list which phone features it will not use.",
+        meaning: "Camera, mic and location are not explicitly switched off in a header.",
+        impact: "A tidy-up.",
+        fix: "Deploy the hosting headers already set in firebase.json.",
       });
     }
   } catch (err) {
@@ -217,78 +303,101 @@ function architectureFindings(): Finding[] {
       id: "arch-passkey-gate",
       severity: "info",
       category: "authentication",
-      title: "Passkey enrolment is required for app data access",
-      description:
-        "Firestore rules gate interactive reads/writes behind users/{uid}.passkeyEnrolled. Display credentials are deliberately excluded and scoped.",
-      recommendation: "Keep this gate; monitor passkey enrolment gaps in each scan.",
+      title: "People must set up a passkey before they can use the app",
+      description: "Firestore only opens family data after passkey enrolment. Remote displays are kept on a tighter, separate path.",
+      recommendation: "Leave this as it is.",
+      summary: "People must set up a passkey before they can use the app.",
+      meaning: "A stolen password alone is not enough to open family data.",
+      impact: "This is a strength, not a problem.",
+      fix: "Leave this as it is.",
     },
     {
       id: "arch-default-modules",
-      severity: "medium",
+      severity: "low",
       category: "authorization",
-      title: "Only finance & passwords are passkey-locked by default in rules",
+      title: "Some private pages do not ask for a passkey unless you turn that on",
       description:
-        "Firestore defaultModuleRequirement() only forces passkey for personal_finance and passwords. Client defaults also lock remote_displays, but rules do not — so a user without custom settings can read displays without a fresh passkey at the rules layer.",
-      recommendation:
-        "Align firestore.rules defaultModuleRequirement with client DEFAULT_SECURITY_SETTINGS (include remote_displays, and consider health, notes, inheritance).",
+        "Money, the password vault and remote displays ask for a passkey by default. Health, notes and similar pages stay open unless someone sets a lock in Settings.",
+      recommendation: "In Settings → Security, require a passkey for any page you want extra-private.",
       actionPath: "/settings",
+      summary: "Some private pages do not ask for a passkey unless you turn that on.",
+      meaning: "A family member who is already signed in can open those pages without a second check.",
+      impact: "Nice to have if a phone is shared. Not an internet break-in.",
+      fix: "In Settings → Security, lock any page you want extra-private.",
     },
     {
       id: "arch-hardcoded-owner",
       severity: "low",
       category: "configuration",
-      title: "Owner email is hardcoded in rules and Admin UI",
-      description:
-        "isOwnerAccount() and the Admin page email gate hardcode chris.hardy.07@googlemail.com. Rotation or multi-owner support requires a code change.",
-      recommendation:
-        "Move owner allow-list to a Firestore adminConfig doc (admin-writable only) and read it from rules via get().",
+      title: "The main owner email is written into the app code",
+      description: "Owner checks use a fixed email address. Changing it needs a code change.",
+      recommendation: "Later, move the owner list into an admin setting.",
+      summary: "The main owner email is written into the app code.",
+      meaning: "If you ever change that email, a developer has to update the code.",
+      impact: "Nice to have. It does not let strangers in.",
+      fix: "Leave it for now unless you are changing the owner email.",
     },
     {
       id: "arch-tattersalls-open",
-      severity: "high",
+      severity: "medium",
       category: "authorization",
-      title: "Tattersalls collection is open to every authenticated user",
+      title: "Anyone signed in can see and change the Flats page",
       description:
-        "firestore.rules allows any passkey-enrolled user to read/write tattersalls/{docId} and nested documents — no owner or household check.",
-      recommendation:
-        "Scope Tattersalls to ownerId / household membership / page shares, matching Finance and Pets.",
+        "Flats is a family-wide page. Every passkey-enrolled account can read and write it. That is fine if the whole family manages it.",
+      recommendation: "Share Flats only with people who should edit it, and keep spare or guest accounts off that page.",
+      summary: "Anyone signed in can see and change the Flats page.",
+      meaning: "A guest account could edit rents and documents, not only look.",
+      impact: "Worth doing if someone should only look. Not a problem if the whole family manages flats.",
+      fix: "Use the share button on Flats, and do not leave unused accounts enabled.",
     },
     {
       id: "arch-appconfig-writable",
-      severity: "high",
-      category: "authorization",
-      title: "appConfig is writable by any authenticated user",
+      severity: "low",
+      category: "data_protection",
+      title: "The shared AI key can be read by the family, but only an admin can change it",
       description:
-        "match /appConfig/{docId} allows read, write if isAuthenticated(). A compromised member account could overwrite shared API keys or config.",
-      recommendation: "Restrict appConfig writes to isAdmin() (or superadmin) and keep secrets in Secret Manager, not Firestore.",
+        "appConfig writes are admin-only. The key still lives in Firestore so in-app AI works for the family.",
+      recommendation: "Keep the key in Settings as an admin. When you can, move it to Secret Manager.",
+      summary: "The shared AI key can be read by the family, but only an admin can change it.",
+      meaning: "Signed-in people can use the key. They can no longer overwrite it.",
+      impact: "Nice to have to move the key to a server secret later.",
+      fix: "Nothing urgent. Only an admin should save a new key in Settings.",
     },
     {
       id: "arch-no-login-audit",
-      severity: "medium",
+      severity: "low",
       category: "monitoring",
-      title: "No persisted login / security event audit trail",
-      description:
-        "The Security Dashboard previously showed a placeholder event log. Auth success/failure and passkey challenges are not written to an admin-readable collection.",
-      recommendation:
-        "Log auth and passkey outcomes (hashed IP, uid, result) into securityEvents via Cloud Functions, retained for 90 days.",
+      title: "There is no saved list of who logged in or failed a passkey",
+      description: "Auth success and failure are not written to an admin-readable history.",
+      recommendation: "Add a login history later if you want one. Not urgent for a family app.",
+      summary: "There is no saved list of who logged in or failed a passkey.",
+      meaning: "If something odd happened last Tuesday, the app cannot show you a history of logins.",
+      impact: "Nice to have. It does not mean someone is in.",
+      fix: "Leave this unless you want a login history.",
     },
     {
       id: "arch-vault-strong",
       severity: "info",
       category: "data_protection",
-      title: "Password vault is owner-only even for admins",
-      description:
-        "Credential vault paths require owner + module passkey and explicitly exclude admin bypass — good blast-radius control.",
-      recommendation: "Maintain this model; never grant admin vault read for support workflows.",
+      title: "Password vaults stay private even from admins",
+      description: "Saved logins stay with the owner. Admin support cannot open them.",
+      recommendation: "Leave this as it is.",
+      summary: "Password vaults stay private even from admins.",
+      meaning: "A helper with admin access still cannot open someone else’s saved logins.",
+      impact: "This is a strength.",
+      fix: "Leave this as it is.",
     },
     {
       id: "arch-invite-password-policy",
       severity: "info",
       category: "authentication",
-      title: "Invite flow enforces a strong temporary password policy",
-      description:
-        "inviteUser requires ≥8 chars with upper, lower, digit, and special character before creating Auth users.",
-      recommendation: "Keep server-side enforcement; consider forcing password change on first login.",
+      title: "New accounts need a strong starter password",
+      description: "Invites cannot use a short or simple password.",
+      recommendation: "Leave this as it is.",
+      summary: "New accounts need a strong starter password.",
+      meaning: "A weak invite password is rejected on the server.",
+      impact: "This is a strength.",
+      fix: "Leave this as it is.",
     },
   ];
 }
@@ -300,6 +409,8 @@ async function runScan(opts: {
 }): Promise<{
   score: number;
   grade: "A" | "B" | "C" | "D" | "F";
+  scoreHeadline: string;
+  scoreWhy: string;
   summary: Record<string, number>;
   breakdown: Record<string, number>;
   findings: Finding[];
@@ -358,12 +469,16 @@ async function runScan(opts: {
       id: "live-passkey-gap",
       severity: passkeyMissing >= 3 ? "high" : "medium",
       category: "authentication",
-      title: `${passkeyMissing} user(s) without a passkey enrolled`,
+      title: `${passkeyMissing} account${passkeyMissing === 1 ? " has" : "s have"} not finished passkey setup`,
       description:
-        "Interactive Firestore access requires passkeyEnrolled, but accounts without enrolment are stuck at the mandatory gate — or may still hold Auth sessions.",
-      recommendation: "Prompt each user to enrol a passkey from Settings, or reset/remove unused accounts.",
+        "Those people cannot use the app until they add a passkey — or they may still have an old login sitting there.",
+      recommendation: "Ask them to add a passkey in Settings, or remove unused accounts in Admin.",
       actionPath: "/admin",
       evidence: `${passkeyEnrolled} enrolled / ${passkeyMissing} missing of ${profiles.size} profiles`,
+      summary: `${passkeyMissing} account${passkeyMissing === 1 ? " has" : "s have"} not finished passkey setup.`,
+      meaning: "The app is waiting for those people to add Face ID / fingerprint. Unused logins should be deleted.",
+      impact: passkeyMissing >= 3 ? "Fix soon if those accounts are leftover." : "Worth doing for unused accounts.",
+      fix: "Open Admin and remove leftover users, or ask them to finish passkey setup.",
     });
   }
 
@@ -372,11 +487,14 @@ async function runScan(opts: {
       id: "live-orphan-auth",
       severity: "medium",
       category: "authentication",
-      title: `${missingProfile} Auth user(s) lack a Firestore profile`,
-      description:
-        "Firebase Auth accounts without users/{uid} docs can sign in but won't match app RBAC cleanly.",
-      recommendation: "Delete orphan Auth users or restore their profiles via Admin invite/restore.",
+      title: `${missingProfile} login${missingProfile === 1 ? "" : "s"} exist without an app profile`,
+      description: "Firebase Auth has accounts that do not match a Hardy Hub user profile.",
+      recommendation: "Delete those logins in Admin, or restore their profiles.",
       evidence: String(missingProfile),
+      summary: `${missingProfile} login${missingProfile === 1 ? "" : "s"} exist without an app profile.`,
+      meaning: "Someone could sign in but the app would not know who they are.",
+      impact: "Worth doing. Tidy leftover logins.",
+      fix: "In Admin, delete unused logins.",
     });
   }
 
@@ -385,25 +503,32 @@ async function runScan(opts: {
       id: "live-too-many-superadmins",
       severity: "medium",
       category: "authorization",
-      title: `${superadmins} superadmin accounts`,
-      description: "Broad superadmin access increases blast radius if any privileged account is compromised.",
-      recommendation: "Keep superadmin to the minimum necessary; prefer admin for day-to-day ops.",
+      title: `${superadmins} people have the top admin role`,
+      description: "If one of those logins is stolen, the thief gets the widest access.",
+      recommendation: "Keep superadmin to the few people who need it.",
       actionPath: "/admin",
       evidence: `${superadmins} superadmin, ${admins} admin`,
+      summary: `${superadmins} people have the top admin role.`,
+      meaning: "Each extra superadmin is another login that can change everything.",
+      impact: "Worth doing. Prefer a normal admin for day-to-day help.",
+      fix: "In Admin, drop leftover superadmin roles.",
     });
   }
 
   if (sensitiveUnlocked > 0) {
     findings.push({
       id: "live-modules-unlocked",
-      severity: "medium",
+      severity: "low",
       category: "authorization",
-      title: `${sensitiveUnlocked} user(s) leave several sensitive modules unlocked`,
-      description:
-        "Health, notes, inheritance, companies, or admin modules are set to 'none' (or left at open defaults) for multiple accounts.",
-      recommendation: "In Settings → Security, require passkey for health, notes, inheritance, and companies.",
+      title: `${sensitiveUnlocked} account${sensitiveUnlocked === 1 ? " leaves" : "s leave"} several private pages unlocked`,
+      description: "Health, notes or similar pages are set to no extra lock for those people.",
+      recommendation: "In Settings → Security, require a passkey for pages you want extra-private.",
       actionPath: "/settings",
       evidence: String(sensitiveUnlocked),
+      summary: `${sensitiveUnlocked} account${sensitiveUnlocked === 1 ? " leaves" : "s leave"} several private pages unlocked.`,
+      meaning: "Once signed in, those pages open without a second check.",
+      impact: "Nice to have on a family phone. Not an internet break-in.",
+      fix: "In Settings → Security, lock the pages you care about.",
     });
   }
 
@@ -417,12 +542,15 @@ async function runScan(opts: {
         id: "live-suspended-auth-enabled",
         severity: "high",
         category: "authorization",
-        title: `${stillEnabled} suspended profile(s) still have Auth enabled`,
-        description:
-          "Firestore marks the user suspended/disabled but Firebase Auth can still mint ID tokens until Auth.disable is set.",
-        recommendation: "When suspending, also disable the Auth user (Admin suspend should call auth.updateUser({ disabled: true })).",
+        title: `${stillEnabled} suspended account${stillEnabled === 1 ? " can" : "s can"} still sign in`,
+        description: "The app says they are suspended, but Firebase login is still switched on.",
+        recommendation: "In Admin, suspend again so the login is switched off as well.",
         actionPath: "/admin",
         evidence: String(stillEnabled),
+        summary: `${stillEnabled} suspended account${stillEnabled === 1 ? " can" : "s can"} still sign in.`,
+        meaning: "You thought they were locked out, but their password or passkey may still work.",
+        impact: "Fix soon. A suspended person should not be able to get back in.",
+        fix: "Open Admin and suspend those accounts again.",
       });
     }
   }
@@ -445,58 +573,74 @@ async function runScan(opts: {
     logger.debug("device scan skipped", { err });
   }
 
-  findings.push(...(await checkSecurityHeaders(HOSTING_URL)));
-  const customHeaders = await checkSecurityHeaders(APP_URL);
-  for (const f of customHeaders) {
-    if (!findings.some((x) => x.id === f.id && x.evidence === f.evidence)) findings.push(f);
+  const headerFindings = [
+    ...(await checkSecurityHeaders(HOSTING_URL)),
+    ...(await checkSecurityHeaders(APP_URL)),
+  ];
+  const mergedHeaders = new Map<string, Finding>();
+  for (const finding of headerFindings) {
+    const existing = mergedHeaders.get(finding.id);
+    if (!existing) {
+      mergedHeaders.set(finding.id, finding);
+      continue;
+    }
+    const extra = finding.evidence && finding.evidence !== existing.evidence ? `; ${finding.evidence}` : "";
+    existing.evidence = `${existing.evidence || ""}${extra}`;
   }
+  findings.push(...mergedHeaders.values());
 
   // Positive: HTTPS hosting reachable
   findings.push({
     id: "live-hosting-up",
     severity: "info",
     category: "infrastructure",
-    title: "Production hosting is reachable over HTTPS",
+    title: "The live site answered over HTTPS",
     description: `${HOSTING_URL} responded during this scan.`,
-    recommendation: "Continue deploying via Firebase Hosting with versioned releases.",
+    recommendation: "Nothing to do.",
     evidence: HOSTING_URL,
+    summary: "The live site answered over HTTPS.",
+    meaning: "People can reach the app, and the connection is encrypted.",
+    impact: "This is a strength.",
+    fix: "Nothing to do.",
   });
 
-  const score = computeScore(findings);
+  const findingsPlain = findings.map(withPlain);
+  const score = computeScore(findingsPlain);
   const summary = {
-    totalFindings: findings.length,
-    critical: findings.filter((f) => f.severity === "critical").length,
-    high: findings.filter((f) => f.severity === "high").length,
-    medium: findings.filter((f) => f.severity === "medium").length,
-    low: findings.filter((f) => f.severity === "low").length,
-    info: findings.filter((f) => f.severity === "info").length,
+    totalFindings: findingsPlain.length,
+    critical: findingsPlain.filter((f) => f.severity === "critical").length,
+    high: findingsPlain.filter((f) => f.severity === "high").length,
+    medium: findingsPlain.filter((f) => f.severity === "medium").length,
+    low: findingsPlain.filter((f) => f.severity === "low").length,
+    info: findingsPlain.filter((f) => f.severity === "info").length,
     usersChecked: profiles.size,
     passkeyEnrolled,
     passkeyMissing,
   };
 
   const recommendations = [
-    ...findings
+    ...findingsPlain
       .filter((f) => f.severity === "critical" || f.severity === "high" || f.severity === "medium")
       .slice(0, 8)
-      .map((f) => f.recommendation),
+      .map((f) => f.fix || f.recommendation),
   ];
-  // de-dupe
   const uniqueRecs = [...new Set(recommendations)];
 
   return {
     score,
     grade: gradeFor(score),
+    scoreHeadline: scoreHeadline(score),
+    scoreWhy: scoreWhy(score, findingsPlain, passkeyMissing),
     summary,
     breakdown: {
-      authentication: categoryScore(findings, "authentication"),
-      authorization: categoryScore(findings, "authorization"),
-      dataProtection: categoryScore(findings, "data_protection"),
-      configuration: categoryScore(findings, "configuration"),
-      infrastructure: categoryScore(findings, "infrastructure"),
-      monitoring: categoryScore(findings, "monitoring"),
+      authentication: categoryScore(findingsPlain, "authentication"),
+      authorization: categoryScore(findingsPlain, "authorization"),
+      dataProtection: categoryScore(findingsPlain, "data_protection"),
+      configuration: categoryScore(findingsPlain, "configuration"),
+      infrastructure: categoryScore(findingsPlain, "infrastructure"),
+      monitoring: categoryScore(findingsPlain, "monitoring"),
     },
-    findings: findings.sort((a, b) => (WEIGHT[b.severity] || 0) - (WEIGHT[a.severity] || 0)),
+    findings: findingsPlain.sort((a, b) => (WEIGHT[b.severity] || 0) - (WEIGHT[a.severity] || 0)),
     recommendations: uniqueRecs,
     triggeredBy: opts.triggeredBy,
     triggeredByUid: opts.triggeredByUid,

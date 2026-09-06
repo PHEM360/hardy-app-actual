@@ -56,12 +56,18 @@ const DialogContent = React.forwardRef<
       const bottom = Number.parseFloat(cs.paddingBottom) || 0;
       probe.remove();
       const rootStyle = getComputedStyle(document.documentElement);
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      const standalone = window.matchMedia("(display-mode: standalone)").matches;
+      const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+      const fallback = coarse && (standalone || ios) ? 47 : 0;
       return {
-        top:
+        top: Math.max(
           top ||
-          Number.parseFloat(rootStyle.getPropertyValue("--sat")) ||
-          Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")) ||
-          0,
+            Number.parseFloat(rootStyle.getPropertyValue("--sat")) ||
+            Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")) ||
+            0,
+          fallback,
+        ),
         bottom:
           bottom ||
           Number.parseFloat(rootStyle.getPropertyValue("--sab")) ||
@@ -115,14 +121,14 @@ const DialogContent = React.forwardRef<
           onOpenAutoFocus?.(event);
         }}
         className={cn(
-          "fixed left-[50%] top-4 z-[300] grid w-full max-w-lg translate-x-[-50%] gap-4 overflow-y-auto overscroll-contain border border-border bg-card p-6 shadow-elevated duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-2xl rounded-2xl",
+          "fixed left-[50%] top-[max(1rem,calc(env(safe-area-inset-top,0px)+0.75rem))] z-[300] grid w-[calc(100%-1.5rem)] max-w-lg translate-x-[-50%] gap-4 overflow-y-auto overscroll-contain border border-border bg-card p-6 pt-14 shadow-elevated duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-2xl rounded-2xl",
           className,
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1 opacity-70 ring-offset-background transition-all hover:opacity-100 hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-          <X className="h-4 w-4" />
+        <DialogPrimitive.Close className="overlay-close opacity-80 ring-offset-background transition-all hover:bg-accent hover:text-accent-foreground hover:opacity-100 data-[state=open]:bg-accent data-[state=open]:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+          <X className="h-5 w-5" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>

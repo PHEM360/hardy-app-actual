@@ -23,6 +23,7 @@ import {
   MonitorSmartphone,
   Palmtree,
   Images,
+  Mail,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -62,6 +63,13 @@ const SECTIONS: Section[] = [
         icon: Images,
         route: "/photos",
         gradient: "linear-gradient(135deg, hsl(330,58%,52%), hsl(345,52%,44%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Email",
+        icon: Mail,
+        route: "/email",
+        gradient: "linear-gradient(135deg, hsl(239,70%,58%), hsl(260,60%,50%))",
         iconColor: "#fff",
       },
       {

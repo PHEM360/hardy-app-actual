@@ -12,6 +12,13 @@ export type SecurityFindingCategory =
 
 export type SecurityScanCadence = "off" | "daily" | "weekly" | "monthly";
 
+export type SecurityDealLabel =
+  | "Fix now"
+  | "Fix soon"
+  | "Worth doing"
+  | "Nice to have"
+  | "Looking good";
+
 export interface SecurityFinding {
   id: string;
   severity: SecurityFindingSeverity;
@@ -23,6 +30,11 @@ export interface SecurityFinding {
   actionPath?: string;
   /** Evidence / counts gathered during the scan */
   evidence?: string;
+  summary?: string;
+  meaning?: string;
+  impact?: string;
+  fix?: string;
+  dealLabel?: SecurityDealLabel;
 }
 
 export interface SecurityScoreBreakdown {
@@ -50,6 +62,8 @@ export interface SecurityReport {
   id?: string;
   score: number;
   grade: "A" | "B" | "C" | "D" | "F";
+  scoreHeadline?: string;
+  scoreWhy?: string;
   summary: SecurityReportSummary;
   breakdown: SecurityScoreBreakdown;
   findings: SecurityFinding[];
@@ -98,14 +112,21 @@ export function securityGrade(score: number): SecurityReport["grade"] {
 }
 
 export const SEVERITY_WEIGHT: Record<SecurityFindingSeverity, number> = {
-  critical: 20,
+  critical: 18,
   high: 10,
   medium: 5,
   low: 2,
   info: 0,
 };
 
+/** Real issues count once. Repeated website-header notes are capped. */
 export function computeSecurityScore(findings: SecurityFinding[]): number {
-  const penalty = findings.reduce((sum, f) => sum + (SEVERITY_WEIGHT[f.severity] || 0), 0);
-  return Math.max(0, Math.min(100, 100 - penalty));
+  let other = 0;
+  let headers = 0;
+  for (const finding of findings) {
+    const weight = SEVERITY_WEIGHT[finding.severity] || 0;
+    if (finding.id.startsWith("hdr-")) headers += weight;
+    else other += weight;
+  }
+  return Math.max(0, Math.min(100, 100 - other - Math.min(12, headers)));
 }

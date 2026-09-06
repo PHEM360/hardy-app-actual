@@ -31,13 +31,16 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
         animate={{ opacity: 1, y: 0 }}
         className="mb-5"
       >
-        <button
-          onClick={() => navigate(-1)}
-          className="group flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-3"
-        >
-          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          Back
-        </button>
+        <div className="sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-1 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="page-back group text-muted-foreground transition-colors hover:bg-card hover:text-primary"
+          >
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            Back
+          </button>
+        </div>
         <div className="flex items-center gap-3 flex-wrap">
           {icon && (
             <div className="w-10 h-10 rounded-xl bg-gradient-primary shadow-glow flex items-center justify-center text-primary-foreground flex-shrink-0">

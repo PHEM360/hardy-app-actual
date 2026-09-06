@@ -381,7 +381,7 @@ export default function Photos() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   {photos.gphotos.connected
                     ? `Linked as ${photos.gphotos.email || "Google"}. Open an album, then pick from Photos or paste a shared album link.`
-                    : "Paste a shared album link to keep new pictures in sync, or connect Google to pick from Photos."}
+                    : "Connect your own Google Photos in this app. Each person signs in with their Google account — the family only needs one Web client set up in Settings."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="secondary" disabled={busy} onClick={() => {

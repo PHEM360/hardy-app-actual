@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {
@@ -9,13 +8,17 @@ import {
   isGooglePhotosShareUrl,
   sizedGooglePhotoUrl,
 } from "./googlePhotosAlbum";
+import {
+  APP_HOST,
+  GOOGLE_SECRET_OPTS,
+  formPost,
+  googleAuthUrl,
+  loadGoogleCredentials,
+} from "./googleOAuth";
 
-const googleClientId = defineSecret("GOOGLE_DRIVE_CLIENT_ID");
-const googleClientSecret = defineSecret("GOOGLE_DRIVE_CLIENT_SECRET");
-const APP_HOST = "https://hardyhub-7b30d.web.app";
 const CALLBACK = `${APP_HOST}/api/google-photos/callback`;
 const SCOPES = "https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/userinfo.email";
-const SECRET_OPTS = { secrets: [googleClientId, googleClientSecret] };
+const SECRET_OPTS = GOOGLE_SECRET_OPTS;
 
 function db() {
   return admin.firestore();
@@ -29,30 +32,8 @@ function requireUid(auth?: { uid: string; token?: Record<string, unknown> }) {
   return auth.uid;
 }
 
-function credentials() {
-  const clientId = googleClientId.value();
-  const clientSecret = googleClientSecret.value();
-  if (!clientId || !clientSecret || clientId === "UNSET" || clientSecret === "UNSET") {
-    throw new HttpsError(
-      "failed-precondition",
-      "Google Photos is not set up yet. Add the family Google OAuth client, then enable the Photos Picker API.",
-    );
-  }
-  return { clientId, clientSecret };
-}
-
-async function formPost(url: string, body: Record<string, string>) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body),
-  });
-  const data = await response.json() as Record<string, unknown>;
-  if (!response.ok) {
-    logger.error("Google Photos token request failed", { status: response.status, data });
-    throw new HttpsError("internal", "Google Photos did not accept that login.");
-  }
-  return data;
+async function credentials() {
+  return loadGoogleCredentials();
 }
 
 async function getTokens(uid: string) {
@@ -66,7 +47,7 @@ async function getTokens(uid: string) {
     return { accessToken: String(data.accessToken), refreshToken: String(data.refreshToken || "") };
   }
   if (!data.refreshToken) throw new HttpsError("failed-precondition", "Link Google Photos again.");
-  const { clientId, clientSecret } = credentials();
+  const { clientId, clientSecret } = await credentials();
   const token = await formPost("https://oauth2.googleapis.com/token", {
     client_id: clientId,
     client_secret: clientSecret,
@@ -122,24 +103,14 @@ async function knownGooglePhotoIds(uid: string, albumId: string) {
 
 export const startGooglePhotosConnect = onCall(SECRET_OPTS, async (request) => {
   const uid = requireUid(request.auth);
-  const { clientId } = credentials();
+  const { clientId } = await credentials();
   const state = randomUUID();
   await db().doc(`googlePhotosOAuth/${state}`).set({
     uid,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: Date.now() + 15 * 60 * 1000,
   });
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: CALLBACK,
-    response_type: "code",
-    scope: SCOPES,
-    access_type: "offline",
-    prompt: "consent",
-    state,
-    include_granted_scopes: "true",
-  });
-  return { authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
+  return { authUrl: googleAuthUrl(clientId, CALLBACK, SCOPES, state) };
 });
 
 export const googlePhotosCallback = onRequest(SECRET_OPTS, async (req, res) => {
@@ -162,7 +133,7 @@ export const googlePhotosCallback = onRequest(SECRET_OPTS, async (req, res) => {
     return;
   }
   try {
-    const { clientId, clientSecret } = credentials();
+    const { clientId, clientSecret } = await credentials();
     const token = await formPost("https://oauth2.googleapis.com/token", {
       code,
       client_id: clientId,

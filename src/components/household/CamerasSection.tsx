@@ -241,7 +241,10 @@ function CameraTile({
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-50 flex flex-col"
           >
-            <div className="flex items-center justify-between p-4">
+            <div
+              className="flex items-center justify-between p-4"
+              style={{ paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+            >
               <div>
                 <h3 className="text-white font-semibold">{camera.name}</h3>
                 {camera.location && <p className="text-white/60 text-xs">{camera.location}</p>}

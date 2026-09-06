@@ -113,9 +113,15 @@ export {
 	rejectMarketingContent,
 	publishMarketingContentNow,
 	processMarketingPublishJobs,
-	startMarketingPlatformConnection,
 	generateMarketingImage,
 } from "./marketing";
+
+export {
+	startMarketingPlatformConnection,
+	marketingConnectCallback,
+	saveMarketingSocialLink,
+	bulkApproveMarketingContent,
+} from "./marketingConnect";
 
 // ── Dog tags (Pets page) ──
 export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
@@ -148,6 +154,31 @@ export {
 	disconnectGooglePhotos,
 	gphotosPhoto,
 } from "./googlePhotos";
+
+export { googleOAuthStatus, saveGoogleOAuthClient } from "./googleOAuth";
+
+export {
+	startGoogleCalendarConnect,
+	googleCalendarCallback,
+	listGoogleCalendars,
+	saveGoogleCalendarSelection,
+	syncGoogleCalendar,
+	pushCalendarEvent,
+	disconnectGoogleCalendar,
+	processGoogleCalendarSync,
+} from "./googleCalendar";
+
+export {
+	startGmailConnect,
+	mailOAuthCallback,
+	connectImapAccount,
+	syncMailbox,
+	sendMail,
+	updateMailFlags,
+	disconnectMailAccount,
+	runMailAi,
+	applyMailAiActions,
+} from "./mail";
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);

@@ -825,10 +825,13 @@ export default function LabelDesigner({ item, allItems, onClose, onSave }: Label
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="h-14 flex-shrink-0 flex items-center gap-3 px-4 border-b border-border bg-card shadow-sm">
+      <div
+        className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4 shadow-sm"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
+      >
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mr-1"
+          className="page-back mr-1 text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>

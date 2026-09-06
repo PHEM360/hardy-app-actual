@@ -2,6 +2,10 @@ export const SUPPORTED_MARKETING_PLATFORMS = [
   "facebook",
   "instagram",
   "linkedin",
+  "x",
+  "tiktok",
+  "youtube",
+  "google",
 ] as const;
 
 export type MarketingPlatform = typeof SUPPORTED_MARKETING_PLATFORMS[number];
@@ -13,6 +17,12 @@ export interface MarketingPlanInput {
   campaignId?: string;
   focus?: string;
   includeImages: boolean;
+  includeArticles: boolean;
+  controversialTheme?: string;
+  textProvider?: string;
+  textModel?: string;
+  imageProvider?: string;
+  imageModel?: string;
 }
 
 export interface MarketingBrandProfile {
@@ -47,7 +57,7 @@ export function parseMarketingPlanInput(value: unknown): MarketingPlanInput {
   }
   const platforms = [...new Set(input.platforms.map((item) => String(item).toLowerCase()))];
   if (platforms.some((item) => !SUPPORTED_MARKETING_PLATFORMS.includes(item as MarketingPlatform))) {
-    throw new Error("Platforms must be facebook, instagram, or linkedin.");
+    throw new Error("Platforms must be facebook, instagram, linkedin, x, tiktok, youtube, or google.");
   }
   return {
     periodDays,
@@ -56,6 +66,12 @@ export function parseMarketingPlanInput(value: unknown): MarketingPlanInput {
     campaignId: cleanOptionalString(input.campaignId, 200),
     focus: cleanOptionalString(input.focus, 1000),
     includeImages: input.includeImages !== false,
+    includeArticles: input.includeArticles === true,
+    controversialTheme: cleanOptionalString(input.controversialTheme, 500),
+    textProvider: cleanOptionalString(input.textProvider, 40),
+    textModel: cleanOptionalString(input.textModel, 80),
+    imageProvider: cleanOptionalString(input.imageProvider, 40),
+    imageModel: cleanOptionalString(input.imageModel, 80),
   };
 }
 
@@ -91,7 +107,10 @@ export function buildMarketingPlanInstructions(pieceCount: number, seasonal: str
     "If competitors are listed, write distinctive angles that do not copy them: contrast, fill a gap, or say what this brand does differently.",
     "Use seasonal UK context, currentThemes, and the current date. Prefer timely hooks (tax year, school terms, bank holidays, weather, cultural moments) over generic filler.",
     "Each post must have a clear hook, a useful point, and a natural call to action.",
-    "Vary formats across the batch: tip, story, question, proof, offer, behind-the-scenes.",
+    "If articles are requested, write full LinkedIn or website articles of 400-800 words, not captions.",
+    "If a controversial theme is supplied, include that many opinion pieces with a clear, professional stance — never abusive or illegal.",
+    "Honour each platform's cadence and tone from the brand profile.",
+    "Vary formats across the batch: tip, story, question, proof, offer, behind-the-scenes, article.",
     "aiImagePrompt must describe a specific photograph or graphic that matches the post, including lighting, setting and mood. No text-in-image.",
     "aiReasoning must cite the brand rule, competitor gap or seasonal hook that justified this post.",
     `Return exactly ${pieceCount} pieces and only the requested platforms.`,
@@ -100,7 +119,7 @@ export function buildMarketingPlanInstructions(pieceCount: number, seasonal: str
 }
 
 export function calculateMarketingPieceCount(periodDays: number, postsPerWeek: number): number {
-  return Math.min(40, Math.max(1, Math.ceil((periodDays / 7) * postsPerWeek)));
+  return Math.min(120, Math.max(1, Math.ceil((periodDays / 7) * postsPerWeek)));
 }
 
 export function isSafePublicHttpUrl(value: string): boolean {
@@ -205,6 +224,7 @@ export function buildMarketingAuditInstructions(seasonal: string[]): string {
     "Google ranking must be framed as inferred visibility and likely query match, not a live SERP position.",
     "Use seasonal UK context. Prioritise a short list of high-impact next moves.",
     "opportunities must be specific actions the owner can take this week.",
+    "Also infer a suggestedBrand: voice, audience, industry, objectives, key messages and hashtags from the public pages. Be specific, not generic.",
     ...seasonal,
   ].join(" ");
 }
@@ -231,7 +251,7 @@ export function parseApprovalVersion(value: unknown): number {
 export function parsePlatform(value: unknown): MarketingPlatform {
   const platform = String(value || "").toLowerCase();
   if (!SUPPORTED_MARKETING_PLATFORMS.includes(platform as MarketingPlatform)) {
-    throw new Error("Platform must be facebook, instagram, or linkedin.");
+    throw new Error("Platform must be facebook, instagram, linkedin, x, tiktok, youtube, or google.");
   }
   return platform as MarketingPlatform;
 }

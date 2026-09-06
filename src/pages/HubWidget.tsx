@@ -52,7 +52,10 @@ export default function HubWidget() {
   const openFull = kind === "notes" ? "/notes" : `/${kind}`;
 
   return (
-    <div className="min-h-[100dvh] bg-[linear-gradient(180deg,#1a2744_0%,#0f1923_55%,#142033_100%)] px-4 py-6 text-white">
+    <div
+      className="min-h-[100dvh] bg-[linear-gradient(180deg,#1a2744_0%,#0f1923_55%,#142033_100%)] px-4 py-6 text-white"
+      style={{ paddingTop: "max(1.5rem, calc(env(safe-area-inset-top, 0px) + 0.75rem))" }}
+    >
       <div className="mx-auto flex max-w-md items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Home screen widget</p>
         <div className="flex gap-3">

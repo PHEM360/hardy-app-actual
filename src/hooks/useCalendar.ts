@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import { pushCalendarEvent } from "@/lib/googleCalendarApi";
 import type { CalendarEvent, CalendarSettings } from "@/types/app";
 
 const DEFAULT_SETTINGS: CalendarSettings = { defaultView: "month" };
@@ -49,12 +50,16 @@ export function useCalendar(scopeUserId?: string) {
     if (!uid) return;
     const ref = await addDoc(collection(db, "calendar", uid, "events"), {
       ...event,
+      source: event.source || "local",
       createdBy: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    if (settings.google?.connected) {
+      void pushCalendarEvent(ref.id, uid).catch(() => undefined);
+    }
     return ref.id;
-  }, [uid]);
+  }, [settings.google?.connected, uid]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CalendarEvent>) => {
     if (!uid) return;
@@ -62,7 +67,10 @@ export function useCalendar(scopeUserId?: string) {
       ...data,
       updatedAt: serverTimestamp(),
     });
-  }, [uid]);
+    if (settings.google?.connected) {
+      void pushCalendarEvent(id, uid).catch(() => undefined);
+    }
+  }, [settings.google?.connected, uid]);
 
   const deleteEvent = useCallback(async (id: string) => {
     if (!uid) return;

@@ -22,6 +22,7 @@ export const PAGE_NOUNS: Record<string, string> = {
   inheritance: "IHT Planner",
   notes: "Notes",
   photos: "Photos",
+  email: "Email",
 };
 
 export interface ScopeOption {

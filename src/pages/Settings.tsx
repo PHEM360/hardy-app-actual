@@ -25,6 +25,7 @@ import { SECURITY_MODULES, type AppSecuritySettings, type SecurityRequirement } 
 import { ChangeVaultPinCard } from "@/components/passwords/ChangeVaultPinCard";
 import { OnePasswordConnectCard } from "@/components/passwords/OnePasswordConnectCard";
 import { toast } from "sonner";
+import { googleOAuthStatus, saveGoogleOAuthClient } from "@/lib/googleCalendarApi";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
 
@@ -122,6 +123,22 @@ const Settings = () => {
   const [geminiSaving, setGeminiSaving] = useState(false);
   const [geminiSaved, setGeminiSaved] = useState(false);
   useEffect(() => { if (savedApiKey) setGeminiKeyInput(savedApiKey); }, [savedApiKey]);
+
+  const isAdmin = role === "admin" || role === "superadmin";
+  const [googleClientIdInput, setGoogleClientIdInput] = useState("");
+  const [googleClientSecretInput, setGoogleClientSecretInput] = useState("");
+  const [googleOauthHint, setGoogleOauthHint] = useState("");
+  const [googleOauthReady, setGoogleOauthReady] = useState(false);
+  const [googleRedirects, setGoogleRedirects] = useState<string[]>([]);
+  const [googleOauthSaving, setGoogleOauthSaving] = useState(false);
+  useEffect(() => {
+    if (!isAdmin) return;
+    void googleOAuthStatus().then((status) => {
+      setGoogleOauthReady(status.configured);
+      setGoogleOauthHint(status.clientHint);
+      setGoogleRedirects(status.redirects);
+    });
+  }, [isAdmin]);
 
   // Linked Displays
   const { devices, loading: devicesLoading, renameDevice, forgetDevice } = useMyDevices();
@@ -594,6 +611,64 @@ const Settings = () => {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="mb-5">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3">
+            Family Google login
+          </h3>
+          <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4 shadow-soft">
+            <p className="text-sm text-muted-foreground">
+              Add one Google Web client here. Everyone then connects Photos, Drive, Gmail or Calendar with their own Google account in the app.
+            </p>
+            <p className="text-xs text-foreground">
+              {googleOauthReady
+                ? `Ready. Current client ends with ${googleOauthHint}.`
+                : "Not set yet — that is why Google says “OAuth client was not found”."}
+            </p>
+            <Input
+              placeholder="123-abc.apps.googleusercontent.com"
+              value={googleClientIdInput}
+              onChange={(event) => setGoogleClientIdInput(event.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Web client secret"
+              value={googleClientSecretInput}
+              onChange={(event) => setGoogleClientSecretInput(event.target.value)}
+              autoComplete="new-password"
+            />
+            <Button
+              disabled={googleOauthSaving}
+              onClick={async () => {
+                setGoogleOauthSaving(true);
+                try {
+                  await saveGoogleOAuthClient(googleClientIdInput, googleClientSecretInput);
+                  setGoogleOauthReady(true);
+                  setGoogleClientSecretInput("");
+                  toast.success("Family Google login saved");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not save that");
+                } finally {
+                  setGoogleOauthSaving(false);
+                }
+              }}
+            >
+              Save Google client
+            </Button>
+            {googleRedirects.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-muted-foreground">In Google Cloud, add these redirect URLs to that Web client</p>
+                <ul className="mt-1 space-y-0.5">
+                  {googleRedirects.map((url) => (
+                    <li key={url} className="break-all font-mono text-[10px] text-foreground">{url}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* AI Configuration */}
       <div className="mb-5">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-3 flex items-center gap-2">
@@ -608,7 +683,7 @@ const Settings = () => {
             <div>
               <p className="text-sm font-semibold text-card-foreground">OpenAI API Key</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Powers AI Health Assessment using GPT-4o Mini. Get a key at{" "}
+                Powers AI Health Assessment using GPT-4o Mini. Only an admin can save this shared key. Get one at{" "}
                 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">platform.openai.com</a>
               </p>
             </div>
@@ -633,10 +708,15 @@ const Settings = () => {
             <Button
               onClick={async () => {
                 setGeminiSaving(true);
-                await saveApiKey(geminiKeyInput.trim());
-                setGeminiSaving(false);
-                setGeminiSaved(true);
-                setTimeout(() => setGeminiSaved(false), 3000);
+                try {
+                  await saveApiKey(geminiKeyInput.trim());
+                  setGeminiSaved(true);
+                  setTimeout(() => setGeminiSaved(false), 3000);
+                } catch {
+                  toast.error("Only an admin can change the shared AI key");
+                } finally {
+                  setGeminiSaving(false);
+                }
               }}
               disabled={geminiSaving || !geminiKeyInput.trim()}
               className="w-full h-10 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm gap-2"

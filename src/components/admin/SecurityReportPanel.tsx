@@ -32,6 +32,7 @@ import type {
   SecurityReport,
   SecurityScanCadence,
 } from "@/types/securityReport";
+import { explainFinding, explainScore, scoreHeadline } from "@/lib/securityReportCopy";
 
 const ACCENT = "hsl(205,55%,45%)";
 
@@ -96,11 +97,12 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 }
 
 function FindingRow({ finding }: { finding: SecurityFinding }) {
+  const plain = explainFinding(finding);
   const [open, setOpen] = useState(finding.severity === "critical" || finding.severity === "high");
   const navigate = useNavigate();
   return (
     <div
-      className="rounded-2xl border border-border/50 bg-card shadow-card overflow-hidden"
+      className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
       style={{ borderLeftWidth: 4, borderLeftColor: ACCENT }}
     >
       <button
@@ -111,11 +113,11 @@ function FindingRow({ finding }: { finding: SecurityFinding }) {
         <span
           className={`mt-0.5 shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${SEVERITY_STYLE[finding.severity]}`}
         >
-          {finding.severity}
+          {plain.dealLabel}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{finding.title}</p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground capitalize">{finding.category.replace(/_/g, " ")}</p>
+          <p className="text-sm font-semibold text-foreground">{plain.summary}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{plain.impact}</p>
         </div>
         {open ? (
           <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -124,14 +126,21 @@ function FindingRow({ finding }: { finding: SecurityFinding }) {
         )}
       </button>
       {open && (
-        <div className="space-y-2 border-t border-border/40 bg-muted/20 px-3.5 py-3">
-          <p className="text-xs text-foreground/90">{finding.description}</p>
+        <div className="space-y-2.5 border-t border-border/40 bg-[color-mix(in_srgb,hsl(var(--card))_88%,hsl(var(--background)))] px-3.5 py-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">What this means</p>
+            <p className="mt-1 text-sm text-foreground">{plain.meaning}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">How big a deal</p>
+            <p className="mt-1 text-sm text-foreground">{plain.impact}</p>
+          </div>
           <div className="rounded-xl border border-border/50 bg-card p-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recommended action</p>
-            <p className="mt-1 text-xs text-foreground">{finding.recommendation}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">What to do</p>
+            <p className="mt-1 text-sm text-foreground">{plain.fix}</p>
           </div>
           {finding.evidence && (
-            <p className="text-[10px] text-muted-foreground">Evidence: {finding.evidence}</p>
+            <p className="text-[11px] text-muted-foreground">Detail: {finding.evidence}</p>
           )}
           {finding.actionPath && (
             <Button
@@ -140,7 +149,7 @@ function FindingRow({ finding }: { finding: SecurityFinding }) {
               className="h-8 rounded-xl text-xs"
               onClick={() => navigate(finding.actionPath!)}
             >
-              Open {finding.actionPath}
+              Open that page
               <ExternalLink className="ml-1 h-3.5 w-3.5" />
             </Button>
           )}
@@ -174,10 +183,15 @@ function ReportBody({ report }: { report: SecurityReport }) {
           <ScoreRing score={report.score} grade={report.grade} />
           <div className="min-w-0 flex-1 space-y-3">
             <div>
-              <h2 className="font-display text-lg font-bold text-foreground">Overall security posture</h2>
+              <h2 className="font-display text-lg font-bold text-foreground">
+                {report.scoreHeadline || scoreHeadline(report.score)}
+              </h2>
               <p className="text-xs text-muted-foreground">
                 Last scan {fmtWhen(report.createdAtIso)} · {report.triggeredBy}
                 {report.durationMs ? ` · ${(report.durationMs / 1000).toFixed(1)}s` : ""}
+              </p>
+              <p className="mt-2 text-sm text-foreground">
+                {report.scoreWhy || explainScore(report)}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -207,7 +221,7 @@ function ReportBody({ report }: { report: SecurityReport }) {
         <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
           <div className="mb-2 flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-primary" />
-            <h3 className="font-display text-sm font-bold">Top recommended actions</h3>
+            <h3 className="font-display text-sm font-bold">Do these first</h3>
           </div>
           <ol className="list-decimal space-y-1.5 pl-4">
             {report.recommendations.map((r) => (
@@ -221,11 +235,11 @@ function ReportBody({ report }: { report: SecurityReport }) {
 
       <div className="space-y-2">
         <h3 className="font-display text-sm font-bold">
-          Findings ({actionable.length})
+          What we found ({actionable.length})
         </h3>
         {actionable.length === 0 ? (
           <p className="rounded-2xl border border-border/50 bg-card p-4 text-sm text-muted-foreground shadow-card">
-            No actionable vulnerabilities in this scan.
+            Nothing here needs a fix. The notes below are strengths.
           </p>
         ) : (
           actionable.map((f) => <FindingRow key={f.id} finding={f} />)
@@ -235,7 +249,7 @@ function ReportBody({ report }: { report: SecurityReport }) {
       {info.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Strengths & notes ({info.length})
+            Looking good ({info.length})
           </h3>
           {info.map((f) => (
             <FindingRow key={f.id} finding={f} />
@@ -493,8 +507,8 @@ export default function SecurityReportPanel() {
 
       <p className="flex items-start gap-2 text-[11px] text-muted-foreground">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Scans combine live Auth/Firestore signals with known architecture checks. They are not a substitute for
-        penetration testing.
+        This is a family-app health check, not a hacker test. A score in the 60s or 70s usually means tidy-ups,
+        not that someone is in. Run a new scan after you deploy so the number matches the current code.
       </p>
     </div>
   );

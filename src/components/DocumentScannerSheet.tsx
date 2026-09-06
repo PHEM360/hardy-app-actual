@@ -472,10 +472,13 @@ export default function DocumentScannerSheet({
   return createPortal(
     <div className="fixed inset-0 z-[400] bg-black flex flex-col">
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm flex-shrink-0">
+      <div
+        className="flex flex-shrink-0 items-center justify-between bg-black/80 px-4 py-3 backdrop-blur-sm"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
+      >
         <button
           onClick={onCancel}
-          className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>

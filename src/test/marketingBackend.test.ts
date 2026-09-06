@@ -26,6 +26,12 @@ describe("marketing backend validation", () => {
       campaignId: undefined,
       focus: "Autumn launch",
       includeImages: true,
+      includeArticles: false,
+      controversialTheme: undefined,
+      textProvider: undefined,
+      textModel: undefined,
+      imageProvider: undefined,
+      imageModel: undefined,
     });
   });
 
@@ -52,12 +58,12 @@ describe("marketing backend validation", () => {
     expect(() => parseMarketingPlanInput({
       periodDays: 30,
       postsPerWeek: 3,
-      platforms: ["x"],
-    })).toThrow("facebook, instagram, or linkedin");
+      platforms: ["threads"],
+    })).toThrow("facebook, instagram, linkedin, x, tiktok, youtube, or google");
   });
 
-  it("caps generated plans at forty pieces", () => {
-    expect(calculateMarketingPieceCount(90, 14)).toBe(40);
+  it("caps generated plans at one hundred and twenty pieces", () => {
+    expect(calculateMarketingPieceCount(90, 14)).toBe(120);
     expect(calculateMarketingPieceCount(7, 3)).toBe(3);
   });
 

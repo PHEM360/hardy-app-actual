@@ -1,4 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
@@ -31,6 +33,13 @@ import { usePets } from "@/hooks/usePets";
 import { useTasks } from "@/hooks/useTasks";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useNotes } from "@/hooks/useNotes";
+import {
+  disconnectGoogleCalendar,
+  listGoogleCalendars,
+  saveGoogleCalendarSelection,
+  startGoogleCalendarConnect,
+  syncGoogleCalendar,
+} from "@/lib/googleCalendarApi";
 import type { CalendarEvent, CalendarEventCategory, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -114,6 +123,24 @@ const CalendarPage = () => {
   const { scopeUserId, permission: sharePermission, pageTitle, isOwnScope } = useSharedScope("calendar");
   const canEdit = sharePermission === "edit";
   const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar(scopeUserId ?? undefined);
+  const [params, setParams] = useSearchParams();
+  const [gcalBusy, setGcalBusy] = useState(false);
+  const [gcalList, setGcalList] = useState<Array<{ id: string; name: string; primary: boolean }>>([]);
+
+  useEffect(() => {
+    if (params.get("gcal") === "connected") toast.success("Google Calendar linked");
+    if (params.get("gcal") === "error") toast.error("That Google Calendar login did not finish");
+    if (!params.get("gcal")) return;
+    const next = new URLSearchParams(params);
+    next.delete("gcal");
+    next.delete("reason");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
+  useEffect(() => {
+    if (!settings.google?.connected || !isOwnScope) return;
+    void listGoogleCalendars(scopeUserId || undefined).then(setGcalList).catch(() => undefined);
+  }, [isOwnScope, scopeUserId, settings.google?.connected]);
   const { settings: hSettings } = useHouseholdSettings();
   const { items: householdItems } = useHouseholdItems();
   const { pets } = usePets();
@@ -548,8 +575,7 @@ const CalendarPage = () => {
             Today
           </button>
 
-          {/* Settings (admin only) */}
-          {isAdmin && (
+          {(isAdmin || isOwnScope) && (
             <button
               onClick={() => setSettingsOpen(true)}
               className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
@@ -570,6 +596,85 @@ const CalendarPage = () => {
           )}
         </div>
       </div>
+
+      {isOwnScope && canEdit && (
+        <div
+          className="mb-3 rounded-2xl border border-border/40 p-4 shadow-card"
+          style={{ background: "color-mix(in srgb, hsl(220,60%,55%) 10%, hsl(var(--card)))", borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)" }}
+        >
+          <p className="font-display text-base font-bold">Google Calendar</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {settings.google?.connected
+              ? `Linked as ${settings.google.email || "Google"}. Hardy Hub stays in sync with the calendars you pick.`
+              : "Connect your own Google Calendar in this app. Each person links their account — nothing is shared unless you share this page."}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {settings.google?.connected ? (
+              <>
+                <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                  setGcalBusy(true);
+                  try {
+                    const result = await syncGoogleCalendar(scopeUserId || undefined);
+                    toast.success(result.upserted ? `Synced ${result.upserted} event${result.upserted === 1 ? "" : "s"}` : "Already up to date");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not sync");
+                  } finally {
+                    setGcalBusy(false);
+                  }
+                }}>Sync now</Button>
+                <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
+                  setGcalBusy(true);
+                  try {
+                    await disconnectGoogleCalendar();
+                    toast.success("Google Calendar disconnected");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not disconnect");
+                  } finally {
+                    setGcalBusy(false);
+                  }
+                }}>Disconnect</Button>
+              </>
+            ) : (
+              <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                setGcalBusy(true);
+                try {
+                  window.location.href = await startGoogleCalendarConnect();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
+                  setGcalBusy(false);
+                }
+              }}>Connect Google Calendar</Button>
+            )}
+          </div>
+          {settings.google?.connected && gcalList.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground">Keep these in sync</p>
+              {gcalList.map((item) => {
+                const selected = (settings.google?.selectedCalendarIds || ["primary"]).includes(item.id) ||
+                  (item.primary && (settings.google?.selectedCalendarIds || []).includes("primary"));
+                return (
+                  <label key={item.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={async (checked) => {
+                        const current = settings.google?.selectedCalendarIds || ["primary"];
+                        const next = checked
+                          ? [...new Set([...current, item.id])]
+                          : current.filter((id) => id !== item.id && !(item.primary && id === "primary"));
+                        await saveGoogleCalendarSelection(next.length ? next : [item.id], item.primary ? item.id : settings.google?.calendarId, scopeUserId || undefined);
+                      }}
+                    />
+                    {item.name}{item.primary ? " (main)" : ""}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {settings.google?.lastSyncAt && (
+            <p className="mt-2 text-[11px] text-muted-foreground">Last synced {new Date(settings.google.lastSyncAt).toLocaleString("en-GB")}</p>
+          )}
+        </div>
+      )}
 
       {/* ── Month view ── */}
       {view === "month" && (
