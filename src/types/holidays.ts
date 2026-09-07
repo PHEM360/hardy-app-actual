@@ -37,7 +37,32 @@ export type HolidayWatchScheduleMode = "once" | "scheduled";
 
 export type HolidayWatchStatus = "active" | "paused" | "archived";
 
-export type HolidayAlertChannel = "push" | "email";
+export type HolidayAlertChannel = "push" | "email" | "sms";
+
+/** What this watch is tracking */
+export type HolidayWatchKind = "search" | "flight" | "hotel";
+
+export interface HolidaySpecificFlight {
+  airline?: string;
+  /** e.g. BA123 */
+  outboundFlightNumber?: string;
+  returnFlightNumber?: string;
+  origin: string;
+  destination: string;
+  outboundDate?: string;
+  returnDate?: string;
+  cabin?: HolidayFlightClass;
+}
+
+export interface HolidaySpecificHotel {
+  name: string;
+  location: string;
+  checkIn?: string;
+  checkOut?: string;
+  nights?: number;
+  boardBasis?: HolidayBoardBasis;
+  bookingUrl?: string;
+}
 
 export interface HolidayTravellers {
   adults: number;
@@ -72,6 +97,8 @@ export interface HolidayDestinationPrefs {
 export interface HolidayWatch {
   id?: string;
   title: string;
+  /** search = criteria-based holiday hunt; flight/hotel = watch a specific booking */
+  watchKind?: HolidayWatchKind;
   destination: string;
   destinationPrefs?: HolidayDestinationPrefs;
   departureAirports: string[];
@@ -95,6 +122,8 @@ export interface HolidayWatch {
   poolRequired: boolean;
   keyFeatures?: HolidayKeyFeatureId[];
   notes?: string;
+  specificFlight?: HolidaySpecificFlight | null;
+  specificHotel?: HolidaySpecificHotel | null;
   /** once = run a single search; scheduled = keep checking on an interval */
   scheduleMode?: HolidayWatchScheduleMode;
   searchIntervalAmount: number;
@@ -258,6 +287,11 @@ export const HOLIDAY_ACCENT = "hsl(172,48%,38%)";
 export const HOLIDAY_GRADIENT =
   "linear-gradient(135deg,hsl(172,52%,42%),hsl(188,48%,36%))";
 
+export const WATCH_KIND_LABELS: Record<HolidayWatchKind, string> = {
+  search: "Holiday search",
+  flight: "Specific flight",
+  hotel: "Specific hotel / resort",
+};
 export const DATE_MODE_LABELS: Record<HolidayDateMode, string> = {
   fixed: "Fixed dates",
   flexible_days: "Flexible (± days)",

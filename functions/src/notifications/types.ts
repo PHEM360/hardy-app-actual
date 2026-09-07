@@ -39,14 +39,36 @@ export interface NotificationPrefs {
     taskCompleted: EventPrefs;
     taskAdded: EventPrefs;
     dailyDigest: DailyDigestPrefs;
+    /** Calendar / household / pets / meds use per-item channels; these master switches gate delivery. */
+    calendar?: EventPrefs;
+    household?: EventPrefs;
+    pets?: EventPrefs;
+    medications?: EventPrefs;
   };
 }
+
+export type ScheduledNotifType =
+  | "taskDue"
+  | "taskCompleted"
+  | "taskAdded"
+  | "dailyDigest"
+  | "calendarEvent"
+  | "householdRenewal"
+  | "petTreatment"
+  | "medication";
 
 export interface ScheduledNotification {
   uid: string;
   taskId?: string;
+  eventId?: string;
+  itemId?: string;
+  petId?: string;
+  medId?: string;
+  householdId?: string;
+  /** Stable key for cancel/reschedule, e.g. calendar:{eventId}:{reminderId} */
+  sourceKey?: string;
   taskTitle?: string;
-  type: "taskDue" | "taskCompleted" | "taskAdded" | "dailyDigest";
+  type: ScheduledNotifType;
   reminderId?: string;
   scheduledFor: FirebaseFirestore.Timestamp;
   channels: NotifChannel[];
@@ -63,11 +85,15 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
     taskDue: {
       enabled: true,
       reminders: [
-        { id: "default-1", mode: "onDayAt", timeOfDay: "09:00", channels: ["email"] },
+        { id: "default-1", mode: "onDayAt", timeOfDay: "09:00", channels: ["email", "push"] },
       ],
     },
     taskCompleted: { enabled: false, channels: ["push"] },
     taskAdded: { enabled: false, channels: ["push"] },
     dailyDigest: { enabled: false, channels: ["email"], time: "09:00" },
+    calendar: { enabled: true, channels: ["push", "email", "sms"] },
+    household: { enabled: true, channels: ["push", "email", "sms"] },
+    pets: { enabled: true, channels: ["push", "email", "sms"] },
+    medications: { enabled: true, channels: ["push"] },
   },
 };

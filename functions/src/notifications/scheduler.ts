@@ -2,9 +2,16 @@ import * as admin from "firebase-admin";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions";
-import { NotificationPrefs, ScheduledNotification } from "./types";
 import { calculateReminderTime } from "./calculations";
 import { sendNotification } from "./sender";
+import {
+  activeChannels,
+  cancelScheduledForTask,
+  escapeHtml,
+  loadPrefs,
+  resolveAuthEmail,
+  sanitizeNotifTitle,
+} from "./helpers";
 
 export const postmarkKey = defineSecret("POSTMARK_API_KEY");
 export const twilioSid = defineSecret("TWILIO_ACCOUNT_SID");
@@ -23,23 +30,8 @@ export const onTaskWrite = onDocumentWritten(
     const after = event.data?.after?.data();
 
     const db = admin.firestore();
-
-    // Get user notification prefs
-    const prefsDoc = await db.doc(`notificationPrefs/${userId}`).get();
-    const prefs = prefsDoc.data() as NotificationPrefs | undefined;
-    if (!prefs) return;
-
-    // Resolve contact details
-    let authEmail = "";
-    try {
-      const userRecord = await admin.auth().getUser(userId);
-      authEmail = userRecord.email ?? "";
-    } catch (err) {
-      logger.debug("Unable to resolve auth email while scheduling notification", {
-        userId,
-        err,
-      });
-    }
+    const prefs = await loadPrefs(userId);
+    const authEmail = await resolveAuthEmail(userId);
 
     const emailTo = prefs.email.enabled ? (prefs.email.address || authEmail) : "";
     const smsTo = prefs.sms.enabled ? prefs.sms.phone : "";
@@ -55,19 +47,23 @@ export const onTaskWrite = onDocumentWritten(
       twilioSid: twilioSid.value(),
       twilioToken: twilioToken.value(),
       twilioFrom: twilioFrom.value(),
+      pushClickPath: "/tasks",
     };
 
     // ── Task created: send immediate "taskAdded" notification ──
     if (!before && after && prefs.events.taskAdded.enabled) {
-      const title = after.title ?? "New task";
-      const dueNote = after.dueDate ? ` Due: ${after.dueDate}.` : "";
-      await sendNotification({
-        ...sendBase,
-        channels: prefs.events.taskAdded.channels,
-        subject: `New task added: ${title}`,
-        textBody: `A new task has been added: "${title}".${dueNote}`,
-        htmlBody: `<p>A new task has been added: <strong>${title}</strong>.${dueNote}</p>`,
-      }).catch((e) => logger.error("taskAdded send failed", e));
+      const channels = activeChannels(prefs.events.taskAdded.channels, prefs);
+      if (channels.length) {
+        const title = sanitizeNotifTitle(after.title ?? "New task");
+        const dueNote = after.dueDate ? ` Due: ${after.dueDate}.` : "";
+        await sendNotification({
+          ...sendBase,
+          channels,
+          subject: `New task added: ${title}`,
+          textBody: `A new task has been added: "${title}".${dueNote}`,
+          htmlBody: `<p>A new task has been added: <strong>${escapeHtml(title)}</strong>.${escapeHtml(dueNote)}</p>`,
+        }).catch((e) => logger.error("taskAdded send failed", e));
+      }
     }
 
     // ── Status changed to done: send "taskCompleted" notification ──
@@ -77,14 +73,17 @@ export const onTaskWrite = onDocumentWritten(
       after.status === "done" &&
       prefs.events.taskCompleted.enabled
     ) {
-      const title = after.title ?? "Task";
-      await sendNotification({
-        ...sendBase,
-        channels: prefs.events.taskCompleted.channels,
-        subject: `Task completed: ${title}`,
-        textBody: `Great work! "${title}" has been marked as done.`,
-        htmlBody: `<p>Great work! <strong>${title}</strong> has been marked as done. ✅</p>`,
-      }).catch((e) => logger.error("taskCompleted send failed", e));
+      const channels = activeChannels(prefs.events.taskCompleted.channels, prefs);
+      if (channels.length) {
+        const title = sanitizeNotifTitle(after.title ?? "Task");
+        await sendNotification({
+          ...sendBase,
+          channels,
+          subject: `Task completed: ${title}`,
+          textBody: `Great work! "${title}" has been marked as done.`,
+          htmlBody: `<p>Great work! <strong>${escapeHtml(title)}</strong> has been marked as done.</p>`,
+        }).catch((e) => logger.error("taskCompleted send failed", e));
+      }
     }
 
     // ── Task deleted: cancel any pending scheduled notifications ──
@@ -102,51 +101,26 @@ export const onTaskWrite = onDocumentWritten(
       if (after.dueDate) {
         const now = new Date();
         for (const reminder of prefs.events.taskDue.reminders) {
-          const hasActiveChannel = reminder.channels.some(
-            (c) =>
-              (c === "email" && prefs.email.enabled) ||
-              (c === "sms" && prefs.sms.enabled) ||
-              (c === "push" && prefs.push.enabled)
-          );
-          if (!hasActiveChannel) continue;
+          const channels = activeChannels(reminder.channels, prefs);
+          if (!channels.length) continue;
 
           const scheduledDate = calculateReminderTime(after.dueDate, reminder);
           if (!scheduledDate || scheduledDate <= now) continue;
 
-          const notif: Omit<ScheduledNotification, "scheduledFor" | "createdAt"> & {
-            scheduledFor: admin.firestore.Timestamp;
-            createdAt: admin.firestore.FieldValue;
-          } = {
+          await db.collection("scheduledNotifications").add({
             uid: userId,
             taskId,
-            taskTitle: after.title ?? "Task",
+            taskTitle: sanitizeNotifTitle(after.title ?? "Task"),
             type: "taskDue",
             reminderId: reminder.id,
+            sourceKey: `task:${taskId}:${reminder.id}`,
             scheduledFor: admin.firestore.Timestamp.fromDate(scheduledDate),
-            channels: reminder.channels,
+            channels,
             sent: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          };
-          await db.collection("scheduledNotifications").add(notif);
+          });
         }
       }
     }
   }
 );
-
-async function cancelScheduledForTask(
-  db: admin.firestore.Firestore,
-  uid: string,
-  taskId: string
-): Promise<void> {
-  const snap = await db
-    .collection("scheduledNotifications")
-    .where("uid", "==", uid)
-    .where("taskId", "==", taskId)
-    .where("sent", "==", false)
-    .get();
-  if (snap.empty) return;
-  const batch = db.batch();
-  snap.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
-}

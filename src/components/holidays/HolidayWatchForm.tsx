@@ -20,6 +20,7 @@ import {
   FLIGHT_CLASS_LABELS,
   HOLIDAY_BRAND_OPTIONS,
   MONTH_LABELS,
+  WATCH_KIND_LABELS,
   type HolidayAlertChannel,
   type HolidayBoardBasis,
   type HolidayBrandPref,
@@ -29,6 +30,7 @@ import {
   type HolidaySearchUnit,
   type HolidaySettings,
   type HolidayWatch,
+  type HolidayWatchKind,
 } from "@/types/holidays";
 import {
   DESTINATION_REGIONS,
@@ -60,6 +62,7 @@ export type HolidayWatchFormValue = Omit<
 function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
   return {
     title: "",
+    watchKind: "search",
     destination: "",
     destinationPrefs: {
       filterMode: "country",
@@ -92,6 +95,8 @@ function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
     poolRequired: false,
     keyFeatures: [],
     notes: "",
+    specificFlight: null,
+    specificHotel: null,
     scheduleMode: "scheduled",
     searchIntervalAmount: settings.defaultSearchIntervalAmount,
     searchIntervalUnit: settings.defaultSearchIntervalUnit,
@@ -103,6 +108,7 @@ function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
 function fromWatch(w: HolidayWatch): HolidayWatchFormValue {
   return {
     title: w.title,
+    watchKind: w.watchKind || "search",
     destination: w.destination,
     destinationPrefs: w.destinationPrefs || {
       filterMode: "other",
@@ -139,6 +145,8 @@ function fromWatch(w: HolidayWatch): HolidayWatchFormValue {
     poolRequired: !!w.poolRequired,
     keyFeatures: w.keyFeatures || [],
     notes: w.notes || "",
+    specificFlight: w.specificFlight || null,
+    specificHotel: w.specificHotel || null,
     scheduleMode: w.scheduleMode === "once" ? "once" : "scheduled",
     searchIntervalAmount: w.searchIntervalAmount || 1,
     searchIntervalUnit: w.searchIntervalUnit || "days",
@@ -307,11 +315,11 @@ export function HolidayWatchForm({
 
   const mode = form.dates.mode;
   const scheduleMode = form.scheduleMode === "once" ? "once" : "scheduled";
-  const valid =
+  const kind: HolidayWatchKind = form.watchKind || "search";
+
+  const searchValid =
     form.destination.trim().length > 0 &&
     form.departureAirports.length > 0 &&
-    (scheduleMode === "once" || form.searchIntervalAmount >= 1) &&
-    form.alertChannels.length > 0 &&
     (form.includeAllBrands || form.brands.length > 0) &&
     (mode === "no_preference" ||
       mode === "months"
@@ -319,22 +327,84 @@ export function HolidayWatchForm({
         : Boolean(form.dates.startDate) &&
           (Boolean(form.dates.endDate) || (form.dates.nights || 0) > 0));
 
+  const flightValid =
+    Boolean(form.specificFlight?.origin?.trim()) &&
+    Boolean(form.specificFlight?.destination?.trim()) &&
+    Boolean(form.specificFlight?.outboundDate);
+
+  const hotelValid =
+    Boolean(form.specificHotel?.name?.trim()) &&
+    Boolean(form.specificHotel?.location?.trim()) &&
+    (Boolean(form.specificHotel?.checkIn) || Boolean(form.specificHotel?.nights));
+
+  const valid =
+    (scheduleMode === "once" || form.searchIntervalAmount >= 1) &&
+    form.alertChannels.length > 0 &&
+    (kind === "search" ? searchValid : kind === "flight" ? flightValid : hotelValid);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) return;
+    const flight = form.specificFlight;
+    const hotel = form.specificHotel;
     const title =
       form.title.trim() ||
-      `${form.destination.trim()}${form.dates.startDate ? ` · ${form.dates.startDate}` : ""}`;
+      (kind === "flight"
+        ? `${flight?.airline || "Flight"} ${flight?.outboundFlightNumber || ""} ${flight?.origin}→${flight?.destination}`.trim()
+        : kind === "hotel"
+          ? `${hotel?.name || "Hotel"} · ${hotel?.location || ""}`.trim()
+          : `${form.destination.trim()}${form.dates.startDate ? ` · ${form.dates.startDate}` : ""}`);
+
+    const destination =
+      kind === "flight"
+        ? (flight?.destination || form.destination).trim()
+        : kind === "hotel"
+          ? (hotel?.location || form.destination).trim()
+          : form.destination.trim();
+
     await onSave({
       ...form,
       title,
-      destination: form.destination.trim(),
+      watchKind: kind,
+      destination,
       scheduleMode,
       searchIntervalAmount: Math.max(1, form.searchIntervalAmount || 1),
+      departureAirports:
+        kind === "flight" && flight?.origin
+          ? [flight.origin.toUpperCase()]
+          : form.departureAirports,
+      dates:
+        kind === "flight"
+          ? {
+              mode: "fixed",
+              startDate: flight?.outboundDate || "",
+              endDate: flight?.returnDate || "",
+              nights: form.dates.nights,
+              flexDays: 0,
+              months: [],
+              year: new Date().getFullYear(),
+            }
+          : kind === "hotel"
+            ? {
+                mode: "fixed",
+                startDate: hotel?.checkIn || "",
+                endDate: hotel?.checkOut || "",
+                nights: hotel?.nights ?? form.dates.nights,
+                flexDays: 0,
+                months: [],
+                year: new Date().getFullYear(),
+              }
+            : form.dates,
+      flightClass: kind === "flight" ? flight?.cabin || form.flightClass : form.flightClass,
+      boardBasis: kind === "hotel" ? hotel?.boardBasis || form.boardBasis : form.boardBasis,
+      includeAllBrands: kind === "search" ? form.includeAllBrands : true,
+      brands: kind === "search" ? form.brands : [],
+      specificFlight: kind === "flight" ? flight : null,
+      specificHotel: kind === "hotel" ? hotel : null,
       destinationPrefs: {
-        filterMode,
-        destinationId: form.destinationPrefs?.destinationId || "",
-        destination: form.destination.trim(),
+        filterMode: kind === "search" ? filterMode : "other",
+        destinationId: kind === "search" ? form.destinationPrefs?.destinationId || "" : "",
+        destination,
         region: form.destinationPrefs?.region,
         country: form.destinationPrefs?.country,
       },
@@ -357,18 +427,280 @@ export function HolidayWatchForm({
     });
   };
 
+  const patchFlight = (p: Partial<NonNullable<HolidayWatchFormValue["specificFlight"]>>) =>
+    setForm((f) => ({
+      ...f,
+      specificFlight: {
+        origin: "",
+        destination: "",
+        ...(f.specificFlight || {}),
+        ...p,
+      },
+    }));
+
+  const patchHotel = (p: Partial<NonNullable<HolidayWatchFormValue["specificHotel"]>>) =>
+    setForm((f) => ({
+      ...f,
+      specificHotel: {
+        name: "",
+        location: "",
+        ...(f.specificHotel || {}),
+        ...p,
+      },
+    }));
+
+  const setKind = (next: HolidayWatchKind) => {
+    patch({
+      watchKind: next,
+      specificFlight:
+        next === "flight"
+          ? form.specificFlight || {
+              origin: form.departureAirports[0] || "LHR",
+              destination: "",
+              outboundDate: form.dates.startDate || "",
+              returnDate: form.dates.endDate || "",
+              cabin: form.flightClass,
+            }
+          : form.specificFlight,
+      specificHotel:
+        next === "hotel"
+          ? form.specificHotel || {
+              name: "",
+              location: form.destination || "",
+              checkIn: form.dates.startDate || "",
+              checkOut: form.dates.endDate || "",
+              nights: form.dates.nights || 7,
+              boardBasis: form.boardBasis,
+            }
+          : form.specificHotel,
+    });
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <Section title="Trip">
-        <Field label="Trip name">
+      <Section title="What to watch">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(["search", "flight", "hotel"] as HolidayWatchKind[]).map((k) => {
+            const active = kind === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={`rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition ${
+                  active
+                    ? "border-primary/40 bg-gradient-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-card text-foreground hover:border-primary/30"
+                }`}
+              >
+                {WATCH_KIND_LABELS[k]}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {kind === "search"
+            ? "Search packages and deals matching your criteria."
+            : kind === "flight"
+              ? "Track a specific flight or route and get alerted on price changes."
+              : "Track a specific hotel or resort and keep watching the price."}
+        </p>
+      </Section>
+
+      <Section title={kind === "search" ? "Trip" : kind === "flight" ? "Flight" : "Hotel / resort"}>
+        <Field label="Name">
           <Input
             value={form.title}
             onChange={(e) => patch({ title: e.target.value })}
-            placeholder="e.g. Crete half-term"
+            placeholder={
+              kind === "flight"
+                ? "e.g. BA morning to NYC"
+                : kind === "hotel"
+                  ? "e.g. Atlantis half-term"
+                  : "e.g. Crete half-term"
+            }
             className="h-9 rounded-xl"
           />
         </Field>
 
+        {kind === "flight" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Airline">
+                <Input
+                  value={form.specificFlight?.airline || ""}
+                  onChange={(e) => patchFlight({ airline: e.target.value })}
+                  placeholder="British Airways"
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+              <Field label="Cabin">
+                <Select
+                  value={form.specificFlight?.cabin || form.flightClass}
+                  onValueChange={(v) => patchFlight({ cabin: v as HolidayFlightClass })}
+                >
+                  <SelectTrigger className="h-9 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(FLIGHT_CLASS_LABELS) as HolidayFlightClass[]).map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {FLIGHT_CLASS_LABELS[c]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Outbound flight no.">
+                <Input
+                  value={form.specificFlight?.outboundFlightNumber || ""}
+                  onChange={(e) => patchFlight({ outboundFlightNumber: e.target.value.toUpperCase() })}
+                  placeholder="BA117"
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+              <Field label="Return flight no.">
+                <Input
+                  value={form.specificFlight?.returnFlightNumber || ""}
+                  onChange={(e) => patchFlight({ returnFlightNumber: e.target.value.toUpperCase() })}
+                  placeholder="BA178"
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="From *">
+                <Select
+                  value={form.specificFlight?.origin || ""}
+                  onValueChange={(v) => patchFlight({ origin: v })}
+                >
+                  <SelectTrigger className="h-9 rounded-xl">
+                    <SelectValue placeholder="Airport" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UK_AIRPORTS.map((a) => (
+                      <SelectItem key={a.code} value={a.code}>
+                        {a.code} — {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="To *">
+                <Input
+                  value={form.specificFlight?.destination || ""}
+                  onChange={(e) => patchFlight({ destination: e.target.value.toUpperCase() })}
+                  placeholder="JFK / MIA / AYT"
+                  className="h-9 rounded-xl"
+                  required
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Outbound date *">
+                <Input
+                  type="date"
+                  value={form.specificFlight?.outboundDate || ""}
+                  onChange={(e) => patchFlight({ outboundDate: e.target.value })}
+                  className="h-9 rounded-xl"
+                  required
+                />
+              </Field>
+              <Field label="Return date">
+                <Input
+                  type="date"
+                  value={form.specificFlight?.returnDate || ""}
+                  onChange={(e) => patchFlight({ returnDate: e.target.value })}
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+            </div>
+          </>
+        )}
+
+        {kind === "hotel" && (
+          <>
+            <Field label="Hotel / resort name *">
+              <Input
+                value={form.specificHotel?.name || ""}
+                onChange={(e) => patchHotel({ name: e.target.value })}
+                placeholder="e.g. Iberostar Selection Anthelia"
+                className="h-9 rounded-xl"
+                required
+              />
+            </Field>
+            <Field label="Location *">
+              <Input
+                value={form.specificHotel?.location || ""}
+                onChange={(e) => patchHotel({ location: e.target.value })}
+                placeholder="City, island or resort area"
+                className="h-9 rounded-xl"
+                required
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Check-in">
+                <Input
+                  type="date"
+                  value={form.specificHotel?.checkIn || ""}
+                  onChange={(e) => patchHotel({ checkIn: e.target.value })}
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+              <Field label="Check-out">
+                <Input
+                  type="date"
+                  value={form.specificHotel?.checkOut || ""}
+                  onChange={(e) => patchHotel({ checkOut: e.target.value })}
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Nights">
+                <Input
+                  type="number"
+                  min={1}
+                  value={form.specificHotel?.nights ?? ""}
+                  onChange={(e) =>
+                    patchHotel({ nights: e.target.value === "" ? undefined : Number(e.target.value) })
+                  }
+                  className="h-9 rounded-xl"
+                />
+              </Field>
+              <Field label="Board">
+                <Select
+                  value={form.specificHotel?.boardBasis || "no_preference"}
+                  onValueChange={(v) => patchHotel({ boardBasis: v as HolidayBoardBasis })}
+                >
+                  <SelectTrigger className="h-9 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(BOARD_BASIS_LABELS) as HolidayBoardBasis[]).map((b) => (
+                      <SelectItem key={b} value={b}>
+                        {BOARD_BASIS_LABELS[b]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <Field label="Booking link (optional)" hint="Paste a Booking.com / Expedia / hotel page to watch">
+              <Input
+                value={form.specificHotel?.bookingUrl || ""}
+                onChange={(e) => patchHotel({ bookingUrl: e.target.value })}
+                placeholder="https://…"
+                className="h-9 rounded-xl"
+              />
+            </Field>
+          </>
+        )}
+
+        {kind === "search" && (
+          <>
         <Field label="Destination filter">
           <Select
             value={filterMode}
@@ -476,8 +808,12 @@ export function HolidayWatchForm({
             </Select>
           </Field>
         )}
+          </>
+        )}
       </Section>
 
+      {kind === "search" && (
+        <>
       <Section title="Fly from">
         <Field
           label="UK airports"
@@ -765,6 +1101,47 @@ export function HolidayWatchForm({
           />
         </Field>
       </Section>
+        </>
+      )}
+
+      {kind !== "search" && (
+        <Section title="Price alerts">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Max budget £">
+              <Input
+                type="number"
+                min={0}
+                placeholder="Optional"
+                value={form.maxBudgetGbp ?? ""}
+                onChange={(e) =>
+                  patch({ maxBudgetGbp: e.target.value === "" ? null : Number(e.target.value) })
+                }
+                className="h-9 rounded-xl"
+              />
+            </Field>
+            <Field label="Alert under £">
+              <Input
+                type="number"
+                min={0}
+                placeholder="Target"
+                value={form.targetPriceGbp ?? ""}
+                onChange={(e) =>
+                  patch({ targetPriceGbp: e.target.value === "" ? null : Number(e.target.value) })
+                }
+                className="h-9 rounded-xl"
+              />
+            </Field>
+          </div>
+          <Field label="Notes">
+            <Textarea
+              value={form.notes || ""}
+              onChange={(e) => patch({ notes: e.target.value })}
+              placeholder="Seat preference, room type…"
+              className="min-h-[72px] rounded-xl"
+            />
+          </Field>
+        </Section>
+      )}
 
       <Section title="Watch schedule">
         <Field label="How often">
@@ -836,6 +1213,10 @@ export function HolidayWatchForm({
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={form.alertChannels.includes("email")} onCheckedChange={(v) => toggleAlert("email", v === true)} />
               Email
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={form.alertChannels.includes("sms")} onCheckedChange={(v) => toggleAlert("sms", v === true)} />
+              SMS
             </label>
           </div>
         </Field>

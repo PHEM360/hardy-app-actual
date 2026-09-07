@@ -1196,7 +1196,7 @@ const CalendarPage = () => {
               )}
               {form.notifications.some((n) => n.via === "email" || n.via === "sms") && (
                 <p className="text-[10px] text-muted-foreground">
-                  ✉️ Email & SMS reminders require backend configuration — stored for future use.
+                  Email & SMS use the channels you enable in Notification Settings.
                 </p>
               )}
             </div>

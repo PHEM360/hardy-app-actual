@@ -35,6 +35,7 @@ import {
   FLIGHT_CLASS_LABELS,
   HOLIDAY_ACCENT,
   MONTH_LABELS,
+  WATCH_KIND_LABELS,
   type HolidayPriceFinding,
   type HolidaySearchOption,
   type HolidaySettings,
@@ -129,6 +130,11 @@ function WatchCard({
             <h3 className="font-display text-base font-bold text-foreground truncate">
               {watch.title || watch.destination}
             </h3>
+            {watch.watchKind && watch.watchKind !== "search" && (
+              <Badge variant="outline" className="text-[10px] border-primary/30 bg-card">
+                {WATCH_KIND_LABELS[watch.watchKind]}
+              </Badge>
+            )}
             <Badge
               variant="outline"
               className={`text-[10px] ${
@@ -140,7 +146,17 @@ function WatchCard({
               {watch.scheduleMode === "once" ? "one-off" : watch.status}
             </Badge>
           </div>
-          <p className="mt-0.5 text-sm text-foreground/80">{watch.destination}</p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            {watch.watchKind === "flight" && watch.specificFlight
+              ? `${watch.specificFlight.origin} → ${watch.specificFlight.destination}${
+                  watch.specificFlight.outboundFlightNumber
+                    ? ` · ${watch.specificFlight.outboundFlightNumber}`
+                    : ""
+                }`
+              : watch.watchKind === "hotel" && watch.specificHotel
+                ? `${watch.specificHotel.name} · ${watch.specificHotel.location}`
+                : watch.destination}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">{dateSummary(watch)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-lg bg-card/80 px-2 py-0.5 text-[10px] font-medium text-foreground">
@@ -518,10 +534,10 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                     <HolidayOptionsPanel
                       watch={
                         selected.id && mockData?.pricesByWatchId?.[selected.id]
-                          ? {
+                          ? ({
                               ...selected,
-                              lastOptions: mockData.pricesByWatchId[selected.id],
-                            }
+                              lastOptions: mockData.pricesByWatchId[selected.id] as HolidaySearchOption[],
+                            } as HolidayWatch)
                           : selected
                       }
                       scopeUserId={scopeUserId}
@@ -648,20 +664,22 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent
           aria-describedby={undefined}
-          className="w-[calc(100%-1.5rem)] max-w-lg overflow-y-auto sm:mx-4"
+          className="flex max-h-[min(90dvh,calc(100dvh-1.5rem))] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:mx-4"
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0 border-b border-border/60 px-6 pb-3 pt-14">
             <DialogTitle className="font-display">
               {editing ? "Edit holiday watch" : "New holiday watch"}
             </DialogTitle>
           </DialogHeader>
-          <HolidayWatchForm
-            settings={settings}
-            initial={editing}
-            saving={saving}
-            onCancel={() => setFormOpen(false)}
-            onSave={handleSave}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4 [-webkit-overflow-scrolling:touch] touch-pan-y">
+            <HolidayWatchForm
+              settings={settings}
+              initial={editing}
+              saving={saving}
+              onCancel={() => setFormOpen(false)}
+              onSave={handleSave}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </FeaturePageShell>

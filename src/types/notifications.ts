@@ -36,6 +36,10 @@ export interface NotificationPrefs {
     taskCompleted: EventPrefs;
     taskAdded: EventPrefs;
     dailyDigest: DailyDigestPrefs;
+    calendar?: EventPrefs;
+    household?: EventPrefs;
+    pets?: EventPrefs;
+    medications?: EventPrefs;
   };
 }
 
@@ -47,11 +51,15 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
     taskDue: {
       enabled: true,
       reminders: [
-        { id: "default-1", mode: "onDayAt", timeOfDay: "09:00", channels: ["email"] },
+        { id: "default-1", mode: "onDayAt", timeOfDay: "09:00", channels: ["email", "push"] },
       ],
     },
     taskCompleted: { enabled: false, channels: ["push"] },
     taskAdded: { enabled: false, channels: ["push"] },
     dailyDigest: { enabled: false, channels: ["email"], time: "09:00" },
+    calendar: { enabled: true, channels: ["push", "email", "sms"] },
+    household: { enabled: true, channels: ["push", "email", "sms"] },
+    pets: { enabled: true, channels: ["push", "email", "sms"] },
+    medications: { enabled: true, channels: ["push"] },
   },
 };

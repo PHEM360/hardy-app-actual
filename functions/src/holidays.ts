@@ -9,6 +9,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { postmarkKey, twilioSid, twilioToken, twilioFrom } from "./notifications/scheduler";
 import { sendNotification } from "./notifications/sender";
+import { escapeHtml, sanitizeNotifTitle } from "./notifications/helpers";
 import type { NotificationPrefs } from "./notifications/types";
 import {
   assembleSearchOptions,
@@ -50,10 +51,11 @@ type FlightBooking =
   | "book_separately"
   | "no_preference";
 type SearchUnit = "hours" | "days" | "weeks" | "months";
-type AlertChannel = "push" | "email";
+type AlertChannel = "push" | "email" | "sms";
 
 interface HolidayWatchDoc {
   title: string;
+  watchKind?: "search" | "flight" | "hotel";
   destination: string;
   destinationPrefs?: {
     filterMode?: string;
@@ -85,6 +87,25 @@ interface HolidayWatchDoc {
   includeTransfers?: boolean;
   keyFeatures?: string[];
   notes?: string;
+  specificFlight?: {
+    airline?: string;
+    outboundFlightNumber?: string;
+    returnFlightNumber?: string;
+    origin?: string;
+    destination?: string;
+    outboundDate?: string;
+    returnDate?: string;
+    cabin?: string;
+  } | null;
+  specificHotel?: {
+    name?: string;
+    location?: string;
+    checkIn?: string;
+    checkOut?: string;
+    nights?: number;
+    boardBasis?: string;
+    bookingUrl?: string;
+  } | null;
   searchIntervalAmount?: number;
   searchIntervalUnit?: SearchUnit;
   scheduleMode?: "once" | "scheduled";
@@ -182,8 +203,133 @@ function dateHint(watch: HolidayWatchDoc): { out?: string; back?: string; months
   return {};
 }
 
+function buildSpecificFlightLinks(watch: HolidayWatchDoc): SourceLink[] {
+  const f = watch.specificFlight!;
+  const cleanCode = (raw: string, fallback = "LHR") => {
+    const code = String(raw || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8);
+    return code || fallback;
+  };
+  const origin = cleanCode(f.origin || departureCode(watch) || "LHR");
+  const dest = cleanCode(f.destination || watch.destination || "ANY", "ANY");
+  const out = /^\d{4}-\d{2}-\d{2}$/.test(String(f.outboundDate || ""))
+    ? String(f.outboundDate)
+    : dateHint(watch).out || "";
+  const back = /^\d{4}-\d{2}-\d{2}$/.test(String(f.returnDate || ""))
+    ? String(f.returnDate)
+    : dateHint(watch).back || "";
+  const adults = Math.min(9, Math.max(1, watch.travellers?.adults ?? 2));
+  const children = Math.min(9, Math.max(0, watch.travellers?.children ?? 0));
+  const flightQ = [f.airline, f.outboundFlightNumber, `${origin}-${dest}`]
+    .filter(Boolean)
+    .map((s) => String(s).slice(0, 40))
+    .join(" ");
+  const links: SourceLink[] = [
+    {
+      name: "Skyscanner",
+      url: `https://www.skyscanner.net/transport/flights/${origin.toLowerCase()}/${dest.toLowerCase()}/${
+        out && back ? `${out}/${back}/` : out ? `${out}/` : ""
+      }?adultsv2=${adults}&childrenv2=${children}&cabinclass=economy&rtn=${back ? 1 : 0}&ref=home`,
+      bookingMode: "flights_hotel_separate",
+    },
+    {
+      name: "Kayak",
+      url: `https://www.kayak.co.uk/flights/${origin}-${dest}/${out || "flexible"}${
+        back ? `/${back}` : ""
+      }?sort=bestflight_a`,
+      bookingMode: "flights_hotel_separate",
+    },
+    {
+      name: "British Airways Flights",
+      url: `https://www.britishairways.com/travel/search/flights/public/en_gb?departurePoint=${encode(
+        origin,
+      )}&destinationPoint=${encode(dest)}${out ? `&outboundDate=${encode(out)}` : ""}`,
+      bookingMode: "flights_hotel_separate",
+    },
+    {
+      name: "Expedia",
+      url: `https://www.expedia.co.uk/Flights-Search?trip=${back ? "roundtrip" : "oneway"}&leg1=from:${encode(
+        origin,
+      )},to:${encode(dest)}${out ? `,departure:${encode(out)}` : ""}&passengers=adults:${adults},children:${children}`,
+      bookingMode: "flights_hotel_separate",
+    },
+  ];
+  if (flightQ) {
+    links.push({
+      name: "Google Flights (via Kayak)",
+      url: `https://www.kayak.co.uk/flights?q=${encode(flightQ)}`,
+      bookingMode: "flights_hotel_separate",
+    });
+  }
+  return links.filter((l) => isAllowlistedUrl(l.url)).slice(0, 8);
+}
+
+function buildSpecificHotelLinks(watch: HolidayWatchDoc): SourceLink[] {
+  const h = watch.specificHotel!;
+  const name = h.name || "hotel";
+  const location = h.location || watch.destination || "";
+  const q = encode(`${name} ${location}`.trim());
+  const adults = watch.travellers?.adults ?? 2;
+  const children = watch.travellers?.children ?? 0;
+  const checkIn = h.checkIn || dateHint(watch).out || "";
+  const checkOut =
+    h.checkOut ||
+    dateHint(watch).back ||
+    (checkIn && h.nights
+      ? new Date(Date.parse(checkIn) + h.nights * 86400000).toISOString().slice(0, 10)
+      : "");
+
+  const links: SourceLink[] = [
+    {
+      name: "Booking.com",
+      url: `https://www.booking.com/searchresults.html?ss=${q}&group_adults=${adults}&group_children=${children}${
+        checkIn ? `&checkin=${encode(checkIn)}` : ""
+      }${checkOut ? `&checkout=${encode(checkOut)}` : ""}`,
+      bookingMode: "hotel_only",
+    },
+    {
+      name: "Expedia",
+      url: `https://www.expedia.co.uk/Hotel-Search?destination=${q}&adults=${adults}&children=${children}${
+        checkIn ? `&startDate=${encode(checkIn)}` : ""
+      }${checkOut ? `&endDate=${encode(checkOut)}` : ""}`,
+      bookingMode: "hotel_only",
+    },
+    {
+      name: "Lastminute.com",
+      url: `https://www.lastminute.com/hotels?destination=${q}`,
+      bookingMode: "hotel_only",
+    },
+    {
+      name: "Secret Escapes",
+      url: `https://www.secretescapes.com/?q=${q}`,
+      bookingMode: "hotel_only",
+    },
+  ];
+
+  if (h.bookingUrl && isAllowlistedUrl(h.bookingUrl)) {
+    links.unshift({
+      name: "Your booking link",
+      url: h.bookingUrl,
+      bookingMode: "hotel_only",
+    });
+  }
+
+  return links.filter((l) => isAllowlistedUrl(l.url)).slice(0, 8);
+}
+
 /** Build deep-link search URLs for allowlisted operators, tagged by booking mode. */
 export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
+  const kind = watch.watchKind || "search";
+
+  if (kind === "flight" && watch.specificFlight) {
+    return buildSpecificFlightLinks(watch);
+  }
+  if (kind === "hotel" && watch.specificHotel) {
+    return buildSpecificHotelLinks(watch);
+  }
+
   const dest = watch.destination || "holiday";
   const from = departureCode(watch);
   const nights = nightsFromWatch(watch);
@@ -472,7 +618,7 @@ async function alertPriceDrop(
   secrets: { postmark: string; twilioSid: string; twilioToken: string; twilioFrom: string },
 ) {
   const channels = (watch.alertChannels || ["push", "email"]).filter(
-    (c): c is AlertChannel => c === "push" || c === "email",
+    (c): c is AlertChannel => c === "push" || c === "email" || c === "sms",
   );
   if (!channels.length) return;
 
@@ -491,22 +637,24 @@ async function alertPriceDrop(
       ? `Down from £${previousBest.toLocaleString("en-GB")} to £${finding.priceGbp.toLocaleString("en-GB")}`
       : `Best price found: £${finding.priceGbp.toLocaleString("en-GB")}`;
 
-  const subject = `Holiday deal: ${watch.title || watch.destination}`;
-  const textBody = `${dropText} via ${finding.sourceName}.\n${finding.sourceUrl}`;
-  const htmlBody = `<p><strong>${dropText}</strong> via ${finding.sourceName}.</p><p><a href="${finding.sourceUrl}">Open offer</a></p>`;
+  const subject = sanitizeNotifTitle(`Holiday deal: ${watch.title || watch.destination}`);
+  const safeSource = sanitizeNotifTitle(finding.sourceName || "travel site", 80);
+  const safeUrl = isAllowlistedUrl(finding.sourceUrl) ? finding.sourceUrl : "https://hardyapp.co.uk/holidays";
+  const textBody = `${dropText} via ${safeSource}.\n${safeUrl}`;
+  const htmlBody = `<p><strong>${escapeHtml(dropText)}</strong> via ${escapeHtml(safeSource)}.</p><p><a href="${escapeHtml(safeUrl)}">Open offer</a></p>`;
 
   await sendNotification({
     uid,
     channels,
     emailEnabled: prefs?.email?.enabled ?? true,
     emailTo: prefs?.email?.address || authEmail,
-    smsEnabled: false,
-    smsTo: "",
+    smsEnabled: prefs?.sms?.enabled ?? false,
+    smsTo: prefs?.sms?.phone || "",
     pushEnabled: prefs?.push?.enabled ?? true,
     subject,
     textBody,
     htmlBody,
-    actionUrl: finding.sourceUrl,
+    actionUrl: safeUrl,
     actionLabel: "View deal",
     footerNote: "Hardy Hub Holidays price watch",
     pushClickPath: "/holidays",

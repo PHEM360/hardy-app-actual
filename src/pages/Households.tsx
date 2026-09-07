@@ -1444,11 +1444,37 @@ function AddEditDialog({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm">
                 {form.pushEnabled ? <Bell className="w-4 h-4 text-primary" /> : <BellOff className="w-4 h-4 text-muted-foreground" />}
-                <span>Push notification</span>
-                {permission === "denied" && <span className="text-xs text-destructive">(blocked)</span>}
+                <span>Reminders</span>
+                {permission === "denied" && <span className="text-xs text-destructive">(push blocked)</span>}
               </div>
               <Switch checked={!!form.pushEnabled} onCheckedChange={handlePushToggle} disabled={permission === "denied"} />
             </div>
+            {form.pushEnabled && (
+              <div className="flex flex-wrap gap-1.5">
+                {(["push", "email", "sms"] as const).map((via) => {
+                  const active = reminder.via === via;
+                  return (
+                    <button
+                      key={via}
+                      type="button"
+                      onClick={() => setReminder({ ...reminder, via })}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium capitalize transition ${
+                        active
+                          ? "border-primary/40 bg-primary/10 text-foreground"
+                          : "border-border bg-card text-muted-foreground"
+                      }`}
+                    >
+                      {via}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {form.pushEnabled && (
+              <p className="text-[11px] text-muted-foreground">
+                Delivery uses the channels enabled in Notification Settings.
+              </p>
+            )}
           </div>
         </div>
 

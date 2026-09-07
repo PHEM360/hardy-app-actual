@@ -73,6 +73,13 @@ async function requireSuperAdmin(uid: string, authEmail?: string) {
 // ── Notification functions ──
 export { onTaskWrite } from "./notifications/scheduler";
 export { processScheduledNotifications, scheduleDailyDigests } from "./notifications/processor";
+export {
+	onCalendarEventWrite,
+	onHouseholdItemWrite,
+	onPetWrite,
+	onMedicationWrite,
+	scheduleMedicationTopUp,
+} from "./notifications/featureSchedulers";
 
 export {
 	getTrueLayerStatus,

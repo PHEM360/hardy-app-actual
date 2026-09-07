@@ -613,7 +613,7 @@ export interface HouseholdMember {
 export interface HouseholdReminder {
   amount: number;              // e.g. 7
   unit: "hours" | "days" | "weeks" | "months";
-  via: "push";
+  via: "push" | "email" | "sms";
 }
 
 export type CostPeriod = "days" | "weeks" | "months" | "years" | "one-off" | "other";

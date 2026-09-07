@@ -578,9 +578,9 @@ function researchHotel(
 
   const researchNotes = [
     `Compared flight haul band for ${region} and ${nightsFromWatch(watch)}-night stay length`,
-    `Cross-checked hotel quality gates (stars / TripAdvisor mins) against watch filters`,
-    `Built cost model for package vs separate booking paths`,
-    `Aggregated independent review themes (not single cherry-picked quotes)`,
+    "Cross-checked hotel quality gates (stars / TripAdvisor mins) against watch filters",
+    "Built cost model for package vs separate booking paths",
+    "Aggregated independent review themes (not single cherry-picked quotes)",
   ];
 
   return { tripadvisorScore, reviewSummaries, independentSummary, researchNotes };
