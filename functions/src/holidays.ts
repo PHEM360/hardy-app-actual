@@ -9,6 +9,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { postmarkKey, twilioSid, twilioToken, twilioFrom } from "./notifications/scheduler";
 import { sendNotification } from "./notifications/sender";
+import { escapeHtml, sanitizeNotifTitle } from "./notifications/helpers";
 import type { NotificationPrefs } from "./notifications/types";
 import {
   assembleSearchOptions,
@@ -204,13 +205,27 @@ function dateHint(watch: HolidayWatchDoc): { out?: string; back?: string; months
 
 function buildSpecificFlightLinks(watch: HolidayWatchDoc): SourceLink[] {
   const f = watch.specificFlight!;
-  const origin = (f.origin || departureCode(watch) || "LHR").toUpperCase();
-  const dest = (f.destination || watch.destination || "anywhere").toUpperCase();
-  const out = f.outboundDate || dateHint(watch).out || "";
-  const back = f.returnDate || dateHint(watch).back || "";
-  const adults = watch.travellers?.adults ?? 2;
-  const children = watch.travellers?.children ?? 0;
-  const flightQ = [f.airline, f.outboundFlightNumber, `${origin}-${dest}`].filter(Boolean).join(" ");
+  const cleanCode = (raw: string, fallback = "LHR") => {
+    const code = String(raw || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8);
+    return code || fallback;
+  };
+  const origin = cleanCode(f.origin || departureCode(watch) || "LHR");
+  const dest = cleanCode(f.destination || watch.destination || "ANY", "ANY");
+  const out = /^\d{4}-\d{2}-\d{2}$/.test(String(f.outboundDate || ""))
+    ? String(f.outboundDate)
+    : dateHint(watch).out || "";
+  const back = /^\d{4}-\d{2}-\d{2}$/.test(String(f.returnDate || ""))
+    ? String(f.returnDate)
+    : dateHint(watch).back || "";
+  const adults = Math.min(9, Math.max(1, watch.travellers?.adults ?? 2));
+  const children = Math.min(9, Math.max(0, watch.travellers?.children ?? 0));
+  const flightQ = [f.airline, f.outboundFlightNumber, `${origin}-${dest}`]
+    .filter(Boolean)
+    .map((s) => String(s).slice(0, 40))
+    .join(" ");
   const links: SourceLink[] = [
     {
       name: "Skyscanner",
@@ -622,9 +637,11 @@ async function alertPriceDrop(
       ? `Down from £${previousBest.toLocaleString("en-GB")} to £${finding.priceGbp.toLocaleString("en-GB")}`
       : `Best price found: £${finding.priceGbp.toLocaleString("en-GB")}`;
 
-  const subject = `Holiday deal: ${watch.title || watch.destination}`;
-  const textBody = `${dropText} via ${finding.sourceName}.\n${finding.sourceUrl}`;
-  const htmlBody = `<p><strong>${dropText}</strong> via ${finding.sourceName}.</p><p><a href="${finding.sourceUrl}">Open offer</a></p>`;
+  const subject = sanitizeNotifTitle(`Holiday deal: ${watch.title || watch.destination}`);
+  const safeSource = sanitizeNotifTitle(finding.sourceName || "travel site", 80);
+  const safeUrl = isAllowlistedUrl(finding.sourceUrl) ? finding.sourceUrl : "https://hardyapp.co.uk/holidays";
+  const textBody = `${dropText} via ${safeSource}.\n${safeUrl}`;
+  const htmlBody = `<p><strong>${escapeHtml(dropText)}</strong> via ${escapeHtml(safeSource)}.</p><p><a href="${escapeHtml(safeUrl)}">Open offer</a></p>`;
 
   await sendNotification({
     uid,
@@ -637,7 +654,7 @@ async function alertPriceDrop(
     subject,
     textBody,
     htmlBody,
-    actionUrl: finding.sourceUrl,
+    actionUrl: safeUrl,
     actionLabel: "View deal",
     footerNote: "Hardy Hub Holidays price watch",
     pushClickPath: "/holidays",

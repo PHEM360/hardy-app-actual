@@ -37,6 +37,29 @@ export function activeChannels(
   );
 }
 
+/** Escape text before embedding in HTML email bodies. */
+export function escapeHtml(input: string): string {
+  return String(input)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Strip control chars and clamp length for notification titles/subjects. */
+export function sanitizeNotifTitle(input: string, max = 160): string {
+  return Array.from(String(input || ""))
+    .map((ch) => {
+      const code = ch.charCodeAt(0);
+      return code < 32 || code === 127 ? " " : ch;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
 export async function cancelBySourceKey(uid: string, sourceKeyPrefix: string): Promise<void> {
   const db = admin.firestore();
   // Prefixed cancel: match exact keys we wrote, or query by sourceKey equality one-by-one

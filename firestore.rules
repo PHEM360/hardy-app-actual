@@ -367,12 +367,23 @@ service cloud.firestore {
         canViewPage(resource.data.ownerId, "pets")
       );
       allow create: if isAuthenticated();
+      // Non-owners may update care fields, but only the owner (or admin) may
+      // change ownership / the sharedWith fan-out list used for notifications.
       allow update: if isAuthenticated() && (
-        !('ownerId' in resource.data) ||
-        resource.data.ownerId == "" ||
-        request.auth.uid == resource.data.ownerId ||
-        sharedWithHasUid(resource.data) ||
-        canEditPage(resource.data.ownerId, "pets")
+        (
+          !('ownerId' in resource.data) ||
+          resource.data.ownerId == "" ||
+          request.auth.uid == resource.data.ownerId ||
+          sharedWithHasUid(resource.data) ||
+          canEditPage(resource.data.ownerId, "pets")
+        ) && (
+          isAdmin() ||
+          request.auth.uid == resource.data.ownerId ||
+          (
+            request.resource.data.ownerId == resource.data.ownerId &&
+            request.resource.data.sharedWith == resource.data.sharedWith
+          )
+        )
       );
       allow delete: if isAuthenticated() && (
         !('ownerId' in resource.data) ||

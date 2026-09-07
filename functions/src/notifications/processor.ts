@@ -4,8 +4,10 @@ import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { ScheduledNotification } from "./types";
 import { sendNotification } from "./sender";
-import { loadPrefs, resolveAuthEmail } from "./helpers";
+import { loadPrefs, resolveAuthEmail, escapeHtml, sanitizeNotifTitle } from "./helpers";
 import { londonLocalToUtc, londonTodayString } from "./calculations";
+
+const APP_ORIGIN = "https://hardyapp.co.uk";
 
 const postmarkKey = defineSecret("POSTMARK_API_KEY");
 const twilioSid = defineSecret("TWILIO_ACCOUNT_SID");
@@ -40,7 +42,7 @@ export const processScheduledNotifications = onSchedule(
         const emailTo = prefs.email.enabled ? (prefs.email.address || authEmail) : "";
         const smsTo = prefs.sms.enabled ? prefs.sms.phone : "";
 
-        const title = notif.taskTitle ?? "Reminder";
+        const title = sanitizeNotifTitle(notif.taskTitle ?? "Reminder");
         const subject = buildSubject(notif.type, title);
         const text = buildText(notif.type, title);
         const clickPath = clickPathFor(notif.type);
@@ -55,9 +57,9 @@ export const processScheduledNotifications = onSchedule(
           pushEnabled: prefs.push.enabled,
           subject,
           textBody: text,
-          htmlBody: `<p>${text}</p>`,
+          htmlBody: `<p>${escapeHtml(text)}</p>`,
           pushClickPath: clickPath,
-          actionUrl: clickPath ? `https://hardyhub.co.uk${clickPath}` : undefined,
+          actionUrl: clickPath ? `${APP_ORIGIN}${clickPath}` : undefined,
           actionLabel: clickPath ? "Open in Hardy Hub" : undefined,
           postmarkKey: postmarkKey.value(),
           twilioSid: twilioSid.value(),

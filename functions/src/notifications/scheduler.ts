@@ -7,8 +7,10 @@ import { sendNotification } from "./sender";
 import {
   activeChannels,
   cancelScheduledForTask,
+  escapeHtml,
   loadPrefs,
   resolveAuthEmail,
+  sanitizeNotifTitle,
 } from "./helpers";
 
 export const postmarkKey = defineSecret("POSTMARK_API_KEY");
@@ -52,14 +54,14 @@ export const onTaskWrite = onDocumentWritten(
     if (!before && after && prefs.events.taskAdded.enabled) {
       const channels = activeChannels(prefs.events.taskAdded.channels, prefs);
       if (channels.length) {
-        const title = after.title ?? "New task";
+        const title = sanitizeNotifTitle(after.title ?? "New task");
         const dueNote = after.dueDate ? ` Due: ${after.dueDate}.` : "";
         await sendNotification({
           ...sendBase,
           channels,
           subject: `New task added: ${title}`,
           textBody: `A new task has been added: "${title}".${dueNote}`,
-          htmlBody: `<p>A new task has been added: <strong>${title}</strong>.${dueNote}</p>`,
+          htmlBody: `<p>A new task has been added: <strong>${escapeHtml(title)}</strong>.${escapeHtml(dueNote)}</p>`,
         }).catch((e) => logger.error("taskAdded send failed", e));
       }
     }
@@ -73,13 +75,13 @@ export const onTaskWrite = onDocumentWritten(
     ) {
       const channels = activeChannels(prefs.events.taskCompleted.channels, prefs);
       if (channels.length) {
-        const title = after.title ?? "Task";
+        const title = sanitizeNotifTitle(after.title ?? "Task");
         await sendNotification({
           ...sendBase,
           channels,
           subject: `Task completed: ${title}`,
           textBody: `Great work! "${title}" has been marked as done.`,
-          htmlBody: `<p>Great work! <strong>${title}</strong> has been marked as done.</p>`,
+          htmlBody: `<p>Great work! <strong>${escapeHtml(title)}</strong> has been marked as done.</p>`,
         }).catch((e) => logger.error("taskCompleted send failed", e));
       }
     }
@@ -108,7 +110,7 @@ export const onTaskWrite = onDocumentWritten(
           await db.collection("scheduledNotifications").add({
             uid: userId,
             taskId,
-            taskTitle: after.title ?? "Task",
+            taskTitle: sanitizeNotifTitle(after.title ?? "Task"),
             type: "taskDue",
             reminderId: reminder.id,
             sourceKey: `task:${taskId}:${reminder.id}`,

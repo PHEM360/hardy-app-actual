@@ -17,6 +17,7 @@ import {
   cancelBySourceKey,
   enqueueNotification,
   loadPrefs,
+  sanitizeNotifTitle,
 } from "./helpers";
 import type { NotifChannel } from "./types";
 
@@ -38,6 +39,22 @@ type PetNotif = { id?: string; daysBeforeDue?: number };
 function asChannels(via: string | undefined): NotifChannel[] {
   if (via === "email" || via === "sms" || via === "push") return [via];
   return ["push"];
+}
+
+/** Only keep UIDs that look like Firebase Auth UIDs and exist as user profiles. */
+async function filterValidRecipientUids(uids: string[]): Promise<string[]> {
+  const unique = [...new Set(uids.map((u) => String(u || "").trim()).filter(Boolean))];
+  const out: string[] = [];
+  for (const uid of unique) {
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(uid)) continue;
+    try {
+      const snap = await admin.firestore().doc(`users/${uid}`).get();
+      if (snap.exists) out.push(uid);
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
 }
 
 // ── Calendar events ───────────────────────────────────────────────────────────
@@ -72,7 +89,7 @@ export const onCalendarEventWrite = onDocumentWritten(
         await enqueueNotification({
           uid: userId,
           type: "calendarEvent",
-          title: String(after.title || "Calendar event"),
+          title: sanitizeNotifTitle(String(after.title || "Calendar event")),
           channels,
           scheduledFor: when,
           sourceKey: `${prefix}${n.id || `${n.via}-${amount}-${unit}`}`,
@@ -166,7 +183,7 @@ export const onHouseholdItemWrite = onDocumentWritten(
           await enqueueNotification({
             uid,
             type: "householdRenewal",
-            title: `${after.type || "Item"} (${after.provider || "household"})`,
+            title: sanitizeNotifTitle(`${after.type || "Item"} (${after.provider || "household"})`),
             channels,
             scheduledFor: when,
             sourceKey: `household:${householdId}:${itemId}:${r.via || "push"}-${amount}-${unit}`,
@@ -201,10 +218,12 @@ export const onPetWrite = onDocumentWritten(
     }
     if (!after) return;
 
-    const recipients = new Set<string>([
+    const recipients = await filterValidRecipientUids([
       String(after.ownerId || ""),
       ...((after.sharedWith || []) as string[]),
-    ].filter(Boolean));
+    ]);
+    // Defense in depth: never notify UIDs that are not in sharedWith/owner after validation.
+    if (!recipients.length) return;
 
     const history = (after.treatmentHistory || []) as {
       type?: string;
@@ -223,6 +242,7 @@ export const onPetWrite = onDocumentWritten(
       if (!latest?.dateDue) continue;
 
       const due = String(latest.dateDue).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
       const [y, m, d] = due.split("-").map(Number);
 
       for (const uid of recipients) {
@@ -233,7 +253,7 @@ export const onPetWrite = onDocumentWritten(
         if (!channels.length) continue;
 
         for (const n of notifications) {
-          const days = Number(n.daysBeforeDue) || 0;
+          const days = Math.max(0, Math.min(365, Number(n.daysBeforeDue) || 0));
           const base = new Date(Date.UTC(y, m - 1, d));
           base.setUTCDate(base.getUTCDate() - days);
           const when = londonLocalToUtc(
@@ -243,15 +263,18 @@ export const onPetWrite = onDocumentWritten(
             9,
             0,
           );
+          const petName = sanitizeNotifTitle(String(after.name || "Pet"), 80);
           const label =
             treatmentType === "flea"
-              ? `Flea treatment for ${after.name}`
-              : `Wormer for ${after.name}`;
+              ? `Flea treatment for ${petName}`
+              : `Wormer for ${petName}`;
           try {
             await enqueueNotification({
               uid,
               type: "petTreatment",
-              title: `${label} due in ${days} day${days === 1 ? "" : "s"} (${due})`,
+              title: sanitizeNotifTitle(
+                `${label} due in ${days} day${days === 1 ? "" : "s"} (${due})`,
+              ),
               channels,
               scheduledFor: when,
               sourceKey: `pet:${petId}:${treatmentType}:${n.id || days}`,
@@ -301,13 +324,17 @@ export const onMedicationWrite = onDocumentWritten(
       const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
       for (const time of times) {
+        if (!/^\d{1,2}:\d{2}$/.test(String(time))) continue;
         const [h, mi] = String(time).split(":").map(Number);
+        if (h < 0 || h > 23 || mi < 0 || mi > 59) continue;
         const when = londonLocalToUtc(y, m, d, h || 0, mi || 0);
         try {
           await enqueueNotification({
             uid: userId,
             type: "medication",
-            title: `${after.name} — ${after.dose || ""} ${after.unit || ""}`.trim(),
+            title: sanitizeNotifTitle(
+              `${after.name} — ${after.dose || ""} ${after.unit || ""}`.trim(),
+            ),
             channels,
             scheduledFor: when,
             sourceKey: `${prefix}${dateStr}:${time}`,
@@ -357,13 +384,17 @@ export const scheduleMedicationTopUp = onSchedule(
           const d = day.getUTCDate();
           const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           for (const time of times) {
+            if (!/^\d{1,2}:\d{2}$/.test(String(time))) continue;
             const [h, mi] = String(time).split(":").map(Number);
+            if (h < 0 || h > 23 || mi < 0 || mi > 59) continue;
             const when = londonLocalToUtc(y, m, d, h || 0, mi || 0);
             try {
               await enqueueNotification({
                 uid,
                 type: "medication",
-                title: `${med.name} — ${med.dose || ""} ${med.unit || ""}`.trim(),
+                title: sanitizeNotifTitle(
+                  `${med.name} — ${med.dose || ""} ${med.unit || ""}`.trim(),
+                ),
                 channels,
                 scheduledFor: when,
                 sourceKey: `med:${medDoc.id}:${dateStr}:${time}`,
