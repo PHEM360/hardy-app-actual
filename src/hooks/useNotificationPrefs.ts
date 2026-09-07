@@ -17,7 +17,17 @@ export function useNotificationPrefs() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          setPrefs({ ...DEFAULT_NOTIF_PREFS, ...(snap.data() as NotificationPrefs) });
+          const data = snap.data() as NotificationPrefs;
+          setPrefs({
+            ...DEFAULT_NOTIF_PREFS,
+            ...data,
+            email: { ...DEFAULT_NOTIF_PREFS.email, ...(data.email || {}) },
+            sms: { ...DEFAULT_NOTIF_PREFS.sms, ...(data.sms || {}) },
+            push: { ...DEFAULT_NOTIF_PREFS.push, ...(data.push || {}) },
+            events: { ...DEFAULT_NOTIF_PREFS.events, ...(data.events || {}) },
+          });
+        } else {
+          setPrefs(DEFAULT_NOTIF_PREFS);
         }
         setLoading(false);
       },

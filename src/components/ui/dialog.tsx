@@ -121,7 +121,7 @@ const DialogContent = React.forwardRef<
           onOpenAutoFocus?.(event);
         }}
         className={cn(
-          "fixed left-[50%] top-[max(1rem,calc(env(safe-area-inset-top,0px)+0.75rem))] z-[300] grid w-[calc(100%-1.5rem)] max-w-lg translate-x-[-50%] gap-4 overflow-y-auto overscroll-contain border border-border bg-card p-6 pt-14 shadow-elevated duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-2xl rounded-2xl",
+          "fixed left-[50%] top-[max(1rem,calc(env(safe-area-inset-top,0px)+0.75rem))] z-[300] flex w-[calc(100%-1.5rem)] max-h-[min(90dvh,calc(100dvh-1.5rem))] max-w-lg translate-x-[-50%] flex-col gap-4 overflow-y-auto overscroll-contain border border-border bg-card p-6 pt-14 shadow-elevated duration-200 touch-pan-y data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-2xl rounded-2xl [-webkit-overflow-scrolling:touch]",
           className,
         )}
         {...props}

@@ -77,7 +77,13 @@ export async function sendNotification(p: NotifPayload): Promise<void> {
     sends.push(sendFcmToUser(p.uid, p.subject, p.textBody, p.pushClickPath));
   }
 
-  await Promise.all(sends);
+  // Don't let one channel failure (e.g. bad phone number) block the others.
+  const results = await Promise.allSettled(sends);
+  for (const r of results) {
+    if (r.status === "rejected") {
+      logger.error("Notification channel send failed", { uid: p.uid, err: r.reason });
+    }
+  }
 }
 
 /** Sends the one shared transactional template — the single place every Postmark send in this app goes through. */

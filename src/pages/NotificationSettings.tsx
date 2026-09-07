@@ -269,8 +269,14 @@ export default function NotificationSettings() {
                 Notification channels
               </h3>
               <p className="text-xs text-muted-foreground -mt-1">
-                Enable the channels you want to use. These must be switched on before they appear as options per event.
+                Enable the channels you want to use. Turn at least one on, then save — otherwise no alerts can be sent.
               </p>
+
+              {!draft.email.enabled && !draft.sms.enabled && !draft.push.enabled && (
+                <div className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+                  All channels are off. Enable Email, SMS, or Push below so reminders can reach you.
+                </div>
+              )}
 
               {/* Email */}
               <div className="space-y-2">
@@ -466,6 +472,38 @@ export default function NotificationSettings() {
               prefs={draft.events.taskAdded}
               channelAvailability={channelAvailability}
               onChange={(ev) => upd({ events: { ...draft.events, taskAdded: ev } })}
+            />
+
+            <EventCard
+              title="Calendar events"
+              description="Reminders from calendar event notification settings (email, SMS, and push)."
+              prefs={draft.events.calendar ?? { enabled: true, channels: ["push", "email", "sms"] }}
+              channelAvailability={channelAvailability}
+              onChange={(ev) => upd({ events: { ...draft.events, calendar: ev } })}
+            />
+
+            <EventCard
+              title="Household renewals"
+              description="Insurance and contract renewal reminders from Households."
+              prefs={draft.events.household ?? { enabled: true, channels: ["push", "email", "sms"] }}
+              channelAvailability={channelAvailability}
+              onChange={(ev) => upd({ events: { ...draft.events, household: ev } })}
+            />
+
+            <EventCard
+              title="Pet treatments"
+              description="Flea and wormer due-date reminders from Pets."
+              prefs={draft.events.pets ?? { enabled: true, channels: ["push", "email", "sms"] }}
+              channelAvailability={channelAvailability}
+              onChange={(ev) => upd({ events: { ...draft.events, pets: ev } })}
+            />
+
+            <EventCard
+              title="Medications"
+              description="Dose-time reminders from Health."
+              prefs={draft.events.medications ?? { enabled: true, channels: ["push"] }}
+              channelAvailability={channelAvailability}
+              onChange={(ev) => upd({ events: { ...draft.events, medications: ev } })}
             />
 
             {/* Daily digest */}

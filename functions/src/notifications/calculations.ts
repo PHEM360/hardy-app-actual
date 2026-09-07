@@ -9,6 +9,8 @@ const MS: Record<string, number> = {
   years: 365 * 86_400_000,
 };
 
+const LONDON = "Europe/London";
+
 /** Parse "HH:MM" into { h, m } */
 function parseTime(t: string): { h: number; m: number } {
   const [h, m] = (t || "09:00").split(":").map(Number);
@@ -16,8 +18,60 @@ function parseTime(t: string): { h: number; m: number } {
 }
 
 /**
+ * Convert a civil date+time in Europe/London to a real UTC Date.
+ * Firebase Functions run in UTC, so `new Date(y, m, d, h, m)` would be wrong.
+ */
+export function londonLocalToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): Date {
+  const desiredAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  // Iteratively correct for the London offset at that instant (handles GMT/BST).
+  let utc = desiredAsUtc;
+  for (let i = 0; i < 3; i++) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: LONDON,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(utc));
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+    const shownAsUtc = Date.UTC(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      get("hour"),
+      get("minute"),
+      get("second"),
+    );
+    utc += desiredAsUtc - shownAsUtc;
+  }
+  return new Date(utc);
+}
+
+/** Parse an ISO datetime (or date) into a UTC Date, treating bare dates as London midnight. */
+export function parseEventStart(iso: string): Date | null {
+  if (!iso) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return londonLocalToUtc(y, m, d, 9, 0);
+  }
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed);
+}
+
+/**
  * Given a task dueDate string ("YYYY-MM-DD") and a reminder config,
  * returns the Date at which to send the notification, or null if invalid.
+ * Times are interpreted in Europe/London.
  */
 export function calculateReminderTime(dueDate: string, reminder: ReminderConfig): Date | null {
   const [year, month, day] = dueDate.split("-").map(Number);
@@ -26,7 +80,7 @@ export function calculateReminderTime(dueDate: string, reminder: ReminderConfig)
   const { h, m } = parseTime(reminder.timeOfDay);
 
   if (reminder.mode === "onDayAt") {
-    return new Date(year, month - 1, day, h, m, 0, 0);
+    return londonLocalToUtc(year, month, day, h, m);
   }
 
   if (reminder.mode === "relative") {
@@ -35,24 +89,58 @@ export function calculateReminderTime(dueDate: string, reminder: ReminderConfig)
     const dir = reminder.relativeDirection ?? "before";
     const sign = dir === "before" ? -1 : 1;
 
-    // Base point: due date at timeOfDay
-    const base = new Date(year, month - 1, day, h, m, 0, 0);
+    const base = londonLocalToUtc(year, month, day, h, m);
 
     if (unit === "minutes" || unit === "hours") {
-      // Offset from the base time directly
       return new Date(base.getTime() + sign * amount * (MS[unit] ?? MS.days));
     }
 
-    // For days/weeks/months/years: shift the whole date, then set timeOfDay
-    const shifted = new Date(base.getTime() + sign * amount * (MS[unit] ?? MS.days));
-    shifted.setHours(h, m, 0, 0);
-    return shifted;
+    const shiftedMs = base.getTime() + sign * amount * (MS[unit] ?? MS.days);
+    const shifted = new Date(shiftedMs);
+    // Re-apply time-of-day in London on the shifted calendar day
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: LONDON,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(shifted);
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+    return londonLocalToUtc(get("year"), get("month"), get("day"), h, m);
   }
 
   return null;
 }
 
-/** Format a Date to a friendly UK-style string */
+/** Subtract relative amount from an absolute event start (for calendar reminders). */
+export function calculateOffsetBefore(
+  start: Date,
+  amount: number,
+  unit: "minutes" | "hours" | "days",
+): Date {
+  const ms =
+    unit === "minutes" ? amount * MS.minutes : unit === "hours" ? amount * MS.hours : amount * MS.days;
+  return new Date(start.getTime() - ms);
+}
+
+/** Format a Date to a friendly UK-style string in London time */
 export function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return d.toLocaleDateString("en-GB", {
+    timeZone: LONDON,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Today's YYYY-MM-DD in Europe/London */
+export function londonTodayString(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: LONDON,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
