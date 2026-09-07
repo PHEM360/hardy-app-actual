@@ -585,7 +585,16 @@ export function DisplayPageRenderer({
   const theme = displayTheme(page);
 
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: theme.background }}>
+    <div
+      className="absolute overflow-hidden"
+      style={{
+        backgroundColor: theme.background,
+        top: "env(safe-area-inset-top, 0px)",
+        right: "env(safe-area-inset-right, 0px)",
+        bottom: "env(safe-area-inset-bottom, 0px)",
+        left: "env(safe-area-inset-left, 0px)",
+      }}
+    >
       <DisplayBackdrop kind={page.backdrop} accent={theme.accent} />
       {page.widgets.map((widget) => {
         const accent = widget.accentColor || theme.accent;

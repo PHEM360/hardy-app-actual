@@ -134,7 +134,10 @@ export function SceneRotator({
             <ChevronRight className="h-[6vmin] w-[6vmin] min-h-8 min-w-8 drop-shadow-[0_1px_8px_rgba(0,0,0,.55)]" />
           </button>
 
-          <div className="absolute bottom-[1.6vmin] left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-[0.8vmin]">
+          <div
+            className="absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-[0.8vmin]"
+            style={{ bottom: "max(1.6vmin, calc(env(safe-area-inset-bottom, 0px) + 0.6rem))" }}
+          >
             <p
               className="rounded-full bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
               style={{ fontSize: "clamp(10px, 1.4vmin, 14px)" }}

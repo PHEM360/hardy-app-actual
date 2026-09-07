@@ -4,6 +4,8 @@ import { Palette, Check, PanelTop, Sun, Loader2, CalendarDays } from "lucide-rea
 import { motion } from "framer-motion";
 import { APP_THEMES, LOADER_PRESETS, hexToHsl, hslToHex } from "@/lib/appThemes";
 import { HEADER_COLOR_PRESETS } from "@/lib/chromeScenes";
+import { HEADER_PICTURE_MODES, normalizeHeaderPictureMode } from "@/lib/headerBackdrop";
+import { usePhotos } from "@/hooks/usePhotos";
 import { useAppearance } from "@/hooks/useAppearance";
 import { ChromeScenePicker, ChromeColorPicker } from "@/components/chrome/ChromeScenePicker";
 import { Switch } from "@/components/ui/switch";
@@ -71,10 +73,13 @@ const Themes = () => {
   const {
     themeId, customPrimary, customAccent, loader,
     theme, setThemeId, setCustomColors, setLoaderPreset, setLoaderEmojis,
-    headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime, setHeaderDisplay,
+    headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    headerPictureMode, headerAlbumIds, headerCelebrateToday, setHeaderDisplay,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader, setGreetingDisplay,
   } = useAppearance();
 
+  const photos = usePhotos();
+  const pictureMode = normalizeHeaderPictureMode(headerPictureMode, !!headerPhotoUrl);
   const lifestyle = APP_THEMES.filter((t) => t.kind === "lifestyle");
   const colours = APP_THEMES.filter((t) => t.kind === "colour");
   const primaryHex = hslToHex(customPrimary || theme.light.primary);
@@ -226,10 +231,66 @@ const Themes = () => {
                 <ChromeColorPicker value={headerColor} presets={HEADER_COLOR_PRESETS} onChange={(value) => setHeaderDisplay({ headerColor: value })} />
               </div>
               <div>
-                <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Picture</h2>
-                <PhotoField value={headerPhotoUrl} onChange={(url) => setHeaderDisplay({ headerPhotoUrl: url })} />
+                <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Pictures behind your name</h2>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {HEADER_PICTURE_MODES.map((option) => {
+                    const selected = pictureMode === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setHeaderDisplay({ headerPictureMode: option.id })}
+                        className={`rounded-xl border p-3 text-left transition-all ${
+                          selected ? "border-primary bg-primary/10 shadow-card" : "border-border/50 bg-card hover:bg-muted"
+                        }`}
+                      >
+                        <p className="text-[11px] font-semibold">{option.label}</p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{option.hint}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {pictureMode === "one" && (
+                  <div className="mt-3">
+                    <PhotoField value={headerPhotoUrl} onChange={(url) => setHeaderDisplay({ headerPhotoUrl: url, headerPictureMode: "one" })} />
+                  </div>
+                )}
+                {(pictureMode === "album" || pictureMode === "today") && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      {photos.albums.length ? "Tap albums to include. Leave all off to rotate every photo." : "Add photos in the Photos page first."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {photos.albums.map((album) => {
+                        const on = headerAlbumIds.includes(album.id);
+                        return (
+                          <button
+                            key={album.id}
+                            type="button"
+                            onClick={() => {
+                              const next = on
+                                ? headerAlbumIds.filter((id) => id !== album.id)
+                                : [...headerAlbumIds, album.id];
+                              setHeaderDisplay({ headerAlbumIds: next, headerPictureMode: pictureMode });
+                            }}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                              on ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground"
+                            }`}
+                          >
+                            {album.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
+                <label className="flex items-center justify-between gap-3 text-sm font-medium">
+                  Celebrate special days
+                  <Switch checked={headerCelebrateToday} onCheckedChange={(v) => setHeaderDisplay({ headerCelebrateToday: v })} />
+                </label>
+                <p className="text-[10px] text-muted-foreground">Hearts, confetti or fireworks when the calendar says birthday, anniversary or a party.</p>
                 <label className="flex items-center justify-between gap-3 text-sm font-medium">
                   Show date
                   <Switch checked={headerShowDate} onCheckedChange={(v) => setHeaderDisplay({ headerShowDate: v })} />

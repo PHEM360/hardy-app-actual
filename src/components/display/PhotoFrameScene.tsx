@@ -66,7 +66,10 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
         </div>
       ))}
       {settings.showCaptions && current.caption && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-6 pt-10 pb-6">
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-6 pt-10"
+          style={{ paddingBottom: "max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))" }}
+        >
           <p className="text-white text-sm font-medium">{current.caption}</p>
         </div>
       )}

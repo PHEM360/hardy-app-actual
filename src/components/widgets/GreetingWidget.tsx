@@ -1,8 +1,11 @@
+import { motion } from "framer-motion";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useAuth } from "@/auth/AuthContext";
 import { useAppearance } from "@/hooks/useAppearance";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
+import { useHeaderBackdrop } from "@/hooks/useHeaderBackdrop";
 import { ChromeSceneLayer } from "@/components/chrome/ChromeSceneLayer";
+import { ChromePhotoRotator } from "@/components/chrome/ChromePhotoRotator";
 import { resolveChromeScene } from "@/lib/chromeScenes";
 
 function firstNameOf(profileFirst: string | undefined, displayName: string | undefined, email: string | undefined) {
@@ -18,13 +21,21 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
   const { profile } = useUserProfile();
   const appearance = useAppearance();
   const { weather } = useDisplayWeather();
+  const backdrop = useHeaderBackdrop();
   const matchHeader = appearance.greetingMatchHeader;
-  const sceneId = resolveChromeScene(
-    matchHeader ? appearance.headerScene : appearance.greetingScene,
-    { atmosphere: appearance.theme.atmosphere, isNight: new Date().getHours() >= 20 || new Date().getHours() < 6, fallback: "weather" },
-  );
+  const sceneId = matchHeader
+    ? backdrop.scene
+    : resolveChromeScene(appearance.greetingScene, {
+      atmosphere: appearance.theme.atmosphere,
+      isNight: new Date().getHours() >= 20 || new Date().getHours() < 6,
+      fallback: "weather",
+    });
   const color = matchHeader ? appearance.headerColor : appearance.greetingColor;
-  const photoUrl = matchHeader ? appearance.headerPhotoUrl : appearance.greetingPhotoUrl;
+  const photoUrls = matchHeader
+    ? backdrop.urls
+    : appearance.greetingPhotoUrl
+      ? [appearance.greetingPhotoUrl]
+      : [];
   const firstName = firstNameOf(
     profile?.firstName,
     profile?.displayName || user?.displayName || "",
@@ -40,15 +51,20 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
       className={`relative w-full h-full p-4 flex items-center overflow-hidden rounded-2xl ${className ?? ""}`}
       style={{ background: color || "var(--gradient-hero)" }}
     >
-      {photoUrl && <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none" />}
-      {photoUrl && <div className="absolute inset-0 bg-black/25 pointer-events-none" />}
+      <ChromePhotoRotator urls={photoUrls} />
       <ChromeSceneLayer scene={sceneId} />
       <div className="relative z-10 min-w-0">
-        <p className="text-base font-bold font-display text-primary-foreground leading-tight truncate">
+        <motion.p
+          key={`${greeting}-${firstName}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="truncate font-display text-base font-bold leading-tight text-primary-foreground"
+        >
           {firstName ? `${greeting} ${firstName}` : greeting}
-        </p>
-        <p className="text-xs text-primary-foreground/70 mt-1">
-          {today}{weatherLine ? ` · ${weatherLine}` : ""}
+        </motion.p>
+        <p className="mt-1 text-xs text-primary-foreground/70">
+          {today}{weatherLine ? ` · ${weatherLine}` : ""}{matchHeader && backdrop.eventLabel ? ` · ${backdrop.eventLabel}` : ""}
         </p>
       </div>
     </div>

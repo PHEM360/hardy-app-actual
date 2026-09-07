@@ -19,11 +19,7 @@ export default function RequireFeature({
   const location = useLocation();
 
   if (initializing || loading || sharesLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <DogLoader text="Checking access…" />
-      </div>
-    );
+    return <DogLoader fullPage text="Checking access…" />;
   }
 
   if (!user) {

@@ -23,6 +23,9 @@ export type AppearancePatch = {
   headerShowWeather?: boolean;
   headerShowDate?: boolean;
   headerShowTime?: boolean;
+  headerPictureMode?: string;
+  headerAlbumIds?: string[];
+  headerCelebrateToday?: boolean;
   greetingScene?: string;
   greetingColor?: string;
   greetingPhotoUrl?: string;
@@ -43,6 +46,9 @@ export function mergeAppearance(current: AppearancePatch, patch: AppearancePatch
     headerShowWeather: patch.headerShowWeather !== undefined ? patch.headerShowWeather : current.headerShowWeather,
     headerShowDate: patch.headerShowDate !== undefined ? patch.headerShowDate : current.headerShowDate,
     headerShowTime: patch.headerShowTime !== undefined ? patch.headerShowTime : current.headerShowTime,
+    headerPictureMode: patch.headerPictureMode !== undefined ? patch.headerPictureMode : current.headerPictureMode,
+    headerAlbumIds: patch.headerAlbumIds !== undefined ? patch.headerAlbumIds : current.headerAlbumIds,
+    headerCelebrateToday: patch.headerCelebrateToday !== undefined ? patch.headerCelebrateToday : current.headerCelebrateToday,
     greetingScene: patch.greetingScene !== undefined ? patch.greetingScene : current.greetingScene,
     greetingColor: patch.greetingColor !== undefined ? patch.greetingColor : current.greetingColor,
     greetingPhotoUrl: patch.greetingPhotoUrl !== undefined ? patch.greetingPhotoUrl : current.greetingPhotoUrl,
@@ -63,6 +69,9 @@ export interface AppearanceState {
   headerShowWeather: boolean;
   headerShowDate: boolean;
   headerShowTime: boolean;
+  headerPictureMode: string;
+  headerAlbumIds: string[];
+  headerCelebrateToday: boolean;
   greetingScene: string;
   greetingColor: string;
   greetingPhotoUrl: string;
@@ -116,6 +125,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const headerShowWeather = appearance.headerShowWeather === true;
   const headerShowDate = appearance.headerShowDate !== false;
   const headerShowTime = appearance.headerShowTime !== false;
+  const headerPictureMode = appearance.headerPictureMode || "";
+  const headerAlbumIds = Array.isArray(appearance.headerAlbumIds) ? appearance.headerAlbumIds : [];
+  const headerCelebrateToday = appearance.headerCelebrateToday === true;
   const greetingMatchHeader = appearance.greetingMatchHeader === true;
   const greetingScene = appearance.greetingScene || "weather";
   const greetingColor = appearance.greetingColor || "";
@@ -142,6 +154,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       headerShowWeather,
       headerShowDate,
       headerShowTime,
+      headerPictureMode,
+      headerAlbumIds,
+      headerCelebrateToday,
       greetingScene,
       greetingColor,
       greetingPhotoUrl,
@@ -155,6 +170,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }, [
     themeId, customPrimary, customAccent, loaderPreset, appearance.loaderLeft, appearance.loaderRight,
     headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    headerPictureMode, headerAlbumIds, headerCelebrateToday,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader, saveProfile, viewAs,
   ]);
 
@@ -206,6 +222,9 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     headerShowWeather,
     headerShowDate,
     headerShowTime,
+    headerPictureMode,
+    headerAlbumIds,
+    headerCelebrateToday,
     greetingScene,
     greetingColor,
     greetingPhotoUrl,
@@ -219,6 +238,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   }), [
     themeId, customPrimary, customAccent, loaderPreset, theme, loader,
     headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    headerPictureMode, headerAlbumIds, headerCelebrateToday,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader,
     setThemeId, setCustomColors, setLoaderPreset, setLoaderEmojis, setHeaderDisplay, setGreetingDisplay,
   ]);
@@ -237,6 +257,9 @@ const FALLBACK: AppearanceState = {
   headerShowWeather: false,
   headerShowDate: true,
   headerShowTime: true,
+  headerPictureMode: "",
+  headerAlbumIds: [],
+  headerCelebrateToday: false,
   greetingScene: "weather",
   greetingColor: "",
   greetingPhotoUrl: "",

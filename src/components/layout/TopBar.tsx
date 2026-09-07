@@ -2,13 +2,15 @@ import { useState, useEffect } from "react";
 import { Bell, Settings, ChevronDown, Home, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
+import { motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { useAppearance } from "@/hooks/useAppearance";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
+import { useHeaderBackdrop } from "@/hooks/useHeaderBackdrop";
 import { ChromeSceneLayer } from "@/components/chrome/ChromeSceneLayer";
-import { resolveChromeScene } from "@/lib/chromeScenes";
+import { ChromePhotoRotator } from "@/components/chrome/ChromePhotoRotator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { looksLikeGeneratedId } from "@/lib/householdIds";
 
@@ -18,10 +20,11 @@ const TopBar = () => {
   const { profile } = useUserProfile();
   const { activeHouseholdId, availableHouseholds, setActiveHouseholdId } = useActiveHousehold();
   const {
-    theme, headerScene, headerColor, headerPhotoUrl,
+    theme, headerScene, headerColor,
     headerShowWeather, headerShowDate, headerShowTime,
   } = useAppearance();
   const { weather } = useDisplayWeather();
+  const backdrop = useHeaderBackdrop();
   const namedHouseholds = availableHouseholds.filter((h) => !looksLikeGeneratedId(h.name) && h.name !== h.id);
   const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
@@ -33,9 +36,6 @@ const TopBar = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const hour = now.getHours();
-  const isNight = hour >= 20 || hour < 6;
-  const scene = resolveChromeScene(headerScene, { atmosphere: theme.atmosphere, isNight, fallback: "none" });
   const decorations = headerScene === "auto" ? (theme.decorations ?? []) : [];
 
   const dateStr = format(now, "EEEE do MMM");
@@ -44,6 +44,7 @@ const TopBar = () => {
     headerShowDate ? dateStr : null,
     headerShowTime ? timeStr : null,
     headerShowWeather && weather ? `${weather.temperature}° ${weather.description}` : null,
+    backdrop.eventLabel,
   ].filter(Boolean).join(" · ");
 
   const renderAvatar = () => {
@@ -75,17 +76,14 @@ const TopBar = () => {
 
   return (
     <header
-      className="sticky top-0 z-40 border-b border-white/5 overflow-hidden"
+      className="sticky top-0 z-40 overflow-hidden border-b border-white/5"
       style={{
         background: headerColor || "var(--chrome-header, var(--gradient-hero))",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      {headerPhotoUrl && (
-        <img src={headerPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none" />
-      )}
-      {headerPhotoUrl && <div className="absolute inset-0 bg-black/35 pointer-events-none" />}
-      <ChromeSceneLayer scene={scene} density="compact" />
+      <ChromePhotoRotator urls={backdrop.urls} />
+      <ChromeSceneLayer scene={backdrop.scene} density="compact" />
       {decorations.length > 0 && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-40">
           {decorations.map((emoji, i) => (
@@ -103,7 +101,15 @@ const TopBar = () => {
         <div className="flex items-center gap-3 min-w-0">
           {renderAvatar()}
           <div className="leading-tight min-w-0">
-            <p className="text-sm font-semibold font-display text-white/95 tracking-wide truncate">{firstName}</p>
+            <motion.p
+              key={firstName || "you"}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="truncate font-display text-sm font-semibold tracking-wide text-white/95"
+            >
+              {firstName}
+            </motion.p>
             {meta && <p className="text-[10px] text-white/55 font-medium tracking-wide truncate">{meta}</p>}
           </div>
         </div>

@@ -37,15 +37,15 @@ export default function Display() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950">
-        <DogLoader text="Starting display…" />
+      <div className="min-h-[100dvh] w-full bg-zinc-950">
+        <DogLoader fullPage text="Starting display…" />
       </div>
     );
   }
 
   if (status === "revoked") {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-zinc-950 gap-4 px-6 text-center">
+      <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center" style={{ paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <WifiOff className="w-10 h-10 text-white/40" />
         <p className="text-white text-lg font-semibold">This display was disconnected</p>
         <p className="text-white/50 text-sm max-w-sm">
@@ -66,8 +66,8 @@ export default function Display() {
 
   if (settingsLoading || !device) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950">
-        <DogLoader text="Loading your display…" />
+      <div className="min-h-[100dvh] w-full bg-zinc-950">
+        <DogLoader fullPage text="Loading your display…" />
       </div>
     );
   }
@@ -75,7 +75,7 @@ export default function Display() {
   const night = resolveNightMode(device.settings.nightMode, device.settings.alarms, new Date());
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 relative overflow-hidden select-none">
+    <div className="relative h-[100svh] min-h-[100dvh] w-full select-none overflow-hidden bg-zinc-950">
       <RemoteDisplayRuntime device={device} extraPhotos={localFolder.photos} />
 
       <AlarmManager alarms={device.settings.alarms} onUpdateAlarm={updateAlarm} />
@@ -86,7 +86,10 @@ export default function Display() {
       />
 
       {/* Low-opacity control cluster — deliberately unobtrusive on an always-on screen */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-2">
+      <div
+        className="absolute right-4 flex items-center gap-2"
+        style={{ bottom: "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))" }}
+      >
         {!wakeLockSupported && (
           <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
             This browser can't keep the screen awake automatically — disable auto-sleep in the device's system settings.

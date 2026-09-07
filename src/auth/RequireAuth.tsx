@@ -7,11 +7,7 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   const location = useLocation();
 
   if (initializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <DogLoader text="Checking login…" />
-      </div>
-    );
+    return <DogLoader fullPage text="Checking login…" />;
   }
 
   if (!user) {

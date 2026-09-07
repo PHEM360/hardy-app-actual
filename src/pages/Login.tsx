@@ -118,14 +118,14 @@ const Login = () => {
 
   if (initializing || user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-hero">
-        <DogLoader text="Opening Hardy Hub…" />
+      <div className="min-h-[100dvh] bg-gradient-hero">
+        <DogLoader fullPage text="Opening Hardy Hub…" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative">
+    <div className="relative flex min-h-[100dvh] flex-col">
       <AnimatePresence>
         {showSplash && (
           <motion.div
@@ -210,7 +210,7 @@ const Login = () => {
       </AnimatePresence>
 
       {/* Main login page */}
-  <div className="min-h-screen flex flex-col bg-gradient-hero overflow-x-hidden">
+  <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-gradient-hero">
         {/* Floating background icons */}
         {FLOATING_ICONS.map((icon, i) => (
           <motion.div

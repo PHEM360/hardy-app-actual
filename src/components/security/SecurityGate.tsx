@@ -285,7 +285,7 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
 
   useEffect(() => setSessionVerified(false), [user?.uid, settings]);
 
-  if (!user || loading) return <DogLoader text="Checking account security…" />;
+  if (!user || loading) return <DogLoader fullPage text="Checking account security…" />;
 
   if (!passkeyEnrolled) {
     return (
@@ -326,7 +326,7 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (sessionDue && checkingPasskey) return <DogLoader text="Checking your recent passkey…" />;
+  if (sessionDue && checkingPasskey) return <DogLoader fullPage text="Checking your recent passkey…" />;
 
   if (sessionDue && !passkeyFresh) {
     const requirement = settings.appUnlockMethod === "either" ? "either" : settings.appUnlockMethod;
@@ -378,7 +378,7 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
   if (requirement === "passkey") {
-    if (checking) return <DogLoader text="Checking your recent passkey…" />;
+    if (checking) return <DogLoader fullPage text="Checking your recent passkey…" />;
     if (passkeyFresh) return <>{children}</>;
   }
   return (
@@ -414,7 +414,7 @@ export function PasskeyGate({
     !!user && !loading && !verified,
   );
 
-  if (loading || checking) return <DogLoader text="Checking your recent passkey…" />;
+  if (loading || checking) return <DogLoader fullPage text="Checking your recent passkey…" />;
   if (verified || fresh) return <>{children}</>;
   return (
     <AuthenticationPrompt
