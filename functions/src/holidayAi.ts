@@ -8,10 +8,15 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import {
+  compareParkAndStayGbp,
   effectiveBudgetGbp,
+  estimateAirportHotelGbp,
   estimateAirportParkingGbp,
+  estimatePrivateTaxiGbp,
+  inferRegion,
   isPlausibleTotalPrice,
   minimumPlausibleTotal,
+  roomsNeeded,
   type BookingMode,
   type SearchOption,
   type WatchLike,
@@ -267,6 +272,25 @@ export async function aiSearchWatchPrices(
       (watch.departureAirports || []).filter((c) => c.toUpperCase() !== "LON")[0] ||
       (watch.departureAirports || [])[0];
     const parkingGbp = watch.includeParking ? estimateAirportParkingGbp(departureAirport, nights) : 0;
+    const airportHotelGbp = watch.includeAirportHotel ? estimateAirportHotelGbp(departureAirport, roomsNeeded(party)) : 0;
+    let parkAndStaySavingGbp = 0;
+    let addOnsNote = "";
+    if (watch.includeParking && watch.includeAirportHotel && watch.compareParkAndStay) {
+      const cmp = compareParkAndStayGbp(airportHotelGbp, parkingGbp);
+      if (cmp.packageIsCheaper) {
+        parkAndStaySavingGbp = cmp.savingGbp;
+        addOnsNote += ` A bundled park & stay package looks ~£${cmp.savingGbp} cheaper than booking the hotel and parking separately.`;
+      } else {
+        addOnsNote += " Booking the hotel and parking separately looks cheaper here than a bundled park & stay package.";
+      }
+    }
+    const privateTaxi = watch.includeTransfers && watch.transferMode === "private_taxi"
+      ? estimatePrivateTaxiGbp(inferRegion(watch), party.adults + party.children)
+      : null;
+    if (privateTaxi) {
+      addOnsNote += ` Private taxi transfer estimated at ~${privateTaxi.durationMinutes} min each way.`;
+    }
+    const addOnsGbp = parkingGbp + airportHotelGbp - parkAndStaySavingGbp;
 
     const criteria = [
       `Destination: ${watch.destination}`,
@@ -284,7 +308,11 @@ export async function aiSearchWatchPrices(
           ? `Maximum budget: £${watch.maxBudgetGbp} per person (£${effectiveBudgetGbp(watch.maxBudgetGbp, watch)} total for the party)`
           : `Maximum total budget for the whole party: £${watch.maxBudgetGbp}`
         : "",
-      watch.includeTransfers ? "Airport transfers should be included." : "",
+      watch.includeTransfers
+        ? watch.transferMode === "private_taxi"
+          ? "A private taxi transfer is wanted (not a shared shuttle) — this is costed separately, don't research transfer prices yourself."
+          : "Shared airport transfers should be included."
+        : "",
       watch.keyFeatures?.length ? `Must-have features: ${watch.keyFeatures.join(", ")}` : "",
       watch.includeAllBrands
         ? "Any reputable UK travel brand is acceptable."
@@ -354,11 +382,14 @@ export async function aiSearchWatchPrices(
       .filter((o) => isPlausibleTotalPrice(Number(o.priceGbp), watch))
       .map((o, i): SearchOption => {
         const basePrice = Math.round(Number(o.priceGbp));
-        const parkingNote = parkingGbp > 0
-          ? ` Includes an estimated £${parkingGbp} for parking at ${departureAirport || "your departure airport"} for the trip.`
-          : "";
+        const amountNotes = [
+          parkingGbp > 0 ? `~£${parkingGbp} for parking at ${departureAirport || "your departure airport"}` : "",
+          airportHotelGbp > 0 && parkAndStaySavingGbp === 0 ? `~£${airportHotelGbp} for an airport hotel the night before` : "",
+          parkAndStaySavingGbp > 0 ? `~£${airportHotelGbp + parkingGbp - parkAndStaySavingGbp} for a bundled park & stay package` : "",
+        ].filter(Boolean).join(" and ");
+        const addOnsSummary = amountNotes ? ` Includes ${amountNotes} for the trip.${addOnsNote}` : addOnsNote;
         return {
-          priceGbp: basePrice + parkingGbp,
+          priceGbp: basePrice + addOnsGbp,
           sourceName: String(o.sourceName || "Travel site"),
           sourceUrl: String(o.sourceUrl),
           packageLabel: `${o.hotelName || watch.destination} · AI-researched`,
@@ -373,7 +404,7 @@ export async function aiSearchWatchPrices(
           bookingMode: (["package", "flights_hotel_separate", "airline_holiday", "hotel_only"] as BookingMode[]).includes(o.bookingMode)
             ? (o.bookingMode as BookingMode)
             : undefined,
-          notes: `${o.priceNote ? String(o.priceNote) : "Live price found via AI web research across allowlisted travel sites"}${parkingNote}`,
+          notes: `${o.priceNote ? String(o.priceNote) : "Live price found via AI web research across allowlisted travel sites"}${addOnsSummary}`,
           priceConfidence: "ai_researched",
           rank: i + 1,
           suitabilityScore: Math.max(0, 90 - i * 4),

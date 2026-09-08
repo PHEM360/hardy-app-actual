@@ -52,6 +52,13 @@ import {
   seasonForRegionMonth,
   type HolidaySeasonTag,
 } from "@/lib/holidaySeasons";
+import {
+  compareParkAndStayGbp,
+  estimateAirportHotelGbp,
+  estimateAirportParkingGbp,
+  estimatePrivateTaxiGbp,
+  roomsNeededFor,
+} from "@/lib/holidayCostEstimates";
 import type { HolidayWatchScheduleMode } from "@/types/holidays";
 
 export type HolidayWatchFormValue = Omit<
@@ -101,7 +108,10 @@ function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
     targetPriceGbp: null,
     budgetBasis: "total",
     includeTransfers: false,
+    transferMode: "shared",
     includeParking: false,
+    includeAirportHotel: false,
+    compareParkAndStay: false,
     kidsClub: false,
     poolRequired: false,
     keyFeatures: [],
@@ -153,7 +163,10 @@ function fromWatch(w: HolidayWatch): HolidayWatchFormValue {
     targetPriceGbp: w.targetPriceGbp ?? null,
     budgetBasis: w.budgetBasis === "per_person" ? "per_person" : "total",
     includeTransfers: !!w.includeTransfers,
+    transferMode: w.transferMode === "private_taxi" ? "private_taxi" : "shared",
     includeParking: !!w.includeParking,
+    includeAirportHotel: !!w.includeAirportHotel,
+    compareParkAndStay: !!w.compareParkAndStay,
     kidsClub: !!w.kidsClub,
     poolRequired: !!w.poolRequired,
     keyFeatures: w.keyFeatures || [],
@@ -300,6 +313,13 @@ export function HolidayWatchForm({
     [filterMode, form.destinationPrefs?.region],
   );
   const seasonRegion = form.destinationPrefs?.region;
+
+  const estimateNights = form.dates.nights || 7;
+  const estimateRooms = roomsNeededFor(form.travellers.adults, form.travellers.children);
+  const parkingEstimateGbp = estimateAirportParkingGbp(form.departureAirports, estimateNights);
+  const airportHotelEstimateGbp = estimateAirportHotelGbp(form.departureAirports, estimateRooms);
+  const parkAndStayComparison = compareParkAndStayGbp(airportHotelEstimateGbp, parkingEstimateGbp);
+  const privateTaxiEstimate = estimatePrivateTaxiGbp(seasonRegion, form.travellers.adults + form.travellers.children);
 
   const toggleAlert = (ch: HolidayAlertChannel, on: boolean) => {
     const set = new Set(form.alertChannels);
@@ -1169,6 +1189,35 @@ export function HolidayWatchForm({
           <span>Transfers included</span>
           <Switch checked={form.includeTransfers} onCheckedChange={(v) => patch({ includeTransfers: v })} />
         </label>
+        {form.includeTransfers && (
+          <Field label="Transfer type">
+            <div className="grid grid-cols-2 gap-2">
+              {(["shared", "private_taxi"] as const).map((modeOpt) => {
+                const on = (form.transferMode || "shared") === modeOpt;
+                return (
+                  <button
+                    key={modeOpt}
+                    type="button"
+                    onClick={() => patch({ transferMode: modeOpt })}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                      on
+                        ? "border-primary/45 bg-primary/10 text-foreground"
+                        : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {modeOpt === "shared" ? "Shared shuttle" : "Private taxi"}
+                  </button>
+                );
+              })}
+            </div>
+            {form.transferMode === "private_taxi" && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Estimated ≈£{privateTaxiEstimate.costGbp} return, ~{privateTaxiEstimate.durationMinutes} min each way.
+              </p>
+            )}
+          </Field>
+        )}
+
         <label className="flex items-center justify-between gap-3 text-sm">
           <div>
             <span className="block">Include airport parking cost</span>
@@ -1178,6 +1227,43 @@ export function HolidayWatchForm({
           </div>
           <Switch checked={!!form.includeParking} onCheckedChange={(v) => patch({ includeParking: v })} />
         </label>
+        {form.includeParking && !(form.includeAirportHotel && form.compareParkAndStay) && (
+          <p className="-mt-1.5 text-[11px] text-muted-foreground">Estimated ≈£{parkingEstimateGbp} for the trip.</p>
+        )}
+
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <div>
+            <span className="block">Add an airport hotel the night before</span>
+            <span className="block text-[11px] font-normal text-muted-foreground">
+              Adds a rough estimate for a hotel near your departure airport, the night before flying
+            </span>
+          </div>
+          <Switch checked={!!form.includeAirportHotel} onCheckedChange={(v) => patch({ includeAirportHotel: v })} />
+        </label>
+        {form.includeAirportHotel && !(form.includeParking && form.compareParkAndStay) && (
+          <p className="-mt-1.5 text-[11px] text-muted-foreground">
+            Estimated ≈£{airportHotelEstimateGbp} for {estimateRooms} room{estimateRooms === 1 ? "" : "s"}.
+          </p>
+        )}
+
+        {form.includeParking && form.includeAirportHotel && (
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <div>
+              <span className="block">Compare park & stay vs booking separately</span>
+              <span className="block text-[11px] font-normal text-muted-foreground">
+                Checks whether a bundled hotel + parking package beats booking them apart
+              </span>
+            </div>
+            <Switch checked={!!form.compareParkAndStay} onCheckedChange={(v) => patch({ compareParkAndStay: v })} />
+          </label>
+        )}
+        {form.includeParking && form.includeAirportHotel && form.compareParkAndStay && (
+          <p className="-mt-1.5 text-[11px] text-muted-foreground">
+            {parkAndStayComparison.packageIsCheaper
+              ? `A bundled package looks ≈£${parkAndStayComparison.savingGbp} cheaper (≈£${parkAndStayComparison.packageTotalGbp} vs ≈£${parkAndStayComparison.separateTotalGbp} separately).`
+              : `Booking separately looks cheaper here (≈£${parkAndStayComparison.separateTotalGbp} vs ≈£${parkAndStayComparison.packageTotalGbp} bundled).`}
+          </p>
+        )}
       </Section>
 
       <Section title="Key features & notes">

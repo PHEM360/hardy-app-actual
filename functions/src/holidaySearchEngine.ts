@@ -16,7 +16,7 @@ export type BookingMode =
 export type HaulBand = "short" | "medium" | "long" | "ultra";
 
 export interface CostLine {
-  kind: "flights" | "hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
+  kind: "flights" | "hotel" | "airport_hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
   label: string;
   amountGbp: number;
   estimated?: boolean;
@@ -112,8 +112,14 @@ export interface WatchLike {
   /** Whether maxBudgetGbp/targetPriceGbp are per traveller or for the whole party. Defaults to total. */
   budgetBasis?: "total" | "per_person";
   includeTransfers?: boolean;
+  /** Shared shuttle (cheaper) or a private taxi (pricier, direct) — only used when includeTransfers is true. */
+  transferMode?: "shared" | "private_taxi";
   /** Add an estimate for parking the car at the departure airport for the trip length. */
   includeParking?: boolean;
+  /** Add an estimate for a hotel at the departure airport the night before flying. */
+  includeAirportHotel?: boolean;
+  /** When both parking and an airport hotel are wanted, check whether a bundled park-and-stay package beats booking separately. */
+  compareParkAndStay?: boolean;
   keyFeatures?: string[];
   kidsClub?: boolean;
   poolRequired?: boolean;
@@ -184,6 +190,59 @@ export function estimateAirportParkingGbp(departureAirport: string | undefined, 
   const perDay = AIRPORT_PARKING_PER_DAY_GBP[code] ?? DEFAULT_PARKING_PER_DAY_GBP;
   const days = Math.max(1, nights) + 1;
   return Math.round(perDay * days);
+}
+
+/** Rough typical room rate for a night at a hotel near a UK departure airport. */
+const AIRPORT_HOTEL_PER_ROOM_GBP: Record<string, number> = {
+  LHR: 95, LGW: 80, STN: 70, LTN: 65, LCY: 100, SEN: 60,
+  MAN: 75, BHX: 65, EDI: 80, GLA: 65, ABZ: 70, BFS: 65,
+  BRS: 70, NCL: 60, LPL: 60, EMA: 60, LBA: 60, SOU: 70, NWI: 60, EXT: 60,
+};
+const DEFAULT_AIRPORT_HOTEL_PER_ROOM_GBP = 70;
+/** Bundled "park & stay" packages (hotel + parking together) typically undercut booking both separately by this much. */
+const PARK_AND_STAY_SAVING_PCT = 0.15;
+
+export function estimateAirportHotelGbp(departureAirport: string | undefined, rooms: number): number {
+  const code = (departureAirport || "").toUpperCase().trim();
+  const perRoom = AIRPORT_HOTEL_PER_ROOM_GBP[code] ?? DEFAULT_AIRPORT_HOTEL_PER_ROOM_GBP;
+  return Math.round(perRoom * Math.max(1, rooms));
+}
+
+export interface ParkAndStayComparison {
+  separateTotalGbp: number;
+  packageTotalGbp: number;
+  packageIsCheaper: boolean;
+  savingGbp: number;
+}
+
+/** Compares booking an airport hotel + parking separately vs a bundled park-and-stay package. */
+export function compareParkAndStayGbp(hotelGbp: number, parkingGbp: number): ParkAndStayComparison {
+  const separateTotalGbp = hotelGbp + parkingGbp;
+  const packageTotalGbp = Math.round(separateTotalGbp * (1 - PARK_AND_STAY_SAVING_PCT));
+  return {
+    separateTotalGbp,
+    packageTotalGbp,
+    packageIsCheaper: packageTotalGbp < separateTotalGbp,
+    savingGbp: separateTotalGbp - packageTotalGbp,
+  };
+}
+
+/** Typical one-way private-taxi duration to a resort, by flight haul band — a rough planning guide, not a quote. */
+const PRIVATE_TAXI_MINUTES: Record<HaulBand, number> = { short: 35, medium: 50, long: 60, ultra: 75 };
+/** Whole-vehicle private taxi rate (one way) for up to 4 passengers, by haul band. */
+const PRIVATE_TAXI_BASE_GBP: Record<HaulBand, number> = { short: 45, medium: 65, long: 85, ultra: 110 };
+
+export interface PrivateTaxiEstimate {
+  costGbp: number;
+  durationMinutes: number;
+}
+
+/** Return private-taxi transfer estimate (both ways) for the party, by region haul band. */
+export function estimatePrivateTaxiGbp(region: string, partySize: number): PrivateTaxiEstimate {
+  const haul = haulForRegion(region);
+  const extraPassengers = Math.max(0, partySize - 4);
+  const oneWay = PRIVATE_TAXI_BASE_GBP[haul] + extraPassengers * 12;
+  return { costGbp: Math.round(oneWay * 2), durationMinutes: PRIVATE_TAXI_MINUTES[haul] };
 }
 
 const HOTEL_POOL: Record<string, string[]> = {
@@ -408,6 +467,8 @@ export function buildCostBreakdown(input: {
   taxes?: number;
   packageDiscount?: number;
   parking?: number;
+  airportHotel?: number;
+  parkAndStaySaving?: number;
   confidence: CostBreakdown["confidence"];
   estimatedComponents?: boolean;
 }): CostBreakdown {
@@ -477,6 +538,22 @@ export function buildCostBreakdown(input: {
       kind: "parking",
       label: "Airport parking for the trip (est.)",
       amountGbp: Math.round(input.parking),
+      estimated: true,
+    });
+  }
+  if (input.airportHotel && input.airportHotel > 0) {
+    lines.push({
+      kind: "airport_hotel",
+      label: "Airport hotel the night before (est.)",
+      amountGbp: Math.round(input.airportHotel),
+      estimated: true,
+    });
+  }
+  if (input.parkAndStaySaving && input.parkAndStaySaving > 0) {
+    lines.push({
+      kind: "discount",
+      label: "Park & stay bundle vs booking separately (est.)",
+      amountGbp: -Math.round(input.parkAndStaySaving),
       estimated: true,
     });
   }
@@ -735,10 +812,32 @@ export function assembleSearchOptions(input: {
 
     const flights = estimateFlightTotal(watch, seed);
     const hotel = estimateHotelStay(watch, seed >> 1, stars);
-    const transfers = watch.includeTransfers ? Math.round(35 * party.paying + 25) : Math.round(28 * party.paying);
+    const privateTaxi = watch.includeTransfers && watch.transferMode === "private_taxi"
+      ? estimatePrivateTaxiGbp(inferRegion(watch), party.paying)
+      : null;
+    const transfers = privateTaxi
+      ? privateTaxi.costGbp
+      : watch.includeTransfers
+        ? Math.round(35 * party.paying + 25)
+        : Math.round(28 * party.paying);
     const taxes = Math.round(flights.totalGbp * 0.04 + 18 * party.paying);
     const saving = Math.round((flights.totalGbp + hotel.totalGbp) * packageSavingPct(seed));
     const parking = watch.includeParking ? estimateAirportParkingGbp(departure, nights) : 0;
+    const airportHotel = watch.includeAirportHotel ? estimateAirportHotelGbp(departure, roomsNeeded(party)) : 0;
+    let parkAndStaySaving = 0;
+    let parkStayNote = "";
+    if (watch.includeParking && watch.includeAirportHotel && watch.compareParkAndStay) {
+      const cmp = compareParkAndStayGbp(airportHotel, parking);
+      if (cmp.packageIsCheaper) {
+        parkAndStaySaving = cmp.savingGbp;
+        parkStayNote = ` A bundled park & stay package looks ~£${cmp.savingGbp} cheaper than booking the hotel and parking separately.`;
+      } else {
+        parkStayNote = " Booking the hotel and parking separately looks cheaper here than a bundled park & stay package.";
+      }
+    }
+    const addOnsNote = privateTaxi
+      ? ` Private taxi transfer estimated at ~${privateTaxi.durationMinutes} min each way.${parkStayNote}`
+      : parkStayNote;
 
     const html = input.htmlBySource[link.name];
     const livePrices = html ? extractGbpPrices(html, watch) : [];
@@ -762,7 +861,7 @@ export function assembleSearchOptions(input: {
     if (liveTotal != null && isPlausibleTotalPrice(liveTotal, watch)) {
       confidence = "partial";
       priceGbp = liveTotal;
-      notes = "Live price signal from allowlisted site — validated against trip cost floor";
+      notes = `Live price signal from allowlisted site — validated against trip cost floor.${addOnsNote}`;
       // Scale component split to match live total
       const modelPackage = Math.max(1, flights.totalGbp + hotel.totalGbp - saving);
       const scale = liveTotal / modelPackage;
@@ -778,11 +877,13 @@ export function assembleSearchOptions(input: {
             ? Math.round(saving * scale)
             : 0,
         parking,
+        airportHotel,
+        parkAndStaySaving,
         confidence,
         estimatedComponents: true,
       });
-      // Force total to live, plus our own deterministic parking add-on
-      priceGbp = liveTotal + parking;
+      // Force total to live, plus our own deterministic add-ons
+      priceGbp = liveTotal + parking + airportHotel - parkAndStaySaving;
       breakdown.totalGbp = priceGbp;
     } else {
       if (link.bookingMode === "flights_hotel_separate") {
@@ -794,6 +895,8 @@ export function assembleSearchOptions(input: {
           transfers,
           taxes,
           parking,
+          airportHotel,
+          parkAndStaySaving,
           confidence: "estimated",
         });
       } else {
@@ -805,14 +908,16 @@ export function assembleSearchOptions(input: {
           transfers: Math.round(transfers * 0.5),
           packageDiscount: saving,
           parking,
+          airportHotel,
+          parkAndStaySaving,
           confidence: "estimated",
         });
       }
       priceGbp = Math.max(floor, breakdown.totalGbp);
       breakdown.totalGbp = priceGbp;
-      notes = html
+      notes = (html
         ? `Source checked — page price failed sanity checks (min ~£${floor.toLocaleString("en-GB")} for this trip), so a structured flights+hotel estimate was used`
-        : `Structured estimate from flights (${flights.haul} haul) + hotel research — live site blocked or unavailable`;
+        : `Structured estimate from flights (${flights.haul} haul) + hotel research — live site blocked or unavailable`) + addOnsNote;
     }
 
     const effectiveMaxBudget = effectiveBudgetGbp(watch.maxBudgetGbp, watch);

@@ -120,8 +120,14 @@ export interface HolidayWatch {
   /** Whether maxBudgetGbp/targetPriceGbp are per traveller or for the whole party. Defaults to total. */
   budgetBasis?: "total" | "per_person";
   includeTransfers: boolean;
+  /** Shared shuttle (cheaper, shared with strangers) or a private taxi (pricier, direct) — only used when includeTransfers is true. */
+  transferMode?: "shared" | "private_taxi";
   /** Add an estimate for parking the car at the departure airport for the trip length. */
   includeParking?: boolean;
+  /** Add an estimate for a hotel at the departure airport the night before flying. */
+  includeAirportHotel?: boolean;
+  /** When both parking and an airport hotel are wanted, check whether a bundled park-and-stay package beats booking them separately. */
+  compareParkAndStay?: boolean;
   kidsClub: boolean;
   poolRequired: boolean;
   keyFeatures?: HolidayKeyFeatureId[];
@@ -170,7 +176,7 @@ export type HolidayBookingMode =
   | "hotel_only";
 
 export interface HolidayCostLine {
-  kind: "flights" | "hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
+  kind: "flights" | "hotel" | "airport_hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
   label: string;
   amountGbp: number;
   estimated?: boolean;
