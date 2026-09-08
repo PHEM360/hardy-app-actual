@@ -40,6 +40,9 @@ export const DEFAULT_MARKETING_PROFILE: MarketingProfile = {
   relatedCompanyIds: [],
   industry: "",
   website: "",
+  prStrategy: "",
+  marketingSpendSummary: "",
+  aiSuggestedFields: [],
   defaultPlanDays: 30,
   postsPerWeek: 3,
   approvalRequired: true,
@@ -209,37 +212,72 @@ export function useCompanyMarketing(companyId: string | undefined) {
     await deleteDoc(doc(db, "companies", companyId, "content", id));
   }, [companyId]);
 
-  const uploadAssets = useCallback(async (files: File[]) => {
-    if (!companyId) return;
-    for (const file of files) {
-      const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|avif)$/i.test(file.name);
-      const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(file.name);
-      const isDoc = file.type.startsWith("application/") || /\.(pdf|ppt|pptx)$/i.test(file.name);
-      if (!isImage && !isVideo && !isDoc) {
-        throw new Error(`${file.name} needs to be an image, video or PDF.`);
+  const MAX_ASSET_BYTES = 1024 * 1024 * 1024; // 1 GB — matches storage.rules
+  const UPLOAD_CONCURRENCY = 3;
+
+  /**
+   * Uploads each file independently (one bad or oversized file doesn't stop
+   * the rest of a large batch) with a few running in parallel at once so
+   * dozens of files don't queue one-at-a-time. Reports live progress and a
+   * per-file failure list rather than throwing on the first problem.
+   */
+  const uploadAssets = useCallback(async (
+    files: File[],
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ succeeded: number; failed: { name: string; reason: string }[] }> => {
+    if (!companyId) return { succeeded: 0, failed: [] };
+    const failed: { name: string; reason: string }[] = [];
+    let succeeded = 0;
+    let done = 0;
+    const total = files.length;
+
+    const uploadOne = async (file: File) => {
+      try {
+        const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|avif)$/i.test(file.name);
+        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+        const isDoc = file.type.startsWith("application/") || /\.(pdf|ppt|pptx)$/i.test(file.name);
+        if (!isImage && !isVideo && !isDoc) {
+          throw new Error("needs to be an image, video or PDF");
+        }
+        if (file.size > MAX_ASSET_BYTES) {
+          throw new Error("is larger than 1 GB");
+        }
+        const storagePath = companyMarketingAssetPath(companyId, file.name);
+        const objectRef = ref(storage, storagePath);
+        const contentType = file.type
+          || (isVideo ? "video/mp4" : isDoc ? "application/pdf" : "image/jpeg");
+        await uploadBytes(objectRef, file, { contentType });
+        const url = await getDownloadURL(objectRef);
+        await addDoc(collection(db, "companies", companyId, "marketingAssets"), {
+          name: file.name,
+          url,
+          storagePath,
+          mediaType: isVideo ? "video" : isDoc ? "document" : "image",
+          source: "uploaded",
+          tags: [],
+          altText: "",
+          usageNotes: "",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        succeeded += 1;
+      } catch (error) {
+        failed.push({ name: file.name, reason: error instanceof Error ? error.message : "upload failed" });
+      } finally {
+        done += 1;
+        onProgress?.(done, total);
       }
-      if (file.size > 80 * 1024 * 1024) {
-        throw new Error(`${file.name} is larger than 80 MB.`);
+    };
+
+    let index = 0;
+    const workers = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, files.length) }, async () => {
+      while (index < files.length) {
+        await uploadOne(files[index++]);
       }
-      const storagePath = companyMarketingAssetPath(companyId, file.name);
-      const objectRef = ref(storage, storagePath);
-      const contentType = file.type
-        || (isVideo ? "video/mp4" : isDoc ? "application/pdf" : "image/jpeg");
-      await uploadBytes(objectRef, file, { contentType });
-      const url = await getDownloadURL(objectRef);
-      await addDoc(collection(db, "companies", companyId, "marketingAssets"), {
-        name: file.name,
-        url,
-        storagePath,
-        mediaType: isVideo ? "video" : isDoc ? "document" : "image",
-        source: "uploaded",
-        tags: [],
-        altText: "",
-        usageNotes: "",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
+    });
+    await Promise.all(workers);
+
+    return { succeeded, failed };
   }, [companyId]);
 
   const updateAsset = useCallback(async (id: string, updates: Partial<MarketingAsset>) => {

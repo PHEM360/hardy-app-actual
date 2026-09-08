@@ -24,6 +24,7 @@ import {
   saveMarketingSocialLink,
 } from "@/lib/marketingApi";
 import { isMarketingProfileReady, seedMarketingProfileFromCompany } from "@/lib/marketingContent";
+import { MarketingHelpButton, MarketingOnboarding } from "@/components/companies/MarketingOnboarding";
 import {
   IMAGE_MODEL_OPTIONS,
   LIVE_OAUTH_PLATFORMS,
@@ -102,6 +103,7 @@ export default function CompanySocial() {
       subtitle="Every company’s posts, brand and calendar in one place"
       icon={<Megaphone className="h-5 w-5" />}
       sharePage="companies"
+      action={<MarketingHelpButton />}
     >
       <div className="flex min-w-0 gap-3">
         <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
@@ -143,6 +145,14 @@ export default function CompanySocial() {
             </div>
           </div>
 
+          {companyId !== "all" && (
+            <MarketingOnboarding
+              state={companyMarketing}
+              company={selectedCompany}
+              companyId={selectedCompany?.id}
+            />
+          )}
+
           {loading ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading social plans…</p>
           ) : !companies.length ? (
@@ -159,7 +169,7 @@ export default function CompanySocial() {
           ) : section === "generate" ? (
             <GenerateSection companyId={selectedCompany?.id} profile={companyMarketing.profile} disabled={companyId === "all"} />
           ) : section === "brand" ? (
-            <BrandSection state={companyMarketing} company={selectedCompany} disabled={companyId === "all"} />
+            <BrandSection state={companyMarketing} company={selectedCompany} companyId={selectedCompany?.id} disabled={companyId === "all"} />
           ) : section === "media" ? (
             <MediaSection state={companyMarketing} companyId={selectedCompany?.id} disabled={companyId === "all"} />
           ) : section === "presence" ? (
@@ -483,13 +493,23 @@ function GenerateSection({
   );
 }
 
+function SuggestedBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+      <Sparkles className="h-2.5 w-2.5" /> AI-suggested — check this
+    </span>
+  );
+}
+
 function BrandSection({
   state,
   company,
+  companyId,
   disabled,
 }: {
   state: ReturnType<typeof useCompanyMarketing>;
   company?: { name: string; description?: string; contact?: { website?: string } };
+  companyId?: string;
   disabled: boolean;
 }) {
   const [form, setForm] = useState(state.profile);
@@ -500,6 +520,14 @@ function BrandSection({
     setCadence(state.profile.cadence || defaultCadence());
   }, [state.profile, company]);
   if (disabled) return <EmptyCard title="Pick one company" body="Brand voice and cadence are per company. Choose one above to edit." />;
+
+  const suggested = new Set(form.aiSuggestedFields || []);
+  const editField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+    const next = new Set(suggested);
+    next.delete(key as string);
+    setForm({ ...form, [key]: value, aiSuggestedFields: [...next] });
+  };
+
   return (
     <form
       className="space-y-4 rounded-2xl border border-border/40 bg-card p-4 shadow-card"
@@ -519,15 +547,27 @@ function BrandSection({
       <p className="font-display text-lg font-bold">Brand guidance</p>
       <p className="text-sm text-muted-foreground">A Presence scan fills this in from the website. Edit anything that does not sound like you.</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Brand voice"><Textarea rows={4} value={form.brandVoice} onChange={(event) => setForm({ ...form, brandVoice: event.target.value })} /></Field>
-        <Field label="Audience"><Textarea rows={4} value={form.targetAudience} onChange={(event) => setForm({ ...form, targetAudience: event.target.value })} /></Field>
-        <Field label="Industry"><Input value={form.industry} onChange={(event) => setForm({ ...form, industry: event.target.value })} /></Field>
-        <Field label="Website"><Input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></Field>
-        <Field label="Objectives" hint="One per line.">
-          <Textarea rows={3} value={form.objectives.join("\n")} onChange={(event) => setForm({ ...form, objectives: lines(event.target.value) })} />
+        <Field label={<>Brand voice{suggested.has("brandVoice") && <SuggestedBadge />}</>}>
+          <Textarea rows={4} value={form.brandVoice} onChange={(event) => editField("brandVoice", event.target.value)} />
         </Field>
-        <Field label="Key messages">
-          <Textarea rows={3} value={form.keyMessages.join("\n")} onChange={(event) => setForm({ ...form, keyMessages: lines(event.target.value) })} />
+        <Field label={<>Audience{suggested.has("targetAudience") && <SuggestedBadge />}</>}>
+          <Textarea rows={4} value={form.targetAudience} onChange={(event) => editField("targetAudience", event.target.value)} />
+        </Field>
+        <Field label={<>Industry{suggested.has("industry") && <SuggestedBadge />}</>}>
+          <Input value={form.industry} onChange={(event) => editField("industry", event.target.value)} />
+        </Field>
+        <Field label="Website"><Input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></Field>
+        <Field label={<>Objectives{suggested.has("objectives") && <SuggestedBadge />}</>} hint="One per line.">
+          <Textarea rows={3} value={form.objectives.join("\n")} onChange={(event) => editField("objectives", lines(event.target.value))} />
+        </Field>
+        <Field label={<>Key messages{suggested.has("keyMessages") && <SuggestedBadge />}</>}>
+          <Textarea rows={3} value={form.keyMessages.join("\n")} onChange={(event) => editField("keyMessages", lines(event.target.value))} />
+        </Field>
+        <Field label="General PR / marketing strategy" hint="Who does it, what channels, the general approach.">
+          <Textarea rows={3} value={form.prStrategy || ""} onChange={(event) => setForm({ ...form, prStrategy: event.target.value })} />
+        </Field>
+        <Field label="Marketing spend so far" hint="Rough figures are fine.">
+          <Textarea rows={3} value={form.marketingSpendSummary || ""} onChange={(event) => setForm({ ...form, marketingSpendSummary: event.target.value })} />
         </Field>
       </div>
       <p className="font-semibold">Monthly cadence</p>
@@ -570,6 +610,7 @@ function MediaSection({
 }) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   if (disabled || !companyId) return <EmptyCard title="Pick one company" body="Uploads and AI pictures belong to a company library." />;
   return (
     <div className="space-y-3">
@@ -579,24 +620,37 @@ function MediaSection({
         </span>
         <span>
           <span className="block text-sm font-semibold">Upload photos, video or PDF</span>
-          <span className="block text-xs text-muted-foreground">Up to 80 MB. These stay in this company’s library for posts.</span>
+          <span className="block text-xs text-muted-foreground">
+            {busy && progress
+              ? `Uploading ${progress.done} of ${progress.total}…`
+              : "Up to 1 GB each, any number at once. These stay in this company’s library for posts."}
+          </span>
         </span>
         <input
           type="file"
           accept="image/*,video/*,.pdf"
           multiple
           className="sr-only"
+          disabled={busy}
           onChange={async (event) => {
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
             setBusy(true);
+            setProgress({ done: 0, total: files.length });
             try {
-              await state.uploadAssets(files);
-              toast.success(files.length === 1 ? "Media uploaded" : `${files.length} files uploaded`);
+              const result = await state.uploadAssets(files, (done, total) => setProgress({ done, total }));
+              if (result.failed.length === 0) {
+                toast.success(result.succeeded === 1 ? "Media uploaded" : `${result.succeeded} files uploaded`);
+              } else if (result.succeeded === 0) {
+                toast.error(`Could not upload ${result.failed.length === 1 ? "that file" : "any of those files"}: ${result.failed.slice(0, 3).map((f) => `${f.name} (${f.reason})`).join(", ")}${result.failed.length > 3 ? "…" : ""}`);
+              } else {
+                toast.message(`${result.succeeded} uploaded, ${result.failed.length} skipped: ${result.failed.slice(0, 3).map((f) => `${f.name} (${f.reason})`).join(", ")}${result.failed.length > 3 ? "…" : ""}`);
+              }
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Could not upload that file");
+              toast.error(error instanceof Error ? error.message : "Could not upload those files");
             } finally {
               setBusy(false);
+              setProgress(null);
               event.target.value = "";
             }
           }}
@@ -766,7 +820,7 @@ function ConnectionsSection({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: React.ReactNode; hint?: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0 space-y-1.5">
       <Label>{label}</Label>

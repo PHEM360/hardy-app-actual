@@ -158,7 +158,7 @@ describe("CompanyMarketingTab", () => {
     mocks.getState.mockImplementation(marketingState);
     mocks.saveProfile.mockResolvedValue(undefined);
     mocks.updateContent.mockResolvedValue(undefined);
-    mocks.uploadAssets.mockResolvedValue(undefined);
+    mocks.uploadAssets.mockResolvedValue({ succeeded: 1, failed: [] });
     mocks.generatePlan.mockResolvedValue({ created: 4, contentIds: [], summary: "Four posts created" });
     mocks.approve.mockResolvedValue({ status: "scheduled" });
     mocks.reject.mockResolvedValue({ status: "rejected" });
@@ -267,7 +267,7 @@ describe("CompanyMarketingTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Media" }));
     const file = new File(["image"], "campaign.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByLabelText("Upload images or videos"), { target: { files: [file] } });
-    await waitFor(() => expect(mocks.uploadAssets).toHaveBeenCalledWith([file]));
+    await waitFor(() => expect(mocks.uploadAssets).toHaveBeenCalledWith([file], expect.any(Function)));
   });
 
   it("shows the backend reason when a connection is unavailable", async () => {

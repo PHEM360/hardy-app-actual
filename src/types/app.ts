@@ -312,6 +312,10 @@ export interface MarketingProfile {
   relatedCompanyIds: string[];
   industry: string;
   website: string;
+  /** Freeform: overall PR/marketing approach — who does it, what channels, what the general strategy is. */
+  prStrategy?: string;
+  /** Freeform: what's been spent on marketing so far, e.g. "£500/mo on Instagram ads, £2k one-off rebrand". */
+  marketingSpendSummary?: string;
   defaultPlanDays: number;
   postsPerWeek: number;
   approvalRequired: boolean;
@@ -322,6 +326,10 @@ export interface MarketingProfile {
   textModel?: string;
   imageProvider?: "auto" | "openai" | "gemini";
   imageModel?: string;
+  /** Fields the last AI audit filled in that the user hasn't reviewed/edited yet — cleared per-field on manual edit. */
+  aiSuggestedFields?: string[];
+  /** Set once the first-run setup (platforms/website/PR strategy/spend + initial AI inference) has been completed. */
+  onboardedAt?: any;
   createdAt?: any;
   updatedAt?: any;
 }

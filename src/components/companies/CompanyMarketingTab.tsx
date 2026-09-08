@@ -1042,6 +1042,7 @@ function MediaSection({ state, companyId }: { state: MarketingState; companyId: 
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   useEffect(() => {
     if (editing) setAssetForm({ altText: editing.altText, tags: editing.tags.join("\n"), usageNotes: editing.usageNotes });
   }, [editing]);
@@ -1051,12 +1052,27 @@ function MediaSection({ state, companyId }: { state: MarketingState; companyId: 
       <div className="grid gap-4 lg:grid-cols-2">
         <label className={`${cardClass} flex cursor-pointer items-center gap-3 p-4 transition hover:border-primary/50`}>
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">{uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}</span>
-          <span><span className="block text-sm font-semibold">Upload images or videos</span><span className="block text-xs text-muted-foreground">JPG, PNG, GIF, WebP or video up to 50 MB</span></span>
-          <input aria-label="Upload images or videos" className="sr-only" type="file" accept="image/*,video/*" multiple onChange={async (event) => {
+          <span>
+            <span className="block text-sm font-semibold">Upload images or videos</span>
+            <span className="block text-xs text-muted-foreground">
+              {uploading && uploadProgress ? `Uploading ${uploadProgress.done} of ${uploadProgress.total}…` : "Any number at once, up to 1 GB each"}
+            </span>
+          </span>
+          <input aria-label="Upload images or videos" className="sr-only" type="file" accept="image/*,video/*" multiple disabled={uploading} onChange={async (event) => {
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
             setUploading(true);
-            try { await state.uploadAssets(files); toast.success(`${files.length} media file${files.length === 1 ? "" : "s"} uploaded.`); } catch (error) { toast.error(errorMessage(error)); } finally { setUploading(false); event.target.value = ""; }
+            setUploadProgress({ done: 0, total: files.length });
+            try {
+              const result = await state.uploadAssets(files, (done, total) => setUploadProgress({ done, total }));
+              if (result.failed.length === 0) {
+                toast.success(`${result.succeeded} media file${result.succeeded === 1 ? "" : "s"} uploaded.`);
+              } else if (result.succeeded === 0) {
+                toast.error(`Could not upload ${result.failed.length === 1 ? "that file" : "any of those files"}.`);
+              } else {
+                toast.message(`${result.succeeded} uploaded, ${result.failed.length} skipped (${result.failed.slice(0, 3).map((f) => f.name).join(", ")}${result.failed.length > 3 ? "…" : ""}).`);
+              }
+            } catch (error) { toast.error(errorMessage(error)); } finally { setUploading(false); setUploadProgress(null); event.target.value = ""; }
           }} />
         </label>
         <div className={`${cardClass} p-4`}>
@@ -1139,6 +1155,12 @@ function BrandSection({ state }: { state: MarketingState }) {
               <Textarea aria-label="What's happening now" rows={3} value={form.currentThemes || ""} onChange={(event) => setForm({ ...form, currentThemes: event.target.value })} />
             </Field>
           </div>
+          <Field label="General PR / marketing strategy" hint="Who does it, what channels, the general approach.">
+            <Textarea aria-label="PR strategy" rows={3} value={form.prStrategy || ""} onChange={(event) => setForm({ ...form, prStrategy: event.target.value })} />
+          </Field>
+          <Field label="Marketing spend so far" hint="Rough figures are fine.">
+            <Textarea aria-label="Marketing spend so far" rows={3} value={form.marketingSpendSummary || ""} onChange={(event) => setForm({ ...form, marketingSpendSummary: event.target.value })} />
+          </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {ARRAY_PROFILE_FIELDS.map((field) => (

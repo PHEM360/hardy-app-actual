@@ -654,19 +654,21 @@ function suggestedBrandFromAudit(value: unknown) {
 function applySuggestedBrand(
   current: Record<string, unknown>,
   suggested: ReturnType<typeof suggestedBrandFromAudit>,
-) {
+): { profile: Record<string, unknown>; filledFields: string[] } {
   const next = { ...current };
+  const filledFields: string[] = [];
   const emptyString = (value: unknown) => typeof value !== "string" || value.trim().length < 3;
   const emptyList = (value: unknown) => !Array.isArray(value) || value.length === 0;
-  if (emptyString(next.brandVoice) && suggested.brandVoice) next.brandVoice = suggested.brandVoice;
-  if (emptyString(next.targetAudience) && suggested.targetAudience) next.targetAudience = suggested.targetAudience;
-  if (emptyString(next.industry) && suggested.industry) next.industry = suggested.industry;
-  if (emptyList(next.objectives) && suggested.objectives.length) next.objectives = suggested.objectives;
-  if (emptyList(next.keyMessages) && suggested.keyMessages.length) next.keyMessages = suggested.keyMessages;
+  if (emptyString(next.brandVoice) && suggested.brandVoice) { next.brandVoice = suggested.brandVoice; filledFields.push("brandVoice"); }
+  if (emptyString(next.targetAudience) && suggested.targetAudience) { next.targetAudience = suggested.targetAudience; filledFields.push("targetAudience"); }
+  if (emptyString(next.industry) && suggested.industry) { next.industry = suggested.industry; filledFields.push("industry"); }
+  if (emptyList(next.objectives) && suggested.objectives.length) { next.objectives = suggested.objectives; filledFields.push("objectives"); }
+  if (emptyList(next.keyMessages) && suggested.keyMessages.length) { next.keyMessages = suggested.keyMessages; filledFields.push("keyMessages"); }
   if (emptyList(next.preferredHashtags) && suggested.preferredHashtags.length) {
     next.preferredHashtags = suggested.preferredHashtags;
+    filledFields.push("preferredHashtags");
   }
-  return next;
+  return { profile: next, filledFields };
 }
 
 function completeMarketingAudit(raw: Record<string, unknown>, sources: string[], actor: string) {
@@ -878,11 +880,15 @@ export const generateMarketingAudit = onCall(
     const competitors = splitCompetitorHints(profile.competitors);
     const extraNotes = [input.searchNotes, input.adsNotes, input.socialNotes, input.otherNotes]
       .some((item) => item.trim().length >= 8);
+    const hasOwnerContext = Boolean(
+      cleanOptionalString(profile.prStrategy, 4000) || cleanOptionalString(profile.marketingSpendSummary, 2000),
+    );
     if (
       !hasMeaningfulMarketingProfile(profile) &&
       !(websiteUrl && isSafePublicHttpUrl(websiteUrl)) &&
       input.extraUrls.length === 0 &&
-      !extraNotes
+      !extraNotes &&
+      !hasOwnerContext
     ) {
       throw new HttpsError(
         "failed-precondition",
@@ -955,7 +961,7 @@ export const generateMarketingAudit = onCall(
     const ref = db.collection(`companies/${companyId}/marketingAudits`).doc();
     await ref.set(audit);
     const profileRef = db.doc(`companies/${companyId}/marketing/profile`);
-    const applied = applySuggestedBrand(profileSnap.data() || {}, audit.suggestedBrand);
+    const { profile: applied, filledFields } = applySuggestedBrand(profileSnap.data() || {}, audit.suggestedBrand);
     const tradingNames = Array.isArray(applied.tradingNames) && applied.tradingNames.length
       ? applied.tradingNames
       : [String(companySnap.data()?.name || "").trim()].filter(Boolean);
@@ -963,10 +969,11 @@ export const generateMarketingAudit = onCall(
       ...applied,
       website: websiteUrl || applied.website || "",
       tradingNames,
+      aiSuggestedFields: filledFields,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    logger.info("Generated marketing audit", { companyId, uid: auth.uid, auditId: ref.id });
-    return { auditId: ref.id, headline: audit.headline, brandApplied: true };
+    logger.info("Generated marketing audit", { companyId, uid: auth.uid, auditId: ref.id, filledFields });
+    return { auditId: ref.id, headline: audit.headline, brandApplied: true, filledFields };
   }
 );
 

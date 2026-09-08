@@ -39,6 +39,8 @@ export interface MarketingBrandProfile {
   competitors?: unknown;
   preferredHashtags?: unknown;
   currentThemes?: unknown;
+  prStrategy?: unknown;
+  marketingSpendSummary?: unknown;
 }
 
 function requiredInteger(value: unknown, minimum: number, maximum: number, label: string): number {
@@ -225,6 +227,7 @@ export function buildMarketingAuditInstructions(seasonal: string[]): string {
     "Use seasonal UK context. Prioritise a short list of high-impact next moves.",
     "opportunities must be specific actions the owner can take this week.",
     "Also infer a suggestedBrand: voice, audience, industry, objectives, key messages and hashtags from the public pages. Be specific, not generic.",
+    "If brandProfile.prStrategy or brandProfile.marketingSpendSummary are supplied, treat them as strong first-hand signals of intent — the owner's own words about their approach and what they've actually spent — and weight them at least as heavily as anything inferred from public pages when writing the suggestedBrand and opportunities.",
     ...seasonal,
   ].join(" ");
 }
