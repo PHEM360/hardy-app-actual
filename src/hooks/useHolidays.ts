@@ -23,8 +23,18 @@ import {
   type HolidayWatchStatus,
 } from "@/types/holidays";
 
-function stripUndefined<T extends object>(obj: T): T {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+// Firestore rejects `undefined` anywhere in a document, including nested inside
+// objects like destinationPrefs — a shallow filter here isn't enough.
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => stripUndefined(item)) as unknown as T;
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)]),
+    ) as T;
+  }
+  return value;
 }
 
 export function useHolidays(scopeUserId?: string) {

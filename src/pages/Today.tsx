@@ -115,6 +115,7 @@ function TodayWidgetShell({
   editMode,
   onUpdate,
   otherRects,
+  bottomOfAllY,
   children,
 }: {
   item: TodayWidgetItem;
@@ -122,6 +123,7 @@ function TodayWidgetShell({
   editMode: boolean;
   onUpdate: (id: string, patch: Partial<TodayWidgetItem>) => void;
   otherRects: Rect[];
+  bottomOfAllY: number;
   children: React.ReactNode;
 }) {
   const colW = containerWidth / SNAP_COLS;
@@ -130,9 +132,16 @@ function TodayWidgetShell({
   const leftInset = item.xFrac > 0 ? TILE_GAP / 2 : 0;
   const rightInset = item.xFrac + item.wFrac < 1 ? TILE_GAP / 2 : 0;
   const [showPalette, setShowPalette] = useState(false);
+  // react-rnd mutates the tile's DOM size/position directly during a live drag or
+  // resize. If we reject the result (would overlap) without ever changing props,
+  // there's nothing to make it re-derive from position/size — so it visually stays
+  // wherever the gesture left it. Bumping this key forces a clean remount, which
+  // re-renders the tile from item's real (rejected) position/size, snapping it back.
+  const [resetNonce, setResetNonce] = useState(0);
 
   return (
     <Rnd
+      key={resetNonce}
       position={{ x, y: item.y }}
       size={{ width: w, height: item.h }}
       dragHandleClassName="td-drag-handle"
@@ -149,8 +158,12 @@ function TodayWidgetShell({
         const desiredY = Math.max(0, d.y);
         const rectX = clampedXFrac * containerWidth;
         const freeY = findFreeY(desiredY, rectX, w, item.h, otherRects);
-        // No free slot anywhere nearby — leave it exactly where it started.
-        onUpdate(item.id, freeY == null ? { xFrac: item.xFrac, y: item.y } : { xFrac: clampedXFrac, y: freeY });
+        if (freeY == null) {
+          // No free slot anywhere nearby — snap back to where it started.
+          setResetNonce((n) => n + 1);
+          return;
+        }
+        onUpdate(item.id, { xFrac: clampedXFrac, y: freeY });
       }}
       onResizeStop={(_e, _dir, ref, _delta, pos) => {
         const newW = parseFloat(ref.style.width);
@@ -160,7 +173,10 @@ function TodayWidgetShell({
         const h = Math.max(MIN_H, newH);
         const resizedRect: Rect = { x: xFrac * containerWidth, y: Math.max(0, pos.y), w: wFrac * containerWidth, h };
         // Growing into a neighbour isn't allowed — snap back to the size that was there before.
-        if (overlapsAny(resizedRect, otherRects)) return;
+        if (overlapsAny(resizedRect, otherRects)) {
+          setResetNonce((n) => n + 1);
+          return;
+        }
         onUpdate(item.id, { xFrac, y: Math.max(0, pos.y), wFrac, h });
       }}
       style={{ zIndex: editMode ? 10 : 1 }}
@@ -221,7 +237,16 @@ function TodayWidgetShell({
               <button
                 className="p-1 rounded-md hover:bg-amber-100 transition-colors"
                 onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { visible: !item.visible }); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (item.visible) {
+                    // Park it below everything else (including other hidden widgets) so it's
+                    // out of the way and doesn't pile up on top of them.
+                    onUpdate(item.id, { visible: false, xFrac: 0, y: bottomOfAllY + GAP });
+                  } else {
+                    onUpdate(item.id, { visible: true });
+                  }
+                }}
                 title={item.visible ? "Hide widget" : "Show widget"}
               >
                 {item.visible
@@ -264,6 +289,7 @@ const Today = () => {
   }, []);
 
   const canvasHeight = layout.reduce((max, w) => Math.max(max, w.y + w.h + GAP), 100);
+  const bottomOfAllY = layout.reduce((max, w) => Math.max(max, w.y + w.h), 0);
   const hiddenWidgets = layout.filter((w) => !w.visible);
 
   const handleUpdate = useCallback((id: string, patch: Partial<TodayWidgetItem>) => {
@@ -433,6 +459,7 @@ const Today = () => {
               editMode={editMode}
               onUpdate={handleUpdate}
               otherRects={otherRects}
+              bottomOfAllY={bottomOfAllY}
             >
               <WidgetContent type={item.type} />
             </TodayWidgetShell>
