@@ -14,18 +14,17 @@ export function TdTasksWidget() {
   const navigate = useNavigate();
   const { tasks, loading, setStatus, toggleToday } = useTasks();
 
-  const todayTasks = tasks
-    .filter((t) => t.isToday)
+  const allTodayTasks = tasks.filter((t) => t.isToday);
+
+  const todayTasks = allTodayTasks
+    .filter((t) => t.status !== "done")
     .sort((a, b) => {
       const pw: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-      const aDone = a.status === "done" ? 1 : 0;
-      const bDone = b.status === "done" ? 1 : 0;
-      if (aDone !== bDone) return aDone - bDone;
       return (pw[a.priority] ?? 2) - (pw[b.priority] ?? 2);
     });
 
-  const done = todayTasks.filter((t) => t.status === "done").length;
-  const total = todayTasks.length;
+  const done = allTodayTasks.filter((t) => t.status === "done").length;
+  const total = allTodayTasks.length;
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const cycle = (task: Task) => {
@@ -70,19 +69,24 @@ export function TdTasksWidget() {
             <button onClick={() => navigate("/tasks")} className="text-xs text-primary underline">Add tasks</button>
           </div>
         )}
+        {!loading && total > 0 && todayTasks.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-4">
+            <span className="text-2xl">🎉</span>
+            <p className="text-xs text-muted-foreground">All of today's tasks are done</p>
+          </div>
+        )}
         <AnimatePresence mode="popLayout">
           {todayTasks.map((task) => {
             const s = STATUSES.find((x) => x.value === task.status)!;
             const Icon = s.icon;
-            const isDone = task.status === "done";
             return (
               <motion.div key={task.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                className={`flex items-center gap-2 p-2 rounded-xl bg-background/60 border border-border/40 ${isDone ? "opacity-50" : ""}`}
+                className="flex items-center gap-2 p-2 rounded-xl bg-background/60 border border-border/40"
               >
                 <button onClick={() => cycle(task)} className="flex-shrink-0">
                   <Icon className={`w-4 h-4 ${s.color}`} />
                 </button>
-                <p className={`flex-1 text-xs font-medium leading-snug min-w-0 truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>
+                <p className="flex-1 text-xs font-medium leading-snug min-w-0 truncate">
                   {task.title}
                 </p>
                 <button onClick={() => task.id && toggleToday(task.id, false)} className="flex-shrink-0 text-amber-300 hover:text-muted-foreground transition-colors">

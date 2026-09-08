@@ -117,7 +117,11 @@ export interface HolidayWatch {
   tripadvisorMin?: number | null;
   maxBudgetGbp?: number | null;
   targetPriceGbp?: number | null;
+  /** Whether maxBudgetGbp/targetPriceGbp are per traveller or for the whole party. Defaults to total. */
+  budgetBasis?: "total" | "per_person";
   includeTransfers: boolean;
+  /** Add an estimate for parking the car at the departure airport for the trip length. */
+  includeParking?: boolean;
   kidsClub: boolean;
   poolRequired: boolean;
   keyFeatures?: HolidayKeyFeatureId[];
@@ -166,7 +170,7 @@ export type HolidayBookingMode =
   | "hotel_only";
 
 export interface HolidayCostLine {
-  kind: "flights" | "hotel" | "package" | "transfers" | "taxes_fees" | "discount" | "other";
+  kind: "flights" | "hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
   label: string;
   amountGbp: number;
   estimated?: boolean;

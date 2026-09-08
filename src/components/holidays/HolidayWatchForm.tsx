@@ -45,6 +45,13 @@ import {
   type DestinationFilterMode,
   type HolidayKeyFeatureId,
 } from "@/lib/holidayCatalog";
+import {
+  HOLIDAY_SEASON_DOT_COLOR,
+  HOLIDAY_SEASON_LABELS,
+  HOLIDAY_SEASON_STYLES,
+  seasonForRegionMonth,
+  type HolidaySeasonTag,
+} from "@/lib/holidaySeasons";
 import type { HolidayWatchScheduleMode } from "@/types/holidays";
 
 export type HolidayWatchFormValue = Omit<
@@ -92,7 +99,9 @@ function blankForm(settings: HolidaySettings): HolidayWatchFormValue {
     tripadvisorMin: null,
     maxBudgetGbp: null,
     targetPriceGbp: null,
+    budgetBasis: "total",
     includeTransfers: false,
+    includeParking: false,
     kidsClub: false,
     poolRequired: false,
     keyFeatures: [],
@@ -142,7 +151,9 @@ function fromWatch(w: HolidayWatch): HolidayWatchFormValue {
     tripadvisorMin: w.tripadvisorMin ?? null,
     maxBudgetGbp: w.maxBudgetGbp ?? null,
     targetPriceGbp: w.targetPriceGbp ?? null,
+    budgetBasis: w.budgetBasis === "per_person" ? "per_person" : "total",
     includeTransfers: !!w.includeTransfers,
+    includeParking: !!w.includeParking,
     kidsClub: !!w.kidsClub,
     poolRequired: !!w.poolRequired,
     keyFeatures: w.keyFeatures || [],
@@ -288,6 +299,7 @@ export function HolidayWatchForm({
     () => destinationsForFilter(filterMode, form.destinationPrefs?.region),
     [filterMode, form.destinationPrefs?.region],
   );
+  const seasonRegion = form.destinationPrefs?.region;
 
   const toggleAlert = (ch: HolidayAlertChannel, on: boolean) => {
     const set = new Set(form.alertChannels);
@@ -319,15 +331,19 @@ export function HolidayWatchForm({
   const scheduleMode = form.scheduleMode === "once" ? "once" : "scheduled";
   const kind: HolidayWatchKind = form.watchKind || "search";
 
+  const datesValid =
+    mode === "no_preference"
+      ? true
+      : mode === "months"
+        ? (form.dates.months?.length || 0) > 0
+        : Boolean(form.dates.startDate) &&
+          (Boolean(form.dates.endDate) || (form.dates.nights || 0) > 0);
+
   const searchValid =
     form.destination.trim().length > 0 &&
     form.departureAirports.length > 0 &&
     (form.includeAllBrands || form.brands.length > 0) &&
-    (mode === "no_preference" ||
-      mode === "months"
-        ? (form.dates.months?.length || 0) > 0
-        : Boolean(form.dates.startDate) &&
-          (Boolean(form.dates.endDate) || (form.dates.nights || 0) > 0));
+    datesValid;
 
   const flightValid =
     Boolean(form.specificFlight?.origin?.trim()) &&
@@ -339,10 +355,37 @@ export function HolidayWatchForm({
     Boolean(form.specificHotel?.location?.trim()) &&
     (Boolean(form.specificHotel?.checkIn) || Boolean(form.specificHotel?.nights));
 
+  const scheduleValid = scheduleMode === "once" || form.searchIntervalAmount >= 1;
+  const alertsValid = form.alertChannels.length > 0;
+
   const valid =
-    (scheduleMode === "once" || form.searchIntervalAmount >= 1) &&
-    form.alertChannels.length > 0 &&
+    scheduleValid &&
+    alertsValid &&
     (kind === "search" ? searchValid : kind === "flight" ? flightValid : hotelValid);
+
+  const missingReasons: string[] = [];
+  if (kind === "search") {
+    if (!form.destination.trim()) missingReasons.push("Add a destination");
+    if (form.departureAirports.length === 0) missingReasons.push("Add at least one UK departure airport");
+    if (!form.includeAllBrands && form.brands.length === 0) {
+      missingReasons.push("Add a preferred brand, or switch on \"Include all reputable UK brands\"");
+    }
+    if (!datesValid) {
+      missingReasons.push(
+        mode === "months" ? "Select at least one month" : "Add a start date, plus an end date or number of nights",
+      );
+    }
+  } else if (kind === "flight") {
+    if (!form.specificFlight?.origin?.trim()) missingReasons.push("Choose a departure airport");
+    if (!form.specificFlight?.destination?.trim()) missingReasons.push("Add where you're flying to");
+    if (!form.specificFlight?.outboundDate) missingReasons.push("Add an outbound date");
+  } else {
+    if (!form.specificHotel?.name?.trim()) missingReasons.push("Add the hotel or resort name");
+    if (!form.specificHotel?.location?.trim()) missingReasons.push("Add its location");
+    if (!form.specificHotel?.checkIn && !form.specificHotel?.nights) missingReasons.push("Add a check-in date or number of nights");
+  }
+  if (!scheduleValid) missingReasons.push("Set how often to search (at least 1)");
+  if (!alertsValid) missingReasons.push("Choose at least one way to be alerted");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -940,22 +983,48 @@ export function HolidayWatchForm({
               {MONTH_LABELS.map((label, i) => {
                 const month = i + 1;
                 const on = (form.dates.months || []).includes(month);
+                const season = seasonForRegionMonth(seasonRegion, month);
+                const seasonClasses = season ? HOLIDAY_SEASON_STYLES[season] : "";
                 return (
                   <button
                     key={label}
                     type="button"
                     onClick={() => toggleMonth(month)}
-                    className={`rounded-xl border px-2 py-2 text-xs font-semibold transition ${
+                    title={season ? HOLIDAY_SEASON_LABELS[season] : undefined}
+                    className={`relative rounded-xl border px-2 py-2 text-xs font-semibold transition ${
                       on
-                        ? "border-primary/45 bg-primary/10 text-foreground"
-                        : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
+                        ? "border-primary/60 bg-primary/15 text-foreground ring-2 ring-primary/25"
+                        : season
+                          ? seasonClasses
+                          : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
                     }`}
                   >
                     {label}
+                    {season && (
+                      <span
+                        className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: HOLIDAY_SEASON_DOT_COLOR[season] }}
+                      />
+                    )}
                   </button>
                 );
               })}
             </div>
+            {seasonRegion ? (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                {(Object.keys(HOLIDAY_SEASON_LABELS) as HolidaySeasonTag[]).map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: HOLIDAY_SEASON_DOT_COLOR[tag] }} />
+                    {HOLIDAY_SEASON_LABELS[tag]}
+                  </span>
+                ))}
+                <span className="w-full text-[10px] opacity-70">Rough guide only — always check the specific year before booking.</span>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Pick a destination above to see seasonal colour-coding for each month.
+              </p>
+            )}
             <Field label="Nights">
               <Input
                 type="number"
@@ -1076,9 +1145,38 @@ export function HolidayWatchForm({
             <Input type="number" min={0} placeholder="Target" value={form.targetPriceGbp ?? ""} onChange={(e) => patch({ targetPriceGbp: e.target.value === "" ? null : Number(e.target.value) })} className="h-9 rounded-xl" />
           </Field>
         </div>
+        {(form.maxBudgetGbp != null || form.targetPriceGbp != null) && (
+          <Field label="These amounts are">
+            <div className="grid grid-cols-2 gap-2">
+              {(["total", "per_person"] as const).map((basis) => (
+                <button
+                  key={basis}
+                  type="button"
+                  onClick={() => patch({ budgetBasis: basis })}
+                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                    (form.budgetBasis || "total") === basis
+                      ? "border-primary/45 bg-primary/10 text-foreground"
+                      : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  {basis === "total" ? "Total for everyone" : "Per person"}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>Transfers included</span>
           <Switch checked={form.includeTransfers} onCheckedChange={(v) => patch({ includeTransfers: v })} />
+        </label>
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <div>
+            <span className="block">Include airport parking cost</span>
+            <span className="block text-[11px] font-normal text-muted-foreground">
+              Adds a rough estimate for parking at your departure airport for the trip length
+            </span>
+          </div>
+          <Switch checked={!!form.includeParking} onCheckedChange={(v) => patch({ includeParking: v })} />
         </label>
       </Section>
 
@@ -1134,6 +1232,26 @@ export function HolidayWatchForm({
               />
             </Field>
           </div>
+          {(form.maxBudgetGbp != null || form.targetPriceGbp != null) && (
+            <Field label="These amounts are">
+              <div className="grid grid-cols-2 gap-2">
+                {(["total", "per_person"] as const).map((basis) => (
+                  <button
+                    key={basis}
+                    type="button"
+                    onClick={() => patch({ budgetBasis: basis })}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                      (form.budgetBasis || "total") === basis
+                        ? "border-primary/45 bg-primary/10 text-foreground"
+                        : "border-border/60 bg-card text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {basis === "total" ? "Total for everyone" : "Per person"}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
           <Field label="Notes">
             <Textarea
               value={form.notes || ""}
@@ -1234,6 +1352,17 @@ export function HolidayWatchForm({
           </div>
         </Field>
       </Section>
+
+      {!valid && missingReasons.length > 0 && (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          <p className="mb-1 font-semibold">Before you can start watching:</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {missingReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex gap-2 pt-1">
         <Button type="button" variant="outline" className="flex-1 rounded-xl" onClick={onCancel}>

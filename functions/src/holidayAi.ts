@@ -8,6 +8,8 @@ import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import {
+  effectiveBudgetGbp,
+  estimateAirportParkingGbp,
   isPlausibleTotalPrice,
   minimumPlausibleTotal,
   type BookingMode,
@@ -260,19 +262,28 @@ export async function aiSearchWatchPrices(
 
     const floor = minimumPlausibleTotal(watch);
     const party = { adults: watch.travellers?.adults ?? 2, children: watch.travellers?.children ?? 0, infants: watch.travellers?.infants ?? 0 };
+    const nights = watch.dates?.nights || 7;
+    const departureAirport =
+      (watch.departureAirports || []).filter((c) => c.toUpperCase() !== "LON")[0] ||
+      (watch.departureAirports || [])[0];
+    const parkingGbp = watch.includeParking ? estimateAirportParkingGbp(departureAirport, nights) : 0;
 
     const criteria = [
       `Destination: ${watch.destination}`,
       watch.dates?.startDate ? `Dates: around ${watch.dates.startDate}${watch.dates.endDate ? ` to ${watch.dates.endDate}` : ""}` : "",
       watch.dates?.months?.length ? `Travel window: months ${watch.dates.months.join(", ")}` : "",
-      `Nights: ${watch.dates?.nights || 7}`,
+      `Nights: ${nights}`,
       `Travellers: ${party.adults} adult(s), ${party.children} child(ren), ${party.infants} infant(s)`,
       watch.departureAirports?.length ? `Departing from: ${watch.departureAirports.join(", ")}` : "",
       watch.directFlightsOnly ? "Direct flights only." : "",
       watch.boardBasis && watch.boardBasis !== "no_preference" ? `Board basis: ${watch.boardBasis}` : "",
       watch.hotelStarsMin ? `Minimum hotel stars: ${watch.hotelStarsMin}` : "",
       watch.tripadvisorMin ? `Minimum TripAdvisor score: ${watch.tripadvisorMin}` : "",
-      watch.maxBudgetGbp ? `Maximum total budget: £${watch.maxBudgetGbp}` : "",
+      watch.maxBudgetGbp
+        ? watch.budgetBasis === "per_person"
+          ? `Maximum budget: £${watch.maxBudgetGbp} per person (£${effectiveBudgetGbp(watch.maxBudgetGbp, watch)} total for the party)`
+          : `Maximum total budget for the whole party: £${watch.maxBudgetGbp}`
+        : "",
       watch.includeTransfers ? "Airport transfers should be included." : "",
       watch.keyFeatures?.length ? `Must-have features: ${watch.keyFeatures.join(", ")}` : "",
       watch.includeAllBrands
@@ -341,27 +352,33 @@ export async function aiSearchWatchPrices(
     const findings: SearchOption[] = rawOptions
       .filter((o) => isAllowlistedUrl(String(o.sourceUrl || "")))
       .filter((o) => isPlausibleTotalPrice(Number(o.priceGbp), watch))
-      .map((o, i): SearchOption => ({
-        priceGbp: Math.round(Number(o.priceGbp)),
-        sourceName: String(o.sourceName || "Travel site"),
-        sourceUrl: String(o.sourceUrl),
-        packageLabel: `${o.hotelName || watch.destination} · AI-researched`,
-        hotelName: o.hotelName ? String(o.hotelName) : undefined,
-        destinationLabel: watch.destination,
-        nights: watch.dates?.nights || 7,
-        boardBasis: o.boardBasis ? String(o.boardBasis) : undefined,
-        officialStars: o.officialStars == null ? null : Number(o.officialStars),
-        tripadvisorScore: o.tripadvisorScore == null ? null : Number(o.tripadvisorScore),
-        independentSummary: o.independentSummary ? String(o.independentSummary) : undefined,
-        whySuitable: Array.isArray(o.whySuitable) ? o.whySuitable.map(String) : undefined,
-        bookingMode: (["package", "flights_hotel_separate", "airline_holiday", "hotel_only"] as BookingMode[]).includes(o.bookingMode)
-          ? (o.bookingMode as BookingMode)
-          : undefined,
-        notes: o.priceNote ? String(o.priceNote) : "Live price found via AI web research across allowlisted travel sites",
-        priceConfidence: "ai_researched",
-        rank: i + 1,
-        suitabilityScore: Math.max(0, 90 - i * 4),
-      }))
+      .map((o, i): SearchOption => {
+        const basePrice = Math.round(Number(o.priceGbp));
+        const parkingNote = parkingGbp > 0
+          ? ` Includes an estimated £${parkingGbp} for parking at ${departureAirport || "your departure airport"} for the trip.`
+          : "";
+        return {
+          priceGbp: basePrice + parkingGbp,
+          sourceName: String(o.sourceName || "Travel site"),
+          sourceUrl: String(o.sourceUrl),
+          packageLabel: `${o.hotelName || watch.destination} · AI-researched`,
+          hotelName: o.hotelName ? String(o.hotelName) : undefined,
+          destinationLabel: watch.destination,
+          nights,
+          boardBasis: o.boardBasis ? String(o.boardBasis) : undefined,
+          officialStars: o.officialStars == null ? null : Number(o.officialStars),
+          tripadvisorScore: o.tripadvisorScore == null ? null : Number(o.tripadvisorScore),
+          independentSummary: o.independentSummary ? String(o.independentSummary) : undefined,
+          whySuitable: Array.isArray(o.whySuitable) ? o.whySuitable.map(String) : undefined,
+          bookingMode: (["package", "flights_hotel_separate", "airline_holiday", "hotel_only"] as BookingMode[]).includes(o.bookingMode)
+            ? (o.bookingMode as BookingMode)
+            : undefined,
+          notes: `${o.priceNote ? String(o.priceNote) : "Live price found via AI web research across allowlisted travel sites"}${parkingNote}`,
+          priceConfidence: "ai_researched",
+          rank: i + 1,
+          suitabilityScore: Math.max(0, 90 - i * 4),
+        };
+      })
       .slice(0, 10);
 
     return { findings, sourcesChecked: sourcesChecked.length ? sourcesChecked : findings.map((f) => f.sourceName) };

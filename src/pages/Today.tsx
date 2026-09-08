@@ -74,17 +74,54 @@ const GAP         = 18;
 const PADDING     = 16;
 const TILE_GAP    = 14;
 
+interface Rect { x: number; y: number; w: number; h: number }
+
+/** A small overlap tolerance so tiles sharing an edge don't count as colliding. */
+function rectsOverlap(a: Rect, b: Rect, epsilon = 2): boolean {
+  return (
+    a.x < b.x + b.w - epsilon &&
+    a.x + a.w > b.x + epsilon &&
+    a.y < b.y + b.h - epsilon &&
+    a.y + a.h > b.y + epsilon
+  );
+}
+
+function overlapsAny(rect: Rect, others: Rect[]): boolean {
+  return others.some((o) => rectsOverlap(rect, o));
+}
+
+/**
+ * Free movement, no overlap: keeps the dropped column/width and searches
+ * outward (down first, then up) in row-height steps for the nearest y that
+ * doesn't collide with anything already placed there.
+ */
+function findFreeY(desiredY: number, x: number, w: number, h: number, others: Rect[]): number | null {
+  const rectAt = (y: number): Rect => ({ x, y, w, h });
+  if (!overlapsAny(rectAt(desiredY), others)) return desiredY;
+
+  const maxSteps = 400; // ± 8000px, comfortably past any realistic page height
+  for (let step = 1; step <= maxSteps; step++) {
+    const down = desiredY + step * SNAP_ROW_PX;
+    if (!overlapsAny(rectAt(down), others)) return down;
+    const up = desiredY - step * SNAP_ROW_PX;
+    if (up >= 0 && !overlapsAny(rectAt(up), others)) return up;
+  }
+  return null;
+}
+
 function TodayWidgetShell({
   item,
   containerWidth,
   editMode,
   onUpdate,
+  otherRects,
   children,
 }: {
   item: TodayWidgetItem;
   containerWidth: number;
   editMode: boolean;
   onUpdate: (id: string, patch: Partial<TodayWidgetItem>) => void;
+  otherRects: Rect[];
   children: React.ReactNode;
 }) {
   const colW = containerWidth / SNAP_COLS;
@@ -108,15 +145,23 @@ function TodayWidgetShell({
       minHeight={MIN_H}
       onDragStop={(_e, d) => {
         const snapped = Math.round((d.x / containerWidth) * SNAP_COLS) / SNAP_COLS;
-        const clamped = Math.max(0, Math.min(1 - item.wFrac, snapped));
-        onUpdate(item.id, { xFrac: clamped, y: Math.max(0, d.y) });
+        const clampedXFrac = Math.max(0, Math.min(1 - item.wFrac, snapped));
+        const desiredY = Math.max(0, d.y);
+        const rectX = clampedXFrac * containerWidth;
+        const freeY = findFreeY(desiredY, rectX, w, item.h, otherRects);
+        // No free slot anywhere nearby — leave it exactly where it started.
+        onUpdate(item.id, freeY == null ? { xFrac: item.xFrac, y: item.y } : { xFrac: clampedXFrac, y: freeY });
       }}
       onResizeStop={(_e, _dir, ref, _delta, pos) => {
         const newW = parseFloat(ref.style.width);
         const newH = parseFloat(ref.style.height);
         const wFrac = Math.max(MIN_W_FRAC, Math.min(1, Math.round((newW / containerWidth) * SNAP_COLS) / SNAP_COLS));
         const xFrac = Math.max(0, Math.min(1 - wFrac, Math.round((pos.x / containerWidth) * SNAP_COLS) / SNAP_COLS));
-        onUpdate(item.id, { xFrac, y: Math.max(0, pos.y), wFrac, h: Math.max(MIN_H, newH) });
+        const h = Math.max(MIN_H, newH);
+        const resizedRect: Rect = { x: xFrac * containerWidth, y: Math.max(0, pos.y), w: wFrac * containerWidth, h };
+        // Growing into a neighbour isn't allowed — snap back to the size that was there before.
+        if (overlapsAny(resizedRect, otherRects)) return;
+        onUpdate(item.id, { xFrac, y: Math.max(0, pos.y), wFrac, h });
       }}
       style={{ zIndex: editMode ? 10 : 1 }}
     >
@@ -376,6 +421,9 @@ const Today = () => {
         {containerWidth > 0 && layout.map((item) => {
           if (!item.visible && !editMode) return null;
           const availWidth = containerWidth - PADDING * 2;
+          const otherRects: Rect[] = layout
+            .filter((w) => w.visible && w.id !== item.id)
+            .map((w) => ({ x: w.xFrac * availWidth, y: w.y, w: w.wFrac * availWidth, h: w.h }));
 
           return (
             <TodayWidgetShell
@@ -384,6 +432,7 @@ const Today = () => {
               containerWidth={availWidth}
               editMode={editMode}
               onUpdate={handleUpdate}
+              otherRects={otherRects}
             >
               <WidgetContent type={item.type} />
             </TodayWidgetShell>

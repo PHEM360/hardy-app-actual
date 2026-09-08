@@ -16,7 +16,7 @@ export type BookingMode =
 export type HaulBand = "short" | "medium" | "long" | "ultra";
 
 export interface CostLine {
-  kind: "flights" | "hotel" | "package" | "transfers" | "taxes_fees" | "discount" | "other";
+  kind: "flights" | "hotel" | "package" | "transfers" | "parking" | "taxes_fees" | "discount" | "other";
   label: string;
   amountGbp: number;
   estimated?: boolean;
@@ -109,10 +109,23 @@ export interface WatchLike {
   tripadvisorMin?: number | null;
   maxBudgetGbp?: number | null;
   targetPriceGbp?: number | null;
+  /** Whether maxBudgetGbp/targetPriceGbp are per traveller or for the whole party. Defaults to total. */
+  budgetBasis?: "total" | "per_person";
   includeTransfers?: boolean;
+  /** Add an estimate for parking the car at the departure airport for the trip length. */
+  includeParking?: boolean;
   keyFeatures?: string[];
   kidsClub?: boolean;
   poolRequired?: boolean;
+}
+
+/** Per-person budget fields are compared against whole-party prices — convert to a total first. */
+export function effectiveBudgetGbp(amount: number | null | undefined, watch: WatchLike): number | null {
+  if (amount == null) return null;
+  if (watch.budgetBasis === "per_person") {
+    return amount * partySize(watch).paying;
+  }
+  return amount;
 }
 
 const REGION_HAUL: Record<string, HaulBand> = {
@@ -156,6 +169,22 @@ const BOARD_NIGHTLY_PP: Record<string, number> = {
   all_inclusive: 62,
   no_preference: 25,
 };
+
+/** Rough typical per-day meet & greet / park & ride rate at UK airports. */
+const AIRPORT_PARKING_PER_DAY_GBP: Record<string, number> = {
+  LHR: 22, LGW: 16, STN: 13, LTN: 12, LCY: 20, SEN: 9,
+  MAN: 13, BHX: 12, EDI: 14, GLA: 12, ABZ: 11, BFS: 10,
+  BRS: 13, NCL: 10, LPL: 9, EMA: 9, LBA: 9, SOU: 12, NWI: 9, EXT: 9,
+};
+const DEFAULT_PARKING_PER_DAY_GBP = 12;
+
+/** Whole-trip parking estimate at the departure airport — a day either side of the nights covers travel days. */
+export function estimateAirportParkingGbp(departureAirport: string | undefined, nights: number): number {
+  const code = (departureAirport || "").toUpperCase().trim();
+  const perDay = AIRPORT_PARKING_PER_DAY_GBP[code] ?? DEFAULT_PARKING_PER_DAY_GBP;
+  const days = Math.max(1, nights) + 1;
+  return Math.round(perDay * days);
+}
 
 const HOTEL_POOL: Record<string, string[]> = {
   Caribbean: [
@@ -378,6 +407,7 @@ export function buildCostBreakdown(input: {
   transfers?: number;
   taxes?: number;
   packageDiscount?: number;
+  parking?: number;
   confidence: CostBreakdown["confidence"];
   estimatedComponents?: boolean;
 }): CostBreakdown {
@@ -442,6 +472,14 @@ export function buildCostBreakdown(input: {
       estimated: true,
     });
   }
+  if (input.parking && input.parking > 0) {
+    lines.push({
+      kind: "parking",
+      label: "Airport parking for the trip (est.)",
+      amountGbp: Math.round(input.parking),
+      estimated: true,
+    });
+  }
 
   const totalGbp = Math.round(lines.reduce((s, l) => s + l.amountGbp, 0));
   return {
@@ -459,7 +497,7 @@ export function buildCostBreakdown(input: {
 export function isPlausibleTotalPrice(price: number, watch: WatchLike): boolean {
   if (!Number.isFinite(price) || price <= 0) return false;
   const floor = minimumPlausibleTotal(watch);
-  const ceiling = Math.max(floor * 8, (watch.maxBudgetGbp || floor) * 3, 80000);
+  const ceiling = Math.max(floor * 8, (effectiveBudgetGbp(watch.maxBudgetGbp, watch) || floor) * 3, 80000);
   return price >= floor && price <= ceiling;
 }
 
@@ -590,14 +628,17 @@ function scoreOption(watch: WatchLike, option: SearchOption, index: number): Sea
   const whySuitable: string[] = [];
   let suitability = 68;
 
-  if (watch.maxBudgetGbp != null && option.priceGbp <= watch.maxBudgetGbp) {
+  const maxBudget = effectiveBudgetGbp(watch.maxBudgetGbp, watch);
+  const targetPrice = effectiveBudgetGbp(watch.targetPriceGbp, watch);
+
+  if (maxBudget != null && option.priceGbp <= maxBudget) {
     suitability += 10;
     whySuitable.push("Within your max budget");
-  } else if (watch.maxBudgetGbp != null && option.priceGbp > watch.maxBudgetGbp) {
+  } else if (maxBudget != null && option.priceGbp > maxBudget) {
     suitability -= 12;
     whySuitable.push("Above max budget");
   }
-  if (watch.targetPriceGbp != null && option.priceGbp <= watch.targetPriceGbp) {
+  if (targetPrice != null && option.priceGbp <= targetPrice) {
     suitability += 8;
     whySuitable.push("At or under alert price");
   }
@@ -697,6 +738,7 @@ export function assembleSearchOptions(input: {
     const transfers = watch.includeTransfers ? Math.round(35 * party.paying + 25) : Math.round(28 * party.paying);
     const taxes = Math.round(flights.totalGbp * 0.04 + 18 * party.paying);
     const saving = Math.round((flights.totalGbp + hotel.totalGbp) * packageSavingPct(seed));
+    const parking = watch.includeParking ? estimateAirportParkingGbp(departure, nights) : 0;
 
     const html = input.htmlBySource[link.name];
     const livePrices = html ? extractGbpPrices(html, watch) : [];
@@ -735,11 +777,13 @@ export function assembleSearchOptions(input: {
           link.bookingMode === "package" || link.bookingMode === "airline_holiday"
             ? Math.round(saving * scale)
             : 0,
+        parking,
         confidence,
         estimatedComponents: true,
       });
-      // Force total to live
-      breakdown.totalGbp = liveTotal;
+      // Force total to live, plus our own deterministic parking add-on
+      priceGbp = liveTotal + parking;
+      breakdown.totalGbp = priceGbp;
     } else {
       if (link.bookingMode === "flights_hotel_separate") {
         breakdown = buildCostBreakdown({
@@ -749,6 +793,7 @@ export function assembleSearchOptions(input: {
           hotelTotal: hotel.totalGbp,
           transfers,
           taxes,
+          parking,
           confidence: "estimated",
         });
       } else {
@@ -759,6 +804,7 @@ export function assembleSearchOptions(input: {
           hotelTotal: hotel.totalGbp,
           transfers: Math.round(transfers * 0.5),
           packageDiscount: saving,
+          parking,
           confidence: "estimated",
         });
       }
@@ -769,7 +815,8 @@ export function assembleSearchOptions(input: {
         : `Structured estimate from flights (${flights.haul} haul) + hotel research — live site blocked or unavailable`;
     }
 
-    if (watch.maxBudgetGbp != null && priceGbp > watch.maxBudgetGbp * 1.4) {
+    const effectiveMaxBudget = effectiveBudgetGbp(watch.maxBudgetGbp, watch);
+    if (effectiveMaxBudget != null && priceGbp > effectiveMaxBudget * 1.4) {
       return;
     }
 

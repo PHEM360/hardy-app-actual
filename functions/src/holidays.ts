@@ -13,6 +13,7 @@ import { escapeHtml, sanitizeNotifTitle } from "./notifications/helpers";
 import type { NotificationPrefs } from "./notifications/types";
 import {
   assembleSearchOptions,
+  effectiveBudgetGbp,
   minimumPlausibleTotal,
   type BookingMode,
   type SourceLink,
@@ -62,7 +63,9 @@ interface HolidayWatchDoc {
   tripadvisorMin?: number | null;
   maxBudgetGbp?: number | null;
   targetPriceGbp?: number | null;
+  budgetBasis?: "total" | "per_person";
   includeTransfers?: boolean;
+  includeParking?: boolean;
   keyFeatures?: string[];
   notes?: string;
   specificFlight?: {
@@ -795,10 +798,11 @@ async function processOneWatch(
 
   await watchRef.update(patch);
 
+  const effectiveTarget = effectiveBudgetGbp(watch.targetPriceGbp, watch);
   const hitTarget =
     bestFinding &&
-    watch.targetPriceGbp != null &&
-    bestFinding.priceGbp <= watch.targetPriceGbp;
+    effectiveTarget != null &&
+    bestFinding.priceGbp <= effectiveTarget;
 
   if (bestFinding && (cheaperThanBefore || hitTarget)) {
     await alertPriceDrop(uid, watchId, watch, bestFinding, previousBest, secrets);
