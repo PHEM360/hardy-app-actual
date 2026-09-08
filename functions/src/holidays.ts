@@ -17,32 +17,10 @@ import {
   type BookingMode,
   type SourceLink,
 } from "./holidaySearchEngine";
+import { aiSearchWatchPrices, openaiApiKey } from "./holidayAi";
+import { LEGITIMATE_TRAVEL_HOSTS, isAllowlistedTravelUrl } from "./travelHosts";
 
-/** Only these hostnames are contacted or linked as price sources. */
-export const LEGITIMATE_TRAVEL_HOSTS = [
-  "www.britishairways.com",
-  "holidays.ba.com",
-  "www.jet2holidays.com",
-  "www.jet2.com",
-  "www.tui.co.uk",
-  "www.firstchoice.co.uk",
-  "www.easyjet.com",
-  "www.loveholidays.com",
-  "www.onthebeach.co.uk",
-  "www.lastminute.com",
-  "www.expedia.co.uk",
-  "www.booking.com",
-  "www.skyscanner.net",
-  "www.kayak.co.uk",
-  "www.trailfinders.com",
-  "www.kuoni.co.uk",
-  "www.virginatlantic.com",
-  "www.virginholidays.co.uk",
-  "www.ryanair.com",
-  "www.travelrepublic.co.uk",
-  "www.secretescapes.com",
-  "www.saga.co.uk",
-] as const;
+export { LEGITIMATE_TRAVEL_HOSTS };
 
 type DateMode = "fixed" | "flexible_days" | "months" | "no_preference";
 type FlightBooking =
@@ -144,14 +122,7 @@ function intervalMs(amount: number, unit: SearchUnit = "days"): number {
   }
 }
 
-function isAllowlistedUrl(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return LEGITIMATE_TRAVEL_HOSTS.some((h) => host === h || host.endsWith(`.${h.replace(/^www\./, "")}`));
-  } catch {
-    return false;
-  }
-}
+const isAllowlistedUrl = isAllowlistedTravelUrl;
 
 function encode(q: string) {
   return encodeURIComponent(q.trim());
@@ -573,14 +544,35 @@ async function fetchAllowlistedPage(url: string): Promise<string | null> {
 }
 
 /**
- * Flights → hotels → booking-mode combine → research → rank.
- * Live scrapes are validated against destination/nights floors so deposits
+ * AI web research first (real prices, real hotel names, from allowlisted
+ * sites) — falls back to the modelled flights+hotel estimate only when the
+ * AI service is unavailable or finds nothing usable, so a watch still gets
+ * a (clearly-labelled) result rather than failing outright.
+ * Either path is validated against destination/nights floors so deposits
  * and junk £50-style numbers cannot become "best deals".
  */
-export async function searchWatchPrices(watch: HolidayWatchDoc): Promise<{
+export async function searchWatchPrices(
+  watch: HolidayWatchDoc,
+  uid: string,
+  openaiApiKeyValue?: string,
+): Promise<{
   findings: PriceFinding[];
   sourcesChecked: string[];
 }> {
+  if (openaiApiKeyValue) {
+    const aiResult = await aiSearchWatchPrices(watch, uid, openaiApiKeyValue);
+    if (aiResult && aiResult.findings.length > 0) {
+      logger.info("Holiday search used AI web research", {
+        destination: watch.destination,
+        findings: aiResult.findings.length,
+      });
+      return aiResult;
+    }
+    logger.info("AI holiday research found nothing usable, falling back to modelled estimate", {
+      destination: watch.destination,
+    });
+  }
+
   const links = buildSearchLinks(watch).slice(0, 10);
   const { out, back } = dateHint(watch);
   const htmlBySource: Record<string, string | null> = {};
@@ -599,7 +591,7 @@ export async function searchWatchPrices(watch: HolidayWatchDoc): Promise<{
     returnDate: back,
   });
 
-  logger.info("Holiday search assembled", {
+  logger.info("Holiday search assembled from modelled estimate", {
     destination: watch.destination,
     floorGbp: minimumPlausibleTotal(watch),
     findings: assembled.findings.length,
@@ -686,13 +678,13 @@ async function processOneWatch(
   uid: string,
   watchId: string,
   watch: HolidayWatchDoc,
-  secrets: { postmark: string; twilioSid: string; twilioToken: string; twilioFrom: string },
+  secrets: { postmark: string; twilioSid: string; twilioToken: string; twilioFrom: string; openai: string },
 ) {
   const db = admin.firestore();
   const watchRef = db.doc(`holidays/${uid}/watches/${watchId}`);
   const previousBest = typeof watch.bestPriceGbp === "number" ? watch.bestPriceGbp : null;
 
-  const { findings, sourcesChecked } = await searchWatchPrices(watch);
+  const { findings, sourcesChecked } = await searchWatchPrices(watch, uid, secrets.openai);
   const nowIso = new Date().toISOString();
   const once = watch.scheduleMode === "once";
   const nextAt = once
@@ -828,8 +820,8 @@ async function processOneWatch(
 
 export const runHolidayPriceSearch = onCall(
   {
-    secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom],
-    timeoutSeconds: 120,
+    secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom, openaiApiKey],
+    timeoutSeconds: 180,
   },
   async (request) => {
     const uid = requireAuth(request);
@@ -848,16 +840,29 @@ export const runHolidayPriceSearch = onCall(
       twilioSid: twilioSid.value(),
       twilioToken: twilioToken.value(),
       twilioFrom: twilioFrom.value(),
+      openai: openaiApiKey.value(),
     });
   },
 );
+
+/** Runs async tasks with at most `limit` in flight at once. */
+async function runWithConcurrency<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
+  let index = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const item = items[index++];
+      await task(item);
+    }
+  });
+  await Promise.all(workers);
+}
 
 export const processHolidayPriceWatches = onSchedule(
   {
     schedule: "every 1 hours",
     timeZone: "Europe/London",
-    secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom],
-    timeoutSeconds: 300,
+    secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom, openaiApiKey],
+    timeoutSeconds: 1800,
   },
   async () => {
     const db = admin.firestore();
@@ -867,6 +872,7 @@ export const processHolidayPriceWatches = onSchedule(
       twilioSid: twilioSid.value(),
       twilioToken: twilioToken.value(),
       twilioFrom: twilioFrom.value(),
+      openai: openaiApiKey.value(),
     };
 
     // Collection-group query on watches due for search
@@ -882,11 +888,11 @@ export const processHolidayPriceWatches = onSchedule(
       return;
     }
 
-    for (const docSnap of due.docs) {
+    await runWithConcurrency(due.docs, 4, async (docSnap) => {
       const watch = docSnap.data() as HolidayWatchDoc;
       const path = docSnap.ref.path; // holidays/{uid}/watches/{watchId}
       const parts = path.split("/");
-      if (parts.length < 4 || parts[0] !== "holidays") continue;
+      if (parts.length < 4 || parts[0] !== "holidays") return;
       const uid = parts[1];
       const watchId = parts[3];
       try {
@@ -903,6 +909,6 @@ export const processHolidayPriceWatches = onSchedule(
           /* ignore */
         }
       }
-    }
+    });
   },
 );

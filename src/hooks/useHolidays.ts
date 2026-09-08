@@ -16,6 +16,7 @@ import { useAuth } from "@/auth/AuthContext";
 import {
   DEFAULT_HOLIDAY_SETTINGS,
   nextHolidaySearchAt,
+  type HolidayAiUsage,
   type HolidayPriceFinding,
   type HolidaySettings,
   type HolidayWatch,
@@ -31,6 +32,7 @@ export function useHolidays(scopeUserId?: string) {
   const uid = scopeUserId ?? dataUid;
   const [watches, setWatches] = useState<HolidayWatch[]>([]);
   const [settings, setSettings] = useState<HolidaySettings>(DEFAULT_HOLIDAY_SETTINGS);
+  const [aiUsage, setAiUsage] = useState<HolidayAiUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +40,7 @@ export function useHolidays(scopeUserId?: string) {
     if (!uid) {
       setWatches([]);
       setSettings(DEFAULT_HOLIDAY_SETTINGS);
+      setAiUsage(null);
       setLoading(false);
       return;
     }
@@ -76,9 +79,20 @@ export function useHolidays(scopeUserId?: string) {
       },
     );
 
+    const unsubAiUsage = onSnapshot(
+      doc(db, "holidays", uid, "meta", "aiUsage"),
+      (snap) => {
+        setAiUsage(snap.exists() ? (snap.data() as HolidayAiUsage) : null);
+      },
+      () => {
+        /* usage ledger is optional until the first AI search runs */
+      },
+    );
+
     return () => {
       unsubWatches();
       unsubSettings();
+      unsubAiUsage();
     };
   }, [uid]);
 
@@ -198,6 +212,7 @@ export function useHolidays(scopeUserId?: string) {
   return {
     watches,
     settings,
+    aiUsage,
     loading,
     error,
     saveSettings,

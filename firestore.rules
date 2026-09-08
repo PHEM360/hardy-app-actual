@@ -867,6 +867,11 @@ service cloud.firestore {
       allow read: if canViewPage(userId, "holidays");
       allow write: if canEditPage(userId, "holidays");
     }
+    // AI destination overviews - written by the backend only (Admin SDK bypasses rules)
+    match /holidays/{userId}/overviews/{overviewId} {
+      allow read: if canViewPage(userId, "holidays");
+      allow write: if false;
+    }
 
     // Substances config - TOTP setup per user - strictly private, never shared
     match /substancesConfig/{userId} {

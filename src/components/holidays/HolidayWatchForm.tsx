@@ -14,8 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AI_SEARCH_ESTIMATED_COST_GBP,
   BOARD_BASIS_LABELS,
   DATE_MODE_LABELS,
+  estimateAiSearchMonthlyCostGbp,
   FLIGHT_BOOKING_LABELS,
   FLIGHT_CLASS_LABELS,
   HOLIDAY_BRAND_OPTIONS,
@@ -1202,7 +1204,18 @@ export function HolidayWatchForm({
                 </SelectContent>
               </Select>
             </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Estimated AI research cost: ≈£{AI_SEARCH_ESTIMATED_COST_GBP.toFixed(2)} per search, so
+              roughly <strong>£{estimateAiSearchMonthlyCostGbp(form.searchIntervalAmount || 1, form.searchIntervalUnit).toFixed(2)} a month</strong> at
+              this frequency. Comes out of your shared AI research budget in Preferences — real spend
+              is metered and capped, this is just an estimate to plan by.
+            </p>
           </Field>
+        )}
+        {scheduleMode === "once" && (
+          <p className="text-[11px] text-muted-foreground">
+            Estimated AI research cost for this one-off search: ≈£{AI_SEARCH_ESTIMATED_COST_GBP.toFixed(2)}.
+          </p>
         )}
         <Field label="Alert me via">
           <div className="flex flex-wrap gap-3">

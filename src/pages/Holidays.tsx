@@ -13,6 +13,9 @@ import {
   Archive,
   Settings2,
   PoundSterling,
+  Compass,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, parseISO } from "date-fns";
@@ -20,13 +23,16 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import DogLoader from "@/components/DogLoader";
 import { HolidayWatchForm, type HolidayWatchFormValue } from "@/components/holidays/HolidayWatchForm";
 import { HolidayOptionsPanel } from "@/components/holidays/HolidayOptionsPanel";
 import { useHolidays } from "@/hooks/useHolidays";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import { runHolidayPriceSearch } from "@/lib/holidaysApi";
+import { researchHolidayDestination, runHolidayPriceSearch } from "@/lib/holidaysApi";
+import { HOLIDAY_KEY_FEATURES } from "@/lib/holidayCatalog";
 import {
   BOARD_BASIS_LABELS,
   DATE_MODE_LABELS,
@@ -36,13 +42,14 @@ import {
   HOLIDAY_ACCENT,
   MONTH_LABELS,
   WATCH_KIND_LABELS,
+  type HolidayDestinationOverview,
   type HolidayPriceFinding,
   type HolidaySearchOption,
   type HolidaySettings,
   type HolidayWatch,
 } from "@/types/holidays";
 
-type RailSection = "watches" | "best" | "settings";
+type RailSection = "watches" | "best" | "explore" | "settings";
 
 export interface HolidaysMockData {
   watches: HolidayWatch[];
@@ -235,6 +242,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const loading = mockData ? false : live.loading;
   const error = mockData ? null : live.error;
   const { saveSettings, addWatch, updateWatch, setWatchStatus, deleteWatch, addManualPrice } = live;
+  const aiUsage = mockData ? null : live.aiUsage;
 
   const [section, setSection] = useState<RailSection>("watches");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -253,6 +261,48 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
     setDefaultIntervalAmount(settings.defaultSearchIntervalAmount);
     setDefaultIntervalUnit(settings.defaultSearchIntervalUnit);
   }, [settings.defaultSearchIntervalAmount, settings.defaultSearchIntervalUnit]);
+
+  const [likedResortsText, setLikedResortsText] = useState(settings.likedResorts.join(", "));
+  const [likedAmenities, setLikedAmenities] = useState(settings.likedAmenities);
+  const [reviewPrioritiesText, setReviewPrioritiesText] = useState(settings.reviewPriorities.join(", "));
+  const [preferenceNotes, setPreferenceNotes] = useState(settings.preferenceNotes);
+  const [aiBudgetText, setAiBudgetText] = useState(
+    settings.aiMonthlyBudgetGbp == null ? "" : String(settings.aiMonthlyBudgetGbp),
+  );
+
+  useEffect(() => {
+    setLikedResortsText(settings.likedResorts.join(", "));
+    setLikedAmenities(settings.likedAmenities);
+    setReviewPrioritiesText(settings.reviewPriorities.join(", "));
+    setPreferenceNotes(settings.preferenceNotes);
+    setAiBudgetText(settings.aiMonthlyBudgetGbp == null ? "" : String(settings.aiMonthlyBudgetGbp));
+  }, [
+    settings.likedResorts,
+    settings.likedAmenities,
+    settings.reviewPriorities,
+    settings.preferenceNotes,
+    settings.aiMonthlyBudgetGbp,
+  ]);
+
+  const [exploreQuery, setExploreQuery] = useState("");
+  const [exploring, setExploring] = useState(false);
+  const [overview, setOverview] = useState<HolidayDestinationOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  const runExplore = async () => {
+    const query = exploreQuery.trim();
+    if (!query) return;
+    setExploring(true);
+    setOverviewError(null);
+    try {
+      const result = await researchHolidayDestination(query);
+      setOverview(result);
+    } catch (err) {
+      setOverviewError((err as Error).message || "Could not research that destination right now.");
+    } finally {
+      setExploring(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedId && watches[0]?.id) setSelectedId(watches[0].id);
@@ -381,7 +431,8 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const rail = [
     { id: "watches" as const, label: "Watches", icon: Palmtree },
     { id: "best" as const, label: "Best prices", icon: PoundSterling },
-    { id: "settings" as const, label: "Defaults", icon: Settings2 },
+    { id: "explore" as const, label: "Explore", icon: Compass },
+    { id: "settings" as const, label: "Preferences", icon: Settings2 },
   ];
 
   return (
@@ -597,6 +648,155 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                 </div>
               )}
 
+              {section === "explore" && (
+                <div className="space-y-4">
+                  <div
+                    className="space-y-3 rounded-2xl border border-border/50 bg-card p-5 shadow-card"
+                    style={{
+                      background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 10%, var(--card))`,
+                      borderLeftWidth: 4,
+                      borderLeftColor: HOLIDAY_ACCENT,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <h2 className="font-display text-base font-bold">Explore a destination</h2>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Type a country, region, or island group — e.g. "Caribbean" or "Crete" — and the
+                      AI will research real, currently-bookable resorts for you, tailored to your
+                      saved preferences.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        value={exploreQuery}
+                        onChange={(e) => setExploreQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && runExplore()}
+                        placeholder="e.g. Caribbean"
+                        className="h-9 flex-1 min-w-[10rem] rounded-xl bg-card"
+                      />
+                      <Button
+                        className="h-9 rounded-xl bg-gradient-primary text-primary-foreground border-0"
+                        disabled={exploring || !exploreQuery.trim()}
+                        onClick={runExplore}
+                      >
+                        {exploring ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Compass className="mr-1.5 h-4 w-4" />}
+                        {exploring ? "Researching…" : "Explore"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {overviewError && (
+                    <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                      {overviewError}
+                    </div>
+                  )}
+
+                  {overview && (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card">
+                        <h3 className="font-display text-lg font-bold">{overview.query}</h3>
+                        <p className="mt-1.5 text-sm text-muted-foreground">{overview.overview}</p>
+                      </div>
+
+                      {overview.areas.length > 0 && (
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          {overview.areas.map((area) => (
+                            <div key={area.name} className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
+                              <p className="font-display font-bold">{area.name}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">{area.summary}</p>
+                              {area.bestFor.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {area.bestFor.map((tag) => (
+                                    <Badge key={tag} variant="secondary" className="rounded-lg text-[10px]">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {overview.topPick && (
+                        <div
+                          className="rounded-2xl border p-4 shadow-card"
+                          style={{
+                            background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 14%, var(--card))`,
+                            borderColor: HOLIDAY_ACCENT,
+                          }}
+                        >
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            Best fit for your family
+                          </p>
+                          <p className="font-display text-lg font-bold">{overview.topPick.name}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{overview.topPick.reason}</p>
+                        </div>
+                      )}
+
+                      {overview.resorts.length > 0 && (
+                        <div className="space-y-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            How the resorts compare
+                          </p>
+                          {overview.resorts.map((resort) => (
+                            <div key={resort.name} className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <p className="font-display font-bold">{resort.name}</p>
+                                <span className="text-xs text-muted-foreground">{resort.area}</span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {resort.starRating != null && <span>{resort.starRating}★</span>}
+                                {resort.boardBasis && <span>{resort.boardBasis.replace(/_/g, " ")}</span>}
+                                {resort.approxPriceGbpPerPerson != null && (
+                                  <span>~{fmtMoney(resort.approxPriceGbpPerPerson)} pp</span>
+                                )}
+                              </div>
+                              {resort.whyItFits.length > 0 && (
+                                <ul className="mt-2 list-disc space-y-0.5 pl-4 text-sm">
+                                  {resort.whyItFits.map((reason, i) => (
+                                    <li key={i}>{reason}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {resort.reviewHighlights.length > 0 && (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Reviewers say: {resort.reviewHighlights.join(" · ")}
+                                </p>
+                              )}
+                              {resort.sourceUrls.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {resort.sourceUrls.map((url) => (
+                                    <a
+                                      key={url}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                                    >
+                                      Source <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {overview.caveats.length > 0 && (
+                        <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                          {overview.caveats.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {section === "settings" && (
                 <div
                   className="space-y-4 rounded-2xl border border-border/50 bg-card p-5 shadow-card"
@@ -649,11 +849,131 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Automated checks only hit allowlisted sites (BA, Jet2, TUI, easyJet, Loveholidays,
-                    On the Beach, Skyscanner, Kayak, Expedia, Trailfinders, and similar). Many sites
-                    block bots — log prices you spot, and you’ll still get alerts when a cheaper deal
-                    is recorded.
+                    Searches use AI web research across allowlisted sites (BA, Jet2, TUI, easyJet,
+                    Loveholidays, On the Beach, Skyscanner, Kayak, Expedia, Trailfinders, and similar)
+                    to find real, current prices. If that's ever unavailable, a clearly-labelled
+                    modelled estimate is shown instead so a watch never comes back empty.
                   </p>
+                </div>
+              )}
+
+              {section === "settings" && (
+                <div
+                  className="space-y-4 rounded-2xl border border-border/50 bg-card p-5 shadow-card"
+                  style={{
+                    background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 10%, var(--card))`,
+                    borderLeftWidth: 4,
+                    borderLeftColor: HOLIDAY_ACCENT,
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <h2 className="font-display text-base font-bold">What the AI should know about us</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Feeds every search and destination overview, so results are tailored to this
+                    family rather than generic.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Resorts / hotels we've liked before</label>
+                    <Input
+                      value={likedResortsText}
+                      onChange={(e) => setLikedResortsText(e.target.value)}
+                      placeholder="e.g. Iberostar Selection Anthelia, Sandals Grande St Lucian"
+                      className="h-9 rounded-xl bg-card"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Comma-separated.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Amenities that matter to us</label>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {HOLIDAY_KEY_FEATURES.map((f) => (
+                        <label key={f.id} className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2 text-sm">
+                          <Checkbox
+                            checked={likedAmenities.includes(f.id)}
+                            onCheckedChange={(v) =>
+                              setLikedAmenities((prev) =>
+                                v === true ? [...prev, f.id] : prev.filter((id) => id !== f.id),
+                              )
+                            }
+                          />
+                          {f.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">What to look for in reviews</label>
+                    <Input
+                      value={reviewPrioritiesText}
+                      onChange={(e) => setReviewPrioritiesText(e.target.value)}
+                      placeholder="e.g. quiet at night, kid-friendly pool, good breakfast"
+                      className="h-9 rounded-xl bg-card"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Comma-separated themes the AI should weigh most.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Anything else the AI should know</label>
+                    <Textarea
+                      value={preferenceNotes}
+                      onChange={(e) => setPreferenceNotes(e.target.value)}
+                      placeholder="e.g. we travel with a dog, avoid resorts with lots of stairs, prefer adults-only pool time in the mornings…"
+                      className="min-h-[72px] rounded-xl bg-card"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 rounded-xl border border-border/40 bg-muted/20 p-3">
+                    <label className="text-xs font-semibold text-foreground">Monthly AI research budget (£)</label>
+                    <p className="text-[11px] text-muted-foreground">
+                      One shared cap across every watch and Explore search. When it's reached, price
+                      watches quietly fall back to the free modelled estimate until it resets on the
+                      1st — Explore searches pause until then. Leave blank for no cap.
+                    </p>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={aiBudgetText}
+                      onChange={(e) => setAiBudgetText(e.target.value)}
+                      placeholder="No cap"
+                      className="h-9 w-32 rounded-xl bg-card"
+                    />
+                    {(() => {
+                      const currentPeriodKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}`;
+                      const spend = aiUsage?.periodKey === currentPeriodKey ? aiUsage.spendGbp : 0;
+                      const cap = settings.aiMonthlyBudgetGbp;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Spent so far this month: <strong>£{spend.toFixed(2)}</strong>
+                          {cap != null ? ` of £${cap.toFixed(2)}` : " (no cap set)"}
+                          {cap != null && spend >= cap ? " — budget reached, using free estimates" : ""}
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  <Button
+                    className="h-9 rounded-xl bg-gradient-primary text-primary-foreground border-0"
+                    disabled={!canEdit}
+                    onClick={async () => {
+                      const parsedBudget = aiBudgetText.trim() === "" ? null : Number(aiBudgetText);
+                      await saveSettings({
+                        ...settings,
+                        likedResorts: likedResortsText.split(",").map((s) => s.trim()).filter(Boolean),
+                        likedAmenities,
+                        reviewPriorities: reviewPrioritiesText.split(",").map((s) => s.trim()).filter(Boolean),
+                        preferenceNotes,
+                        aiMonthlyBudgetGbp: parsedBudget != null && Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : null,
+                      });
+                      toast.success("Preferences saved");
+                    }}
+                  >
+                    Save preferences
+                  </Button>
                 </div>
               )}
             </>

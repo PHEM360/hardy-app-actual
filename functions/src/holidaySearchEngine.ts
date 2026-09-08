@@ -30,7 +30,7 @@ export interface CostBreakdown {
   partySize: number;
   rooms: number;
   priceBasis: "total_party";
-  confidence: "live" | "partial" | "estimated";
+  confidence: "ai_researched" | "live" | "partial" | "estimated";
 }
 
 export interface ReviewSummary {
@@ -77,7 +77,7 @@ export interface SearchOption {
   bookingMode?: BookingMode;
   costBreakdown?: CostBreakdown;
   researchNotes?: string[];
-  priceConfidence?: "live" | "partial" | "estimated";
+  priceConfidence?: "ai_researched" | "live" | "partial" | "estimated";
 }
 
 export interface WatchLike {

@@ -584,18 +584,20 @@ export function DisplayPageRenderer({
 }) {
   const theme = displayTheme(page);
 
+  // Notch/home-indicator insets are rarely equal on opposite edges (e.g. a
+  // taller top inset than bottom), so padding each side by its own raw inset
+  // shifts the grid off-centre. Padding both sides of an axis by the larger
+  // of the two keeps the layout centred while still clearing every notch.
+  const insetX = "max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))";
+  const insetY = "max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px))";
+
   return (
-    <div
-      className="absolute overflow-hidden"
-      style={{
-        backgroundColor: theme.background,
-        top: "env(safe-area-inset-top, 0px)",
-        right: "env(safe-area-inset-right, 0px)",
-        bottom: "env(safe-area-inset-bottom, 0px)",
-        left: "env(safe-area-inset-left, 0px)",
-      }}
-    >
+    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: theme.background }}>
       <DisplayBackdrop kind={page.backdrop} accent={theme.accent} />
+      <div
+        className="absolute overflow-hidden"
+        style={{ top: insetY, bottom: insetY, left: insetX, right: insetX }}
+      >
       {page.widgets.map((widget) => {
         const accent = widget.accentColor || theme.accent;
         const selectedPhotos = visibleDisplayPhotos(
@@ -643,6 +645,7 @@ export function DisplayPageRenderer({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

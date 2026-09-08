@@ -180,7 +180,7 @@ export interface HolidayCostBreakdown {
   partySize?: number;
   rooms?: number;
   priceBasis?: "total_party" | "per_person";
-  confidence?: "live" | "partial" | "estimated";
+  confidence?: "ai_researched" | "live" | "partial" | "estimated";
 }
 
 export interface HolidaySearchOption {
@@ -211,7 +211,7 @@ export interface HolidaySearchOption {
   bookingMode?: HolidayBookingMode | null;
   costBreakdown?: HolidayCostBreakdown | null;
   researchNotes?: string[];
-  priceConfidence?: "live" | "partial" | "estimated" | null;
+  priceConfidence?: "ai_researched" | "live" | "partial" | "estimated" | null;
   notes?: string;
   manual?: boolean;
   foundAt: string;
@@ -252,7 +252,7 @@ export interface HolidayPriceFinding {
   bookingMode?: HolidayBookingMode | null;
   costBreakdown?: HolidayCostBreakdown | null;
   researchNotes?: string[];
-  priceConfidence?: "live" | "partial" | "estimated" | null;
+  priceConfidence?: "ai_researched" | "live" | "partial" | "estimated" | null;
 }
 
 export interface HolidaySettings {
@@ -261,6 +261,24 @@ export interface HolidaySettings {
   defaultAlertChannels: HolidayAlertChannel[];
   preferredBrands: string[];
   preferredDepartureAirports: string[];
+  /** Resorts/hotels the family has enjoyed before or wants to prioritise. */
+  likedResorts: string[];
+  /** Amenities the family cares about, beyond a single watch's key features. */
+  likedAmenities: HolidayKeyFeatureId[];
+  /** Free-text themes the AI should weigh when reading reviews, e.g. "quiet at night", "kid-friendly pool". */
+  reviewPriorities: string[];
+  /** Freeform notes the AI should take into account for every search and overview. */
+  preferenceNotes: string;
+  /** Shared monthly cap, in GBP, on AI research spend across every watch and Explore search. null = no cap. */
+  aiMonthlyBudgetGbp: number | null;
+  updatedAt?: any;
+}
+
+/** One shared monthly AI-research spend pot per household, read live from holidays/{uid}/meta/aiUsage. */
+export interface HolidayAiUsage {
+  periodKey: string;
+  spendGbp: number;
+  callCount: number;
   updatedAt?: any;
 }
 
@@ -279,7 +297,31 @@ export const DEFAULT_HOLIDAY_SETTINGS: HolidaySettings = {
     "Virgin Atlantic Holidays",
   ],
   preferredDepartureAirports: ["LON", "MAN", "BHX", "EDI"],
+  likedResorts: [],
+  likedAmenities: [],
+  reviewPriorities: [],
+  preferenceNotes: "",
+  aiMonthlyBudgetGbp: null,
 };
+
+/**
+ * Rough per-call cost of an AI holiday search, in GBP, based on OpenAI's published
+ * per-token and per-web-search rates for a typical multi-site lookup. This is an
+ * estimate for display only — the real spend is metered and capped server-side.
+ */
+export const AI_SEARCH_ESTIMATED_COST_GBP = 0.15;
+/** A destination overview does more web research and produces a longer report, so costs more per call. */
+export const AI_OVERVIEW_ESTIMATED_COST_GBP = 0.4;
+
+const AVERAGE_DAYS_PER_MONTH = 30.44;
+
+/** Estimated AI research spend per month for a watch searching every `amount` `unit`s. */
+export function estimateAiSearchMonthlyCostGbp(amount: number, unit: HolidaySearchUnit): number {
+  const intervalMs = holidaySearchIntervalMs(amount, unit);
+  const monthMs = AVERAGE_DAYS_PER_MONTH * 24 * 60 * 60 * 1000;
+  const searchesPerMonth = monthMs / intervalMs;
+  return AI_SEARCH_ESTIMATED_COST_GBP * searchesPerMonth;
+}
 
 export const HOLIDAY_BRAND_OPTIONS = UK_REPUTABLE_BRANDS;
 
@@ -358,4 +400,36 @@ export function nextHolidaySearchAt(
   unit: HolidaySearchUnit,
 ): string {
   return new Date(from.getTime() + holidaySearchIntervalMs(amount, unit)).toISOString();
+}
+
+/** One resort/hotel surfaced by the AI destination overview, with sources so it can be checked. */
+export interface HolidayOverviewResort {
+  name: string;
+  area: string;
+  whyItFits: string[];
+  approxPriceGbpPerPerson: number | null;
+  boardBasis?: string;
+  starRating?: number | null;
+  reviewHighlights: string[];
+  sourceUrls: string[];
+}
+
+/** One island/region/area within a broader destination query, e.g. one island within "Caribbean". */
+export interface HolidayOverviewArea {
+  name: string;
+  summary: string;
+  bestFor: string[];
+}
+
+/** AI-researched overview of a destination or region, tailored to the family's saved preferences. */
+export interface HolidayDestinationOverview {
+  id?: string;
+  query: string;
+  overview: string;
+  areas: HolidayOverviewArea[];
+  resorts: HolidayOverviewResort[];
+  topPick: { name: string; reason: string } | null;
+  caveats: string[];
+  sources: { url: string; title: string }[];
+  createdAt?: any;
 }

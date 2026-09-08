@@ -135,6 +135,7 @@ export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients,
 
 // ── Holidays price watches ──
 export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";
+export { researchHolidayDestination } from "./holidayAi";
 
 // ── Security posture scans (Admin dashboard) ──
 export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans } from "./securityScan";
