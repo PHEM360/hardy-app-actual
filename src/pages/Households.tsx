@@ -1430,7 +1430,7 @@ function AddEditDialog({
               <span className="text-sm text-muted-foreground shrink-0">Remind me</span>
               <Input
                 type="number" min={1} className="w-20"
-                value={reminder.amount}
+                value={reminder.amount || ""}
                 onChange={(e) => setReminder({ ...reminder, amount: Math.max(1, parseInt(e.target.value) || 1) })}
               />
               <Select value={reminder.unit} onValueChange={(v) => setReminder({ ...reminder, unit: v as HouseholdReminder["unit"] })}>

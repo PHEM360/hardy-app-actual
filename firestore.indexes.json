@@ -9,6 +9,21 @@
       ]
     },
     {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "recurrence.active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recurringSourceId", "order": "ASCENDING" },
+        { "fieldPath": "recurrencePeriod", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "scheduledNotifications",
       "queryScope": "COLLECTION",
       "fields": [

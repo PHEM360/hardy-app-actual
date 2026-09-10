@@ -147,6 +147,7 @@ export interface HolidayWatch {
   lastSearchedAt?: string | null;
   nextSearchAt?: string | null;
   lastOptions?: HolidaySearchOption[];
+  lastSearchSummary?: HolidaySearchSummary | null;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -214,6 +215,8 @@ export interface HolidaySearchOption {
   directFlight?: boolean;
   officialStars?: number | null;
   tripadvisorScore?: number | null;
+  /** Google/Maps review score, kept separate from TripAdvisor so they can be compared or sorted independently. */
+  googleScore?: number | null;
   reviewSummaries?: HolidayReviewSummary[];
   independentSummary?: string;
   discounts?: HolidayDiscountInfo[];
@@ -226,6 +229,15 @@ export interface HolidaySearchOption {
   manual?: boolean;
   foundAt: string;
   createdAt?: any;
+  /** Only ever set from a real researched flight — never fabricated for a modelled estimate. */
+  outboundDepartTime?: string | null;
+  outboundArriveTime?: string | null;
+  returnDepartTime?: string | null;
+  returnArriveTime?: string | null;
+  flightDurationMinutes?: number | null;
+  transferDurationMinutes?: number | null;
+  /** Whether joining a loyalty/membership scheme is worth it for this specific booking. */
+  loyaltyNote?: string | null;
 }
 
 /** @deprecated prefer HolidaySearchOption — kept for older price docs */
@@ -263,6 +275,21 @@ export interface HolidayPriceFinding {
   costBreakdown?: HolidayCostBreakdown | null;
   researchNotes?: string[];
   priceConfidence?: "ai_researched" | "live" | "partial" | "estimated" | null;
+  googleScore?: number | null;
+  outboundDepartTime?: string | null;
+  outboundArriveTime?: string | null;
+  returnDepartTime?: string | null;
+  returnArriveTime?: string | null;
+  flightDurationMinutes?: number | null;
+  transferDurationMinutes?: number | null;
+  loyaltyNote?: string | null;
+}
+
+/** Batch-level research produced alongside a set of findings — not tied to any one option. */
+export interface HolidaySearchSummary {
+  comparisonSummary: string;
+  otherWorthChecking: string;
+  tips: string[];
 }
 
 export interface HolidaySettings {

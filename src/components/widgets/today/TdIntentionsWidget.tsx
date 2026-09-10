@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { useTodayPage } from "@/hooks/useTodayPage";
 
 const PLACEHOLDERS = ["I intend to…", "I also want to…", "One more thing…"];
 
 export function TdIntentionsWidget() {
   const { daily, saveDaily } = useTodayPage();
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState("");
 
-  const update = (i: number, val: string) => {
+  const commitIntention = (i: number) => {
     const next = [...daily.intentions] as [string, string, string];
-    next[i] = val;
+    next[i] = editingValue;
     saveDaily({ intentions: next });
+    setEditingIndex(null);
   };
 
   return (
@@ -24,8 +28,10 @@ export function TdIntentionsWidget() {
               {i + 1}
             </span>
             <textarea
-              value={val}
-              onChange={(e) => update(i, e.target.value)}
+              value={editingIndex === i ? editingValue : val}
+              onFocus={() => { setEditingIndex(i); setEditingValue(val); }}
+              onChange={(e) => setEditingValue(e.target.value)}
+              onBlur={() => commitIntention(i)}
               placeholder={PLACEHOLDERS[i]}
               className="flex-1 text-xs text-foreground placeholder:text-muted-foreground/60 bg-transparent resize-none focus:outline-none leading-relaxed min-h-0"
             />

@@ -16,6 +16,8 @@ import {
   Compass,
   Sparkles,
   Loader2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, parseISO } from "date-fns";
@@ -228,6 +230,13 @@ function WatchCard({
           </Button>
         </div>
       )}
+      <p className="mt-2.5 flex items-center gap-1 text-[11px] font-semibold" style={{ color: accent }}>
+        {selected ? (
+          <>Hide results <ChevronUp className="h-3.5 w-3.5" /></>
+        ) : (
+          <>View results <ChevronDown className="h-3.5 w-3.5" /></>
+        )}
+      </p>
     </motion.button>
   );
 }
@@ -253,12 +262,12 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
   const [showArchived, setShowArchived] = useState(false);
 
   const [defaultIntervalAmount, setDefaultIntervalAmount] = useState(
-    settings.defaultSearchIntervalAmount,
+    String(settings.defaultSearchIntervalAmount),
   );
   const [defaultIntervalUnit, setDefaultIntervalUnit] = useState(settings.defaultSearchIntervalUnit);
 
   useEffect(() => {
-    setDefaultIntervalAmount(settings.defaultSearchIntervalAmount);
+    setDefaultIntervalAmount(String(settings.defaultSearchIntervalAmount));
     setDefaultIntervalUnit(settings.defaultSearchIntervalUnit);
   }, [settings.defaultSearchIntervalAmount, settings.defaultSearchIntervalUnit]);
 
@@ -303,10 +312,6 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
       setExploring(false);
     }
   };
-
-  useEffect(() => {
-    if (!selectedId && watches[0]?.id) setSelectedId(watches[0].id);
-  }, [watches, selectedId]);
 
   const selected = watches.find((w) => w.id === selectedId) || null;
 
@@ -563,7 +568,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                             accent={HOLIDAY_ACCENT}
                             selected={selectedId === w.id}
                             canEdit={canEdit}
-                            onSelect={() => setSelectedId(w.id || null)}
+                            onSelect={() => setSelectedId(selectedId === w.id ? null : (w.id || null))}
                             onEdit={() => openEdit(w)}
                             onTogglePause={() =>
                               w.id &&
@@ -819,7 +824,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                       min={1}
                       className="h-9 w-24 rounded-xl bg-card"
                       value={defaultIntervalAmount}
-                      onChange={(e) => setDefaultIntervalAmount(Number(e.target.value) || 1)}
+                      onChange={(e) => setDefaultIntervalAmount(e.target.value)}
                     />
                     <select
                       className="h-9 rounded-xl border border-border bg-card px-3 text-sm"
@@ -839,7 +844,7 @@ const Holidays = ({ mockData }: { mockData?: HolidaysMockData } = {}) => {
                       onClick={async () => {
                         await saveSettings({
                           ...settings,
-                          defaultSearchIntervalAmount: defaultIntervalAmount,
+                          defaultSearchIntervalAmount: Number(defaultIntervalAmount) || 1,
                           defaultSearchIntervalUnit: defaultIntervalUnit,
                         });
                         toast.success("Defaults saved");

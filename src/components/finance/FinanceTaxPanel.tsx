@@ -36,7 +36,7 @@ function NumField({
       <Label className="text-xs">{label}</Label>
       <Input
         type="number"
-        value={Number.isFinite(value) ? value : 0}
+        value={Number.isFinite(value) && value ? value : ""}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
         className="h-10 rounded-xl"
       />

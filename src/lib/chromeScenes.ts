@@ -69,6 +69,13 @@ export const HEADER_COLOR_PRESETS: { id: string; label: string; value: string }[
   { id: "berry", label: "Berry", value: "linear-gradient(135deg, hsl(328, 48%, 24%) 0%, hsl(272, 36%, 22%) 100%)" },
   { id: "slate", label: "Slate", value: "linear-gradient(135deg, hsl(220, 16%, 18%) 0%, hsl(215, 12%, 22%) 100%)" },
   { id: "cocoa", label: "Cocoa", value: "linear-gradient(135deg, hsl(24, 32%, 18%) 0%, hsl(18, 28%, 14%) 100%)" },
+  { id: "ocean", label: "Ocean", value: "linear-gradient(135deg, hsl(200, 62%, 22%) 0%, hsl(230, 48%, 20%) 100%)" },
+  { id: "plum", label: "Plum", value: "linear-gradient(135deg, hsl(285, 42%, 22%) 0%, hsl(320, 38%, 18%) 100%)" },
+  { id: "amber", label: "Amber", value: "linear-gradient(135deg, hsl(38, 68%, 26%) 0%, hsl(20, 58%, 20%) 100%)" },
+  { id: "emerald", label: "Emerald", value: "linear-gradient(135deg, hsl(160, 55%, 20%) 0%, hsl(178, 48%, 16%) 100%)" },
+  { id: "crimson", label: "Crimson", value: "linear-gradient(135deg, hsl(350, 58%, 26%) 0%, hsl(10, 48%, 20%) 100%)" },
+  { id: "indigo", label: "Indigo", value: "linear-gradient(135deg, hsl(248, 52%, 26%) 0%, hsl(228, 46%, 18%) 100%)" },
+  { id: "charcoal", label: "Charcoal", value: "linear-gradient(135deg, hsl(220, 14%, 12%) 0%, hsl(220, 10%, 8%) 100%)" },
 ];
 
 export type ThemeAtmosphere = "none" | "stars" | "farm" | "sea" | "celestial";

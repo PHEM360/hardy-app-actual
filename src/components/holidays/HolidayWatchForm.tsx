@@ -988,7 +988,7 @@ export function HolidayWatchForm({
             </Field>
             {mode === "flexible_days" && (
               <Field label="± flexible days">
-                <Input type="number" min={0} max={30} value={form.dates.flexDays ?? 0} onChange={(e) => patchDates({ flexDays: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
+                <Input type="number" min={0} max={30} value={form.dates.flexDays || ""} onChange={(e) => patchDates({ flexDays: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
               </Field>
             )}
           </div>
@@ -997,7 +997,7 @@ export function HolidayWatchForm({
         {mode === "months" && (
           <div className="space-y-2">
             <Field label="Year">
-              <Input type="number" min={new Date().getFullYear()} max={new Date().getFullYear() + 3} value={form.dates.year || new Date().getFullYear()} onChange={(e) => patchDates({ year: Number(e.target.value) })} className="h-9 rounded-xl" />
+              <Input type="number" min={new Date().getFullYear()} max={new Date().getFullYear() + 3} value={form.dates.year || ""} onChange={(e) => patchDates({ year: Number(e.target.value) })} className="h-9 rounded-xl" />
             </Field>
             <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
               {MONTH_LABELS.map((label, i) => {
@@ -1069,13 +1069,13 @@ export function HolidayWatchForm({
       <Section title="Travellers">
         <div className="grid grid-cols-3 gap-2">
           <Field label="Adults">
-            <Input type="number" min={1} max={9} value={form.travellers.adults} onChange={(e) => patchTravellers({ adults: Number(e.target.value) || 1 })} className="h-9 rounded-xl" />
+            <Input type="number" min={1} max={9} value={form.travellers.adults || ""} onChange={(e) => patchTravellers({ adults: Number(e.target.value) || 1 })} className="h-9 rounded-xl" />
           </Field>
           <Field label="Children">
-            <Input type="number" min={0} max={9} value={form.travellers.children} onChange={(e) => patchTravellers({ children: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
+            <Input type="number" min={0} max={9} value={form.travellers.children || ""} onChange={(e) => patchTravellers({ children: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
           </Field>
           <Field label="Infants">
-            <Input type="number" min={0} max={9} value={form.travellers.infants} onChange={(e) => patchTravellers({ infants: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
+            <Input type="number" min={0} max={9} value={form.travellers.infants || ""} onChange={(e) => patchTravellers({ infants: Number(e.target.value) || 0 })} className="h-9 rounded-xl" />
           </Field>
         </div>
       </Section>

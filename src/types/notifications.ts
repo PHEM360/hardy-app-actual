@@ -40,6 +40,7 @@ export interface NotificationPrefs {
     household?: EventPrefs;
     pets?: EventPrefs;
     medications?: EventPrefs;
+    birthdays?: EventPrefs;
   };
 }
 
@@ -61,5 +62,6 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
     household: { enabled: true, channels: ["push", "email", "sms"] },
     pets: { enabled: true, channels: ["push", "email", "sms"] },
     medications: { enabled: true, channels: ["push"] },
+    birthdays: { enabled: true, channels: ["push", "email", "sms"] },
   },
 };

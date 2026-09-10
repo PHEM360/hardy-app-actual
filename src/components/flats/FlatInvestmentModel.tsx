@@ -587,7 +587,7 @@ export default function FlatInvestmentModelPanel({
                       <Label className="text-xs">Amount £</Label>
                       <Input
                         type="number"
-                        value={o.amountGbp}
+                        value={o.amountGbp || ""}
                         onChange={(e) =>
                           setOneOffs((prev) =>
                             prev.map((x) =>
@@ -602,7 +602,7 @@ export default function FlatInvestmentModelPanel({
                       <Label className="text-xs">Year</Label>
                       <Input
                         type="number"
-                        value={o.year}
+                        value={o.year || ""}
                         onChange={(e) =>
                           setOneOffs((prev) =>
                             prev.map((x) =>

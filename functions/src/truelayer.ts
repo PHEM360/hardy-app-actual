@@ -42,6 +42,21 @@ function isAllowedRedirect(uri: string) {
   }
 }
 
+/** Same-origin relative path only — never trust this for an absolute or protocol-relative redirect. */
+function safeReturnPath(value: unknown, fallback: string): string {
+  const s = String(value || "").trim();
+  return /^\/[A-Za-z0-9/_-]*$/.test(s) ? s : fallback;
+}
+
+/** The user should land back on whichever real domain they started from, not a hardcoded one. */
+function originFromRedirectUri(redirectUri: string): string {
+  try {
+    return new URL(redirectUri).origin;
+  } catch {
+    return APP_HOST;
+  }
+}
+
 type TlAccount = {
   account_id: string;
   account_type?: string;
@@ -407,10 +422,12 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
   if (!isAllowedRedirect(redirectUri)) {
     throw new HttpsError("invalid-argument", "That redirect URI is not allowed.");
   }
+  const returnPath = safeReturnPath(request.data?.returnPath, "/finance");
   const state = randomUUID();
   await db().doc(`trueLayerOAuth/${state}`).set({
     uid,
     redirectUri,
+    returnPath,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: Date.now() + 15 * 60 * 1000,
   });
@@ -626,7 +643,21 @@ export const trueLayerCallback = onRequest(
   const error = String(req.query.error || "");
   const fallback = `${APP_HOST}/finance?bank=error`;
   if (error || !code || !state) {
-    res.redirect(302, `${APP_HOST}/finance?bank=${encodeURIComponent(error || "cancelled")}`);
+    // Best-effort lookup so a cancelled/errored connect still lands back where the user started.
+    let origin = APP_HOST;
+    let returnPath = "/finance";
+    if (state) {
+      try {
+        const stateData = (await db().doc(`trueLayerOAuth/${state}`).get()).data();
+        if (stateData) {
+          origin = originFromRedirectUri(String(stateData.redirectUri || ""));
+          returnPath = safeReturnPath(stateData.returnPath, "/finance");
+        }
+      } catch {
+        // ignore, use defaults
+      }
+    }
+    res.redirect(302, `${origin}${returnPath}?bank=${encodeURIComponent(error || "cancelled")}`);
     return;
   }
   try {
@@ -636,7 +667,9 @@ export const trueLayerCallback = onRequest(
     if (Number(stateData.expiresAt || 0) < Date.now()) throw new Error("expired");
     await stateSnap.ref.delete();
     await finishConnect(String(stateData.uid), code, String(stateData.redirectUri));
-    res.redirect(302, `${APP_HOST}/finance?bank=connected`);
+    const origin = originFromRedirectUri(String(stateData.redirectUri || ""));
+    const returnPath = safeReturnPath(stateData.returnPath, "/finance");
+    res.redirect(302, `${origin}${returnPath}?bank=connected`);
   } catch (err) {
     logger.warn("TrueLayer callback failed", { error: err instanceof Error ? err.message : String(err) });
     res.redirect(302, fallback);

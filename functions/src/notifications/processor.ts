@@ -138,6 +138,10 @@ function clickPathFor(type: ScheduledNotification["type"]): string {
       return "/pets";
     case "medication":
       return "/health";
+    case "birthday":
+      return "/today";
+    case "expenseReview":
+      return "/companies";
     default:
       return "/";
   }
@@ -161,6 +165,10 @@ function buildSubject(type: ScheduledNotification["type"], title: string): strin
       return `Pet care: ${title}`;
     case "medication":
       return `Medication: ${title}`;
+    case "birthday":
+      return `🎂 ${title}`;
+    case "expenseReview":
+      return "Time to review your regular expenses";
     default:
       return "Hardy Hub notification";
   }
@@ -184,6 +192,10 @@ function buildText(type: ScheduledNotification["type"], title: string): string {
       return title;
     case "medication":
       return `Time for ${title}.`;
+    case "birthday":
+      return title;
+    case "expenseReview":
+      return title;
     default:
       return "You have a new notification from Hardy Hub.";
   }

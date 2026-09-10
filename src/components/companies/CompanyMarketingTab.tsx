@@ -627,7 +627,7 @@ function PlanGenerator({
           </select>
         </Field>
         <Field label="Posts per week">
-          <Input aria-label="Posts per week" className={inputClass} type="number" min={1} max={14} value={request.postsPerWeek} onChange={(event) => setRequest({ ...request, postsPerWeek: Number(event.target.value) })} />
+          <Input aria-label="Posts per week" className={inputClass} type="number" min={1} max={14} value={request.postsPerWeek || ""} onChange={(event) => setRequest({ ...request, postsPerWeek: Number(event.target.value) })} />
         </Field>
         <Field label="Campaign">
           <select aria-label="Plan campaign" className={`${inputClass} w-full border-2 border-border bg-input px-3 text-sm`} value={request.campaignId} onChange={(event) => setRequest({ ...request, campaignId: event.target.value || undefined })}>
@@ -1171,8 +1171,8 @@ function BrandSection({ state }: { state: MarketingState }) {
         </div>
         <PlatformChecks value={form.platforms} onChange={(platforms) => setForm({ ...form, platforms })} legend="Default platforms" />
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Default plan days"><Input aria-label="Default plan days" type="number" min={7} max={90} value={form.defaultPlanDays} onChange={(event) => setForm({ ...form, defaultPlanDays: Number(event.target.value) })} /></Field>
-          <Field label="Default posts per week"><Input aria-label="Default posts per week" type="number" min={1} max={14} value={form.postsPerWeek} onChange={(event) => setForm({ ...form, postsPerWeek: Number(event.target.value) })} /></Field>
+          <Field label="Default plan days"><Input aria-label="Default plan days" type="number" min={7} max={90} value={form.defaultPlanDays || ""} onChange={(event) => setForm({ ...form, defaultPlanDays: Number(event.target.value) })} /></Field>
+          <Field label="Default posts per week"><Input aria-label="Default posts per week" type="number" min={1} max={14} value={form.postsPerWeek || ""} onChange={(event) => setForm({ ...form, postsPerWeek: Number(event.target.value) })} /></Field>
           <fieldset className="space-y-2"><legend className="text-sm font-medium">Approval</legend><label className="flex h-11 items-center gap-2 rounded-xl border-2 border-border bg-input px-3 text-sm"><Checkbox aria-label="Require approval before publishing" checked={form.approvalRequired} onCheckedChange={(checked) => setForm({ ...form, approvalRequired: Boolean(checked) })} />Require approval</label></fieldset>
         </div>
         <div className="flex justify-end"><Button type="submit" disabled={saving} className="gap-2 bg-gradient-primary">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Save brand guidance</Button></div>

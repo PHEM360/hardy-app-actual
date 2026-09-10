@@ -5,12 +5,12 @@ import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
-  Megaphone,
+  Megaphone, Repeat,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
 import CompanyMarketingTab from "@/components/companies/CompanyMarketingTab";
-import { ReceiptAttachCard, ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
+import { ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
 import {
@@ -23,12 +23,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   useCompanies,
   useCompanyLogins,
   useCompanyServices,
   useCompanyExpenses,
   expenseSaveMessage,
+  addExpenseCopyToCompany,
   useCompanyInsurance,
   useCompanyIncome,
   useCompanyTaxReturns,
@@ -52,6 +54,13 @@ const TABS = [
   { id: "projection",  label: "Projection",  icon: BarChart3 },
   { id: "settings",    label: "Settings",    icon: Settings2 },
 ];
+
+/** "YYYY-MM-DD" -> "DD/MM/YYYY" for display; falls back to the raw string if unparseable. */
+function fmtDateUK(iso: string) {
+  const [y, m, d] = String(iso || "").split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
 
 const COMPANY_TYPE_LABELS_DETAIL: Record<string, string> = {
   registered: "Ltd company",
@@ -163,16 +172,17 @@ function ServicesTab({ companyId }: { companyId: string }) {
   const { services, addService, updateService, deleteService } = useCompanyServices(companyId);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<CompanyService | null>(null);
-  const [form, setForm] = useState<Omit<CompanyService, "id">>({ name: "", description: "", price: 0, unit: "per month", category: "" });
+  const [form, setForm] = useState<Omit<CompanyService, "id" | "price"> & { price: string }>({ name: "", description: "", price: "", unit: "per month", category: "" });
   const [saving, setSaving] = useState(false);
   const { settings } = useCompanySettings(companyId);
 
-  const openAdd = () => { setEdit(null); setForm({ name: "", description: "", price: 0, unit: "per month", category: "" }); setOpen(true); };
-  const openEdit = (s: CompanyService) => { setEdit(s); setForm({ name: s.name, description: s.description || "", price: s.price, unit: s.unit, category: s.category || "" }); setOpen(true); };
+  const openAdd = () => { setEdit(null); setForm({ name: "", description: "", price: "", unit: "per month", category: "" }); setOpen(true); };
+  const openEdit = (s: CompanyService) => { setEdit(s); setForm({ name: s.name, description: s.description || "", price: String(s.price), unit: s.unit, category: s.category || "" }); setOpen(true); };
   const save = async () => {
     setSaving(true);
     try {
-      if (edit?.id) await updateService(edit.id, form); else await addService(form);
+      const payload = { ...form, price: Number(form.price) || 0 };
+      if (edit?.id) await updateService(edit.id, payload); else await addService(payload);
       setOpen(false);
     } finally { setSaving(false); }
   };
@@ -218,7 +228,7 @@ function ServicesTab({ companyId }: { companyId: string }) {
             <div className="space-y-1"><Label>Service Name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="space-y-1"><Label>Description</Label><Textarea value={form.description || ""} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="rounded-xl resize-none" rows={2} /></div>
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label>Price (£)</Label><Input type="number" step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="h-9 rounded-xl" /></div>
+              <div className="space-y-1"><Label>Price (£)</Label><Input type="number" step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} className="h-9 rounded-xl" /></div>
               <div className="space-y-1"><Label>Unit</Label>
                 <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}>
                   <SelectTrigger className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
@@ -252,21 +262,29 @@ function ExpensesTab({ companyId }: { companyId: string }) {
     uploadReceipt, removeReceipt, replaceReceipt, renameReceipt,
   } = useCompanyExpenses(companyId);
   const { settings } = useCompanySettings(companyId);
+  const { companies: allCompanies } = useCompanies();
+  const otherCompanies = allCompanies.filter((c) => c.id && c.id !== companyId);
   const [open, setOpen] = useState(false);
-  const emptyForm: Omit<CompanyExpense, "id" | "createdAt"> = {
+  const emptyForm: Omit<CompanyExpense, "id" | "createdAt" | "amount"> & { amount: string } = {
     date: new Date().toISOString().split("T")[0],
     description: "",
-    amount: 0,
+    amount: "",
     category: "Other",
     receipts: [],
     receiptNames: [],
   };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // True when editingId was set automatically because a receipt was attached
+  // before "Save" was tapped — lets Cancel roll back the draft it created
+  // rather than leaving an empty "Untitled expense" behind.
+  const [autoCreated, setAutoCreated] = useState(false);
+  const [assignCompanyIds, setAssignCompanyIds] = useState<string[]>([]);
+  const [recurEnabled, setRecurEnabled] = useState(false);
+  const [recurFrequency, setRecurFrequency] = useState<"monthly" | "yearly">("monthly");
   const [saving, setSaving] = useState(false);
   const newFileRef = useRef<HTMLInputElement>(null);
   const [newReceiptCapture, setNewReceiptCapture] = useState<File | null>(null);
-  const [newReceiptFile, setNewReceiptFile] = useState<File | null>(null);
   const [chosenMode, setChosenMode] = useState<"scan" | "picture" | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [scannerCtx, setScannerCtx] = useState<{
@@ -277,6 +295,8 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   } | null>(null);
   const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<ReceiptSource | null>(null);
+  const editingIdRef = useRef<string | null>(null);
+  editingIdRef.current = editingId;
 
   const liveExpense = editingId ? expenses.find((e) => e.id === editingId) : undefined;
   const liveReceipts = liveExpense?.receipts ?? form.receipts ?? [];
@@ -284,35 +304,80 @@ function ExpensesTab({ companyId }: { companyId: string }) {
 
   const openAdd = () => {
     setEditingId(null);
+    setAutoCreated(false);
+    setAssignCompanyIds([]);
+    setRecurEnabled(false);
+    setRecurFrequency("monthly");
     setForm(emptyForm);
-    setNewReceiptFile(null);
     setOpen(true);
   };
 
   const openEdit = (exp: CompanyExpense) => {
     setEditingId(exp.id ?? null);
+    setAutoCreated(false);
+    setAssignCompanyIds((exp.companyIds ?? []).filter((cid) => cid !== companyId));
+    setRecurEnabled(!!exp.recurrence?.active);
+    setRecurFrequency(exp.recurrence?.frequency ?? "monthly");
     setForm({
       date: exp.date,
       description: exp.description,
-      amount: exp.amount,
+      amount: String(exp.amount),
       category: exp.category,
       receipts: exp.receipts ?? [],
       receiptNames: alignedReceiptNames(exp.receipts ?? [], exp.receiptNames),
     });
-    setNewReceiptFile(null);
     setOpen(true);
   };
 
-  const attachIncomingFile = (f: File) => {
+  const closeDialog = async () => {
+    // A receipt was attached but the user backed out before typing a real
+    // description — drop the placeholder draft instead of leaving debris.
+    if (autoCreated && editingId) {
+      await deleteExpense(editingId).catch(() => undefined);
+    }
+    setOpen(false);
+    setEditingId(null);
+    setAutoCreated(false);
+    setAssignCompanyIds([]);
+    setRecurEnabled(false);
+    setForm(emptyForm);
+  };
+
+  /**
+   * Creates the Firestore expense doc immediately the first time anything is
+   * attached, instead of waiting for "Save" — a raw captured File only ever
+   * lived in memory until Save was tapped, so backgrounding the app for the
+   * camera/scanner (very easy to do on mobile) silently lost the whole
+   * expense. Uploading straight away means the receipt (and a placeholder
+   * expense to hang it on) is safely in Firestore/Storage the moment it's
+   * captured, matching how editing an existing expense already behaved.
+   */
+  const ensureExpenseId = async (): Promise<string | null> => {
+    if (editingIdRef.current) return editingIdRef.current;
+    const id = await addExpense({
+      date: form.date,
+      description: form.description.trim() || "Untitled expense",
+      amount: Number(form.amount) || 0,
+      category: form.category,
+      receipts: [],
+    });
+    if (id) {
+      editingIdRef.current = id;
+      setEditingId(id);
+      setAutoCreated(true);
+    }
+    return id ?? null;
+  };
+
+  const attachIncomingFile = async (f: File) => {
     if (f.type.startsWith("image/")) {
       setNewReceiptCapture(f);
       return;
     }
-    if (editingId) {
-      void uploadReceipt(editingId, f, liveReceipts);
-    } else {
-      setNewReceiptFile(f);
-    }
+    const wasNew = !editingIdRef.current;
+    const id = await ensureExpenseId();
+    if (!id) return;
+    await uploadReceipt(id, f, wasNew ? [] : liveReceipts);
   };
 
   const totalThisYear = useMemo(() => {
@@ -331,7 +396,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const handleNewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (f) attachIncomingFile(f);
+    if (f) void attachIncomingFile(f);
   };
 
   const openUpload = () => {
@@ -354,47 +419,70 @@ function ExpensesTab({ companyId }: { companyId: string }) {
   const save = async () => {
     setSaving(true);
     try {
+      const groupId = assignCompanyIds.length > 0
+        ? (liveExpense?.groupId || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`)
+        : undefined;
+      const companyIds = assignCompanyIds.length > 0 ? [companyId, ...assignCompanyIds] : undefined;
+      // Recurrence metadata belongs on the template only — a generated occurrence
+      // carries recurringSourceId instead and shouldn't get its own copy of it.
+      const isOccurrence = !!liveExpense?.recurringSourceId;
+      const recurrence = isOccurrence
+        ? undefined
+        : recurEnabled
+        ? { frequency: recurFrequency, active: true }
+        : liveExpense?.recurrence
+        ? { frequency: liveExpense.recurrence.frequency, active: false }
+        : undefined;
+
       if (editingId) {
-        await updateExpense(editingId, { date: form.date, description: form.description, amount: form.amount, category: form.category });
-        if (newReceiptFile) {
-          try {
-            await uploadReceipt(editingId, newReceiptFile, form.receipts ?? []);
-          } catch (receiptErr) {
-            console.error("Failed to upload receipt", receiptErr);
-            toast.success("Expense saved", { description: "The receipt didn’t upload — try attaching it again." });
-            setOpen(false);
-            setEditingId(null);
-            setForm(emptyForm);
-            setNewReceiptFile(null);
-            return;
-          }
-        }
-      } else {
-        const id = await addExpense({
+        await updateExpense(editingId, {
           date: form.date,
           description: form.description,
-          amount: form.amount,
+          amount: Number(form.amount) || 0,
+          category: form.category,
+          ...(companyIds ? { companyIds, groupId } : { companyIds: [], groupId: undefined }),
+          ...(recurrence !== undefined ? { recurrence } : {}),
+        });
+      } else {
+        await addExpense({
+          date: form.date,
+          description: form.description,
+          amount: Number(form.amount) || 0,
           category: form.category,
           receipts: [],
+          ...(companyIds ? { companyIds, groupId } : {}),
+          ...(recurrence ? { recurrence } : {}),
         });
-        if (id && newReceiptFile) {
-          try {
-            await uploadReceipt(id, newReceiptFile, []);
-          } catch (receiptErr) {
-            console.error("Failed to upload receipt", receiptErr);
-            toast.success("Expense saved", { description: "The receipt didn’t upload — try attaching it again." });
-            setOpen(false);
-            setEditingId(null);
-            setForm(emptyForm);
-            setNewReceiptFile(null);
-            return;
-          }
+      }
+
+      // Newly-assigned companies get their own independent copy (receipts included)
+      // — expenses live per company, so sharing one means writing it into each.
+      const previouslyAssigned = new Set(liveExpense?.companyIds ?? []);
+      const newlyAssigned = assignCompanyIds.filter((cid) => !previouslyAssigned.has(cid));
+      for (const cid of newlyAssigned) {
+        try {
+          await addExpenseCopyToCompany(cid, {
+            date: form.date,
+            description: form.description,
+            amount: Number(form.amount) || 0,
+            category: form.category,
+            receipts: liveReceipts,
+            receiptNames: liveNames,
+            companyIds,
+            groupId,
+          });
+        } catch (err) {
+          console.error("Failed to copy expense to company", cid, err);
+          toast.error(`Saved, but couldn't also assign it to ${allCompanies.find((c) => c.id === cid)?.name || "another company"}.`);
         }
       }
+
       setOpen(false);
       setEditingId(null);
+      setAutoCreated(false);
+      setAssignCompanyIds([]);
+      setRecurEnabled(false);
       setForm(emptyForm);
-      setNewReceiptFile(null);
       toast.success("Expense saved");
     } catch (err) {
       console.error("Failed to save expense", err);
@@ -464,8 +552,26 @@ function ExpensesTab({ companyId }: { companyId: string }) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-card-foreground">{exp.description}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{exp.date} · {exp.category}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-sm font-semibold text-card-foreground">{exp.description}</p>
+                    {exp.recurrence?.active && (
+                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                        <Repeat className="h-2.5 w-2.5" /> {exp.recurrence.frequency}
+                      </span>
+                    )}
+                    {exp.recurrence && !exp.recurrence.active && (
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">Cancelled</span>
+                    )}
+                    {exp.recurringSourceId && (
+                      <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                        <Repeat className="h-2.5 w-2.5" /> auto
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {fmtDateUK(exp.date)} · {exp.category}
+                    {(exp.companyIds?.length ?? 0) > 1 && ` · shared with ${exp.companyIds!.length - 1} other ${exp.companyIds!.length === 2 ? "company" : "companies"}`}
+                  </p>
                   {(exp.receipts?.length ?? 0) > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {exp.receipts!.map((url, i) => (
@@ -536,24 +642,29 @@ function ExpensesTab({ companyId }: { companyId: string }) {
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (!next && viewer) return;
-          setOpen(next);
+          // The receipt viewer, the scan/picture chooser, and the full-screen
+          // scanner sheet all render into a portal outside this DialogContent —
+          // Radix sees interacting with them as a click "outside" and would
+          // otherwise close (and reset) this dialog mid-upload.
+          if (!next && (viewer || chooserOpen || newReceiptCapture || scannerCtx)) return;
+          if (!next) void closeDialog();
+          else setOpen(next);
         }}
       >
         <DialogContent
           aria-describedby={undefined}
           className="mx-4 max-w-md"
-          onPointerDownOutside={(e) => { if (viewer) e.preventDefault(); }}
-          onInteractOutside={(e) => { if (viewer) e.preventDefault(); }}
-          onEscapeKeyDown={(e) => { if (viewer) e.preventDefault(); }}
+          onPointerDownOutside={(e) => { if (viewer || chooserOpen || newReceiptCapture || scannerCtx) e.preventDefault(); }}
+          onInteractOutside={(e) => { if (viewer || chooserOpen || newReceiptCapture || scannerCtx) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (viewer || chooserOpen || newReceiptCapture || scannerCtx) e.preventDefault(); }}
         >
           <DialogHeader>
-            <DialogTitle className="font-display">{editingId ? (form.description || "Expense") : "Add expense"}</DialogTitle>
+            <DialogTitle className="font-display">{editingId && !autoCreated ? (form.description || "Expense") : "Add expense"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1"><Label>Description *</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label>Amount (£)</Label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} className="h-9 rounded-xl" /></div>
+              <div className="space-y-1"><Label>Amount (£)</Label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className="h-9 rounded-xl" /></div>
               <div className="space-y-1"><Label>Date</Label><Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="h-9 rounded-xl" /></div>
             </div>
             <div className="space-y-1"><Label>Category</Label>
@@ -563,9 +674,78 @@ function ExpensesTab({ companyId }: { companyId: string }) {
               </Select>
             </div>
 
+            {liveExpense?.recurringSourceId ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5">
+                <Repeat className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <p className="text-xs text-muted-foreground">
+                  Auto-generated from a regular expense. To stop future occurrences, cancel it from{" "}
+                  {expenses.find((e) => e.id === liveExpense.recurringSourceId)?.description || "the original entry"}.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Repeat className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-foreground">Regular expense</span>
+                  </div>
+                  <Switch checked={recurEnabled} onCheckedChange={setRecurEnabled} />
+                </div>
+                {recurEnabled && (
+                  <>
+                    <div className="flex gap-1.5">
+                      {(["monthly", "yearly"] as const).map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setRecurFrequency(f)}
+                          className={`flex-1 rounded-lg py-1.5 text-xs font-semibold capitalize ${
+                            recurFrequency === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      A new expense will appear automatically each {recurFrequency === "monthly" ? "month" : "year"} on this date, ready for you to attach that period's receipt. Turn this off any time to stop.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {otherCompanies.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Also assign to</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {otherCompanies.map((c) => {
+                    const active = assignCompanyIds.includes(c.id!);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setAssignCompanyIds((prev) => active ? prev.filter((x) => x !== c.id) : [...prev, c.id!])}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                          active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {assignCompanyIds.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    This expense (with its receipt) will also appear under {assignCompanyIds.length === 1 ? "that company" : "those companies"}.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Receipt</Label>
-              {editingId && liveReceipts.length > 0 && (
+              {liveReceipts.length > 0 && (
                 <div className="space-y-2">
                   {liveReceipts.map((url, i) => (
                     <ReceiptManageCard
@@ -574,39 +754,32 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                       name={liveNames[i]}
                       busy={uploadingReceipt}
                       onPreview={() => setViewer({ url, name: liveNames[i] })}
-                      onRename={(name) => { void renameReceipt(editingId, url, name); }}
+                      onRename={(name) => { if (editingId) void renameReceipt(editingId, url, name); }}
                       onReplace={(file) => {
+                        if (!editingId) return;
                         if (file.type.startsWith("image/")) {
                           setScannerCtx({ expId: editingId, receipts: liveReceipts, file, replaceUrl: url });
                         } else {
                           void replaceReceipt(editingId, url, file);
                         }
                       }}
-                      onRemove={() => { void removeReceipt(editingId, url); }}
+                      onRemove={() => { if (editingId) void removeReceipt(editingId, url); }}
                     />
                   ))}
                 </div>
               )}
               <input ref={newFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleNewFile} />
-              {newReceiptFile && !editingId ? (
-                <ReceiptAttachCard
-                  file={newReceiptFile}
-                  onRemove={() => setNewReceiptFile(null)}
-                  onPreview={() => setViewer({ file: newReceiptFile, name: newReceiptFile.name })}
-                />
-              ) : (
-                <div className="flex gap-2">
-                  <button type="button" onClick={openUpload} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
-                    <Upload className="h-3.5 w-3.5" /> {liveReceipts.length || newReceiptFile ? "Add another" : "Upload file"}
-                  </button>
-                  <button type="button" onClick={openCameraChooser} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
-                    <Camera className="h-3.5 w-3.5" /> Take photo
-                  </button>
-                </div>
-              )}
+              <div className="flex gap-2">
+                <button type="button" onClick={openUpload} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                  <Upload className="h-3.5 w-3.5" /> {liveReceipts.length ? "Add another" : "Upload file"}
+                </button>
+                <button type="button" onClick={openCameraChooser} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60">
+                  <Camera className="h-3.5 w-3.5" /> Take photo
+                </button>
+              </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => { setOpen(false); setEditingId(null); setNewReceiptFile(null); }} className="h-9 flex-1 rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => void closeDialog()} className="h-9 flex-1 rounded-xl">Cancel</Button>
               <Button onClick={save} disabled={!form.description || saving} className="h-9 flex-1 rounded-xl bg-gradient-primary">{saving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
@@ -620,16 +793,19 @@ function ExpensesTab({ companyId }: { companyId: string }) {
         onCancel={() => setChooserOpen(false)}
       />
 
-      {/* Scan & crop (or just confirm + rename) a receipt for the expense currently being created */}
+      {/* Scan & crop (or just confirm + rename) a receipt for the expense currently being created.
+          Uploads immediately once confirmed — creating the expense first if needed — rather
+          than holding the scan in memory until "Save" is tapped. */}
       <DocumentScannerSheet
         imageFile={newReceiptCapture}
         initialMode={chosenMode ?? undefined}
+        allowMultiPage
         onConfirm={(scannedFile) => {
-          if (editingId) {
-            void uploadReceipt(editingId, scannedFile, liveReceipts);
-          } else {
-            setNewReceiptFile(scannedFile);
-          }
+          void (async () => {
+            const wasNew = !editingIdRef.current;
+            const id = await ensureExpenseId();
+            if (id) await uploadReceipt(id, scannedFile, wasNew ? [] : liveReceipts);
+          })();
           setNewReceiptCapture(null);
           setChosenMode(null);
         }}
@@ -718,7 +894,7 @@ function IncomeLineRow({
         <span className="text-[10px] text-muted-foreground">£</span>
         <Input
           type="number" min={0} step={0.01}
-          value={line.unitPrice}
+          value={line.unitPrice || ""}
           onChange={(e) => onUpdate({ unitPrice: parseFloat(e.target.value) || 0 })}
           className="h-8 rounded-lg text-xs w-20 text-right"
           placeholder="Price"
@@ -728,7 +904,7 @@ function IncomeLineRow({
         <span className="text-[10px] text-muted-foreground">×</span>
         <Input
           type="number" min={0} step={1}
-          value={line.qty}
+          value={line.qty || ""}
           onChange={(e) => onUpdate({ qty: parseFloat(e.target.value) || 0 })}
           className="h-8 rounded-lg text-xs w-14 text-center"
           placeholder="Qty"
@@ -767,7 +943,7 @@ function ExpenseLineRow({
         <span className="text-[10px] text-muted-foreground">£</span>
         <Input
           type="number" min={0} step={0.01}
-          value={line.amount}
+          value={line.amount || ""}
           onChange={(e) => onUpdate({ amount: parseFloat(e.target.value) || 0 })}
           className="h-8 rounded-lg text-xs w-24 text-right"
           placeholder="Amount"
@@ -1013,7 +1189,7 @@ function ProjectionTab({ companyId, taxYearStart }: { companyId: string; taxYear
             <Label className="text-[10px] text-muted-foreground">Corp Tax</Label>
             <Input
               type="number" min={0} max={100}
-              value={taxRate}
+              value={taxRate || ""}
               onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
               className="h-7 rounded-lg w-14 text-xs"
             />
@@ -1293,7 +1469,7 @@ function SettingsTab({ companyId }: { companyId: string }) {
       <div>
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Default Corp Tax Rate</p>
         <div className="flex items-center gap-2">
-          <Input type="number" min={0} max={100} value={local.corporateTaxRate}
+          <Input type="number" min={0} max={100} value={local.corporateTaxRate || ""}
             onChange={(e) => setLocal((l) => ({ ...l, corporateTaxRate: parseFloat(e.target.value) || 0 }))}
             className="h-9 rounded-xl w-20" />
           <span className="text-sm text-muted-foreground">%</span>

@@ -2,33 +2,55 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Calculator,
+  Check,
   FileText,
   Landmark,
   Link2,
   Loader2,
+  Pencil,
   Plus,
+  Settings2,
   StickyNote,
   Trash2,
   TrendingUp,
   Upload,
   Wallet,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/auth/AuthContext";
 import { useBankConnections } from "@/hooks/useBankConnections";
 import { useBankConnectStatus } from "@/hooks/useBankConnectStatus";
-import { useFlat } from "@/hooks/useFlats";
+import { setFlatDocumentCategories, useFlat } from "@/hooks/useFlats";
 import { computeFlatReturns, estimateFlatTax, fmtGbp, fmtPct } from "@/lib/flatFinance";
 import { importFlatBankTransactions, startBankConnect } from "@/lib/truelayerApi";
-import { OWNERSHIP_LABELS, type FlatOwnership, type FlatTenant } from "@/types/flats";
+import {
+  FLAT_LEDGER_FREQUENCIES,
+  OWNERSHIP_LABELS,
+  type FlatDocumentMeta,
+  type FlatOwnership,
+  type FlatRecord,
+  type FlatTenant,
+} from "@/types/flats";
 
 const ACCENT = "hsl(195,50%,45%)";
 const SECTIONS = [
@@ -44,6 +66,13 @@ const SECTIONS = [
 
 function tint(pct = 14) {
   return `color-mix(in srgb, ${ACCENT} ${pct}%, hsl(var(--card)))`;
+}
+
+/** ISO date (yyyy-mm-dd) to dd/mm/yy for compact display in list rows. */
+function fmtDateShort(iso: string) {
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y.slice(2)}`;
 }
 
 function SectionCard({
@@ -107,7 +136,16 @@ function BalanceTooltip({ active, payload, label }: { active?: boolean; payload?
   );
 }
 
-export default function FlatDashboard({ flatId, canEdit = true }: { flatId: string; canEdit?: boolean }) {
+export default function FlatDashboard({
+  flatId,
+  canEdit = true,
+  flats = [],
+}: {
+  flatId: string;
+  canEdit?: boolean;
+  /** Sibling flats, used to offer "use these tag settings for X too". */
+  flats?: FlatRecord[];
+}) {
   const { dataUid } = useAuth();
   const {
     flat,
@@ -118,10 +156,13 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
     saveFlat,
     addBalance,
     addLedgerEntry,
+    updateLedgerEntry,
     removeLedgerEntry,
     saveTax,
     saveBankLinks,
-    uploadDocument,
+    uploadDocuments,
+    updateDocument,
+    deleteDocument,
     addNote,
     toggleNote,
     deleteNote,
@@ -149,17 +190,41 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
 
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [editingLedgerId, setEditingLedgerId] = useState<string | null>(null);
   const [ledgerDesc, setLedgerDesc] = useState("");
   const [ledgerAmount, setLedgerAmount] = useState("");
   const [ledgerCategory, setLedgerCategory] = useState("");
   const [ledgerDate, setLedgerDate] = useState(new Date().toISOString().slice(0, 10));
+  const [ledgerFrequency, setLedgerFrequency] = useState("One-off");
+  const [ledgerNotes, setLedgerNotes] = useState("");
+  const [ledgerFile, setLedgerFile] = useState<File | null>(null);
 
   const [linkConnId, setLinkConnId] = useState("");
   const [linkAccountId, setLinkAccountId] = useState("");
 
   const [noteText, setNoteText] = useState("");
   const [docCategory, setDocCategory] = useState("Other");
+  const [docYear, setDocYear] = useState<number>(year);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const [tagSettingsOpen, setTagSettingsOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState("");
+  const [savingCategories, setSavingCategories] = useState(false);
+
+  const [editDocId, setEditDocId] = useState<string | null>(null);
+  const [editDocDraft, setEditDocDraft] = useState<{ name: string; category: string; year: string; notes: string }>({
+    name: "",
+    category: "",
+    year: "",
+    notes: "",
+  });
+  const [savingDocEdit, setSavingDocEdit] = useState(false);
+  const [deleteDocTarget, setDeleteDocTarget] = useState<FlatDocumentMeta | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState(false);
+
+  const otherFlats = flats.filter((f) => f.id !== flatId);
 
   const [balOpen, setBalOpen] = useState(false);
   const [balDate, setBalDate] = useState(new Date().toISOString().slice(0, 10));
@@ -210,6 +275,7 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
 
   const selectedConn = connections.find((c) => c.id === linkConnId);
   const bankLinks = flat?.bankLinks || [];
+  const documentsById = useMemo(() => new Map(documents.map((d) => [d.id, d])), [documents]);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -238,6 +304,30 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
     }
   };
 
+  const resetLedgerForm = () => {
+    setEditingLedgerId(null);
+    setLedgerDesc("");
+    setLedgerAmount("");
+    setLedgerCategory("");
+    setLedgerDate(new Date().toISOString().slice(0, 10));
+    setLedgerFrequency("One-off");
+    setLedgerNotes("");
+    setLedgerFile(null);
+  };
+
+  const openEditLedger = (kind: "income" | "expense", e: (typeof yearLedger)[number]) => {
+    setEditingLedgerId(e.id);
+    setLedgerDesc(e.description);
+    setLedgerAmount(String(e.amountGbp));
+    setLedgerCategory(e.category);
+    setLedgerDate(e.date);
+    setLedgerFrequency(e.frequency || "One-off");
+    setLedgerNotes(e.notes || "");
+    setLedgerFile(null);
+    if (kind === "income") setIncomeOpen(true);
+    else setExpenseOpen(true);
+  };
+
   const submitLedger = async (kind: "income" | "expense") => {
     if (!flat || !canEdit) return;
     const amount = Number(ledgerAmount);
@@ -247,26 +337,77 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
     }
     setBusy(kind);
     try {
-      await addLedgerEntry({
-        kind,
-        date: ledgerDate,
-        description: ledgerDesc.trim(),
-        category:
-          ledgerCategory ||
-          (kind === "income" ? flat.incomeCategories[0] : flat.expenseCategories[0]) ||
-          "Other",
-        amountGbp: amount,
-        frequency: "One-off",
-        source: "manual",
-      });
-      toast.success(kind === "income" ? "Income added" : "Expense added");
+      const category =
+        ledgerCategory ||
+        (kind === "income" ? flat.incomeCategories[0] : flat.expenseCategories[0]) ||
+        "Other";
+
+      let documentId: string | null = editingLedgerId
+        ? yearLedger.find((e) => e.id === editingLedgerId)?.documentId ?? null
+        : null;
+
+      if (ledgerFile) {
+        const entryId = editingLedgerId || `led_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const result = await uploadDocuments([ledgerFile], {
+          category,
+          year: Number(ledgerDate.slice(0, 4)) || year,
+          link: { noteId: entryId, type: "ledger", text: ledgerDesc.trim() },
+        });
+        if (result.uploaded[0]) documentId = result.uploaded[0].id;
+        if (editingLedgerId) {
+          await updateLedgerEntry(editingLedgerId, {
+            date: ledgerDate,
+            description: ledgerDesc.trim(),
+            category,
+            amountGbp: amount,
+            frequency: ledgerFrequency,
+            notes: ledgerNotes,
+            documentId,
+          });
+        } else {
+          await addLedgerEntry({
+            id: entryId,
+            kind,
+            date: ledgerDate,
+            description: ledgerDesc.trim(),
+            category,
+            amountGbp: amount,
+            frequency: ledgerFrequency,
+            notes: ledgerNotes,
+            source: "manual",
+            documentId,
+          });
+        }
+      } else if (editingLedgerId) {
+        await updateLedgerEntry(editingLedgerId, {
+          date: ledgerDate,
+          description: ledgerDesc.trim(),
+          category,
+          amountGbp: amount,
+          frequency: ledgerFrequency,
+          notes: ledgerNotes,
+        });
+      } else {
+        await addLedgerEntry({
+          kind,
+          date: ledgerDate,
+          description: ledgerDesc.trim(),
+          category,
+          amountGbp: amount,
+          frequency: ledgerFrequency,
+          notes: ledgerNotes,
+          source: "manual",
+        });
+      }
+
+      toast.success(
+        editingLedgerId ? "Entry updated" : kind === "income" ? "Income added" : "Expense added",
+      );
       setIncomeOpen(false);
       setExpenseOpen(false);
-      setLedgerDesc("");
-      setLedgerAmount("");
-      setLedgerCategory("");
+      resetLedgerForm();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add entry");
+      toast.error(err instanceof Error ? err.message : "Could not save entry");
     } finally {
       setBusy(null);
     }
@@ -279,11 +420,123 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
     }
     setBusy("connect");
     try {
-      const url = await startBankConnect();
+      const url = await startBankConnect(window.location.pathname);
       window.location.href = url;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start bank connect");
       setBusy(null);
+    }
+  };
+
+  const openTagSettings = () => {
+    setCategoryDraft([...(flat.documentCategories || [])]);
+    setNewCategory("");
+    setTagSettingsOpen(true);
+  };
+
+  const addCategoryToDraft = () => {
+    const v = newCategory.trim();
+    if (!v || categoryDraft.some((c) => c.toLowerCase() === v.toLowerCase())) return;
+    setCategoryDraft((prev) => [...prev, v]);
+    setNewCategory("");
+  };
+
+  const removeCategoryFromDraft = (c: string) => {
+    setCategoryDraft((prev) => prev.filter((x) => x !== c));
+  };
+
+  const saveTagSettings = async (alsoApplyToFlatId?: string) => {
+    if (categoryDraft.length === 0) {
+      toast.error("Add at least one tag");
+      return;
+    }
+    setSavingCategories(true);
+    try {
+      await saveFlat({ documentCategories: categoryDraft });
+      if (alsoApplyToFlatId) {
+        await setFlatDocumentCategories(alsoApplyToFlatId, categoryDraft);
+      }
+      toast.success(alsoApplyToFlatId ? "Tag settings saved for both properties" : "Tag settings saved");
+      setTagSettingsOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save tag settings");
+    } finally {
+      setSavingCategories(false);
+    }
+  };
+
+  const startEditDoc = (d: FlatDocumentMeta) => {
+    setEditDocId(d.id);
+    setEditDocDraft({
+      name: d.name,
+      category: d.category || "Other",
+      year: d.year != null ? String(d.year) : "",
+      notes: d.notes || "",
+    });
+  };
+
+  const saveEditDoc = async () => {
+    if (!editDocId) return;
+    if (!editDocDraft.name.trim()) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+    setSavingDocEdit(true);
+    try {
+      await updateDocument(editDocId, {
+        name: editDocDraft.name.trim(),
+        category: editDocDraft.category,
+        year: editDocDraft.year ? Number(editDocDraft.year) : null,
+        notes: editDocDraft.notes,
+      });
+      toast.success("Document updated");
+      setEditDocId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update document");
+    } finally {
+      setSavingDocEdit(false);
+    }
+  };
+
+  const confirmDeleteDoc = async () => {
+    if (!deleteDocTarget) return;
+    setDeletingDoc(true);
+    try {
+      await deleteDocument(deleteDocTarget);
+      toast.success("Document deleted");
+      setDeleteDocTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete document");
+    } finally {
+      setDeletingDoc(false);
+    }
+  };
+
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploadProgress({ done: 0, total: files.length });
+    try {
+      const result = await uploadDocuments(
+        files,
+        { category: docCategory, year: docYear },
+        (done, total) => setUploadProgress({ done, total }),
+      );
+      if (result.failed.length === 0) {
+        toast.success(`${result.succeeded} document${result.succeeded === 1 ? "" : "s"} uploaded`);
+      } else if (result.succeeded === 0) {
+        toast.error(`Could not upload ${result.failed.length === 1 ? "that file" : "any of those files"}`);
+      } else {
+        toast.message(
+          `${result.succeeded} uploaded, ${result.failed.length} failed (${result.failed
+            .slice(0, 3)
+            .map((f) => f.name)
+            .join(", ")}${result.failed.length > 3 ? "…" : ""})`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadProgress(null);
     }
   };
 
@@ -337,32 +590,28 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
   }
 
   return (
-    <div className="flex min-w-0 gap-3 lg:gap-4">
-      <aside className="hidden w-40 shrink-0 lg:block">
-        <nav
-          aria-label="Flat sections"
-          className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card"
-        >
-          {SECTIONS.map((s) => {
-            const Icon = s.icon;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => scrollTo(s.id)}
-                className="flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left text-xs font-semibold text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-                {s.label}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+    <div className="min-w-0 space-y-3">
+      <nav
+        aria-label="Flat sections"
+        className="sticky top-2 z-10 flex gap-1.5 overflow-x-auto rounded-2xl border border-border/50 bg-card p-1.5 shadow-card"
+      >
+        {SECTIONS.map((s) => {
+          const Icon = s.icon;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => scrollTo(s.id)}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-transparent px-2.5 py-1.5 text-left text-xs font-semibold text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {s.label}
+            </button>
+          );
+        })}
+      </nav>
 
-      <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden">
+      <div className="min-w-0 space-y-4 overflow-x-hidden">
         <SectionCard id="returns" title="Returns" icon={<TrendingUp className="h-4 w-4" />}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatTile label="Gross yield" value={fmtPct(returns?.grossYieldPct)} emphasise />
@@ -536,6 +785,7 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                     variant="outline"
                     className="h-8 rounded-lg text-xs"
                     onClick={() => {
+                      resetLedgerForm();
                       setLedgerCategory(flat.incomeCategories[0] || "Rent");
                       setIncomeOpen(true);
                     }}
@@ -547,6 +797,7 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                     size="sm"
                     className="h-8 rounded-lg bg-gradient-primary text-xs"
                     onClick={() => {
+                      resetLedgerForm();
                       setLedgerCategory(flat.expenseCategories[0] || "Other");
                       setExpenseOpen(true);
                     }}
@@ -573,38 +824,74 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
             {yearLedger.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No entries for {ledgerYear} yet.</p>
             ) : (
-              yearLedger.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2"
-                  style={{ background: tint(8) }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{e.description}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {e.date} · {e.category}
-                      {e.source === "truelayer" ? " · bank" : ""}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 text-sm font-semibold ${
-                      e.kind === "income" ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"
-                    }`}
+              yearLedger.map((e) => {
+                const linkedDoc = e.documentId ? documentsById.get(e.documentId) : undefined;
+                return (
+                  <div
+                    key={e.id}
+                    className="flex min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2"
+                    style={{ background: tint(8) }}
                   >
-                    {e.kind === "income" ? "+" : "−"}
-                    {fmtGbp(e.amountGbp)}
-                  </span>
-                  {canEdit && (
-                    <button
-                      type="button"
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                      onClick={() => void removeLedgerEntry(e.id).then(() => toast.success("Removed"))}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{e.description}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                        <span>{fmtDateShort(e.date)}</span>
+                        <span>·</span>
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ background: tint(20) }}
+                        >
+                          {e.category}
+                        </span>
+                        {e.frequency && e.frequency !== "One-off" && (
+                          <>
+                            <span>·</span>
+                            <span>{e.frequency}</span>
+                          </>
+                        )}
+                        {e.source === "truelayer" && <span>· bank</span>}
+                        {linkedDoc && (
+                          <a
+                            href={linkedDoc.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-0.5 text-primary hover:underline"
+                          >
+                            <FileText className="h-3 w-3" /> doc
+                          </a>
+                        )}
+                      </div>
+                      {e.notes && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{e.notes}</p>}
+                    </div>
+                    <span
+                      className={`shrink-0 text-sm font-semibold ${
+                        e.kind === "income" ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"
+                      }`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))
+                      {e.kind === "income" ? "+" : "−"}
+                      {fmtGbp(e.amountGbp)}
+                    </span>
+                    {canEdit && (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          onClick={() => openEditLedger(e.kind, e)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                          onClick={() => void removeLedgerEntry(e.id).then(() => toast.success("Removed"))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </SectionCard>
@@ -845,7 +1132,15 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
           icon={<FileText className="h-4 w-4" />}
           action={
             canEdit ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={openTagSettings}
+                  className="flex h-8 items-center gap-1 rounded-lg border border-border/50 px-2 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  title="Tag settings"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                </button>
                 <Select value={docCategory} onValueChange={setDocCategory}>
                   <SelectTrigger className="h-8 w-28 rounded-lg text-xs">
                     <SelectValue />
@@ -858,6 +1153,18 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={String(docYear)} onValueChange={(v) => setDocYear(Number(v))}>
+                  <SelectTrigger className="h-8 w-[4.5rem] rounded-lg text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[year + 1, year, year - 1, year - 2, year - 3].map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm"
                   className="h-8 rounded-lg bg-gradient-primary text-xs gap-1"
@@ -865,18 +1172,17 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                   onClick={() => fileRef.current?.click()}
                 >
                   {uploadingDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  Upload
+                  {uploadingDoc && uploadProgress ? `${uploadProgress.done}/${uploadProgress.total}` : "Upload"}
                 </Button>
                 <input
                   ref={fileRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void uploadDocument(file, { category: docCategory })
-                      .then(() => toast.success("Uploaded"))
-                      .catch((err) => toast.error(err instanceof Error ? err.message : "Upload failed"));
+                    const files = Array.from(e.target.files || []);
+                    if (files.length === 0) return;
+                    void handleFileUpload(files);
                     e.target.value = "";
                   }}
                 />
@@ -888,23 +1194,118 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
             {documents.length === 0 ? (
               <li className="py-4 text-center text-sm text-muted-foreground">No documents yet.</li>
             ) : (
-              documents.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2"
-                  style={{ background: tint(8) }}
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <a href={d.url} target="_blank" rel="noreferrer" className="truncate text-sm font-medium text-primary hover:underline">
-                      {d.name}
-                    </a>
-                    <p className="text-[11px] text-muted-foreground">
-                      {d.category || "Other"} · {d.date}
-                    </p>
-                  </div>
-                </li>
-              ))
+              documents.map((d) =>
+                editDocId === d.id ? (
+                  <li
+                    key={d.id}
+                    className="space-y-2 rounded-xl border border-primary/40 px-3 py-2.5"
+                    style={{ background: tint(14) }}
+                  >
+                    <Input
+                      value={editDocDraft.name}
+                      onChange={(e) => setEditDocDraft((p) => ({ ...p, name: e.target.value }))}
+                      className="h-9 rounded-lg text-sm"
+                      placeholder="Document name"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={editDocDraft.category}
+                        onValueChange={(v) => setEditDocDraft((p) => ({ ...p, category: v }))}
+                      >
+                        <SelectTrigger className="h-9 rounded-lg text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(flat.documentCategories || []).map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={editDocDraft.year || "none"}
+                        onValueChange={(v) => setEditDocDraft((p) => ({ ...p, year: v === "none" ? "" : v }))}
+                      >
+                        <SelectTrigger className="h-9 rounded-lg text-xs">
+                          <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No year</SelectItem>
+                          {[year + 1, year, year - 1, year - 2, year - 3, year - 4].map((y) => (
+                            <SelectItem key={y} value={String(y)}>
+                              {y}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Textarea
+                      value={editDocDraft.notes}
+                      onChange={(e) => setEditDocDraft((p) => ({ ...p, notes: e.target.value }))}
+                      rows={2}
+                      className="rounded-lg text-sm"
+                      placeholder="Notes…"
+                    />
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-lg text-xs"
+                        onClick={() => setEditDocId(null)}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" />
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-8 rounded-lg bg-gradient-primary text-xs"
+                        disabled={savingDocEdit}
+                        onClick={() => void saveEditDoc()}
+                      >
+                        {savingDocEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+                        Save
+                      </Button>
+                    </div>
+                  </li>
+                ) : (
+                  <li
+                    key={d.id}
+                    className="flex min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2"
+                    style={{ background: tint(8) }}
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <a href={d.url} target="_blank" rel="noreferrer" className="truncate text-sm font-medium text-primary hover:underline">
+                        {d.name}
+                      </a>
+                      <p className="text-[11px] text-muted-foreground">
+                        {d.category || "Other"}
+                        {d.year ? ` · ${d.year}` : ""} · {fmtDateShort(d.date)}
+                      </p>
+                      {d.notes && <p className="truncate text-[11px] text-muted-foreground">{d.notes}</p>}
+                    </div>
+                    {canEdit && (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          onClick={() => startEditDoc(d)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                          onClick={() => setDeleteDocTarget(d)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ),
+              )
             )}
           </ul>
         </SectionCard>
@@ -946,10 +1347,16 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
         </SectionCard>
       </div>
 
-      <Dialog open={incomeOpen} onOpenChange={setIncomeOpen}>
+      <Dialog
+        open={incomeOpen}
+        onOpenChange={(o) => {
+          setIncomeOpen(o);
+          if (!o) resetLedgerForm();
+        }}
+      >
         <DialogContent className="mx-4 max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-display">Add income</DialogTitle>
+            <DialogTitle className="font-display">{editingLedgerId ? "Edit income" : "Add income"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1.5">
@@ -966,32 +1373,74 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                 <Input type="date" value={ledgerDate} onChange={(e) => setLedgerDate(e.target.value)} className="h-10 rounded-xl" />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Category</Label>
+                <Select value={ledgerCategory} onValueChange={setLedgerCategory}>
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {flat.incomeCategories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Frequency</Label>
+                <Select value={ledgerFrequency} onValueChange={setLedgerFrequency}>
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FLAT_LEDGER_FREQUENCIES.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Category</Label>
-              <Select value={ledgerCategory} onValueChange={setLedgerCategory}>
-                <SelectTrigger className="h-10 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {flat.incomeCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Notes</Label>
+              <Textarea
+                value={ledgerNotes}
+                onChange={(e) => setLedgerNotes(e.target.value)}
+                rows={2}
+                className="rounded-xl"
+                placeholder="Optional notes…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Attach document (optional)</Label>
+              <Input
+                type="file"
+                onChange={(e) => setLedgerFile(e.target.files?.[0] || null)}
+                className="h-10 rounded-xl text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs"
+              />
+              {ledgerFile && <p className="text-[11px] text-muted-foreground">{ledgerFile.name} will also be added to Documents.</p>}
             </div>
             <Button className="w-full rounded-xl bg-gradient-primary" disabled={busy === "income"} onClick={() => void submitLedger("income")}>
-              Save income
+              {busy === "income" ? <Loader2 className="h-4 w-4 animate-spin" /> : editingLedgerId ? "Save changes" : "Save income"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
+      <Dialog
+        open={expenseOpen}
+        onOpenChange={(o) => {
+          setExpenseOpen(o);
+          if (!o) resetLedgerForm();
+        }}
+      >
         <DialogContent className="mx-4 max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-display">Add expense</DialogTitle>
+            <DialogTitle className="font-display">{editingLedgerId ? "Edit expense" : "Add expense"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="space-y-1.5">
@@ -1008,23 +1457,59 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
                 <Input type="date" value={ledgerDate} onChange={(e) => setLedgerDate(e.target.value)} className="h-10 rounded-xl" />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Category</Label>
+                <Select value={ledgerCategory} onValueChange={setLedgerCategory}>
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {flat.expenseCategories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Frequency</Label>
+                <Select value={ledgerFrequency} onValueChange={setLedgerFrequency}>
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FLAT_LEDGER_FREQUENCIES.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Category</Label>
-              <Select value={ledgerCategory} onValueChange={setLedgerCategory}>
-                <SelectTrigger className="h-10 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {flat.expenseCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Notes</Label>
+              <Textarea
+                value={ledgerNotes}
+                onChange={(e) => setLedgerNotes(e.target.value)}
+                rows={2}
+                className="rounded-xl"
+                placeholder="Optional notes…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Attach document (optional)</Label>
+              <Input
+                type="file"
+                onChange={(e) => setLedgerFile(e.target.files?.[0] || null)}
+                className="h-10 rounded-xl text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs"
+              />
+              {ledgerFile && <p className="text-[11px] text-muted-foreground">{ledgerFile.name} will also be added to Documents.</p>}
             </div>
             <Button className="w-full rounded-xl bg-gradient-primary" disabled={busy === "expense"} onClick={() => void submitLedger("expense")}>
-              Save expense
+              {busy === "expense" ? <Loader2 className="h-4 w-4 animate-spin" /> : editingLedgerId ? "Save changes" : "Save expense"}
             </Button>
           </div>
         </DialogContent>
@@ -1068,6 +1553,98 @@ export default function FlatDashboard({ flatId, canEdit = true }: { flatId: stri
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={tagSettingsOpen} onOpenChange={setTagSettingsOpen}>
+        <DialogContent className="mx-4 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Document tags for {flat.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <p className="text-xs text-muted-foreground">
+              These tags appear when uploading a document to this property.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {categoryDraft.map((c) => (
+                <span
+                  key={c}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{ background: tint(20) }}
+                >
+                  {c}
+                  <button
+                    type="button"
+                    onClick={() => removeCategoryFromDraft(c)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCategoryToDraft();
+                  }
+                }}
+                placeholder="Add a tag…"
+                className="h-9 rounded-lg text-sm"
+              />
+              <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={addCategoryToDraft}>
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="space-y-2 pt-1">
+              <Button
+                className="w-full rounded-xl bg-gradient-primary"
+                disabled={savingCategories}
+                onClick={() => void saveTagSettings()}
+              >
+                {savingCategories ? <Loader2 className="h-4 w-4 animate-spin" /> : `Save for ${flat.name}`}
+              </Button>
+              {otherFlats.map((other) => (
+                <Button
+                  key={other.id}
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  disabled={savingCategories}
+                  onClick={() => void saveTagSettings(other.id)}
+                >
+                  Use these settings for {other.name} too
+                </Button>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteDocTarget} onOpenChange={(o) => !o && setDeleteDocTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{deleteDocTarget?.name}</strong>. The file cannot be recovered.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDoc}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingDoc}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDeleteDoc();
+              }}
+            >
+              {deletingDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

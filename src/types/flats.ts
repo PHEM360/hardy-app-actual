@@ -81,18 +81,26 @@ export interface FlatLedgerEntry {
   source?: "manual" | "truelayer";
   bankTxId?: string | null;
   notes?: string;
+  /** Id of a flats/{flatId}/documents record uploaded alongside this entry, e.g. a receipt or invoice. */
+  documentId?: string | null;
 }
+
+export const FLAT_LEDGER_FREQUENCIES = ["One-off", "Weekly", "Monthly", "Quarterly", "Annually"];
 
 export interface FlatDocumentMeta {
   id: string;
   name: string;
   date: string;
   url: string;
+  /** Storage object path — needed to actually delete the underlying file, not just the Firestore record. */
+  storagePath?: string;
   fileType: string;
   category?: string;
+  /** Calendar year this document relates to, e.g. a council tax bill or service charge accounts for that year. */
+  year?: number | null;
   notes?: string;
   linkedNoteId?: string;
-  linkedNoteType?: "note" | "task";
+  linkedNoteType?: "note" | "task" | "ledger";
   linkedNoteText?: string;
   createdAt?: unknown;
 }
@@ -168,6 +176,10 @@ export const DEFAULT_FLAT_EXPENSE_CATEGORIES = [
 export const DEFAULT_FLAT_INCOME_CATEGORIES = ["Rent", "Deposit retained", "Other income"];
 
 export const DEFAULT_FLAT_DOCUMENT_CATEGORIES = [
+  "Service Accounts",
+  "Council Tax",
+  "Maintenance Charge",
+  "Upkeep / Isolated Purchases",
   "Tenancy",
   "Insurance",
   "Certificates",

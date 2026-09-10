@@ -8,6 +8,14 @@ import {
   Plane,
   Hotel,
   ClipboardList,
+  Lightbulb,
+  Sparkles,
+  Radar,
+  Clock,
+  Car,
+  Award,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +37,12 @@ import {
   type HolidayWatch,
 } from "@/types/holidays";
 
+const INSIGHT_TINT = "hsl(258,55%,52%)";
+const TIP_TINT = "hsl(38,92%,50%)";
+const SAVING_TINT = "hsl(150,55%,36%)";
+const LIVE_TINT = "hsl(150,55%,36%)";
+const ESTIMATE_TINT = "hsl(38,92%,45%)";
+
 function fmtMoney(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
   return `£${Math.round(n).toLocaleString("en-GB")}`;
@@ -43,7 +57,18 @@ function fmtDate(d?: string | null) {
   }
 }
 
-type SortKey = "suitability" | "price" | "tripadvisor" | "stars";
+function fmtDuration(minutes?: number | null) {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return null;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+type SortKey = "suitability" | "price" | "tripadvisor" | "google" | "stars";
+
+function isLiveConfidence(c?: string | null) {
+  return c === "ai_researched" || c === "live" || c === "partial";
+}
 
 export function HolidayOptionsPanel({
   watch,
@@ -65,6 +90,7 @@ export function HolidayOptionsPanel({
   const [sort, setSort] = useState<SortKey>("suitability");
   const [brandFilter, setBrandFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
+  const [confidenceFilter, setConfidenceFilter] = useState("all");
   const [maxPrice, setMaxPrice] = useState("");
   const [onlyDiscounts, setOnlyDiscounts] = useState(false);
   const [price, setPrice] = useState("");
@@ -95,21 +121,28 @@ export function HolidayOptionsPanel({
     [latestBatch],
   );
 
+  const liveCount = useMemo(() => latestBatch.filter((p) => isLiveConfidence(p.priceConfidence)).length, [latestBatch]);
+
   const filtered = useMemo(() => {
     let rows = [...latestBatch];
     if (brandFilter !== "all") rows = rows.filter((r) => r.sourceName === brandFilter);
     if (modeFilter !== "all") rows = rows.filter((r) => r.bookingMode === modeFilter);
+    if (confidenceFilter === "live") rows = rows.filter((r) => isLiveConfidence(r.priceConfidence));
+    if (confidenceFilter === "estimated") rows = rows.filter((r) => !isLiveConfidence(r.priceConfidence));
     if (onlyDiscounts) rows = rows.filter((r) => (r.discounts || []).length > 0);
     const cap = Number(maxPrice);
     if (Number.isFinite(cap) && cap > 0) rows = rows.filter((r) => r.priceGbp <= cap);
     rows.sort((a, b) => {
       if (sort === "price") return a.priceGbp - b.priceGbp;
       if (sort === "tripadvisor") return (b.tripadvisorScore || 0) - (a.tripadvisorScore || 0);
+      if (sort === "google") return (b.googleScore || 0) - (a.googleScore || 0);
       if (sort === "stars") return (b.officialStars || 0) - (a.officialStars || 0);
       return (b.suitabilityScore || 0) - (a.suitabilityScore || 0) || a.priceGbp - b.priceGbp;
     });
     return rows.slice(0, 10);
-  }, [latestBatch, brandFilter, modeFilter, onlyDiscounts, maxPrice, sort]);
+  }, [latestBatch, brandFilter, modeFilter, confidenceFilter, onlyDiscounts, maxPrice, sort]);
+
+  const summary = watch.lastSearchSummary;
 
   const submit = async () => {
     const n = Number(price);
@@ -132,14 +165,14 @@ export function HolidayOptionsPanel({
 
   return (
     <div
-      className="rounded-2xl border border-border/50 bg-card p-4 shadow-card"
-      style={{ borderLeftWidth: 4, borderLeftColor: HOLIDAY_ACCENT }}
+      className="rounded-2xl border-2 bg-card p-4 shadow-elevated"
+      style={{ borderColor: `color-mix(in srgb, ${HOLIDAY_ACCENT} 45%, var(--border))` }}
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-display text-base font-bold">{watch.title}</h3>
+          <h3 className="font-display text-lg font-bold">{watch.title}</h3>
           <p className="text-xs text-muted-foreground">
-            Ranked research · flights + hotels · package & separate paths
+            {latestBatch.length} option{latestBatch.length === 1 ? "" : "s"} · {liveCount} live-researched, {latestBatch.length - liveCount} modelled
             {watch.scheduleMode === "once"
               ? " · one-off"
               : ` · every ${watch.searchIntervalAmount} ${watch.searchIntervalUnit}`}
@@ -151,19 +184,76 @@ export function HolidayOptionsPanel({
             href={watch.bestPriceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-xl bg-gradient-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+            style={{ background: `linear-gradient(135deg, ${HOLIDAY_ACCENT}, color-mix(in srgb, ${HOLIDAY_ACCENT} 70%, black))` }}
           >
-            Open best deal <ExternalLink className="h-3.5 w-3.5" />
+            Open best deal <ExternalLink className="h-4 w-4" />
           </a>
         )}
       </div>
 
-      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-border/50 bg-muted/25 p-2.5">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          <Filter className="h-3.5 w-3.5" /> Filters
+      {summary && (summary.comparisonSummary || summary.otherWorthChecking || (summary.tips || []).length > 0) && (
+        <div className="mb-3 space-y-2.5">
+          {summary.comparisonSummary && (
+            <div
+              className="rounded-2xl border-2 p-3.5 shadow-sm"
+              style={{
+                borderColor: `color-mix(in srgb, ${INSIGHT_TINT} 45%, var(--border))`,
+                background: `color-mix(in srgb, ${INSIGHT_TINT} 12%, var(--card))`,
+              }}
+            >
+              <p className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: INSIGHT_TINT }}>
+                <Sparkles className="h-3.5 w-3.5" /> How the top options compare
+              </p>
+              <p className="text-sm leading-relaxed">{summary.comparisonSummary}</p>
+            </div>
+          )}
+          {summary.otherWorthChecking && (
+            <div
+              className="rounded-2xl border-2 p-3.5 shadow-sm"
+              style={{
+                borderColor: `color-mix(in srgb, ${HOLIDAY_ACCENT} 45%, var(--border))`,
+                background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 12%, var(--card))`,
+              }}
+            >
+              <p className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: HOLIDAY_ACCENT }}>
+                <Radar className="h-3.5 w-3.5" /> Also worth a look
+              </p>
+              <p className="text-sm leading-relaxed">{summary.otherWorthChecking}</p>
+            </div>
+          )}
+          {(summary.tips || []).length > 0 && (
+            <div
+              className="rounded-2xl border-2 p-3.5 shadow-sm"
+              style={{
+                borderColor: `color-mix(in srgb, ${TIP_TINT} 50%, var(--border))`,
+                background: `color-mix(in srgb, ${TIP_TINT} 14%, var(--card))`,
+              }}
+            >
+              <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: TIP_TINT }}>
+                <Lightbulb className="h-3.5 w-3.5" /> Tips & tricks for this search
+              </p>
+              <ul className="space-y-1">
+                {(summary.tips || []).map((tip, i) => (
+                  <li key={i} className="flex gap-1.5 text-sm leading-relaxed">
+                    <span style={{ color: TIP_TINT }}>•</span> {tip}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div
+        className="mb-3 flex flex-wrap items-end gap-2 rounded-2xl border-2 border-border p-3"
+        style={{ background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 8%, var(--muted))` }}
+      >
+        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+          <Filter className="h-3.5 w-3.5" /> Sort & filter
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase">Sort</Label>
+          <Label className="text-[10px] font-bold uppercase">Sort</Label>
           <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
             <SelectTrigger className="h-8 w-[9.5rem] rounded-xl bg-card text-xs">
               <SelectValue />
@@ -171,13 +261,27 @@ export function HolidayOptionsPanel({
             <SelectContent>
               <SelectItem value="suitability">Suitability</SelectItem>
               <SelectItem value="price">Price</SelectItem>
-              <SelectItem value="tripadvisor">TripAdvisor</SelectItem>
+              <SelectItem value="tripadvisor">TripAdvisor score</SelectItem>
+              <SelectItem value="google">Google score</SelectItem>
               <SelectItem value="stars">Hotel stars</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase">Book as</Label>
+          <Label className="text-[10px] font-bold uppercase">Pricing</Label>
+          <Select value={confidenceFilter} onValueChange={setConfidenceFilter}>
+            <SelectTrigger className="h-8 w-[9.5rem] rounded-xl bg-card text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Live + estimated</SelectItem>
+              <SelectItem value="live">Live-researched only</SelectItem>
+              <SelectItem value="estimated">Modelled estimate only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] font-bold uppercase">Book as</Label>
           <Select value={modeFilter} onValueChange={setModeFilter}>
             <SelectTrigger className="h-8 w-[11rem] rounded-xl bg-card text-xs">
               <SelectValue />
@@ -187,11 +291,12 @@ export function HolidayOptionsPanel({
               <SelectItem value="package">Package</SelectItem>
               <SelectItem value="airline_holiday">Airline holiday</SelectItem>
               <SelectItem value="flights_hotel_separate">Flights + hotel</SelectItem>
+              <SelectItem value="hotel_only">Hotel only</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase">Brand</Label>
+          <Label className="text-[10px] font-bold uppercase">Brand</Label>
           <Select value={brandFilter} onValueChange={setBrandFilter}>
             <SelectTrigger className="h-8 w-[10rem] rounded-xl bg-card text-xs">
               <SelectValue />
@@ -207,7 +312,7 @@ export function HolidayOptionsPanel({
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase">Max £</Label>
+          <Label className="text-[10px] font-bold uppercase">Max £</Label>
           <Input
             type="number"
             value={maxPrice}
@@ -216,7 +321,7 @@ export function HolidayOptionsPanel({
             placeholder="Any"
           />
         </div>
-        <label className="flex h-8 items-center gap-2 rounded-xl border border-border/50 bg-card px-2.5 text-xs">
+        <label className="flex h-8 items-center gap-2 rounded-xl border-2 border-border bg-card px-2.5 text-xs font-semibold">
           <input
             type="checkbox"
             checked={onlyDiscounts}
@@ -227,17 +332,17 @@ export function HolidayOptionsPanel({
       </div>
 
       {canEdit && (
-        <div className="mb-4 grid gap-2 rounded-xl border border-border/50 bg-muted/25 p-3 sm:grid-cols-3">
+        <div className="mb-4 grid gap-2 rounded-2xl border-2 border-border p-3 sm:grid-cols-3" style={{ background: `color-mix(in srgb, ${HOLIDAY_ACCENT} 6%, var(--muted))` }}>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Log price £</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-wide">Log price £</Label>
             <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="h-9 rounded-xl bg-card" />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Source</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-wide">Source</Label>
             <Input value={source} onChange={(e) => setSource(e.target.value)} className="h-9 rounded-xl bg-card" placeholder="Jet2Holidays" />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide">Link</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-wide">Link</Label>
             <div className="flex gap-1.5">
               <Input value={url} onChange={(e) => setUrl(e.target.value)} className="h-9 rounded-xl bg-card" placeholder="https://…" />
               <Button type="button" className="h-9 shrink-0 rounded-xl bg-gradient-primary text-primary-foreground border-0" disabled={saving} onClick={submit}>
@@ -255,105 +360,167 @@ export function HolidayOptionsPanel({
           No matching options yet. Tap Search now, or loosen filters.
         </p>
       ) : (
-        <ul className="space-y-2.5">
+        <ul className="space-y-3">
           {filtered.map((p, i) => {
             const id = p.id || `${p.sourceName}-${i}`;
             const open = expanded === id;
             const mode = p.bookingMode as HolidayBookingMode | null | undefined;
+            const isTop = i === 0;
+            const live = isLiveConfidence(p.priceConfidence);
+            const outboundDuration = fmtDuration(p.flightDurationMinutes);
+            const transferDuration = fmtDuration(p.transferDurationMinutes);
+            const hasFlightTimes = p.outboundDepartTime || p.outboundArriveTime;
             return (
               <li
                 key={id}
-                className="rounded-xl border border-border/40 bg-card overflow-hidden"
+                className="overflow-hidden rounded-2xl border-2 shadow-md"
                 style={{
-                  background:
-                    i === 0
-                      ? `color-mix(in srgb, ${HOLIDAY_ACCENT} 12%, var(--card))`
-                      : undefined,
+                  borderColor: isTop
+                    ? HOLIDAY_ACCENT
+                    : `color-mix(in srgb, ${HOLIDAY_ACCENT} 20%, var(--border))`,
+                  background: isTop
+                    ? `color-mix(in srgb, ${HOLIDAY_ACCENT} 16%, var(--card))`
+                    : "var(--card)",
                 }}
               >
                 <button
                   type="button"
-                  className="flex w-full items-start gap-3 px-3 py-2.5 text-left"
+                  className="flex w-full items-start gap-3 px-3.5 py-3 text-left"
                   onClick={() => setExpanded(open ? null : id)}
                 >
-                  <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/10 text-[10px] font-bold text-primary">
+                  <div
+                    className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl text-sm font-bold text-white shadow-sm"
+                    style={{ background: isTop ? HOLIDAY_ACCENT : "color-mix(in srgb, var(--foreground) 35%, var(--muted))" }}
+                  >
                     #{p.rank || i + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
-                      {p.hotelName || p.packageLabel || p.sourceName}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-sm font-bold">
+                        {p.hotelName || p.packageLabel || p.sourceName}
+                      </p>
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                        style={{ background: live ? LIVE_TINT : ESTIMATE_TINT }}
+                      >
+                        {live ? <CheckCircle2 className="h-2.5 w-2.5" /> : <AlertTriangle className="h-2.5 w-2.5" />}
+                        {live ? "Live researched" : "Modelled estimate"}
+                      </span>
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {p.sourceName}
                       {mode ? ` · ${BOOKING_MODE_LABELS[mode]}` : ""}
                       {p.officialStars != null ? ` · ${p.officialStars}★` : ""}
                       {p.tripadvisorScore != null ? ` · TA ${p.tripadvisorScore}` : ""}
+                      {p.googleScore != null ? ` · Google ${p.googleScore}` : ""}
                       {p.suitabilityScore != null ? ` · fit ${p.suitabilityScore}` : ""}
                     </p>
                     {(p.discounts || []).length > 0 && (
-                      <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-primary">
+                      <p className="mt-1 flex items-center gap-1 text-[10px] font-bold" style={{ color: SAVING_TINT }}>
                         <BadgePercent className="h-3 w-3" />
                         {(p.discounts || []).map((d) => d.label).join(" · ")}
                       </p>
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-display text-base font-bold">{fmtMoney(p.priceGbp)}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {p.priceConfidence === "estimated"
-                        ? "Structured estimate"
-                        : p.priceConfidence === "partial"
-                          ? "Live + checked"
-                          : "Total for party"}
-                    </p>
+                    <p className="font-display text-lg font-extrabold">{fmtMoney(p.priceGbp)}</p>
                     {p.sourceUrl && (
                       <a
                         href={p.sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex text-muted-foreground hover:text-primary"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold hover:underline"
+                        style={{ color: HOLIDAY_ACCENT }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        View <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
                   </div>
                 </button>
                 {open && (
-                  <div className="space-y-3 border-t border-border/40 bg-muted/20 px-3 py-3">
+                  <div className="space-y-3 border-t-2 p-3.5" style={{ borderColor: `color-mix(in srgb, ${HOLIDAY_ACCENT} 20%, var(--border))`, background: "var(--muted)" }}>
                     <div className="flex flex-wrap gap-2 text-[11px]">
                       {mode && (
-                        <span className="rounded-lg bg-card px-2 py-1 font-medium">
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">
                           {BOOKING_MODE_LABELS[mode]}
                         </span>
                       )}
                       {p.officialStars != null && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-card px-2 py-1 font-medium">
+                        <span className="inline-flex items-center gap-1 rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">
                           <Star className="h-3 w-3" /> Official {p.officialStars}★
                         </span>
                       )}
                       {p.tripadvisorScore != null && (
-                        <span className="rounded-lg bg-card px-2 py-1 font-medium">
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">
                           TripAdvisor {p.tripadvisorScore}
                         </span>
                       )}
+                      {p.googleScore != null && (
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">
+                          Google {p.googleScore}
+                        </span>
+                      )}
                       {p.nights != null && (
-                        <span className="rounded-lg bg-card px-2 py-1 font-medium">{p.nights} nights</span>
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">{p.nights} nights</span>
                       )}
                       {p.boardBasis && (
-                        <span className="rounded-lg bg-card px-2 py-1 font-medium capitalize">
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold capitalize">
                           {p.boardBasis.replace(/_/g, " ")}
                         </span>
                       )}
                       {p.departureAirport && (
-                        <span className="rounded-lg bg-card px-2 py-1 font-medium">
+                        <span className="rounded-lg border-2 border-border bg-card px-2 py-1 font-semibold">
                           From {p.departureAirport}
                         </span>
                       )}
                     </div>
 
+                    {(hasFlightTimes || outboundDuration || transferDuration) ? (
+                      <div className="rounded-xl border-2 border-border bg-card p-3">
+                        <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          <Clock className="h-3.5 w-3.5" /> Flight & transfer times (real, researched)
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {hasFlightTimes && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Plane className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span>
+                                Out {p.outboundDepartTime || "?"} → {p.outboundArriveTime || "?"}
+                                {p.returnDepartTime ? ` · Back ${p.returnDepartTime} → ${p.returnArriveTime || "?"}` : ""}
+                                {outboundDuration ? ` (${outboundDuration} flight)` : ""}
+                              </span>
+                            </div>
+                          )}
+                          {transferDuration && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Car className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span>~{transferDuration} airport transfer</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] italic text-muted-foreground">
+                        No real flight schedule found for this option — times aren't guessed.
+                      </p>
+                    )}
+
+                    {p.loyaltyNote && (
+                      <div
+                        className="flex items-start gap-2 rounded-xl border-2 p-3"
+                        style={{ borderColor: `color-mix(in srgb, ${TIP_TINT} 45%, var(--border))`, background: `color-mix(in srgb, ${TIP_TINT} 12%, var(--card))` }}
+                      >
+                        <Award className="mt-0.5 h-4 w-4 shrink-0" style={{ color: TIP_TINT }} />
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: TIP_TINT }}>Loyalty scheme</p>
+                          <p className="mt-0.5 text-xs leading-relaxed">{p.loyaltyNote}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {p.costBreakdown && (
-                      <div className="rounded-xl border border-border/40 bg-card p-3">
+                      <div className="rounded-xl border-2 border-border bg-card p-3">
                         <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                           <PoundSterling className="h-3.5 w-3.5" /> Cost breakdown
                           {p.costBreakdown.confidence ? ` · ${p.costBreakdown.confidence}` : ""}
@@ -365,7 +532,7 @@ export function HolidayOptionsPanel({
                                 <span className="mr-1.5 inline-flex text-muted-foreground">
                                   {line.kind === "flights" ? (
                                     <Plane className="h-3.5 w-3.5" />
-                                  ) : line.kind === "hotel" || line.kind === "package" ? (
+                                  ) : line.kind === "hotel" || line.kind === "package" || line.kind === "airport_hotel" ? (
                                     <Hotel className="h-3.5 w-3.5" />
                                   ) : null}
                                 </span>
@@ -374,13 +541,13 @@ export function HolidayOptionsPanel({
                                   <span className="ml-1 text-[10px] text-muted-foreground">(est.)</span>
                                 ) : null}
                               </span>
-                              <span className={`shrink-0 font-semibold ${line.amountGbp < 0 ? "text-primary" : ""}`}>
+                              <span className={`shrink-0 font-bold ${line.amountGbp < 0 ? "" : ""}`} style={line.amountGbp < 0 ? { color: SAVING_TINT } : undefined}>
                                 {fmtMoney(line.amountGbp)}
                               </span>
                             </li>
                           ))}
                         </ul>
-                        <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2 text-sm font-bold">
+                        <div className="mt-2 flex items-center justify-between border-t-2 border-border pt-2 text-sm font-extrabold">
                           <span>Total for party</span>
                           <span>{fmtMoney(p.costBreakdown.totalGbp || p.priceGbp)}</span>
                         </div>
@@ -388,7 +555,7 @@ export function HolidayOptionsPanel({
                     )}
 
                     {p.independentSummary && (
-                      <div className="rounded-xl border border-border/40 bg-card p-3">
+                      <div className="rounded-xl border-2 border-border bg-card p-3">
                         <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                           <ClipboardList className="h-3.5 w-3.5" /> Independent review summary
                         </p>
@@ -397,7 +564,7 @@ export function HolidayOptionsPanel({
                     )}
 
                     {(p.reviewSummaries || []).map((r) => (
-                      <div key={r.source} className="rounded-lg border border-border/40 bg-card px-2.5 py-2">
+                      <div key={r.source} className="rounded-xl border-2 border-border bg-card px-3 py-2.5">
                         <p className="text-[11px] font-bold">
                           {r.source}
                           {r.score != null ? ` · ${r.score}` : ""}
@@ -406,12 +573,12 @@ export function HolidayOptionsPanel({
                         <p className="mt-0.5 text-xs text-muted-foreground">{r.summary}</p>
                         {!!(r.pros || []).length && (
                           <p className="mt-1 text-[11px] text-foreground/80">
-                            <span className="font-semibold text-primary">Pros:</span> {(r.pros || []).join("; ")}
+                            <span className="font-bold" style={{ color: SAVING_TINT }}>Pros:</span> {(r.pros || []).join("; ")}
                           </p>
                         )}
                         {!!(r.cons || []).length && (
                           <p className="mt-0.5 text-[11px] text-foreground/80">
-                            <span className="font-semibold">Watch-outs:</span> {(r.cons || []).join("; ")}
+                            <span className="font-bold">Watch-outs:</span> {(r.cons || []).join("; ")}
                           </p>
                         )}
                         {!!(r.themes || []).length && (
@@ -423,13 +590,16 @@ export function HolidayOptionsPanel({
                     ))}
 
                     {(p.discounts || []).length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      <div
+                        className="space-y-1 rounded-xl border-2 p-3"
+                        style={{ borderColor: `color-mix(in srgb, ${SAVING_TINT} 40%, var(--border))`, background: `color-mix(in srgb, ${SAVING_TINT} 10%, var(--card))` }}
+                      >
+                        <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: SAVING_TINT }}>
                           Discounts to check
                         </p>
                         {(p.discounts || []).map((d) => (
                           <p key={d.label} className="text-xs">
-                            <span className="font-semibold">{d.label}</span> — {d.detail}
+                            <span className="font-bold">{d.label}</span> — {d.detail}
                             {d.estimatedSavingPct != null ? ` (~${d.estimatedSavingPct}%)` : ""}
                           </p>
                         ))}
@@ -457,10 +627,11 @@ export function HolidayOptionsPanel({
         </ul>
       )}
 
-      <div className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+      <div className="mt-3 flex items-start gap-2 rounded-xl border-2 border-border bg-muted p-2.5 text-[11px] leading-relaxed text-muted-foreground">
         <PoundSterling className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Options are capped at 10 and ranked by fit. Totals are for the whole party. Live site numbers
-        that look like deposits or fragments are discarded; structured flight + hotel estimates are used instead.
+        Options are capped at 10 and ranked by fit. Totals are for the whole party. "Live researched" options
+        come from an AI web search of real travel sites; "Modelled estimate" options are a structured
+        flights + hotel calculation used only when live research isn't available, and are always labelled as such.
       </div>
     </div>
   );

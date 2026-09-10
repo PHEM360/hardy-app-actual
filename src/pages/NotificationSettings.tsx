@@ -130,7 +130,7 @@ function ReminderRow({
             <Input
               type="number"
               min={1}
-              value={reminder.relativeAmount ?? 1}
+              value={reminder.relativeAmount || ""}
               onChange={(e) => upd({ relativeAmount: Math.max(1, Number(e.target.value)) })}
               className="h-8 text-sm w-16"
             />

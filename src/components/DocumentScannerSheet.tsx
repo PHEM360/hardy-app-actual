@@ -4,7 +4,9 @@
  * Full-screen document scanner modal. Shows a captured camera image,
  * auto-detects document edges, lets the user drag 4 corner handles to
  * refine the crop, then applies a perspective warp and returns the result
- * as a JPEG File — similar to Dropbox / Google Drive scanning.
+ * as a JPEG File — similar to Dropbox / Google Drive scanning. Optionally
+ * (allowMultiPage) lets the user capture several pages in one session,
+ * returned as a single multi-page PDF.
  *
  * Usage:
  *   <DocumentScannerSheet
@@ -16,15 +18,17 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { jsPDF } from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, RotateCcw, Loader2, CheckCheck, ScanLine, Image as ImageIcon } from "lucide-react";
+import { X, RotateCcw, Loader2, CheckCheck, ScanLine, Image as ImageIcon, Plus, Palette } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Pt = { x: number; y: number };
 // Corners in order: TL, TR, BR, BL
 type Quad = [Pt, Pt, Pt, Pt];
+type ColorMode = "color" | "bw";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -239,6 +243,58 @@ function enhanceScan(canvas: HTMLCanvasElement): HTMLCanvasElement {
   return canvas;
 }
 
+/**
+ * Converts to true grayscale (desaturated) after the same auto-contrast
+ * stretch used for colour scans, so text reads crisp black-on-white —
+ * matching the "B&W" scan mode in Dropbox / Adobe Scan.
+ */
+function toBlackAndWhite(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+    d[i] = d[i + 1] = d[i + 2] = lum;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+function applyColorMode(canvas: HTMLCanvasElement, mode: ColorMode): HTMLCanvasElement {
+  const enhanced = enhanceScan(canvas);
+  return mode === "bw" ? toBlackAndWhite(enhanced) : enhanced;
+}
+
+/** Assembles one or more page canvases into a single multi-page PDF, each
+ *  page sized to the image's own aspect ratio (A4-width portrait canvas). */
+async function buildPdfFromBlobs(blobs: Blob[]): Promise<Blob> {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  for (let i = 0; i < blobs.length; i++) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blobs[i]);
+    });
+    const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.src = dataUrl;
+    });
+    if (i > 0) doc.addPage();
+    const scale = Math.min(pageW / dims.w, pageH / dims.h);
+    const w = dims.w * scale;
+    const h = dims.h * scale;
+    const format = blobs[i].type.includes("png") ? "PNG" : blobs[i].type.includes("webp") ? "WEBP" : "JPEG";
+    doc.addImage(dataUrl, format, (pageW - w) / 2, (pageH - h) / 2, w, h);
+  }
+
+  return doc.output("blob");
+}
+
 // ─── Corner labels ────────────────────────────────────────────────────────────
 
 const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
@@ -254,6 +310,7 @@ const LOUPE_FINGER_GAP = 24;   // px gap above the finger, so the touch doesn't 
 export default function DocumentScannerSheet({
   imageFile,
   initialMode,
+  allowMultiPage,
   onConfirm,
   onCancel,
 }: {
@@ -262,6 +319,11 @@ export default function DocumentScannerSheet({
    *  to that mode — use this when the caller already asked the user before
    *  opening the camera/file picker (see ScanModeChooser below). */
   initialMode?: "scan" | "picture";
+  /** Lets the user capture several pages in one session — "Add another page"
+   *  appears after each page, and the final result is a single multi-page
+   *  PDF when more than one page was captured (a single File either way, so
+   *  existing single-page callers don't need to change). */
+  allowMultiPage?: boolean;
   onConfirm: (file: File) => void;
   onCancel: () => void;
 }) {
@@ -285,32 +347,55 @@ export default function DocumentScannerSheet({
   const [stage, setStage] = useState<Stage>("choose");
   const [mode, setMode] = useState<"scan" | "picture" | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string>("");
+  const [colorMode, setColorMode] = useState<ColorMode>("color");
   const warpedBlobRef = useRef<Blob | null>(null);
   const [fileName, setFileName] = useState("Scan");
+
+  // ── Multi-page session state ─────────────────────────────────────────────────
+  // The prop only ever carries the FIRST captured page — once inside a
+  // multi-page session, `activeFile` (not the prop) drives what's loaded, so
+  // "Add another page" can feed in a fresh capture without the parent
+  // needing to know about the multi-page loop at all.
+  const [activeFile, setActiveFile] = useState<File | null>(null);
+  const [confirmedPages, setConfirmedPages] = useState<Blob[]>([]);
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const [assembling, setAssembling] = useState(false);
+  const extraPageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (imageFile) {
+      setConfirmedPages([]);
+      setSessionOpen(true);
+      setActiveFile(imageFile);
+    }
+  }, [imageFile]);
 
   // ── SVG ref for coordinate transforms ────────────────────────────────────────
   const svgRef = useRef<SVGSVGElement>(null);
 
   // ── Load image ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!imageFile) return;
+    if (!activeFile) return;
     setImgReady(false);
     setQuad(null);
     setPreviewSrc("");
+    setColorMode("color");
     warpedBlobRef.current = null;
-    setFileName((imageFile.name || "Scan").replace(/\.[^.]+$/, ""));
+    setFileName((activeFile.name || "Scan").replace(/\.[^.]+$/, ""));
 
-    const url = URL.createObjectURL(imageFile);
+    const url = URL.createObjectURL(activeFile);
     setImgSrc(url);
 
-    if (initialMode === "picture") {
+    if (initialMode === "picture" && confirmedPages.length === 0) {
       // Caller already asked "scan or picture?" before opening the camera/
       // file picker — skip the in-sheet choice and use the photo as-is.
+      // (Only for the very first page — subsequent "add another page"
+      // captures always go through the normal scan-edit flow.)
       setMode("picture");
-      warpedBlobRef.current = imageFile;
+      warpedBlobRef.current = activeFile;
       setPreviewSrc(url);
       setStage("preview");
-    } else if (initialMode === "scan") {
+    } else if (initialMode === "scan" || confirmedPages.length > 0) {
       setMode("scan");
       setStage("edit");
     } else {
@@ -336,7 +421,9 @@ export default function DocumentScannerSheet({
     img.src = url;
 
     return () => URL.revokeObjectURL(url);
-  }, [imageFile, initialMode]);
+    // confirmedPages.length (not the array itself) intentionally drives this: it only
+    // needs to distinguish "first page" from "a later page in the same session".
+  }, [activeFile, initialMode, confirmedPages.length]);
 
   // ── Drag: map screen → SVG/image coordinates ─────────────────────────────────
   const getSVGPt = useCallback(
@@ -394,15 +481,15 @@ export default function DocumentScannerSheet({
   }, []);
 
   const choosePicture = useCallback(() => {
-    if (!imageFile) return;
+    if (!activeFile) return;
     setMode("picture");
-    warpedBlobRef.current = imageFile;
+    warpedBlobRef.current = activeFile;
     setPreviewSrc(imgSrc);
     setStage("preview");
-  }, [imageFile, imgSrc]);
+  }, [activeFile, imgSrc]);
 
   // ── Apply perspective warp ────────────────────────────────────────────────────
-  const handleWarp = useCallback(async () => {
+  const runWarp = useCallback(async (mode: ColorMode) => {
     if (!quad || !offscreenRef.current) return;
     setStage("warping");
 
@@ -418,7 +505,7 @@ export default function DocumentScannerSheet({
       const outW = Math.max(1, Math.round(Math.max(topW, botW)));
       const outH = Math.max(1, Math.round(Math.max(leftH, rightH)));
 
-      const warped = enhanceScan(warpPerspective(offscreenRef.current, quad, outW, outH));
+      const warped = applyColorMode(warpPerspective(offscreenRef.current, quad, outW, outH), mode);
 
       // Convert to blob
       await new Promise<void>((resolve) => {
@@ -439,16 +526,55 @@ export default function DocumentScannerSheet({
     }
   }, [quad]);
 
-  // ── Confirm ───────────────────────────────────────────────────────────────────
-  const handleConfirm = useCallback(() => {
+  const handleWarp = useCallback(() => { void runWarp(colorMode); }, [runWarp, colorMode]);
+
+  const toggleColorMode = useCallback((next: ColorMode) => {
+    setColorMode(next);
+    // Already-warped preview — re-run with the new mode so the toggle has
+    // an immediate, visible effect rather than only applying next time.
+    if (stage === "preview" && mode === "scan") void runWarp(next);
+  }, [stage, mode, runWarp]);
+
+  // ── Multi-page: stash this page, capture another ─────────────────────────────
+  const addAnotherPage = useCallback(() => {
+    const blob = warpedBlobRef.current;
+    if (!blob) return;
+    setConfirmedPages((prev) => [...prev, blob]);
+    extraPageInputRef.current?.click();
+  }, []);
+
+  const handleExtraPageFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) setActiveFile(f);
+  }, []);
+
+  // ── Confirm (finish session) ─────────────────────────────────────────────────
+  const handleConfirm = useCallback(async () => {
     const blob = warpedBlobRef.current;
     if (!blob) return;
     const baseName = fileName.trim() || "Scan";
-    const mime = blob.type || "image/jpeg";
-    const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const file = new File([blob], `${baseName}.${ext}`, { type: mime });
-    onConfirm(file);
-  }, [fileName, onConfirm]);
+    const allPages = [...confirmedPages, blob];
+
+    if (allPages.length <= 1) {
+      const mime = blob.type || "image/jpeg";
+      const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+      const file = new File([blob], `${baseName}.${ext}`, { type: mime });
+      setSessionOpen(false);
+      onConfirm(file);
+      return;
+    }
+
+    setAssembling(true);
+    try {
+      const pdfBlob = await buildPdfFromBlobs(allPages);
+      const file = new File([pdfBlob], `${baseName}.pdf`, { type: "application/pdf" });
+      setSessionOpen(false);
+      onConfirm(file);
+    } finally {
+      setAssembling(false);
+    }
+  }, [fileName, onConfirm, confirmedPages]);
 
   // ── Cleanup preview URL ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -457,7 +583,7 @@ export default function DocumentScannerSheet({
     };
   }, [previewSrc]);
 
-  if (!imageFile) return null;
+  if (!sessionOpen || !activeFile) return null;
 
   // ── Handle radius: scale with image to stay consistent on screen ──────────────
   // We use SVG user units (= image px), so r should be ~2% of shorter side
@@ -477,7 +603,7 @@ export default function DocumentScannerSheet({
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
       >
         <button
-          onClick={onCancel}
+          onClick={() => { setSessionOpen(false); onCancel(); }}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <X className="w-4 h-4" />
@@ -492,7 +618,9 @@ export default function DocumentScannerSheet({
           )}
           {stage === "edit" && (
             <>
-              <p className="text-white text-sm font-semibold">Adjust edges</p>
+              <p className="text-white text-sm font-semibold">
+                {confirmedPages.length > 0 ? `Adjust edges — page ${confirmedPages.length + 1}` : "Adjust edges"}
+              </p>
               <p className="text-white/50 text-[10px]">Drag the coloured corners to fit the document</p>
             </>
           )}
@@ -648,6 +776,48 @@ export default function DocumentScannerSheet({
           </div>
         )}
 
+        {stage === "edit" && imgReady && mode === "scan" && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setColorMode("color")}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold transition-colors ${
+                colorMode === "color" ? "bg-white text-black" : "bg-white/10 text-white/70"
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" /> Colour
+            </button>
+            <button
+              onClick={() => setColorMode("bw")}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold transition-colors ${
+                colorMode === "bw" ? "bg-white text-black" : "bg-white/10 text-white/70"
+              }`}
+            >
+              Black &amp; White
+            </button>
+          </div>
+        )}
+
+        {stage === "preview" && mode === "scan" && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => toggleColorMode("color")}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold transition-colors ${
+                colorMode === "color" ? "bg-white text-black" : "bg-white/10 text-white/70"
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" /> Colour
+            </button>
+            <button
+              onClick={() => toggleColorMode("bw")}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold transition-colors ${
+                colorMode === "bw" ? "bg-white text-black" : "bg-white/10 text-white/70"
+              }`}
+            >
+              Black &amp; White
+            </button>
+          </div>
+        )}
+
         {stage === "preview" && (
           <Input
             value={fileName}
@@ -670,12 +840,29 @@ export default function DocumentScannerSheet({
         {stage === "preview" && (
           <>
             <Button
-              onClick={handleConfirm}
+              onClick={() => void handleConfirm()}
+              disabled={assembling}
               className="w-full h-12 rounded-2xl text-sm font-semibold bg-green-500 hover:bg-green-600 text-white gap-2"
             >
-              <CheckCheck className="w-4 h-4" />
-              {mode === "scan" ? "Use this Scan" : "Use this Photo"}
+              {assembling ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCheck className="w-4 h-4" />
+              )}
+              {confirmedPages.length > 0
+                ? `Use all ${confirmedPages.length + 1} pages`
+                : mode === "scan" ? "Use this Scan" : "Use this Photo"}
             </Button>
+            {allowMultiPage && (
+              <Button
+                variant="ghost"
+                onClick={addAnotherPage}
+                disabled={assembling}
+                className="w-full h-10 rounded-2xl text-sm text-white/80 hover:text-white hover:bg-white/10 gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add another page
+              </Button>
+            )}
             {mode === "scan" && (
               <Button
                 variant="ghost"
@@ -694,6 +881,16 @@ export default function DocumentScannerSheet({
           </div>
         )}
       </div>
+
+      {/* Hidden input for capturing a subsequent page mid-session */}
+      <input
+        ref={extraPageInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleExtraPageFile}
+      />
 
       {/* Magnifier loupe: zoomed view of the corner being dragged, offset
           above the finger (or below, if there's no room above) so the touch

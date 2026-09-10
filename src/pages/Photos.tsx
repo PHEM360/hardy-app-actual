@@ -21,7 +21,7 @@ import {
 } from "@/lib/googlePhotosApi";
 import { isGooglePhotosShareUrl } from "@/lib/googlePhotosAlbum";
 import { albumLibraryKey } from "@/lib/photoSelection";
-import type { DriveFolderOption, PhotoAlbum } from "@/types/photos";
+import type { DriveFolderOption, PhotoAlbum, PhotoItem } from "@/types/photos";
 
 type RailId = "all" | "shared" | string;
 
@@ -62,6 +62,8 @@ export default function Photos() {
   const [folders, setFolders] = useState<DriveFolderOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [transfer, setTransfer] = useState<TransferState | null>(null);
+  const [editingCaptionKey, setEditingCaptionKey] = useState<string | null>(null);
+  const [editingCaption, setEditingCaption] = useState("");
   const [params, setParams] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const transferClear = useRef<number>(0);
@@ -117,6 +119,11 @@ export default function Photos() {
     const wanted = name.trim().toLowerCase();
     if (!wanted) return undefined;
     return photos.albums.find((album) => album.name.trim().toLowerCase() === wanted);
+  };
+
+  const commitCaption = (photo: PhotoItem) => {
+    void photos.updateCaption(photo, editingCaption);
+    setEditingCaptionKey(null);
   };
 
   const makeAlbum = async () => {
@@ -663,8 +670,13 @@ export default function Photos() {
                     <figcaption className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-black/45 px-2 py-1.5">
                       {albumCanEdit ? (
                         <input
-                          value={photo.caption}
-                          onChange={(event) => void photos.updateCaption(photo, event.target.value)}
+                          value={editingCaptionKey === `${photo.ownerId}:${photo.id}` ? editingCaption : photo.caption}
+                          onFocus={() => {
+                            setEditingCaptionKey(`${photo.ownerId}:${photo.id}`);
+                            setEditingCaption(photo.caption);
+                          }}
+                          onChange={(event) => setEditingCaption(event.target.value)}
+                          onBlur={() => commitCaption(photo)}
                           placeholder="Caption"
                           className="min-w-0 flex-1 bg-transparent text-[11px] text-white placeholder:text-white/60 focus:outline-none"
                         />

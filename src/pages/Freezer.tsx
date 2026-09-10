@@ -21,7 +21,7 @@ const Freezer = () => {
   const { items, loading, addItem, updateItem, removeItem } = useFreezer(scopeUserId ?? undefined);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState("1");
   const [dateAdded, setDateAdded] = useState(today());
   const [barcode, setBarcode] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -29,6 +29,7 @@ const Freezer = () => {
   const [saving, setSaving] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -107,14 +108,14 @@ const Freezer = () => {
 
   const resetForm = () => {
     stopScanner();
-    setName(""); setQuantity(1); setDateAdded(today()); setBarcode(""); setImageUrl("");
+    setName(""); setQuantity("1"); setDateAdded(today()); setBarcode(""); setImageUrl("");
   };
 
   const save = async () => {
     if (!name.trim()) return toast.error("Please enter an item name.");
     setSaving(true);
     try {
-      await addItem({ name: name.trim(), quantity: Math.max(1, quantity), dateAdded, ...(barcode && { barcode }), ...(imageUrl && { imageUrl }) });
+      await addItem({ name: name.trim(), quantity: Math.max(1, Number(quantity) || 1), dateAdded, ...(barcode && { barcode }), ...(imageUrl && { imageUrl }) });
       toast.success("Added to the freezer");
       setOpen(false); resetForm();
     } catch { toast.error("The item could not be added."); }
@@ -123,6 +124,7 @@ const Freezer = () => {
 
   const changeQuantity = async (id: string, current: number, next: number) => {
     if (next < 1) return;
+    setQtyDrafts((d) => { if (!(id in d)) return d; const rest = { ...d }; delete rest[id]; return rest; });
     try { await updateItem(id, { quantity: next }); }
     catch { toast.error("Quantity could not be updated."); }
   };
@@ -169,7 +171,19 @@ const Freezer = () => {
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <div className="flex items-center rounded-lg border border-border">
                       <button aria-label={`Decrease ${item.name} quantity`} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30" disabled={item.quantity <= 1} onClick={() => changeQuantity(item.id, item.quantity, item.quantity - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                      <input aria-label={`${item.name} quantity`} type="number" min="1" value={item.quantity} onChange={(e) => { const value = Number(e.target.value); if (value >= 1) changeQuantity(item.id, item.quantity, value); }} className="w-9 border-x border-border bg-transparent text-center text-sm font-semibold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                      <input
+                        aria-label={`${item.name} quantity`}
+                        type="number"
+                        min="1"
+                        value={qtyDrafts[item.id] ?? String(item.quantity)}
+                        onChange={(e) => setQtyDrafts((d) => ({ ...d, [item.id]: e.target.value }))}
+                        onBlur={(e) => {
+                          const value = Number(e.target.value);
+                          if (value >= 1) changeQuantity(item.id, item.quantity, value);
+                          else setQtyDrafts((d) => { const rest = { ...d }; delete rest[item.id]; return rest; });
+                        }}
+                        className="w-9 border-x border-border bg-transparent text-center text-sm font-semibold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      />
                       <button aria-label={`Increase ${item.name} quantity`} className="p-1.5 text-muted-foreground hover:text-foreground" onClick={() => changeQuantity(item.id, item.quantity, item.quantity + 1)}><Plus className="h-3.5 w-3.5" /></button>
                     </div>
                     <button aria-label={`Remove ${item.name}`} onClick={() => remove(item.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
@@ -188,7 +202,7 @@ const Freezer = () => {
             {scanning && <div className="relative overflow-hidden rounded-xl bg-black"><video ref={videoRef} muted playsInline className="aspect-video w-full object-cover" /><div className="pointer-events-none absolute inset-6 rounded-lg border-2 border-white/80" /><Button type="button" variant="secondary" size="sm" className="absolute bottom-2 right-2" onClick={stopScanner}>Cancel</Button></div>}
             <div className="space-y-1.5"><Label htmlFor="freezer-barcode">Barcode (optional)</Label><div className="flex gap-2"><div className="relative flex-1"><Barcode className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input id="freezer-barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Scan or enter barcode" className="pl-9" /></div><Button type="button" variant="outline" size="icon" title="Scan barcode" onClick={startScanner}><ScanLine className="h-4 w-4" /></Button><Button type="button" variant="outline" onClick={() => lookupBarcode(barcode)} disabled={!barcode || lookingUp}>{lookingUp ? "Finding…" : "Find"}</Button></div></div>
             <div className="space-y-1.5"><Label htmlFor="freezer-name">Item name</Label><Input id="freezer-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Chicken breasts" /></div>
-            <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label htmlFor="freezer-quantity">Quantity</Label><Input id="freezer-quantity" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} /></div><div className="space-y-1.5"><Label htmlFor="freezer-date">Date added</Label><Input id="freezer-date" type="date" value={dateAdded} onChange={(e) => setDateAdded(e.target.value)} /></div></div>
+            <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label htmlFor="freezer-quantity">Quantity</Label><Input id="freezer-quantity" type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div><div className="space-y-1.5"><Label htmlFor="freezer-date">Date added</Label><Input id="freezer-date" type="date" value={dateAdded} onChange={(e) => setDateAdded(e.target.value)} /></div></div>
             <Button className="w-full" onClick={save} disabled={saving}>{saving ? "Adding…" : "Add to freezer"}</Button>
           </div>
         </DialogContent>

@@ -630,7 +630,7 @@ export default function RemoteDisplays() {
                                 <input
                                   type="number"
                                   min={5}
-                                  value={selectedWidget.photoIntervalSeconds || 20}
+                                  value={selectedWidget.photoIntervalSeconds || ""}
                                   onChange={(event) => updateWidget({ photoIntervalSeconds: Math.max(5, Number(event.target.value) || 20) })}
                                   className={`${FIELD} h-8 w-20`}
                                 />
@@ -662,7 +662,7 @@ export default function RemoteDisplays() {
                                         type="number"
                                         min={1}
                                         max={90}
-                                        value={selectedWidget.calendarDaysAhead || 14}
+                                        value={selectedWidget.calendarDaysAhead || ""}
                                         onChange={(event) => updateWidget({ calendarDaysAhead: Math.max(1, Number(event.target.value) || 14) })}
                                         className={`${FIELD} h-8 w-20`}
                                       />
@@ -759,7 +759,7 @@ export default function RemoteDisplays() {
                                     type="number"
                                     min={1}
                                     max={30}
-                                    value={selectedWidget.taskLimit || 8}
+                                    value={selectedWidget.taskLimit || ""}
                                     onChange={(event) => updateWidget({ taskLimit: Math.max(1, Number(event.target.value) || 8) })}
                                     className={`${FIELD} mt-1`}
                                   />
@@ -770,7 +770,7 @@ export default function RemoteDisplays() {
                                     type="number"
                                     min={5}
                                     max={300}
-                                    value={selectedWidget.autoCycleSeconds || 20}
+                                    value={selectedWidget.autoCycleSeconds || ""}
                                     onChange={(event) => updateWidget({ autoCycleSeconds: Math.max(5, Number(event.target.value) || 20) })}
                                     className={`${FIELD} mt-1`}
                                   />

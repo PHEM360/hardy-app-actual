@@ -80,6 +80,8 @@ export {
 	onMedicationWrite,
 	scheduleMedicationTopUp,
 } from "./notifications/featureSchedulers";
+export { onBirthdayWrite, refreshBirthdayReminders } from "./notifications/birthdayScheduler";
+export { generateRecurringExpenses, remindRegularExpenseReview } from "./companyExpenses";
 
 export {
 	getTrueLayerStatus,

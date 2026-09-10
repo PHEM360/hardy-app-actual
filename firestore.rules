@@ -304,6 +304,23 @@ service cloud.firestore {
       );
     }
 
+    // Birthdays - created by one user, optionally shared with all/some members
+    // of their household (resolved against households/{householdId}.memberIds)
+    // or kept private. Reminders/calendar sync are handled by Cloud Functions.
+    match /birthdays/{birthdayId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.createdBy == request.auth.uid ||
+        (resource.data.sharedWith.mode == 'all' &&
+          request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds) ||
+        (resource.data.sharedWith.mode == 'some' && request.auth.uid in resource.data.sharedWith.uids)
+      );
+      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        isAdmin() || resource.data.createdBy == request.auth.uid
+      );
+    }
+
     // Page shares - generic owner -> target grant (view/edit) for individual
     // pages (finance, tasks, etc). Doc id is deterministic: {ownerId}_{page}_{targetUid}.
     match /pageShares/{shareId} {
@@ -958,6 +975,13 @@ service cloud.firestore {
     // Scheduled notifications - written by Cloud Functions; readable by owner
     match /scheduledNotifications/{notifId} {
       allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false; // Cloud Functions only
+    }
+
+    // Tracks when each company owner last got a "review your regular expenses"
+    // nudge - written by Cloud Functions; readable by the owner it's about.
+    match /expenseReviewReminders/{ownerId} {
+      allow read: if isOwner(ownerId) || isAdmin();
       allow write: if false; // Cloud Functions only
     }
 

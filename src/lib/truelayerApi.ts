@@ -26,9 +26,15 @@ export async function getBankConnectStatus() {
   }
 }
 
-export async function startBankConnect() {
-  const call = httpsCallable<{ redirectUri: string }, { authUrl: string }>(functions, "startTrueLayerConnect");
-  const result = await call({ redirectUri: bankRedirectUri() });
+export async function startBankConnect(returnPath?: string) {
+  const call = httpsCallable<{ redirectUri: string; returnPath?: string }, { authUrl: string }>(
+    functions,
+    "startTrueLayerConnect"
+  );
+  const result = await call({
+    redirectUri: bankRedirectUri(),
+    returnPath: returnPath || window.location.pathname,
+  });
   return result.data.authUrl;
 }
 

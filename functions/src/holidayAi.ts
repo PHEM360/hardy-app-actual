@@ -13,12 +13,15 @@ import {
   estimateAirportHotelGbp,
   estimateAirportParkingGbp,
   estimatePrivateTaxiGbp,
+  haulForRegion,
   inferRegion,
   isPlausibleTotalPrice,
   minimumPlausibleTotal,
+  operatorServesHaul,
   roomsNeeded,
   type BookingMode,
   type SearchOption,
+  type SearchSummary,
   type WatchLike,
 } from "./holidaySearchEngine";
 import { LEGITIMATE_TRAVEL_HOSTS, isAllowlistedTravelUrl } from "./travelHosts";
@@ -257,7 +260,7 @@ export async function aiSearchWatchPrices(
   watch: WatchLike,
   uid: string,
   apiKey: string,
-): Promise<{ findings: SearchOption[]; sourcesChecked: string[] } | null> {
+): Promise<{ findings: SearchOption[]; sourcesChecked: string[]; summary: SearchSummary | null } | null> {
   try {
     const prefs = await loadPreferenceProfile(uid);
     if (!(await hasAiBudgetRemaining(uid, prefs.aiMonthlyBudgetGbp))) {
@@ -268,6 +271,8 @@ export async function aiSearchWatchPrices(
     const floor = minimumPlausibleTotal(watch);
     const party = { adults: watch.travellers?.adults ?? 2, children: watch.travellers?.children ?? 0, infants: watch.travellers?.infants ?? 0 };
     const nights = watch.dates?.nights || 7;
+    const region = inferRegion(watch);
+    const haul = haulForRegion(region);
     const departureAirport =
       (watch.departureAirports || []).filter((c) => c.toUpperCase() !== "LON")[0] ||
       (watch.departureAirports || [])[0];
@@ -322,15 +327,45 @@ export async function aiSearchWatchPrices(
     ].filter(Boolean).join("\n");
 
     const system = [
-      "You are a meticulous UK family holiday researcher. You use web search to find REAL, CURRENT holiday prices — you never invent a hotel name, review, or price.",
+      "You are a meticulous UK family holiday researcher. You use web search to find REAL, CURRENT holiday prices — you never invent a hotel name, review, price, flight time, or URL.",
       `Only use sources from these travel websites: ${ALLOWLIST_BRIEF}.`,
       "Every price you report must be the TOTAL cost in GBP for the whole party for the whole stay described — never a per-person, per-night, or deposit figure. If a page only shows a per-person or per-night price, multiply it out yourself and say so in the notes.",
       `As a sanity check, a genuine trip like this should cost at least roughly £${floor.toLocaleString("en-GB")} for the whole party — if everything you can find is far below that, the page is showing a fragment price, not a real total; convert it correctly or skip it.`,
+      `This is a ${haul}-haul trip to the ${region} region. Only suggest airlines and package operators that actually fly this route — for example Ryanair and easyJet only fly short-haul within Europe, so never suggest them for a long-haul or ultra-long-haul destination like this one if that applies.`,
+      "For each option, if you can find a specific real flight's timings, include outbound/return departure and arrival times, total flight duration, and typical airport-to-resort transfer time — leave these out entirely rather than guessing if you can't find a real one.",
+      "For each option, also note the Google/Maps review score if you find one (separately from TripAdvisor), and one sentence on whether a loyalty scheme (airline miles, hotel chain points, Genius/One Key style membership) would be worth joining for this specific booking, or leave it blank if none applies.",
       "Return up to 6 real options, each with the exact source URL you found it on. If you cannot find any real current price, return an empty options array rather than guessing.",
+      "Once you've gathered the options, also write: a short comparisonSummary (2-4 sentences) directly comparing your top options against each other — not repeating each one's blurb, but genuinely weighing them against one another; an otherWorthChecking note naming one option that didn't make the top list but could still suit this family well, with why (empty string if nothing stood out); and 2-4 tips — concrete, specific advice for this exact search, such as when prices for this destination/time of year are usually lower, known sale periods for the relevant airlines/operators, or another destination not currently being watched that fits this family's criteria just as well and is worth considering.",
       preferenceBrief(prefs),
     ].join("\n\n");
 
     const user = `Find current holiday prices matching this family's search:\n${criteria}`;
+
+    const optionProperties = {
+      priceGbp: { type: "number" },
+      sourceName: { type: "string" },
+      sourceUrl: { type: "string" },
+      hotelName: { type: "string" },
+      boardBasis: { type: "string" },
+      officialStars: { type: ["number", "null"] },
+      tripadvisorScore: { type: ["number", "null"] },
+      googleScore: { type: ["number", "null"] },
+      bookingMode: {
+        type: "string",
+        enum: ["package", "flights_hotel_separate", "airline_holiday", "hotel_only"],
+      },
+      independentSummary: { type: "string" },
+      whySuitable: { type: "array", items: { type: "string" } },
+      priceNote: { type: "string" },
+      outboundDepartTime: { type: "string" },
+      outboundArriveTime: { type: "string" },
+      returnDepartTime: { type: "string" },
+      returnArriveTime: { type: "string" },
+      flightDurationMinutes: { type: ["number", "null"] },
+      transferDurationMinutes: { type: ["number", "null"] },
+      loyaltyNote: { type: "string" },
+    };
+    const optionRequired = Object.keys(optionProperties);
 
     const schema = {
       type: "object",
@@ -339,33 +374,17 @@ export async function aiSearchWatchPrices(
           type: "array",
           items: {
             type: "object",
-            properties: {
-              priceGbp: { type: "number" },
-              sourceName: { type: "string" },
-              sourceUrl: { type: "string" },
-              hotelName: { type: "string" },
-              boardBasis: { type: "string" },
-              officialStars: { type: ["number", "null"] },
-              tripadvisorScore: { type: ["number", "null"] },
-              bookingMode: {
-                type: "string",
-                enum: ["package", "flights_hotel_separate", "airline_holiday", "hotel_only"],
-              },
-              independentSummary: { type: "string" },
-              whySuitable: { type: "array", items: { type: "string" } },
-              priceNote: { type: "string" },
-            },
-            required: [
-              "priceGbp", "sourceName", "sourceUrl", "hotelName", "boardBasis",
-              "officialStars", "tripadvisorScore", "bookingMode", "independentSummary",
-              "whySuitable", "priceNote",
-            ],
+            properties: optionProperties,
+            required: optionRequired,
             additionalProperties: false,
           },
         },
         sourcesChecked: { type: "array", items: { type: "string" } },
+        comparisonSummary: { type: "string" },
+        otherWorthChecking: { type: "string" },
+        tips: { type: "array", items: { type: "string" } },
       },
-      required: ["options", "sourcesChecked"],
+      required: ["options", "sourcesChecked", "comparisonSummary", "otherWorthChecking", "tips"],
       additionalProperties: false,
     };
 
@@ -380,6 +399,7 @@ export async function aiSearchWatchPrices(
     const findings: SearchOption[] = rawOptions
       .filter((o) => isAllowlistedUrl(String(o.sourceUrl || "")))
       .filter((o) => isPlausibleTotalPrice(Number(o.priceGbp), watch))
+      .filter((o) => operatorServesHaul(String(o.sourceName || ""), haul))
       .map((o, i): SearchOption => {
         const basePrice = Math.round(Number(o.priceGbp));
         const amountNotes = [
@@ -399,6 +419,7 @@ export async function aiSearchWatchPrices(
           boardBasis: o.boardBasis ? String(o.boardBasis) : undefined,
           officialStars: o.officialStars == null ? null : Number(o.officialStars),
           tripadvisorScore: o.tripadvisorScore == null ? null : Number(o.tripadvisorScore),
+          googleScore: o.googleScore == null ? null : Number(o.googleScore),
           independentSummary: o.independentSummary ? String(o.independentSummary) : undefined,
           whySuitable: Array.isArray(o.whySuitable) ? o.whySuitable.map(String) : undefined,
           bookingMode: (["package", "flights_hotel_separate", "airline_holiday", "hotel_only"] as BookingMode[]).includes(o.bookingMode)
@@ -408,11 +429,26 @@ export async function aiSearchWatchPrices(
           priceConfidence: "ai_researched",
           rank: i + 1,
           suitabilityScore: Math.max(0, 90 - i * 4),
+          outboundDepartTime: o.outboundDepartTime ? String(o.outboundDepartTime) : undefined,
+          outboundArriveTime: o.outboundArriveTime ? String(o.outboundArriveTime) : undefined,
+          returnDepartTime: o.returnDepartTime ? String(o.returnDepartTime) : undefined,
+          returnArriveTime: o.returnArriveTime ? String(o.returnArriveTime) : undefined,
+          flightDurationMinutes: o.flightDurationMinutes == null ? null : Number(o.flightDurationMinutes),
+          transferDurationMinutes: o.transferDurationMinutes == null ? null : Number(o.transferDurationMinutes),
+          loyaltyNote: o.loyaltyNote ? String(o.loyaltyNote) : undefined,
         };
       })
       .slice(0, 10);
 
-    return { findings, sourcesChecked: sourcesChecked.length ? sourcesChecked : findings.map((f) => f.sourceName) };
+    const summary: SearchSummary | null = findings.length
+      ? {
+          comparisonSummary: String(json?.comparisonSummary || ""),
+          otherWorthChecking: String(json?.otherWorthChecking || ""),
+          tips: Array.isArray(json?.tips) ? json.tips.map(String).filter(Boolean).slice(0, 6) : [],
+        }
+      : null;
+
+    return { findings, sourcesChecked: sourcesChecked.length ? sourcesChecked : findings.map((f) => f.sourceName), summary };
   } catch (err) {
     logger.warn("AI holiday price research failed, caller should fall back", { destination: watch.destination, err });
     return null;

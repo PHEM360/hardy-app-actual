@@ -522,6 +522,23 @@ export interface CompanyExpense {
   createdAt?: any;
   updatedAt?: any;
   history?: CompanyExpenseHistoryEntry[];
+  /** Every company this one real-world expense is assigned to, including this copy's own company. */
+  companyIds?: string[];
+  /** Shared id linking this expense's copy in each assigned company — same value across all copies. */
+  groupId?: string;
+  /** Present on the ORIGINAL expense that started a recurring series — it's the
+   *  ongoing "template" a scheduled Cloud Function reads to generate future
+   *  occurrences. Set active:false to cancel the subscription (existing
+   *  occurrences are left alone; no more are generated). */
+  recurrence?: {
+    frequency: "monthly" | "yearly";
+    active: boolean;
+  };
+  /** Present on an AUTO-GENERATED occurrence — the id of the template expense
+   *  (in the same company's expenses subcollection) it was generated from. */
+  recurringSourceId?: string;
+  /** Dedupe key for a generated occurrence, e.g. "2026-03" (monthly) or "2026" (yearly). */
+  recurrencePeriod?: string;
 }
 
 export interface CompanyInsurance {
@@ -786,7 +803,8 @@ export type CalendarEventCategory =
   | "work"
   | "health"
   | "social"
-  | "other";
+  | "other"
+  | "birthday";
 
 export interface CalendarNotificationPref {
   id: string;
@@ -809,9 +827,11 @@ export interface CalendarEvent {
   invitees?: string[];         // household member names
   createdBy?: string;          // user UID
   notifications?: CalendarNotificationPref[];
-  source?: "local" | "google" | "import";
+  source?: "local" | "google" | "import" | "birthday";
   googleEventId?: string;
   googleCalendarId?: string;
+  /** Id of the birthdays/{id} doc this was synced from, when source is "birthday". */
+  birthdayId?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -837,6 +857,7 @@ export interface CalendarSettings {
     tasks?: boolean;           // show task due dates
     companies?: boolean;       // show company insurance/tax renewal dates
     notes?: boolean;           // show dated notes from the Notes workspace
+    birthdays?: boolean;       // show birthdays synced from the Birthdays widget
   };
   updatedAt?: any;
 }

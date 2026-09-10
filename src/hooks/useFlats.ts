@@ -15,7 +15,7 @@ import {
   updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import {
   DEFAULT_FLAT_DOCUMENT_CATEGORIES,
@@ -124,6 +124,14 @@ async function ensureSeeded() {
       });
     }
   }
+}
+
+/** Used by the "use these settings for [other flat] too" action, which writes to a flat other than the one currently open. */
+export async function setFlatDocumentCategories(flatId: string, categories: string[]) {
+  await updateDoc(doc(db, "flats", flatId), {
+    documentCategories: categories,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export function useFlatsList() {
@@ -278,13 +286,24 @@ export function useFlat(flatId: string | null) {
   );
 
   const addLedgerEntry = useCallback(
-    async (entry: Omit<FlatLedgerEntry, "id">) => {
+    async (entry: Omit<FlatLedgerEntry, "id"> & { id?: string }) => {
       if (!flat) return;
       const row: FlatLedgerEntry = {
         ...entry,
-        id: `led_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: entry.id || `led_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       };
       await saveFlat({ ledger: [...(flat.ledger || []), row] });
+      return row.id;
+    },
+    [flat, saveFlat],
+  );
+
+  const updateLedgerEntry = useCallback(
+    async (entryId: string, patch: Partial<Omit<FlatLedgerEntry, "id">>) => {
+      if (!flat) return;
+      await saveFlat({
+        ledger: (flat.ledger || []).map((e) => (e.id === entryId ? { ...e, ...patch } : e)),
+      });
     },
     [flat, saveFlat],
   );
@@ -307,50 +326,102 @@ export function useFlat(flatId: string | null) {
     [saveFlat],
   );
 
-  const uploadDocument = useCallback(
+  /**
+   * Uploads each file independently — one bad or oversized file doesn't stop
+   * the rest of a large batch — with a few running in parallel, and reports
+   * live progress plus a per-file failure list rather than throwing on the
+   * first problem. Matches the same pattern used for marketing media uploads.
+   */
+  const uploadDocuments = useCallback(
     async (
-      file: File,
+      files: File[],
       meta?: {
         category?: string;
+        year?: number | null;
         notes?: string;
-        link?: { noteId: string; type: "note" | "task"; text: string };
+        link?: { noteId: string; type: "note" | "task" | "ledger"; text: string };
       },
-    ) => {
-      if (!flatId) return;
+      onProgress?: (done: number, total: number) => void,
+    ): Promise<{
+      succeeded: number;
+      failed: { name: string; reason: string }[];
+      uploaded: { id: string; name: string }[];
+    }> => {
+      if (!flatId) return { succeeded: 0, failed: [], uploaded: [] };
       setUploadingDoc(true);
+      const failed: { name: string; reason: string }[] = [];
+      const uploaded: { id: string; name: string }[] = [];
+      let done = 0;
+      const total = files.length;
+
+      const uploadOne = async (file: File) => {
+        try {
+          const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+          const fileType = file.type.startsWith("image/") ? "image" : ext === "pdf" ? "pdf" : "file";
+          const storagePath = `flats/${flatId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${file.name}`;
+          const storageRef = ref(storage, storagePath);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          const docRef = await addDoc(collection(db, "flats", flatId, "documents"), {
+            name: file.name,
+            date: new Date().toISOString().slice(0, 10),
+            url,
+            storagePath,
+            fileType,
+            category: meta?.category || "Other",
+            year: meta?.year ?? null,
+            notes: meta?.notes || "",
+            createdAt: serverTimestamp(),
+            ...(meta?.link
+              ? {
+                  linkedNoteId: meta.link.noteId,
+                  linkedNoteType: meta.link.type,
+                  linkedNoteText: meta.link.text,
+                }
+              : {}),
+          });
+          uploaded.push({ id: docRef.id, name: file.name });
+        } catch (error) {
+          failed.push({ name: file.name, reason: error instanceof Error ? error.message : "upload failed" });
+        } finally {
+          done += 1;
+          onProgress?.(done, total);
+        }
+      };
+
       try {
-        const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-        const fileType = file.type.startsWith("image/") ? "image" : ext === "pdf" ? "pdf" : "file";
-        const storageRef = ref(storage, `flats/${flatId}/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        await addDoc(collection(db, "flats", flatId, "documents"), {
-          name: file.name,
-          date: new Date().toISOString().slice(0, 10),
-          url,
-          fileType,
-          category: meta?.category || "Other",
-          notes: meta?.notes || "",
-          createdAt: serverTimestamp(),
-          ...(meta?.link
-            ? {
-                linkedNoteId: meta.link.noteId,
-                linkedNoteType: meta.link.type,
-                linkedNoteText: meta.link.text,
-              }
-            : {}),
+        let index = 0;
+        const CONCURRENCY = 3;
+        const workers = Array.from({ length: Math.min(CONCURRENCY, files.length) }, async () => {
+          while (index < files.length) {
+            await uploadOne(files[index++]);
+          }
         });
+        await Promise.all(workers);
       } finally {
         setUploadingDoc(false);
       }
+
+      return { succeeded: uploaded.length, failed, uploaded };
     },
     [flatId],
   );
 
   const updateDocument = useCallback(
-    async (id: string, data: Partial<Pick<FlatDocumentMeta, "name" | "notes" | "category">>) => {
+    async (id: string, data: Partial<Pick<FlatDocumentMeta, "name" | "notes" | "category" | "year">>) => {
       if (!flatId) return;
       await updateDoc(doc(db, "flats", flatId, "documents", id), data as Record<string, unknown>);
+    },
+    [flatId],
+  );
+
+  const deleteDocument = useCallback(
+    async (docMeta: FlatDocumentMeta) => {
+      if (!flatId) return;
+      if (docMeta.storagePath) {
+        await deleteObject(ref(storage, docMeta.storagePath)).catch(() => undefined);
+      }
+      await deleteDoc(doc(db, "flats", flatId, "documents", docMeta.id));
     },
     [flatId],
   );
@@ -432,12 +503,14 @@ export function useFlat(flatId: string | null) {
     saveFlat,
     addBalance,
     addLedgerEntry,
+    updateLedgerEntry,
     removeLedgerEntry,
     saveTenant,
     saveTax,
     saveBankLinks,
-    uploadDocument,
+    uploadDocuments,
     updateDocument,
+    deleteDocument,
     addNote,
     updateNote,
     addComment,

@@ -62,7 +62,29 @@ function expenseDocPayload(expense: Omit<CompanyExpense, "id" | "createdAt">) {
     receiptNames: Array.isArray(expense.receiptNames)
       ? expense.receiptNames
       : alignedReceiptNames(Array.isArray(expense.receipts) ? expense.receipts : []),
+    companyIds: Array.isArray(expense.companyIds) ? expense.companyIds : [],
+    groupId: expense.groupId ?? null,
+    recurrence: expense.recurrence ?? null,
+    recurringSourceId: expense.recurringSourceId ?? null,
+    recurrencePeriod: expense.recurrencePeriod ?? null,
   };
+}
+
+/**
+ * Writes a copy of one real-world expense into ANOTHER company's own expenses
+ * subcollection, for "assign this expense to more than one company" — each
+ * company keeps its own independent copy (same groupId links them), since
+ * expenses live per-company and there's no shared cross-company collection.
+ */
+export async function addExpenseCopyToCompany(
+  companyId: string,
+  expense: Omit<CompanyExpense, "id" | "createdAt">,
+): Promise<string> {
+  const docRef = await addDoc(collection(db, "companies", companyId, "expenses"), {
+    ...expenseDocPayload(expense),
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
 }
 
 export function canEditCompanyClient(

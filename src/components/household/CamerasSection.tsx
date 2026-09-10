@@ -353,8 +353,8 @@ function CameraDialog({
               <Label>Refresh interval (seconds)</Label>
               <Input
                 type="number" min={1} max={60}
-                value={form.snapshotRefreshSecs ?? 5}
-                onChange={(e) => set("snapshotRefreshSecs", Number(e.target.value))}
+                value={form.snapshotRefreshSecs ?? ""}
+                onChange={(e) => set("snapshotRefreshSecs", e.target.value === "" ? undefined : Number(e.target.value))}
                 className="h-11 rounded-xl"
               />
             </div>

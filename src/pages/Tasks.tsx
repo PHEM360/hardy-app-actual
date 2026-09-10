@@ -162,6 +162,8 @@ function TaskDetailSheet({
   const [expandedSubId, setExpandedSubId] = useState<string | null>(null);
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
   const [editingSubTitle, setEditingSubTitle] = useState("");
+  const [editingSubNotesId, setEditingSubNotesId] = useState<string | null>(null);
+  const [editingSubNotes, setEditingSubNotes] = useState("");
   const [dragSubIdx, setDragSubIdx] = useState<number | null>(null);
   const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
 
@@ -203,6 +205,11 @@ function TaskDetailSheet({
     if (t) patchSub(subId, { title: t });
     setEditingSubId(null);
     setEditingSubTitle("");
+  };
+
+  const commitSubNotes = (subId: string) => {
+    patchSub(subId, { notes: editingSubNotes });
+    setEditingSubNotesId(null);
   };
 
   const visibleSubtasks = (task.subtasks ?? []).filter((s) => showCompleted || !s.done);
@@ -443,8 +450,10 @@ function TaskDetailSheet({
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
                           <textarea
-                            value={sub.notes ?? ""}
-                            onChange={(e) => patchSub(sub.id, { notes: e.target.value })}
+                            value={editingSubNotesId === sub.id ? editingSubNotes : (sub.notes ?? "")}
+                            onFocus={() => { setEditingSubNotesId(sub.id); setEditingSubNotes(sub.notes ?? ""); }}
+                            onChange={(e) => setEditingSubNotes(e.target.value)}
+                            onBlur={() => commitSubNotes(sub.id)}
                             placeholder="Add notes…"
                             rows={3}
                             className="w-full text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-2 resize-none outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/60 leading-relaxed"

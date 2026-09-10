@@ -263,7 +263,7 @@ function PosSizeFields({
               type="number"
               step="0.1"
               min={key === "wCm" || key === "hCm" ? "0.1" : undefined}
-              value={roundCm(el[key] as number)}
+              value={roundCm(el[key] as number) || ""}
               onChange={(e) =>
                 onChange({ [key]: parseFloat(e.target.value) || 0 } as Partial<LabelElement>)
               }
@@ -312,7 +312,7 @@ function PropertiesPanel({
               step="0.5"
               min="1"
               max="50"
-              value={design.widthCm}
+              value={design.widthCm || ""}
               onChange={(e) => onChangeDesign({ widthCm: parseFloat(e.target.value) || 10 })}
               className="h-7 rounded-lg text-xs px-2"
             />
@@ -324,7 +324,7 @@ function PropertiesPanel({
               step="0.5"
               min="1"
               max="50"
-              value={design.heightCm}
+              value={design.heightCm || ""}
               onChange={(e) => onChangeDesign({ heightCm: parseFloat(e.target.value) || 5 })}
               className="h-7 rounded-lg text-xs px-2"
             />
@@ -451,7 +451,7 @@ function PropertiesPanel({
                 type="number"
                 min="6"
                 max="200"
-                value={el.fontSizePt || 14}
+                value={el.fontSizePt || ""}
                 onChange={(e) => onUpdateEl(el.id, { fontSizePt: Number(e.target.value) || 14 })}
                 className="h-7 w-14 rounded-lg text-xs px-2"
               />

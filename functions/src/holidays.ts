@@ -14,8 +14,12 @@ import type { NotificationPrefs } from "./notifications/types";
 import {
   assembleSearchOptions,
   effectiveBudgetGbp,
+  haulForRegion,
+  inferRegion,
   minimumPlausibleTotal,
   type BookingMode,
+  type HaulBand,
+  type SearchSummary,
   type SourceLink,
 } from "./holidaySearchEngine";
 import { aiSearchWatchPrices, openaiApiKey } from "./holidayAi";
@@ -320,6 +324,8 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
     url: string;
     modes: FlightBooking[];
     bookingMode: BookingMode;
+    /** Omit for travel agents/aggregators that source flights from many airlines — only set this for an airline-specific operator whose own network doesn't reach every haul. */
+    hauls?: HaulBand[];
   }[] = [
     {
       name: "British Airways Holidays",
@@ -338,6 +344,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
       url: `https://www.jet2holidays.com/search?destination=${q}&nights=${nights}&adults=${adults}`,
       modes: ["travel_agent_package", "no_preference"],
       bookingMode: "package",
+      hauls: ["short", "medium"],
     },
     {
       name: "TUI",
@@ -347,7 +354,8 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
     },
     {
       name: "First Choice",
-      url: `https://www.firstchoice.co.uk/destinations/search?q=${q}`,
+      // No confirmed working deep-link search route — link to the homepage rather than a guess that 404s.
+      url: `https://www.firstchoice.co.uk/`,
       modes: ["travel_agent_package", "no_preference"],
       bookingMode: "package",
     },
@@ -356,6 +364,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
       url: `https://www.easyjet.com/en/holidays?destination=${q}`,
       modes: ["travel_agent_package", "no_preference"],
       bookingMode: "package",
+      hauls: ["short", "medium"],
     },
     {
       name: "Loveholidays",
@@ -377,15 +386,18 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
     },
     {
       name: "Kuoni",
-      url: `https://www.kuoni.co.uk/search?query=${q}`,
+      // No confirmed working deep-link search route — link to the homepage rather than a guess that 404s.
+      url: `https://www.kuoni.co.uk/`,
       modes: ["travel_agent_package", "no_preference"],
       bookingMode: "package",
     },
     {
       name: "Virgin Atlantic Holidays",
-      url: `https://www.virginatlantic.com/gb/en/holidays.html?destination=${q}`,
+      // No confirmed working deep-link search route — link to the homepage rather than a guess that 404s.
+      url: `https://www.virginatlantic.com/`,
       modes: ["travel_agent_package", "british_airways", "no_preference"],
       bookingMode: "airline_holiday",
+      hauls: ["medium", "long", "ultra"],
     },
     {
       name: "Lastminute.com",
@@ -416,6 +428,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
       url: `https://www.ryanair.com/gb/en?destination=${q}&origin=${encode(from)}`,
       modes: ["book_separately", "no_preference"],
       bookingMode: "flights_hotel_separate",
+      hauls: ["short"],
     },
     {
       name: "Skyscanner",
@@ -452,6 +465,14 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
   const preferBa =
     booking === "british_airways" || brandNames.some((n) => /british airways/.test(n));
 
+  // Drop operators whose own network doesn't reach this haul (e.g. Ryanair doesn't fly to the
+  // Caribbean) before anything else runs, so a short-haul-only airline never gets offered for a
+  // long-haul trip. Travel agents/aggregators (no `hauls` set) source flights from many airlines
+  // and stay available everywhere.
+  const tripHaul = haulForRegion(inferRegion(watch));
+  const haulOk = (item: { hauls?: HaulBand[] }) => !item.hauls || item.hauls.includes(tripHaul);
+  const reachableCatalog = catalog.filter(haulOk);
+
   const links: SourceLink[] = [];
   const seen = new Set<string>();
 
@@ -468,7 +489,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
     );
   };
 
-  for (const item of catalog) {
+  for (const item of reachableCatalog) {
     const modeOk = item.modes.includes(booking) || (preferBa && /british airways/i.test(item.name));
     if (!modeOk && !includeAll && !brandMatches(item.name)) continue;
     if (includeAll || brandMatches(item.name) || item.modes.includes(booking)) {
@@ -493,7 +514,7 @@ export function buildSearchLinks(watch: HolidayWatchDoc): SourceLink[] {
   ];
   for (const row of ensure) {
     if (links.length >= 12) break;
-    const item = catalog.find((c) => c.name === row.name);
+    const item = reachableCatalog.find((c) => c.name === row.name);
     if (item) push(item);
   }
 
@@ -561,6 +582,7 @@ export async function searchWatchPrices(
 ): Promise<{
   findings: PriceFinding[];
   sourcesChecked: string[];
+  summary: SearchSummary | null;
 }> {
   if (openaiApiKeyValue) {
     const aiResult = await aiSearchWatchPrices(watch, uid, openaiApiKeyValue);
@@ -601,7 +623,7 @@ export async function searchWatchPrices(
     sourcesChecked: assembled.sourcesChecked.length,
   });
 
-  return assembled;
+  return { ...assembled, summary: null };
 }
 
 async function alertPriceDrop(
@@ -687,7 +709,7 @@ async function processOneWatch(
   const watchRef = db.doc(`holidays/${uid}/watches/${watchId}`);
   const previousBest = typeof watch.bestPriceGbp === "number" ? watch.bestPriceGbp : null;
 
-  const { findings, sourcesChecked } = await searchWatchPrices(watch, uid, secrets.openai);
+  const { findings, sourcesChecked, summary } = await searchWatchPrices(watch, uid, secrets.openai);
   const nowIso = new Date().toISOString();
   const once = watch.scheduleMode === "once";
   const nextAt = once
@@ -723,6 +745,7 @@ async function processOneWatch(
       rank: finding.rank ?? null,
       officialStars: finding.officialStars ?? null,
       tripadvisorScore: finding.tripadvisorScore ?? null,
+      googleScore: finding.googleScore ?? null,
       reviewSummaries: finding.reviewSummaries || [],
       independentSummary: finding.independentSummary || null,
       discounts: finding.discounts || [],
@@ -731,6 +754,13 @@ async function processOneWatch(
       costBreakdown: finding.costBreakdown || null,
       researchNotes: finding.researchNotes || [],
       priceConfidence: finding.priceConfidence || null,
+      outboundDepartTime: finding.outboundDepartTime || null,
+      outboundArriveTime: finding.outboundArriveTime || null,
+      returnDepartTime: finding.returnDepartTime || null,
+      returnArriveTime: finding.returnArriveTime || null,
+      flightDurationMinutes: finding.flightDurationMinutes ?? null,
+      transferDurationMinutes: finding.transferDurationMinutes ?? null,
+      loyaltyNote: finding.loyaltyNote || null,
       manual: false,
       foundAt: nowIso,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -751,15 +781,16 @@ async function processOneWatch(
     nextSearchAt: nextAt,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastSourcesChecked: sourcesChecked,
+    lastSearchSummary: summary,
     lastOptions: findings.map((f) => ({
-      rank: f.rank,
-      suitabilityScore: f.suitabilityScore,
+      rank: f.rank ?? null,
+      suitabilityScore: f.suitabilityScore ?? null,
       priceGbp: f.priceGbp,
       currency: "GBP",
       sourceName: f.sourceName,
       sourceUrl: f.sourceUrl,
-      packageLabel: f.packageLabel,
-      hotelName: f.hotelName,
+      packageLabel: f.packageLabel || null,
+      hotelName: f.hotelName || null,
       destinationLabel: f.destinationLabel || watch.destination,
       outboundDate: f.outboundDate || null,
       returnDate: f.returnDate || null,
@@ -768,17 +799,25 @@ async function processOneWatch(
       flightClass: f.flightClass || null,
       departureAirport: f.departureAirport || null,
       directFlight: f.directFlight ?? null,
-      officialStars: f.officialStars,
-      tripadvisorScore: f.tripadvisorScore,
+      officialStars: f.officialStars ?? null,
+      tripadvisorScore: f.tripadvisorScore ?? null,
+      googleScore: f.googleScore ?? null,
       reviewSummaries: f.reviewSummaries || [],
-      independentSummary: f.independentSummary,
-      discounts: f.discounts,
-      whySuitable: f.whySuitable,
+      independentSummary: f.independentSummary || null,
+      discounts: f.discounts || [],
+      whySuitable: f.whySuitable || [],
       bookingMode: f.bookingMode || null,
       costBreakdown: f.costBreakdown || null,
       researchNotes: f.researchNotes || [],
       priceConfidence: f.priceConfidence || null,
       notes: f.notes || null,
+      outboundDepartTime: f.outboundDepartTime || null,
+      outboundArriveTime: f.outboundArriveTime || null,
+      returnDepartTime: f.returnDepartTime || null,
+      returnArriveTime: f.returnArriveTime || null,
+      flightDurationMinutes: f.flightDurationMinutes ?? null,
+      transferDurationMinutes: f.transferDurationMinutes ?? null,
+      loyaltyNote: f.loyaltyNote || null,
       foundAt: nowIso,
     })),
   };

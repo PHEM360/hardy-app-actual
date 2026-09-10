@@ -142,7 +142,7 @@ const Tattersalls = () => {
             {view === "model" ? (
               <FlatInvestmentModelPanel flats={flats} initialFlatId={activeFlatId} />
             ) : (
-              activeFlatId && <FlatDashboard flatId={activeFlatId} canEdit />
+              activeFlatId && <FlatDashboard flatId={activeFlatId} canEdit flats={flats} />
             )}
           </div>
         </div>

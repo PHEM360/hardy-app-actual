@@ -44,6 +44,7 @@ export interface NotificationPrefs {
     household?: EventPrefs;
     pets?: EventPrefs;
     medications?: EventPrefs;
+    birthdays?: EventPrefs;
   };
 }
 
@@ -55,7 +56,9 @@ export type ScheduledNotifType =
   | "calendarEvent"
   | "householdRenewal"
   | "petTreatment"
-  | "medication";
+  | "medication"
+  | "birthday"
+  | "expenseReview";
 
 export interface ScheduledNotification {
   uid: string;
@@ -65,6 +68,7 @@ export interface ScheduledNotification {
   petId?: string;
   medId?: string;
   householdId?: string;
+  birthdayId?: string;
   /** Stable key for cancel/reschedule, e.g. calendar:{eventId}:{reminderId} */
   sourceKey?: string;
   taskTitle?: string;
@@ -95,5 +99,6 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
     household: { enabled: true, channels: ["push", "email", "sms"] },
     pets: { enabled: true, channels: ["push", "email", "sms"] },
     medications: { enabled: true, channels: ["push"] },
+    birthdays: { enabled: true, channels: ["push", "email", "sms"] },
   },
 };

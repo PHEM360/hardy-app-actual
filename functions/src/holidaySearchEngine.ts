@@ -70,6 +70,8 @@ export interface SearchOption {
   rank?: number;
   officialStars?: number | null;
   tripadvisorScore?: number | null;
+  /** Google/Maps review score, kept separate from TripAdvisor so the two can be compared or sorted independently. */
+  googleScore?: number | null;
   reviewSummaries?: ReviewSummary[];
   independentSummary?: string;
   discounts?: DiscountInfo[];
@@ -78,6 +80,25 @@ export interface SearchOption {
   costBreakdown?: CostBreakdown;
   researchNotes?: string[];
   priceConfidence?: "ai_researched" | "live" | "partial" | "estimated";
+  /** Only ever set from a real researched flight — never fabricated for a modelled estimate. */
+  outboundDepartTime?: string;
+  outboundArriveTime?: string;
+  returnDepartTime?: string;
+  returnArriveTime?: string;
+  flightDurationMinutes?: number | null;
+  transferDurationMinutes?: number | null;
+  /** Whether joining a loyalty/membership scheme (Avios, hotel points, Genius/One Key, etc.) is worth it for this booking. */
+  loyaltyNote?: string;
+}
+
+/** Batch-level research produced alongside a set of findings — not tied to any one option. */
+export interface SearchSummary {
+  /** 2-4 sentences directly comparing the top options against each other. */
+  comparisonSummary: string;
+  /** An option outside the top list that could still suit this family, and why. Empty string if none. */
+  otherWorthChecking: string;
+  /** Concrete, specific advice for this search: cheaper timing, sale periods, alternative destinations worth a look. */
+  tips: string[];
 }
 
 export interface WatchLike {
@@ -385,6 +406,19 @@ export function inferRegion(watch: WatchLike): string {
 
 export function haulForRegion(region: string): HaulBand {
   return REGION_HAUL[region] || "medium";
+}
+
+/** Airlines whose own network is short-haul only — never a genuine option for a long/ultra-haul trip. */
+const SHORT_HAUL_ONLY_OPERATORS = ["ryanair", "easyjet"];
+/** Airlines/operators with no meaningful short-haul European network. */
+const NOT_SHORT_HAUL_OPERATORS = ["virgin atlantic"];
+
+/** Defence-in-depth check (also enforced in the source catalog and the AI prompt): does this named operator plausibly fly this haul? */
+export function operatorServesHaul(sourceName: string, haul: HaulBand): boolean {
+  const lower = sourceName.toLowerCase();
+  if (SHORT_HAUL_ONLY_OPERATORS.some((n) => lower.includes(n))) return haul === "short";
+  if (NOT_SHORT_HAUL_OPERATORS.some((n) => lower.includes(n))) return haul !== "short";
+  return true;
 }
 
 /** Absolute floor for a whole-party trip — rejects deposit/junk scrapes. */

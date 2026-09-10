@@ -113,6 +113,7 @@ export async function enqueueNotification(opts: {
   petId?: string;
   medId?: string;
   householdId?: string;
+  birthdayId?: string;
 }): Promise<void> {
   if (!opts.channels.length) return;
   if (opts.scheduledFor.getTime() <= Date.now()) return;
@@ -142,6 +143,7 @@ export async function enqueueNotification(opts: {
     petId: opts.petId || null,
     medId: opts.medId || null,
     householdId: opts.householdId || null,
+    birthdayId: opts.birthdayId || null,
     sent: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });

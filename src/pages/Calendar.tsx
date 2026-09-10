@@ -59,6 +59,7 @@ const CAT: Record<CalendarEventCategory, { color: string; bg: string; label: str
   health:   { color: "#10b981", bg: "bg-[#10b981]", label: "Health"   },
   social:   { color: "#ec4899", bg: "bg-[#ec4899]", label: "Social"   },
   other:    { color: "#8b5cf6", bg: "bg-[#8b5cf6]", label: "Other"    },
+  birthday: { color: "#f43f5e", bg: "bg-[#f43f5e]", label: "Birthday" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -239,8 +240,10 @@ const CalendarPage = () => {
   };
 
   const openEdit = (event: CalendarEvent) => {
-    // Virtual events (auto-imported) are read-only
-    if (event.id?.startsWith("__")) return;
+    // Virtual events (auto-imported) and birthdays synced from the Birthdays
+    // widget are read-only here — manage birthdays from that widget instead,
+    // or turn them off entirely via Settings → Birthdays.
+    if (event.id?.startsWith("__") || event.source === "birthday") return;
     const { date: sd, time: st } = splitISO(event.startDate);
     const { date: ed, time: et } = splitISO(event.endDate);
     setForm({
@@ -479,8 +482,11 @@ const CalendarPage = () => {
   }, [pets, householdItems, tasks, companies, datedNotes, settings.autoImport]);
 
   const allDisplayEvents = useMemo(
-    () => [...events, ...virtualEvents],
-    [events, virtualEvents]
+    () => [
+      ...events.filter((e) => e.source !== "birthday" || settings.autoImport?.birthdays !== false),
+      ...virtualEvents,
+    ],
+    [events, virtualEvents, settings.autoImport?.birthdays]
   );
 
   // ─── Notification row helpers ────────────────────────────────────────────────
@@ -1153,7 +1159,7 @@ const CalendarPage = () => {
                   <Input
                     type="number"
                     min={1}
-                    value={n.amount}
+                    value={n.amount || ""}
                     onChange={(e) => updateNotifRow(n.id, { amount: Number(e.target.value) })}
                     className="h-8 w-16 text-xs text-center"
                   />
@@ -1451,6 +1457,20 @@ const CalendarPage = () => {
                   onCheckedChange={(v) => saveSettings({
                     ...settings,
                     autoImport: { ...(settings.autoImport ?? {}), notes: v },
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                <div>
+                  <p className="text-sm font-medium">🎂 Birthdays</p>
+                  <p className="text-[11px] text-muted-foreground">Birthdays shared with you from the Birthdays widget</p>
+                </div>
+                <Switch
+                  checked={settings.autoImport?.birthdays !== false}
+                  onCheckedChange={(v) => saveSettings({
+                    ...settings,
+                    autoImport: { ...(settings.autoImport ?? {}), birthdays: v },
                   })}
                 />
               </div>

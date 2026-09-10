@@ -1109,7 +1109,7 @@ const Pets = () => {
                           const updated = pet.fleaOptions.map((o, j) => j === i ? { ...o, product: val } : o);
                           patchLocal(pet.id, { fleaOptions: updated });
                         }} className="h-9 rounded-lg flex-1 text-xs" />
-                        <Input type="number" min="1" value={opt.frequencyDays} onChange={(e) => {
+                        <Input type="number" min="1" value={opt.frequencyDays || ""} onChange={(e) => {
                           const val = Math.max(1, Number(e.target.value));
                           const updated = pet.fleaOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o);
                           patchLocal(pet.id, { fleaOptions: updated });
@@ -1158,7 +1158,7 @@ const Pets = () => {
                           const updated = pet.wormOptions.map((o, j) => j === i ? { ...o, product: val } : o);
                           patchLocal(pet.id, { wormOptions: updated });
                         }} className="h-9 rounded-lg flex-1 text-xs" />
-                        <Input type="number" min="1" value={opt.frequencyDays} onChange={(e) => {
+                        <Input type="number" min="1" value={opt.frequencyDays || ""} onChange={(e) => {
                           const val = Math.max(1, Number(e.target.value));
                           const updated = pet.wormOptions.map((o, j) => j === i ? { ...o, frequencyDays: val } : o);
                           patchLocal(pet.id, { wormOptions: updated });
@@ -1203,7 +1203,7 @@ const Pets = () => {
                         <Input
                           type="number"
                           min="1"
-                          value={opt.frequencyMonths}
+                          value={opt.frequencyMonths || ""}
                           onChange={(e) => {
                             const val = Math.max(1, Number(e.target.value));
                             const updated = pet.vaccinationOptions.map((o, j) => j === i ? { ...o, frequencyMonths: val } : o);
@@ -1234,7 +1234,7 @@ const Pets = () => {
                       <p className="text-[10px] font-medium text-card-foreground mb-1">Flea reminders</p>
                       {pet.fleaNotifications.map((n, i) => (
                         <div key={n.id} className="flex items-center gap-2 mb-1">
-                          <Input type="number" value={n.daysBeforeDue} onChange={(e) => {
+                          <Input type="number" value={n.daysBeforeDue || ""} onChange={(e) => {
                             const val = Number(e.target.value);
                             const updated = pet.fleaNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn);
                             patchLocal(pet.id, { fleaNotifications: updated });
@@ -1252,7 +1252,7 @@ const Pets = () => {
                       <p className="text-[10px] font-medium text-card-foreground mb-1">Wormer reminders</p>
                       {pet.wormNotifications.map((n, i) => (
                         <div key={n.id} className="flex items-center gap-2 mb-1">
-                          <Input type="number" value={n.daysBeforeDue} onChange={(e) => {
+                          <Input type="number" value={n.daysBeforeDue || ""} onChange={(e) => {
                             const val = Number(e.target.value);
                             const updated = pet.wormNotifications.map((nn, j) => j === i ? { ...nn, daysBeforeDue: val } : nn);
                             patchLocal(pet.id, { wormNotifications: updated });
@@ -1298,11 +1298,11 @@ const Pets = () => {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Monthly (£)</Label>
-                      <Input type="number" step="0.01" value={pet.insurance.monthlyPremium} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, monthlyPremium: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
+                      <Input type="number" step="0.01" value={pet.insurance.monthlyPremium || ""} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, monthlyPremium: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Excess (£)</Label>
-                      <Input type="number" value={pet.insurance.excess} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, excess: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
+                      <Input type="number" value={pet.insurance.excess || ""} onChange={(e) => patchLocal(pet.id, { insurance: { ...pet.insurance, excess: Number(e.target.value) } })} className="h-9 rounded-lg text-xs" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Renewal Date</Label>

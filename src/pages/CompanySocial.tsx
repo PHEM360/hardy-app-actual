@@ -404,8 +404,8 @@ function GenerateSection({
   profile: ReturnType<typeof useCompanyMarketing>["profile"];
   disabled: boolean;
 }) {
-  const [days, setDays] = useState(profile.defaultPlanDays || 30);
-  const [postsPerWeek, setPostsPerWeek] = useState(profile.postsPerWeek || 3);
+  const [days, setDays] = useState(String(profile.defaultPlanDays || 30));
+  const [postsPerWeek, setPostsPerWeek] = useState(String(profile.postsPerWeek || 3));
   const [platforms, setPlatforms] = useState<SocialPlatform[]>(profile.platforms);
   const [focus, setFocus] = useState("");
   const [controversial, setControversial] = useState(profile.controversialTheme || "");
@@ -432,10 +432,10 @@ function GenerateSection({
       {!ready && <p className="rounded-xl bg-amber-500/15 p-3 text-sm">Run a Presence scan or fill Brand first — AI needs a voice, audience and objective.</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Days ahead">
-          <Input type="number" min={7} max={90} value={days} onChange={(event) => setDays(Number(event.target.value))} />
+          <Input type="number" min={7} max={90} value={days} onChange={(event) => setDays(event.target.value)} />
         </Field>
         <Field label="Posts per week">
-          <Input type="number" min={1} max={14} value={postsPerWeek} onChange={(event) => setPostsPerWeek(Number(event.target.value))} />
+          <Input type="number" min={1} max={14} value={postsPerWeek} onChange={(event) => setPostsPerWeek(event.target.value)} />
         </Field>
         <Field label="Writing model">
           <select className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm" value={textModel} onChange={(event) => setTextModel(event.target.value)}>
@@ -467,8 +467,8 @@ function GenerateSection({
         setBusy(true);
         try {
           const result = await generateMarketingPlan(companyId, {
-            periodDays: days,
-            postsPerWeek,
+            periodDays: Number(days) || 30,
+            postsPerWeek: Number(postsPerWeek) || 3,
             platforms,
             focus,
             includeImages,
@@ -578,9 +578,9 @@ function BrandSection({
           return (
             <div key={item} className="grid gap-2 rounded-xl bg-card p-3 shadow-card sm:grid-cols-5">
               <p className="text-sm font-semibold sm:col-span-5">{SOCIAL_PLATFORM_LABELS[item]} <span className="font-normal text-muted-foreground">· {SOCIAL_PLATFORM_HINTS[item]}</span></p>
-              <Field label="Posts / month"><Input type="number" min={0} max={60} value={rule.postsPerMonth} onChange={(event) => patch({ postsPerMonth: Number(event.target.value) })} /></Field>
-              <Field label="Articles"><Input type="number" min={0} max={12} value={rule.articlesPerMonth} onChange={(event) => patch({ articlesPerMonth: Number(event.target.value) })} /></Field>
-              <Field label="Opinion pieces"><Input type="number" min={0} max={8} value={rule.controversialCount} onChange={(event) => patch({ controversialCount: Number(event.target.value) })} /></Field>
+              <Field label="Posts / month"><Input type="number" min={0} max={60} value={rule.postsPerMonth || ""} onChange={(event) => patch({ postsPerMonth: Number(event.target.value) })} /></Field>
+              <Field label="Articles"><Input type="number" min={0} max={12} value={rule.articlesPerMonth || ""} onChange={(event) => patch({ articlesPerMonth: Number(event.target.value) })} /></Field>
+              <Field label="Opinion pieces"><Input type="number" min={0} max={8} value={rule.controversialCount || ""} onChange={(event) => patch({ controversialCount: Number(event.target.value) })} /></Field>
               <div className="sm:col-span-2"><Field label="Tone"><Input value={rule.tone} onChange={(event) => patch({ tone: event.target.value })} /></Field></div>
             </div>
           );
