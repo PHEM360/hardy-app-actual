@@ -226,8 +226,10 @@ export function useFlat(flatId: string | null) {
               name: x.name ?? "",
               date: x.date ?? "",
               url: x.url ?? "",
+              storagePath: x.storagePath,
               fileType: x.fileType ?? "file",
               category: x.category ?? "Other",
+              year: x.year ?? null,
               notes: x.notes ?? "",
               linkedNoteId: x.linkedNoteId,
               linkedNoteType: x.linkedNoteType,
@@ -302,7 +304,28 @@ export function useFlat(flatId: string | null) {
     async (entryId: string, patch: Partial<Omit<FlatLedgerEntry, "id">>) => {
       if (!flat) return;
       await saveFlat({
-        ledger: (flat.ledger || []).map((e) => (e.id === entryId ? { ...e, ...patch } : e)),
+        ledger: (flat.ledger || []).map((e) => {
+          if (e.id !== entryId) return e;
+          // Amount/frequency/date changes (e.g. ground rent going up) keep the
+          // old value visible in history instead of silently overwriting it.
+          const valueChanged =
+            (patch.amountGbp !== undefined && patch.amountGbp !== e.amountGbp) ||
+            (patch.frequency !== undefined && patch.frequency !== e.frequency) ||
+            (patch.date !== undefined && patch.date !== e.date);
+          const history = valueChanged
+            ? [
+                ...(e.history || []),
+                {
+                  amountGbp: e.amountGbp,
+                  date: e.date,
+                  changedAt: new Date().toISOString(),
+                  // Firestore rejects `undefined` fields, so this is only present when set.
+                  ...(e.frequency !== undefined ? { frequency: e.frequency } : {}),
+                },
+              ]
+            : e.history;
+          return { ...e, ...patch, ...(history ? { history } : {}) };
+        }),
       });
     },
     [flat, saveFlat],

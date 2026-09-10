@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
@@ -38,6 +38,7 @@ import {
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { useSharedScope } from "@/hooks/useSharedScope";
+import { useVisitedTabs } from "@/hooks/useVisitedTabs";
 import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company, sortCategoriesOtherLast } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
@@ -2283,6 +2284,17 @@ const CompanyDetail = () => {
   const { scopeUserId } = useSharedScope("companies");
   const { companies, loading, updateCompany } = useCompanies(scopeUserId ?? undefined);
   const [activeTab, setActiveTab] = useState("overview");
+  // Tabs mount lazily on first visit, then stay mounted (hidden) rather than
+  // being unmounted on switch, so in-progress edits on a tab survive
+  // checking another tab and coming back.
+  const isTabVisited = useVisitedTabs(activeTab);
+  const renderTab = (id: string, node: React.ReactNode) => isTabVisited(id) && (
+    <div hidden={activeTab !== id}>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+        {node}
+      </motion.div>
+    </div>
+  );
 
   const company = companies.find((c) => c.id === id);
 
@@ -2382,45 +2394,37 @@ const CompanyDetail = () => {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.15 }}
-            >
-              {activeTab === "overview"   && <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />}
-              {activeTab === "finance"    && <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />}
-              {activeTab === "marketing"  && (
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/companies/social?company=${id}`)}
-                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/40 p-4 text-left shadow-card"
-                    style={{
-                      background: `color-mix(in srgb, ${company.color} 12%, hsl(var(--card)))`,
-                      borderLeft: `4px solid ${company.color}`,
-                    }}
-                  >
-                    <div>
-                      <p className="font-display font-bold">Open the Social & Ads dashboard</p>
-                      <p className="mt-1 text-sm text-muted-foreground">See every company, filter this one, and work the calendar from one page.</p>
-                    </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                  </button>
-                  <CompanyMarketingTab companyId={id!} company={company} />
-                </div>
-              )}
-              {activeTab === "logins"     && <LoginsTab companyId={id!} />}
-              {activeTab === "services"   && <ServicesTab companyId={id!} />}
-              {activeTab === "expenses"   && <ExpensesTab companyId={id!} />}
-              {activeTab === "insurance"  && <InsuranceTab companyId={id!} />}
-              {activeTab === "tax"        && <TaxTab companyId={id!} company={company} allCompanies={companies} />}
-              {activeTab === "projection" && <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />}
-              {activeTab === "settings"   && <SettingsTab companyId={id!} />}
-            </motion.div>
-          </AnimatePresence>
+          <div>
+            {renderTab("overview", <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />)}
+            {renderTab("finance", <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />)}
+            {renderTab("marketing", (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/companies/social?company=${id}`)}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/40 p-4 text-left shadow-card"
+                  style={{
+                    background: `color-mix(in srgb, ${company.color} 12%, hsl(var(--card)))`,
+                    borderLeft: `4px solid ${company.color}`,
+                  }}
+                >
+                  <div>
+                    <p className="font-display font-bold">Open the Social & Ads dashboard</p>
+                    <p className="mt-1 text-sm text-muted-foreground">See every company, filter this one, and work the calendar from one page.</p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </button>
+                <CompanyMarketingTab companyId={id!} company={company} />
+              </div>
+            ))}
+            {renderTab("logins", <LoginsTab companyId={id!} />)}
+            {renderTab("services", <ServicesTab companyId={id!} />)}
+            {renderTab("expenses", <ExpensesTab companyId={id!} />)}
+            {renderTab("insurance", <InsuranceTab companyId={id!} />)}
+            {renderTab("tax", <TaxTab companyId={id!} company={company} allCompanies={companies} />)}
+            {renderTab("projection", <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />)}
+            {renderTab("settings", <SettingsTab companyId={id!} />)}
+          </div>
         </div>
       </div>
     </div>
