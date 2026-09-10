@@ -78,6 +78,7 @@ export function defaultInvestmentInputs(partial?: Partial<FlatInvestmentInputs>)
     lettingFeesPctOfRent: 10,
     otherAnnualCostsGbp: 0,
     mortgageInterestAnnualGbp: 0,
+    councilTaxAnnualGbp: 0,
     oneOffs: [],
     sellingCostsPct: 2.5,
     sellingFixedGbp: 1_500,
@@ -125,13 +126,19 @@ function yearGrossRent(inputs: FlatInvestmentInputs, yearIndex: number): number 
 
 function yearOperatingCosts(inputs: FlatInvestmentInputs, yearIndex: number, grossRent: number): number {
   const costFactor = Math.pow(1 + inputs.costGrowthPctPa / 100, yearIndex);
+  // Council tax while let is normally the tenant's liability, falling to the
+  // landlord only during void gaps between tenancies — so it's pro-rated to
+  // the void months, unlike the other fixed costs which apply all year.
+  const voidMonths = Math.min(12, Math.max(0, inputs.voidMonthsPerYear));
+  const councilTaxDuringVoid = (Math.max(0, inputs.councilTaxAnnualGbp) * voidMonths) / 12;
   const fixed =
     (Math.max(0, inputs.serviceChargeAnnualGbp) +
       Math.max(0, inputs.maintenanceAnnualGbp) +
       Math.max(0, inputs.insuranceAnnualGbp) +
       Math.max(0, inputs.groundRentAnnualGbp) +
       Math.max(0, inputs.otherAnnualCostsGbp) +
-      Math.max(0, inputs.mortgageInterestAnnualGbp)) *
+      Math.max(0, inputs.mortgageInterestAnnualGbp) +
+      councilTaxDuringVoid) *
     costFactor;
   const lettingFees = (grossRent * Math.max(0, inputs.lettingFeesPctOfRent)) / 100;
   return fixed + lettingFees;
@@ -139,13 +146,15 @@ function yearOperatingCosts(inputs: FlatInvestmentInputs, yearIndex: number, gro
 
 function vacantOperatingCosts(inputs: FlatInvestmentInputs, yearIndex: number): number {
   const costFactor = Math.pow(1 + inputs.costGrowthPctPa / 100, yearIndex);
+  // Vacant all year, so the landlord is liable for the full annual council tax bill.
   return (
     (Math.max(0, inputs.serviceChargeAnnualGbp) +
       Math.max(0, inputs.maintenanceAnnualGbp) +
       Math.max(0, inputs.insuranceAnnualGbp) +
       Math.max(0, inputs.groundRentAnnualGbp) +
       Math.max(0, inputs.otherAnnualCostsGbp) +
-      Math.max(0, inputs.mortgageInterestAnnualGbp)) *
+      Math.max(0, inputs.mortgageInterestAnnualGbp) +
+      Math.max(0, inputs.councilTaxAnnualGbp)) *
     costFactor
   );
 }
@@ -244,6 +253,88 @@ function fmtDelta(n: number): string {
   return n >= 0 ? formatted : `${formatted} less`;
 }
 
+function fmtGbpWhole(n: number): string {
+  return `£${Math.round(n).toLocaleString("en-GB")}`;
+}
+
+export interface FlatInvestmentVerdict {
+  recommendation: FlatInvestmentStrategy;
+  recommendationLabel: string;
+  recommendationDetail: string;
+  wealthAtHorizon: Record<FlatInvestmentStrategy, number>;
+  differencesAtHorizon: {
+    rentMinusOfferGbp: number;
+    rentMinusMarketGbp: number;
+    rentMinusVacantGbp: number;
+  };
+}
+
+/**
+ * Builds the verdict (best actionable strategy + a plain-English explanation
+ * of what's actually being compared) from a single projected year's row. The
+ * full-horizon verdict passes the last row of projectYears(), but any row
+ * can be passed — e.g. to answer "what if I only look 2 years out" — without
+ * re-running the whole projection, since every year's numbers already exist
+ * in FlatInvestmentResult.years.
+ *
+ * Every wealth figure here is a value compounded to `yearsLabel` years,
+ * not a raw price — the sentence spells that out explicitly, because
+ * showing e.g. "Sell at offer: £116,199" next to a £80,000 offer with no
+ * explanation reads as a bug even though the number is correct.
+ */
+export function buildVerdict(
+  row: FlatInvestmentYearRow,
+  yearsLabel: number,
+  inputs: FlatInvestmentInputs,
+): FlatInvestmentVerdict {
+  const wealthAtHorizon: Record<FlatInvestmentStrategy, number> = {
+    sell_offer: row.sellOfferWealthGbp,
+    sell_market: row.sellMarketWealthGbp,
+    hold_vacant: row.holdVacantWealthGbp,
+    rent: row.rentWealthGbp,
+  };
+
+  const actionable: FlatInvestmentStrategy[] = ["sell_offer", "hold_vacant", "rent"];
+  let recommendation: FlatInvestmentStrategy = "sell_offer";
+  let best = -Infinity;
+  for (const k of actionable) {
+    if (wealthAtHorizon[k] > best) {
+      best = wealthAtHorizon[k];
+      recommendation = k;
+    }
+  }
+
+  const gaps = {
+    rentMinusOfferGbp: row.rentWealthGbp - row.sellOfferWealthGbp,
+    rentMinusMarketGbp: row.rentWealthGbp - row.sellMarketWealthGbp,
+    rentMinusVacantGbp: row.rentWealthGbp - row.holdVacantWealthGbp,
+  };
+
+  const netOffer = netSaleProceeds(inputs.offerPriceGbp, inputs.mortgageBalanceGbp, inputs.sellingCostsPct, inputs.sellingFixedGbp);
+  const yearsWord = `${yearsLabel} year${yearsLabel === 1 ? "" : "s"}`;
+  const marketBeatsRent = row.sellMarketWealthGbp > row.rentWealthGbp;
+  let recommendationDetail = "";
+  if (recommendation === "rent") {
+    recommendationDetail = `At ${yearsWord}, renting leaves you ${fmtDelta(gaps.rentMinusOfferGbp)} ahead of taking the ${fmtGbpWhole(inputs.offerPriceGbp)} offer and investing its ${fmtGbpWhole(netOffer)} net proceeds at ${inputs.alternativeReturnPctPa}%/yr (after selling costs, tax, growth and alternative returns on cash).`;
+    if (marketBeatsRent) {
+      recommendationDetail += ` Achieving full market value on a sale would still edge renting by ${fmtDelta(row.sellMarketWealthGbp - row.rentWealthGbp)} — only count that if the price is realistic.`;
+    }
+  } else if (recommendation === "sell_offer") {
+    recommendationDetail = `Taking the ${fmtGbpWhole(inputs.offerPriceGbp)} offer nets ${fmtGbpWhole(netOffer)} after selling costs; invested at ${inputs.alternativeReturnPctPa}%/yr for ${yearsWord} that grows to ${fmtGbpWhole(wealthAtHorizon.sell_offer)} — ${fmtDelta(-gaps.rentMinusOfferGbp)} more than renting over the same period.`;
+  } else {
+    recommendationDetail =
+      "Holding vacant is rarely optimal; costs without rent drag on wealth versus selling or letting.";
+  }
+
+  return {
+    recommendation,
+    recommendationLabel: STRATEGY_LABELS[recommendation],
+    recommendationDetail,
+    wealthAtHorizon,
+    differencesAtHorizon: gaps,
+  };
+}
+
 export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvestmentResult {
   const horizon = Math.max(1, Math.min(40, Math.round(inputs.horizonYears) || 10));
   const normalised: FlatInvestmentInputs = {
@@ -275,23 +366,8 @@ export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvest
 
   const years = projectYears(normalised);
   const last = years[years.length - 1];
-
-  const wealthAtHorizon: Record<FlatInvestmentStrategy, number> = {
-    sell_offer: last.sellOfferWealthGbp,
-    sell_market: last.sellMarketWealthGbp,
-    hold_vacant: last.holdVacantWealthGbp,
-    rent: last.rentWealthGbp,
-  };
-
-  const actionable: FlatInvestmentStrategy[] = ["sell_offer", "hold_vacant", "rent"];
-  let recommendation: FlatInvestmentStrategy = "sell_offer";
-  let best = -Infinity;
-  for (const k of actionable) {
-    if (wealthAtHorizon[k] > best) {
-      best = wealthAtHorizon[k];
-      recommendation = k;
-    }
-  }
+  const verdict = buildVerdict(last, horizon, normalised);
+  const { recommendation, wealthAtHorizon } = verdict;
 
   const yearsUntilRentBeatsOffer = years.find((row) => row.rentVsOfferGbp > 0)?.year ?? null;
 
@@ -320,26 +396,6 @@ export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvest
   }
   const breakEvenMonthlyRentGbp = (lo + hi) / 2;
 
-  const gaps = {
-    rentMinusOfferGbp: last.rentWealthGbp - last.sellOfferWealthGbp,
-    rentMinusMarketGbp: last.rentWealthGbp - last.sellMarketWealthGbp,
-    rentMinusVacantGbp: last.rentWealthGbp - last.holdVacantWealthGbp,
-  };
-
-  const marketBeatsRent = last.sellMarketWealthGbp > last.rentWealthGbp;
-  let recommendationDetail = "";
-  if (recommendation === "rent") {
-    recommendationDetail = `At ${horizon} years, renting leaves you ${fmtDelta(gaps.rentMinusOfferGbp)} ahead of taking the current offer (after selling costs, tax, growth and alternative returns on cash).`;
-    if (marketBeatsRent) {
-      recommendationDetail += ` Achieving full market value on a sale would still edge renting by ${fmtDelta(last.sellMarketWealthGbp - last.rentWealthGbp)} — only count that if the price is realistic.`;
-    }
-  } else if (recommendation === "sell_offer") {
-    recommendationDetail = `At ${horizon} years, taking the offer and investing the proceeds beats renting by ${fmtDelta(-gaps.rentMinusOfferGbp)}.`;
-  } else {
-    recommendationDetail =
-      "Holding vacant is rarely optimal; costs without rent drag on wealth versus selling or letting.";
-  }
-
   return {
     inputs: normalised,
     netOfferProceedsGbp,
@@ -351,13 +407,13 @@ export function runFlatInvestmentModel(inputs: FlatInvestmentInputs): FlatInvest
     annualNetRentAfterTaxYear0Gbp,
     years,
     recommendation,
-    recommendationLabel: STRATEGY_LABELS[recommendation],
-    recommendationDetail,
+    recommendationLabel: verdict.recommendationLabel,
+    recommendationDetail: verdict.recommendationDetail,
     breakEvenSalePriceGbp,
     yearsUntilRentBeatsOffer,
     breakEvenMonthlyRentGbp,
     wealthAtHorizon,
-    differencesAtHorizon: gaps,
+    differencesAtHorizon: verdict.differencesAtHorizon,
   };
 }
 

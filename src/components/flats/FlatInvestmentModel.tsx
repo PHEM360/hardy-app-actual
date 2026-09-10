@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calculator,
   LineChart,
@@ -23,9 +23,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useFlat } from "@/hooks/useFlats";
 import { fmtGbp } from "@/lib/flatFinance";
 import {
+  buildVerdict,
   defaultInvestmentInputs,
   inputsFromFlatDefaults,
   runFlatInvestmentModel,
@@ -33,6 +35,7 @@ import {
   type FlatInvestmentInputs,
   type FlatInvestmentOneOff,
   type FlatInvestmentStrategy,
+  type FlatInvestmentVerdict,
 } from "@/lib/flatInvestmentModel";
 import type { FlatRecord } from "@/types/flats";
 
@@ -156,6 +159,7 @@ function inputsToForm(inputs: FlatInvestmentInputs) {
     lettingFeesPctOfRent: String(inputs.lettingFeesPctOfRent),
     otherAnnualCostsGbp: String(inputs.otherAnnualCostsGbp),
     mortgageInterestAnnualGbp: String(inputs.mortgageInterestAnnualGbp),
+    councilTaxAnnualGbp: String(inputs.councilTaxAnnualGbp),
     sellingCostsPct: String(inputs.sellingCostsPct),
     sellingFixedGbp: String(inputs.sellingFixedGbp),
     capitalGrowthPctPa: String(inputs.capitalGrowthPctPa),
@@ -184,6 +188,7 @@ function formToInputs(form: FormState, oneOffs: FlatInvestmentOneOff[]): FlatInv
     lettingFeesPctOfRent: num(form.lettingFeesPctOfRent),
     otherAnnualCostsGbp: num(form.otherAnnualCostsGbp),
     mortgageInterestAnnualGbp: num(form.mortgageInterestAnnualGbp),
+    councilTaxAnnualGbp: num(form.councilTaxAnnualGbp),
     sellingCostsPct: num(form.sellingCostsPct),
     sellingFixedGbp: num(form.sellingFixedGbp),
     capitalGrowthPctPa: num(form.capitalGrowthPctPa),
@@ -247,6 +252,13 @@ export default function FlatInvestmentModelPanel({
   const [form, setForm] = useState<FormState>(() => inputsToForm(defaultInvestmentInputs()));
   const [oneOffs, setOneOffs] = useState<FlatInvestmentOneOff[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  // Unsaved edits per flat, so switching the flat dropdown and back doesn't
+  // discard whatever you were mid-way through typing for the flat you left.
+  const draftsRef = useRef<Map<string, { form: FormState; oneOffs: FlatInvestmentOneOff[] }>>(new Map());
+  const currentDraftRef = useRef<{ form: FormState; oneOffs: FlatInvestmentOneOff[] }>({ form, oneOffs });
+  useEffect(() => {
+    currentDraftRef.current = { form, oneOffs };
+  }, [form, oneOffs]);
 
   useEffect(() => {
     if (localOnly) setLocalFlats(flats);
@@ -266,9 +278,16 @@ export default function FlatInvestmentModelPanel({
   useEffect(() => {
     if (!flat || flat.id !== flatId) return;
     if (hydratedFor === flat.id) return;
-    const seeded = defaultInvestmentInputs(inputsFromFlatDefaults(flat));
-    setForm(inputsToForm(seeded));
-    setOneOffs(seeded.oneOffs || []);
+    if (hydratedFor) draftsRef.current.set(hydratedFor, currentDraftRef.current);
+    const cached = draftsRef.current.get(flat.id);
+    if (cached) {
+      setForm(cached.form);
+      setOneOffs(cached.oneOffs);
+    } else {
+      const seeded = defaultInvestmentInputs(inputsFromFlatDefaults(flat));
+      setForm(inputsToForm(seeded));
+      setOneOffs(seeded.oneOffs || []);
+    }
     setHydratedFor(flat.id);
   }, [flat, flatId, hydratedFor]);
 
@@ -277,7 +296,38 @@ export default function FlatInvestmentModelPanel({
   };
 
   const inputs = useMemo(() => formToInputs(form, oneOffs), [form, oneOffs]);
-  const result = useMemo(() => runFlatInvestmentModel(inputs), [inputs]);
+  // The toggle only changes what's *displayed* — saving always persists the
+  // real inputs (including one-offs) below in saveModel().
+  const [includeOneOffs, setIncludeOneOffs] = useState(true);
+  const effectiveInputs = useMemo(
+    () => (includeOneOffs ? inputs : { ...inputs, oneOffs: [] }),
+    [inputs, includeOneOffs],
+  );
+  const result = useMemo(() => runFlatInvestmentModel(effectiveInputs), [effectiveInputs]);
+
+  // "What do you want to see" for the verdict box: the full horizon (default,
+  // unchanged), a specific year (answers "in 2 years what's the difference"),
+  // or a nudge down to the year-by-year table which already has every year.
+  type VerdictView = "horizon" | "year" | "table";
+  const [verdictView, setVerdictView] = useState<VerdictView>("horizon");
+  const [verdictYear, setVerdictYear] = useState(1);
+  const yearByYearRef = useRef<HTMLDivElement | null>(null);
+
+  const clampedVerdictYear = Math.min(result.years.length, Math.max(1, Math.round(verdictYear) || 1));
+  const verdict: FlatInvestmentVerdict = useMemo(() => {
+    if (verdictView !== "year") {
+      return {
+        recommendation: result.recommendation,
+        recommendationLabel: result.recommendationLabel,
+        recommendationDetail: result.recommendationDetail,
+        wealthAtHorizon: result.wealthAtHorizon,
+        differencesAtHorizon: result.differencesAtHorizon,
+      };
+    }
+    const row = result.years[clampedVerdictYear - 1] || result.years[result.years.length - 1];
+    return buildVerdict(row, clampedVerdictYear, result.inputs);
+  }, [verdictView, clampedVerdictYear, result]);
+  const verdictYearsLabel = verdictView === "year" ? clampedVerdictYear : result.inputs.horizonYears;
 
   const chartData = useMemo(
     () =>
@@ -317,9 +367,14 @@ export default function FlatInvestmentModelPanel({
   };
 
   const strategyTone = (s: FlatInvestmentStrategy) =>
-    result.recommendation === s
+    verdict.recommendation === s
       ? "border-primary/45 bg-primary/10"
       : "border-border/50 bg-card";
+
+  const pill = (active: boolean) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+      active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+    }`;
 
   if (!flats.length) {
     return (
@@ -389,12 +444,50 @@ export default function FlatInvestmentModelPanel({
             transition={{ duration: 0.4, delay: 0.05 }}
           >
             <Section title="Verdict" icon={<Scale className="h-4 w-4" />}>
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Show</span>
+                <button type="button" className={pill(verdictView === "horizon")} onClick={() => setVerdictView("horizon")}>
+                  Full horizon ({result.inputs.horizonYears} yrs)
+                </button>
+                <button type="button" className={pill(verdictView === "year")} onClick={() => setVerdictView("year")}>
+                  At a chosen year
+                </button>
+                {verdictView === "year" && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={result.years.length}
+                    value={verdictYear}
+                    onChange={(e) => setVerdictYear(Number(e.target.value) || 1)}
+                    className="h-8 w-16 rounded-lg border border-input bg-background px-2 text-xs"
+                    aria-label="Verdict year"
+                  />
+                )}
+                <button
+                  type="button"
+                  className={pill(false)}
+                  onClick={() => {
+                    setVerdictView("table");
+                    yearByYearRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Year-by-year ↓
+                </button>
+                <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  Include one-off costs
+                  <Switch checked={includeOneOffs} onCheckedChange={setIncludeOneOffs} />
+                </label>
+              </div>
+              {!includeOneOffs && oneOffs.length > 0 && (
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  Showing figures with one-off costs excluded, for comparison — toggle back on to include them.
+                </p>
+              )}
               <div className="mb-3 rounded-2xl border border-primary/35 bg-primary/10 px-4 py-3">
                 <p className="font-display text-base font-bold text-foreground">
-                  Best actionable path at {result.inputs.horizonYears} years:{" "}
-                  {result.recommendationLabel}
+                  Best actionable path at {verdictYearsLabel} years: {verdict.recommendationLabel}
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">{result.recommendationDetail}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{verdict.recommendationDetail}</p>
               </div>
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 {(Object.keys(STRATEGY_LABELS) as FlatInvestmentStrategy[]).map((s) => (
@@ -407,8 +500,9 @@ export default function FlatInvestmentModelPanel({
                       {s === "sell_market" ? " (if achievable)" : ""}
                     </p>
                     <p className="mt-1 font-display text-lg font-bold text-foreground">
-                      {fmtGbp(result.wealthAtHorizon[s])}
+                      {fmtGbp(verdict.wealthAtHorizon[s])}
                     </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">wealth in {verdictYearsLabel} yrs</p>
                   </div>
                 ))}
               </div>
@@ -436,11 +530,11 @@ export default function FlatInvestmentModelPanel({
                 />
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatTile label="Net offer proceeds" value={fmtGbp(result.netOfferProceedsGbp)} />
-                <StatTile label="Net market proceeds" value={fmtGbp(result.netMarketProceedsGbp)} />
+                <StatTile label="Net offer proceeds" value={fmtGbp(result.netOfferProceedsGbp)} hint="What the offer nets today, before any investing" />
+                <StatTile label="Net market proceeds" value={fmtGbp(result.netMarketProceedsGbp)} hint="What full market value would net today" />
                 <StatTile
-                  label="Rent − offer (horizon)"
-                  value={fmtGbp(result.differencesAtHorizon.rentMinusOfferGbp)}
+                  label={`Rent − offer (${verdictYearsLabel}y)`}
+                  value={fmtGbp(verdict.differencesAtHorizon.rentMinusOfferGbp)}
                 />
                 <StatTile
                   label="Year-1 net rent (after tax)"
@@ -543,6 +637,12 @@ export default function FlatInvestmentModelPanel({
                   value={form.otherAnnualCostsGbp}
                   onChange={(v) => setField("otherAnnualCostsGbp", v)}
                   suffix="£"
+                />
+                <Field
+                  label="Council tax (if unoccupied)"
+                  value={form.councilTaxAnnualGbp}
+                  onChange={(v) => setField("councilTaxAnnualGbp", v)}
+                  suffix="£/yr"
                 />
               </div>
             </Section>
@@ -709,6 +809,7 @@ export default function FlatInvestmentModelPanel({
             </div>
           </Section>
 
+          <div ref={yearByYearRef} />
           <Section title="Year-by-year" icon={<Calculator className="h-4 w-4" />}>
             <div className="min-w-0 overflow-x-auto">
               <table className="w-full min-w-[40rem] text-left text-xs">

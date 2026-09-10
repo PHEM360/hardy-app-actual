@@ -3,6 +3,7 @@ import {
   Building2,
   Calculator,
   Check,
+  Clock,
   FileText,
   Landmark,
   Link2,
@@ -36,7 +37,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { AutoGrowTextarea } from "@/components/ui/autogrow-textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/auth/AuthContext";
 import { useBankConnections } from "@/hooks/useBankConnections";
 import { useBankConnectStatus } from "@/hooks/useBankConnectStatus";
@@ -871,6 +873,32 @@ export default function FlatDashboard({
                       {e.kind === "income" ? "+" : "−"}
                       {fmtGbp(e.amountGbp)}
                     </span>
+                    {e.history && e.history.length > 0 && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="See past values"
+                          >
+                            <Clock className="h-3.5 w-3.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="end">
+                          <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase text-muted-foreground">Previous values</p>
+                          <div className="space-y-1">
+                            {e.history.map((h, i) => (
+                              <div key={i} className="rounded-lg bg-muted/50 px-2 py-1.5 text-xs">
+                                <p className="font-semibold text-foreground">
+                                  {fmtGbp(h.amountGbp)}{h.frequency && h.frequency !== "One-off" ? ` · ${h.frequency}` : ""}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">From {fmtDateShort(h.date)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                     {canEdit && (
                       <div className="flex shrink-0 items-center gap-0.5">
                         <button
@@ -1240,11 +1268,10 @@ export default function FlatDashboard({
                         </SelectContent>
                       </Select>
                     </div>
-                    <Textarea
+                    <AutoGrowTextarea
                       value={editDocDraft.notes}
                       onChange={(e) => setEditDocDraft((p) => ({ ...p, notes: e.target.value }))}
-                      rows={2}
-                      className="rounded-lg text-sm"
+                      className="min-h-[44px] rounded-lg text-sm"
                       placeholder="Notes…"
                     />
                     <div className="flex justify-end gap-1.5">
@@ -1407,11 +1434,10 @@ export default function FlatDashboard({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>
-              <Textarea
+              <AutoGrowTextarea
                 value={ledgerNotes}
                 onChange={(e) => setLedgerNotes(e.target.value)}
-                rows={2}
-                className="rounded-xl"
+                className="min-h-[44px] rounded-xl"
                 placeholder="Optional notes…"
               />
             </div>
@@ -1491,11 +1517,10 @@ export default function FlatDashboard({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>
-              <Textarea
+              <AutoGrowTextarea
                 value={ledgerNotes}
                 onChange={(e) => setLedgerNotes(e.target.value)}
-                rows={2}
-                className="rounded-xl"
+                className="min-h-[44px] rounded-xl"
                 placeholder="Optional notes…"
               />
             </div>

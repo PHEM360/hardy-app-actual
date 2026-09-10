@@ -27,6 +27,8 @@ export interface FlatInvestmentInputs {
   lettingFeesPctOfRent: number;
   otherAnnualCostsGbp: number;
   mortgageInterestAnnualGbp: number;
+  /** Landlord is typically liable only while the flat is unoccupied — see flatInvestmentModel.ts. */
+  councilTaxAnnualGbp: number;
 
   oneOffs: FlatInvestmentOneOff[];
 
@@ -70,6 +72,14 @@ export interface FlatBalanceRecord {
   balance: number;
 }
 
+/** A superseded amount/frequency/date for a ledger entry, kept so e.g. a ground-rent rise still shows what it used to be. */
+export interface FlatLedgerHistoryEntry {
+  amountGbp: number;
+  frequency?: string;
+  date: string;
+  changedAt: string;
+}
+
 export interface FlatLedgerEntry {
   id: string;
   kind: FlatLedgerKind;
@@ -83,6 +93,8 @@ export interface FlatLedgerEntry {
   notes?: string;
   /** Id of a flats/{flatId}/documents record uploaded alongside this entry, e.g. a receipt or invoice. */
   documentId?: string | null;
+  /** Prior amount/frequency/date values, oldest first, pushed here whenever one of them is edited. */
+  history?: FlatLedgerHistoryEntry[];
 }
 
 export const FLAT_LEDGER_FREQUENCIES = ["One-off", "Weekly", "Monthly", "Quarterly", "Annually"];

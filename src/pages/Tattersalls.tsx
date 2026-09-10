@@ -4,6 +4,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import FlatDashboard from "@/components/flats/FlatDashboard";
 import FlatInvestmentModelPanel from "@/components/flats/FlatInvestmentModel";
 import { useFlatsList } from "@/hooks/useFlats";
+import { useVisitedTabs } from "@/hooks/useVisitedTabs";
 
 type FlatsView = "flat" | "model";
 
@@ -11,6 +12,7 @@ const Tattersalls = () => {
   const { flats, loading } = useFlatsList();
   const [view, setView] = useState<FlatsView>("flat");
   const [selectedId, setSelectedId] = useState<string>("");
+  const isVisited = useVisitedTabs(view);
 
   useEffect(() => {
     if (!selectedId && flats.length > 0) {
@@ -138,11 +140,19 @@ const Tattersalls = () => {
             </nav>
           </aside>
 
+          {/* Both stay mounted (once visited) rather than being unmounted on
+              switch, so leaving unsaved investment-model edits to check the
+              flat's ledger or notes — and coming back — never loses them. */}
           <div className="min-w-0 flex-1 overflow-x-hidden">
-            {view === "model" ? (
-              <FlatInvestmentModelPanel flats={flats} initialFlatId={activeFlatId} />
-            ) : (
-              activeFlatId && <FlatDashboard flatId={activeFlatId} canEdit flats={flats} />
+            {isVisited("model") && (
+              <div hidden={view !== "model"}>
+                <FlatInvestmentModelPanel flats={flats} initialFlatId={activeFlatId} />
+              </div>
+            )}
+            {isVisited("flat") && activeFlatId && (
+              <div hidden={view !== "flat"}>
+                <FlatDashboard flatId={activeFlatId} canEdit flats={flats} />
+              </div>
             )}
           </div>
         </div>
