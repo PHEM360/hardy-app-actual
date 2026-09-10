@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SceneRotator } from "@/components/display/SceneRotator";
-import type { DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_LIGHT_SETTINGS, type DeviceDoc } from "@/hooks/useDeviceSettings";
 import { DEFAULT_NIGHT_MODE } from "@/lib/displayNightMode";
 import type { DisplayPage } from "@/lib/displayPages";
 
@@ -30,6 +30,7 @@ function deviceWith(pages: DisplayPage[]): DeviceDoc {
     uid: "owner",
     householdId: null,
     label: "Kitchen",
+    deviceType: "display",
     pairedVia: "qr",
     revoked: false,
     settings: {
@@ -41,6 +42,7 @@ function deviceWith(pages: DisplayPage[]): DeviceDoc {
       scenes: { rotateSeconds: 3_600 },
       pages,
       nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false, withAlarms: false },
+      light: DEFAULT_LIGHT_SETTINGS,
     },
   };
 }

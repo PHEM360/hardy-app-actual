@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ACCOUNT_TYPES, resolveAccountType } from "@/lib/financeAccounts";
 import { AccountTypeFields } from "@/components/finance/AccountTypeFields";
 import { useNavigate } from "react-router-dom";
+import { useVisitedTabs } from "@/hooks/useVisitedTabs";
 
 const COLORS = [
   "hsl(36, 85%, 54%)", "hsl(168, 55%, 36%)", "hsl(215, 75%, 50%)",
@@ -61,6 +62,10 @@ const HouseholdFinance = () => {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>("balances");
+  // Mount each tab lazily on first visit, then keep it mounted (hidden)
+  // rather than unmounting it on switch, so in-progress edits (e.g. the CSV
+  // paste in AI Analysis) survive flipping to the other tab and back.
+  const isTabVisited = useVisitedTabs(tab);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [addBalanceOpen, setAddBalanceOpen] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -288,8 +293,8 @@ const HouseholdFinance = () => {
         </button>
       </div>
 
-      {tab === "balances" && (
-        <>
+      {isTabVisited("balances") && (
+        <div hidden={tab !== "balances"}>
           {/* Total */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl bg-gradient-warm mb-5">
             <p className="text-xs text-secondary-foreground/70 uppercase tracking-wider font-medium">Total Household</p>
@@ -507,11 +512,11 @@ const HouseholdFinance = () => {
               </ResponsiveContainer>
             </div>
           </div>
-        </>
+        </div>
       )}
 
-      {tab === "analysis" && (
-        <>
+      {isTabVisited("analysis") && (
+        <div hidden={tab !== "analysis"}>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <div className="p-5 rounded-2xl text-white bg-gradient-primary">
               <div className="flex items-center gap-2 mb-2">
@@ -565,7 +570,7 @@ const HouseholdFinance = () => {
               </motion.div>
             )}
           </motion.div>
-        </>
+        </div>
       )}
 
       <HouseholdManagerSheet open={householdsOpen} onClose={() => setHouseholdsOpen(false)} />

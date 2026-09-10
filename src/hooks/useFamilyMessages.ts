@@ -23,10 +23,17 @@ export interface FamilyMessage {
   createdAt?: { toMillis?: () => number } | null;
 }
 
-export function useFamilyMessages() {
+/**
+ * householdIdOverride lets a caller pin the household explicitly (e.g. a
+ * remote display showing its own paired household) instead of following
+ * whichever household this browser last had active — the two can differ,
+ * such as a kiosk with no local "active household" of its own.
+ */
+export function useFamilyMessages(householdIdOverride?: string | null) {
   const { dataUid, user } = useAuth();
   const { profile } = useUserProfile();
-  const { activeHouseholdId } = useActiveHousehold();
+  const { activeHouseholdId: browsingActiveHouseholdId } = useActiveHousehold();
+  const activeHouseholdId = householdIdOverride !== undefined ? householdIdOverride : browsingActiveHouseholdId;
   const [messages, setMessages] = useState<FamilyMessage[]>([]);
   const [loading, setLoading] = useState(true);
 

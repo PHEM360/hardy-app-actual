@@ -4,8 +4,8 @@ import {
   isToday, parseISO, startOfMonth, startOfWeek,
 } from "date-fns";
 import {
-  CalendarDays, CheckCircle2, Circle, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow,
-  CornerDownRight, ListChecks, Moon, Sun, Timer,
+  Cake, CalendarDays, CheckCircle2, Circle, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow,
+  CornerDownRight, ListChecks, MessageCircle, Moon, Sun, Timer,
 } from "lucide-react";
 import type { CalendarEvent, Task } from "@/types/app";
 import type { DisplayPage, DisplayWidgetLayout, PhotoFrameSettings } from "@/hooks/useDeviceSettings";
@@ -16,6 +16,9 @@ import { resolveDisplayPhotos } from "@/lib/photoSelection";
 import { PhotoFrameScene } from "@/components/display/PhotoFrameScene";
 import { DisplayBackdrop } from "@/components/display/DisplayBackdrop";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
+import type { Birthday } from "@/types/birthdays";
+import { nextOccurrenceLabel } from "@/lib/birthdayDates";
+import type { FamilyMessage } from "@/hooks/useFamilyMessages";
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => new Date());
@@ -571,16 +574,82 @@ function CountdownWidget({ widget, accent }: { widget: DisplayWidgetLayout; acce
   );
 }
 
+function BirthdaysWidget({ widget, birthdays, accent }: { widget: DisplayWidgetLayout; birthdays: Birthday[]; accent: string }) {
+  const daysAhead = widget.birthdaysDaysAhead || 30;
+  const upcoming = useMemo(() => (
+    birthdays
+      .map((birthday) => ({ ...birthday, occurrence: nextOccurrenceLabel(birthday.month, birthday.day) }))
+      .filter((birthday) => birthday.occurrence.days <= daysAhead)
+      .sort((a, b) => a.occurrence.days - b.occurrence.days)
+  ), [birthdays, daysAhead]);
+  const { visible, pages, index } = useCyclingChunk(upcoming, 5, widget.autoCycleSeconds || 20);
+
+  return (
+    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+      <WidgetHeading
+        icon={<Cake style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
+        title={widget.title || "Birthdays"}
+        accent={accent}
+      />
+      <div className="min-h-0 flex-1 space-y-[0.6vmin] overflow-hidden">
+        {visible.length === 0 && (
+          <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing in the next {daysAhead} days.</p>
+        )}
+        {visible.map((birthday) => (
+          <div key={birthday.id} className="flex items-center justify-between gap-[1vmin] rounded-[1vmin] bg-white/[.09] px-[1.2vmin] py-[0.9vmin]">
+            <p className="truncate font-semibold" style={{ fontSize: "clamp(.75rem,1.6vw,1.3rem)" }}>{birthday.name}</p>
+            <span className="shrink-0 font-bold" style={{ color: accent, fontSize: "clamp(.65rem,1.4vw,1.1rem)" }}>
+              {birthday.occurrence.days === 0 ? "Today" : birthday.occurrence.days === 1 ? "Tomorrow" : format(birthday.occurrence.date, "d MMM")}
+            </span>
+          </div>
+        ))}
+      </div>
+      <PageDots pages={pages} index={index} accent={accent} />
+    </div>
+  );
+}
+
+function FamilyBoardWidget({ widget, messages, accent }: { widget: DisplayWidgetLayout; messages: FamilyMessage[]; accent: string }) {
+  const rows = useMemo(() => messages.slice(0, Math.max(1, widget.familyBoardLimit || 6)), [messages, widget.familyBoardLimit]);
+  const { visible, pages, index } = useCyclingChunk(rows, 3, widget.autoCycleSeconds || 20);
+
+  return (
+    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+      <WidgetHeading
+        icon={<MessageCircle style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
+        title={widget.title || "Family board"}
+        accent={accent}
+      />
+      <div className="min-h-0 flex-1 space-y-[0.8vmin] overflow-hidden">
+        {visible.length === 0 && (
+          <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>No notes yet — post one from your phone.</p>
+        )}
+        {visible.map((message) => (
+          <div key={message.id} className="rounded-[1vmin] bg-white/[.09] px-[1.2vmin] py-[0.9vmin]">
+            <p className="font-bold uppercase tracking-wider" style={{ color: accent, fontSize: "clamp(.5rem,1vw,.85rem)" }}>{message.authorName}</p>
+            <p className="mt-[0.3vmin] leading-snug" style={{ fontSize: "clamp(.75rem,1.6vw,1.3rem)" }}>{message.text}</p>
+          </div>
+        ))}
+      </div>
+      <PageDots pages={pages} index={index} accent={accent} />
+    </div>
+  );
+}
+
 export function DisplayPageRenderer({
   page,
   photos,
   calendarEvents,
   tasks,
+  birthdays = [],
+  familyMessages = [],
 }: {
   page: DisplayPage;
   photos: RemoteDisplayPhoto[];
   calendarEvents: CalendarEvent[];
   tasks: Task[];
+  birthdays?: Birthday[];
+  familyMessages?: FamilyMessage[];
 }) {
   const theme = displayTheme(page);
 
@@ -642,6 +711,8 @@ export function DisplayPageRenderer({
             {widget.type === "weather" && <WeatherWidget widget={widget} accent={accent} />}
             {widget.type === "message" && <MessageWidget widget={widget} accent={accent} />}
             {widget.type === "countdown" && <CountdownWidget widget={widget} accent={accent} />}
+            {widget.type === "birthdays" && <BirthdaysWidget widget={widget} birthdays={birthdays} accent={accent} />}
+            {widget.type === "familyBoard" && <FamilyBoardWidget widget={widget} messages={familyMessages} accent={accent} />}
           </div>
         );
       })}

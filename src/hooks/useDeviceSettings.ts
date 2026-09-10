@@ -64,6 +64,8 @@ export interface Alarm {
   label: string;
   enabled: boolean;
   sunriseMinutes?: number;
+  /** Sunrise lights (devices/{id} with deviceType "light") to ramp alongside this alarm. */
+  linkedLightIds?: string[];
 }
 
 export interface PhotoFrameSettings {
@@ -88,6 +90,22 @@ export interface SceneRotationSettings {
   rotateSeconds: number;
 }
 
+/**
+ * An ESP32 sunrise light running stock WLED, paired once and controlled from
+ * the cloud via MQTT (see functions/src/sunriseLights.ts). No MQTT password
+ * ever lives here — the broker is the sole authority on that credential;
+ * this is just enough metadata to address and later revoke it.
+ */
+export interface LightSettings {
+  mqttTopic: string;
+  mqttUsername?: string;
+  brokerCredentialId?: string;
+  manual: { on: boolean; brightness: number; colorHex: string };
+  sunrise: { rampMinutes: number; peakBrightness: number; colorFrom: string; colorTo: string };
+  online: boolean;
+  lastReportedAt?: unknown;
+}
+
 export interface DeviceSettings {
   clock: ClockSettings;
   alarms: Alarm[];
@@ -97,6 +115,7 @@ export interface DeviceSettings {
   scenes: SceneRotationSettings;
   pages: DisplayPage[];
   nightMode: NightModeSettings;
+  light: LightSettings;
 }
 
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
@@ -122,11 +141,19 @@ export const DEFAULT_CALENDAR_SCENE_SETTINGS: CalendarSceneSettings = { enabled:
 export const DEFAULT_OVERVIEW_SCENE_SETTINGS: OverviewSceneSettings = { enabled: false, widgets: DEFAULT_KIOSK_WIDGETS };
 export const DEFAULT_SCENE_ROTATION_SETTINGS: SceneRotationSettings = { rotateSeconds: 30 };
 
+export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
+  mqttTopic: "",
+  manual: { on: false, brightness: 180, colorHex: "#ffd27a" },
+  sunrise: { rampMinutes: 20, peakBrightness: 220, colorFrom: "#7c2d12", colorTo: "#fff7c2" },
+  online: false,
+};
+
 export interface DeviceDoc {
   id: string;
   uid: string;
   householdId: string | null;
   label: string;
+  deviceType: "display" | "light";
   pairedVia: "direct" | "qr";
   revoked: boolean;
   lastSeenAt?: unknown;
@@ -188,6 +215,12 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
     pages: (Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw)).map(applyPageLayout),
     nightMode: { ...DEFAULT_NIGHT_MODE, ...(raw?.nightMode ?? {}) },
+    light: {
+      ...DEFAULT_LIGHT_SETTINGS,
+      ...(raw?.light ?? {}),
+      manual: { ...DEFAULT_LIGHT_SETTINGS.manual, ...(raw?.light?.manual ?? {}) },
+      sunrise: { ...DEFAULT_LIGHT_SETTINGS.sunrise, ...(raw?.light?.sunrise ?? {}) },
+    },
   };
 }
 
@@ -213,6 +246,7 @@ export function useDeviceSettings(deviceId: string | null) {
         uid: string;
         householdId?: string | null;
         label?: string;
+        deviceType?: string;
         pairedVia?: string;
         revoked?: boolean;
         lastSeenAt?: unknown;
@@ -222,7 +256,8 @@ export function useDeviceSettings(deviceId: string | null) {
         id: snap.id,
         uid: data.uid,
         householdId: data.householdId ?? null,
-        label: data.label || "Display",
+        label: data.label || (data.deviceType === "light" ? "Sunrise light" : "Display"),
+        deviceType: data.deviceType === "light" ? "light" : "display",
         pairedVia: data.pairedVia === "qr" ? "qr" : "direct",
         revoked: data.revoked === true,
         lastSeenAt: data.lastSeenAt,
@@ -339,6 +374,16 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updateLightSunrise = useCallback(
+    async (patch: Partial<LightSettings["sunrise"]>) => {
+      if (!deviceId || !device) return;
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.light.sunrise": { ...device.settings.light.sunrise, ...patch },
+      });
+    },
+    [deviceId, device]
+  );
+
   const updatePages = useCallback(
     async (pages: DisplayPage[]) => {
       if (!deviceId) return;
@@ -362,6 +407,7 @@ export function useDeviceSettings(deviceId: string | null) {
     updateOverviewSettings,
     updateSceneSettings,
     updateNightMode,
+    updateLightSunrise,
     updatePages,
   };
 }

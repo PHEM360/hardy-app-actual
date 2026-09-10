@@ -106,6 +106,18 @@ export {
 	getHouseholdCalendarEvents,
 } from "./display";
 
+// ── Sunrise lights (ESP32/WLED) ──
+export {
+	createLightPairing,
+	getLightPairingStatus,
+	getLightPairingSecret,
+} from "./lightPairing";
+export {
+	sendLightCommand,
+	tickSunriseLights,
+	onLightRevoked,
+} from "./sunriseLights";
+
 export {
 	beginPasskeyRegistration,
 	finishPasskeyRegistration,

@@ -6,6 +6,8 @@ import { resolveNightMode } from "@/lib/displayNightMode";
 import { NightModeView } from "@/components/display/NightModeView";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import type { CalendarEvent, Task } from "@/types/app";
+import type { Birthday } from "@/types/birthdays";
+import type { FamilyMessage } from "@/hooks/useFamilyMessages";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
 
 const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Spacebar", "MediaTrackNext"]);
@@ -21,11 +23,15 @@ export function SceneRotator({
   photos,
   calendarEvents,
   tasks,
+  birthdays = [],
+  familyMessages = [],
 }: {
   device: DeviceDoc;
   photos: RemoteDisplayPhoto[];
   calendarEvents: CalendarEvent[];
   tasks: Task[];
+  birthdays?: Birthday[];
+  familyMessages?: FamilyMessage[];
 }) {
   const [index, setIndex] = useState(0);
   const [minuteTick, setMinuteTick] = useState(() => Date.now());
@@ -114,6 +120,8 @@ export function SceneRotator({
         photos={photos}
         calendarEvents={calendarEvents}
         tasks={tasks}
+        birthdays={birthdays}
+        familyMessages={familyMessages}
       />
       {pages.length > 1 && (
         <>

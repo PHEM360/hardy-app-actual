@@ -6,7 +6,9 @@ export type DisplayWidgetType =
   | "today"
   | "weather"
   | "message"
-  | "countdown";
+  | "countdown"
+  | "birthdays"
+  | "familyBoard";
 
 export type DisplayPageLayout = "full" | "halves" | "stack" | "main-side" | "quarters";
 export type DisplayCalendarView = "agenda" | "month" | "week";
@@ -48,6 +50,8 @@ export interface DisplayWidgetLayout {
   weatherLatitude?: number;
   weatherLongitude?: number;
   weatherPlace?: string;
+  birthdaysDaysAhead?: number;
+  familyBoardLimit?: number;
 }
 
 export interface DisplayPage {
@@ -82,6 +86,8 @@ export const WIDGET_LABELS: Record<DisplayWidgetType, string> = {
   weather: "Weather",
   message: "Message board",
   countdown: "Countdown",
+  birthdays: "Birthdays",
+  familyBoard: "Family board",
 };
 
 export const WIDGET_DESCRIPTIONS: Record<DisplayWidgetType, string> = {
@@ -93,10 +99,12 @@ export const WIDGET_DESCRIPTIONS: Record<DisplayWidgetType, string> = {
   weather: "Today’s conditions and temperature",
   message: "A note for the household, in big friendly text",
   countdown: "Days to go until a date that matters",
+  birthdays: "Upcoming birthdays with a countdown",
+  familyBoard: "Notes anyone in the household has posted from their phone",
 };
 
 export const WIDGET_ORDER: DisplayWidgetType[] = [
-  "today", "clock", "calendar", "tasks", "photos", "weather", "message", "countdown",
+  "today", "clock", "calendar", "tasks", "photos", "weather", "birthdays", "familyBoard", "message", "countdown",
 ];
 
 export interface DisplayTheme {
@@ -227,6 +235,8 @@ export function createDisplayWidget(type: DisplayWidgetType): DisplayWidgetLayou
     weatherLatitude: 0,
     weatherLongitude: 0,
     weatherPlace: "",
+    birthdaysDaysAhead: 30,
+    familyBoardLimit: 6,
   };
 }
 

@@ -6,6 +6,7 @@ import { useAuth } from "@/auth/AuthContext";
 export interface LinkedDevice {
   id: string;
   label: string;
+  deviceType: "display" | "light";
   pairedVia: "direct" | "qr";
   createdAt: unknown;
   lastSeenAt: unknown;
@@ -32,9 +33,11 @@ export function useMyDevices() {
           snap.docs
             .map((d) => {
               const data = d.data();
+              const deviceType = data.deviceType === "light" ? "light" : "display";
               return {
                 id: d.id,
-                label: data.label || "Display",
+                label: data.label || (deviceType === "light" ? "Sunrise light" : "Display"),
+                deviceType,
                 pairedVia: data.pairedVia === "qr" ? "qr" : "direct",
                 createdAt: data.createdAt,
                 lastSeenAt: data.lastSeenAt,

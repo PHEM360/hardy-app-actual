@@ -19,10 +19,13 @@ import { useOwnPhotoLibrary } from "@/hooks/usePhotos";
 import { DisplayAlbumPicker } from "@/components/display/DisplayAlbumPicker";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
+import { useBirthdays } from "@/hooks/useBirthdays";
+import { useFamilyMessages } from "@/hooks/useFamilyMessages";
 import { RemoteLayoutEditor } from "@/components/display/RemoteLayoutEditor";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
 import { AlarmsSettingsPanel } from "@/components/display/AlarmsSettingsPanel";
 import { NightModeSettingsPanel } from "@/components/display/NightModeSettingsPanel";
+import { SunriseLightsPanel } from "@/components/display/SunriseLightsPanel";
 import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
 import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
 import { toast } from "sonner";
@@ -95,7 +98,11 @@ function PairingSteps() {
 
 export default function RemoteDisplays() {
   const { dataUid } = useAuth();
-  const { devices, loading, renameDevice, forgetDevice } = useMyDevices();
+  const { devices: allDevices, loading, renameDevice, forgetDevice } = useMyDevices();
+  // Sunrise lights are paired/managed as devices too, but they get their own
+  // "Sunrise lights" card below rather than showing up as a screen to build.
+  const devices = useMemo(() => allDevices.filter((item) => item.deviceType !== "light"), [allDevices]);
+  const lights = useMemo(() => allDevices.filter((item) => item.deviceType === "light"), [allDevices]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
@@ -122,6 +129,8 @@ export default function RemoteDisplays() {
   const previewPhotos = useMemo(() => [...albumPhotos, ...photos], [albumPhotos, photos]);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
+  const { birthdays } = useBirthdays(device?.householdId ?? null);
+  const { messages: familyMessages } = useFamilyMessages(device?.householdId ?? null);
   const calendarCategories = useMemo(
     () => [...new Set(calendarEvents.map((event) => event.category).filter(Boolean))].sort(),
     [calendarEvents],
@@ -392,7 +401,14 @@ export default function RemoteDisplays() {
                         )}
                       </div>
                       <div className="relative aspect-video w-full">
-                        <DisplayPageRenderer page={selectedPage} photos={previewPhotos} calendarEvents={calendarEvents} tasks={tasks} />
+                        <DisplayPageRenderer
+                          page={selectedPage}
+                          photos={previewPhotos}
+                          calendarEvents={calendarEvents}
+                          tasks={tasks}
+                          birthdays={birthdays}
+                          familyMessages={familyMessages}
+                        />
                       </div>
                     </div>
 
@@ -877,6 +893,39 @@ export default function RemoteDisplays() {
                               </label>
                             </div>
                           )}
+
+                          {selectedWidget.type === "birthdays" && (
+                            <label className="flex items-center gap-2 text-xs text-white">
+                              Show birthdays within
+                              <input
+                                type="number"
+                                min={1}
+                                max={365}
+                                value={selectedWidget.birthdaysDaysAhead || ""}
+                                onChange={(event) => updateWidget({ birthdaysDaysAhead: Math.max(1, Number(event.target.value) || 30) })}
+                                className={`${FIELD} h-8 w-20`}
+                              />
+                              days
+                            </label>
+                          )}
+
+                          {selectedWidget.type === "familyBoard" && (
+                            <div className="space-y-2">
+                              <label className="flex items-center gap-2 text-xs text-white">
+                                Show the latest
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  value={selectedWidget.familyBoardLimit || ""}
+                                  onChange={(event) => updateWidget({ familyBoardLimit: Math.max(1, Number(event.target.value) || 6) })}
+                                  className={`${FIELD} h-8 w-20`}
+                                />
+                                notes
+                              </label>
+                              <p className="text-[10px] text-white/40">Anyone can post a note to the family board from their phone — it appears here automatically.</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -933,6 +982,7 @@ export default function RemoteDisplays() {
                 </div>
                 <AlarmsSettingsPanel
                   alarms={device.settings.alarms}
+                  lights={lights}
                   onAdd={(alarm) => {
                     void addAlarm(alarm);
                     if (device.settings.nightMode.withAlarms && alarm.enabled) {
@@ -959,6 +1009,8 @@ export default function RemoteDisplays() {
               </div>
             </>
           )}
+
+          <SunriseLightsPanel lights={lights} onForget={forgetDevice} />
         </section>
       </div>
     </FeaturePageShell>

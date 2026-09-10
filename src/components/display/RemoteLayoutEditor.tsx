@@ -1,6 +1,6 @@
 import {
-  CalendarDays, Clock3, Image, ListChecks, MessageSquareQuote, Plus, Settings2, Sun, Timer, Trash2,
-  CloudSun,
+  Cake, CalendarDays, Clock3, Image, ListChecks, MessageCircle, MessageSquareQuote, Plus, Settings2, Sun, Timer,
+  Trash2, CloudSun,
 } from "lucide-react";
 import {
   PAGE_LAYOUTS,
@@ -25,6 +25,8 @@ const ICONS: Record<DisplayWidgetType, typeof Clock3> = {
   weather: CloudSun,
   message: MessageSquareQuote,
   countdown: Timer,
+  birthdays: Cake,
+  familyBoard: MessageCircle,
 };
 
 const TINTS: Record<DisplayWidgetType, string> = {
@@ -36,6 +38,8 @@ const TINTS: Record<DisplayWidgetType, string> = {
   weather: "border-cyan-400/40 bg-cyan-400/15 text-cyan-100",
   message: "border-rose-400/40 bg-rose-400/15 text-rose-100",
   countdown: "border-lime-400/40 bg-lime-400/15 text-lime-100",
+  birthdays: "border-pink-400/40 bg-pink-400/15 text-pink-100",
+  familyBoard: "border-orange-400/40 bg-orange-400/15 text-orange-100",
 };
 
 function LayoutThumbnail({ layout, ratio }: { layout: DisplayPageLayout; ratio?: number }) {

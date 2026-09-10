@@ -1,9 +1,11 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { hasFreshPasskey, passkeyFreshnessDays } from "./securityPolicy";
+import {
+  enforceAnonymousRateLimit, isExpired, newPairingSecret, pairingIdFrom, requireAccountAuth, requireAuth,
+  secretsMatch, sha256,
+} from "./pairingUtils";
 
 // Always-on /display kiosk pairing. A display shows a QR code, a phone scans
 // it and approves, and the display then signs in permanently as that account
@@ -13,80 +15,12 @@ import { hasFreshPasskey, passkeyFreshnessDays } from "./securityPolicy";
 // surface on a collection that briefly holds a uid.
 
 const PAIRING_TTL_MS = 5 * 60 * 1000;
-const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
-const PAIRING_ID_PATTERN = /^[A-Za-z0-9_-]{10,128}$/;
-
-function pairingIdFrom(request: { data?: unknown }): string {
-  const data = request.data as { pairingId?: unknown } | undefined;
-  const pairingId = String(data?.pairingId || "");
-  if (!PAIRING_ID_PATTERN.test(pairingId)) {
-    throw new HttpsError("invalid-argument", "A valid pairingId is required.");
-  }
-  return pairingId;
-}
-
-function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function secretsMatch(value: string, expectedHash: string): boolean {
-  const actual = Buffer.from(sha256(value), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-async function enforceAnonymousRateLimit(
-  request: { rawRequest: { ip?: string; socket?: { remoteAddress?: string } } },
-  action: "create" | "claim",
-  maxAttempts: number
-): Promise<void> {
-  const address = request.rawRequest.ip || request.rawRequest.socket?.remoteAddress || "unknown";
-  const window = Math.floor(Date.now() / RATE_LIMIT_WINDOW_MS);
-  const key = sha256(`${action}:${address}:${window}`);
-  const ref = admin.firestore().doc(`functionRateLimits/${key}`);
-
-  await admin.firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const count = snap.exists ? Number(snap.data()?.count || 0) : 0;
-    if (count >= maxAttempts) {
-      throw new HttpsError("resource-exhausted", "Too many pairing attempts. Please wait a few minutes.");
-    }
-    tx.set(ref, {
-      action,
-      count: count + 1,
-      expiresAt: Timestamp.fromMillis((window + 2) * RATE_LIMIT_WINDOW_MS),
-    });
-  });
-}
-
-function requireAuth(request: { auth?: { uid: string } }) {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
-  return uid;
-}
-
-async function requireAccountAuth(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {
-  const uid = requireAuth(request);
-  if (request.auth?.token?.deviceId) {
-    throw new HttpsError("permission-denied", "Pairing must be approved from your phone or computer.");
-  }
-  const days = await passkeyFreshnessDays(uid);
-  if (!hasFreshPasskey(request.auth?.token, days)) {
-    throw new HttpsError("failed-precondition", "Confirm your passkey before linking a remote display.");
-  }
-  return uid;
-}
-
-function isExpired(data: FirebaseFirestore.DocumentData): boolean {
-  const expiresAtMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : 0;
-  return expiresAtMs > 0 && Date.now() > expiresAtMs;
-}
 
 export const createDevicePairing = onCall(async (request) => {
-  await enforceAnonymousRateLimit(request, "create", 8);
+  await enforceAnonymousRateLimit(request, "display", "create", 8);
   const ref = admin.firestore().collection("devicePairings").doc();
   const expiresAt = Timestamp.fromMillis(Date.now() + PAIRING_TTL_MS);
-  const claimSecret = randomBytes(32).toString("base64url");
+  const claimSecret = newPairingSecret();
   await ref.set({
     status: "pending",
     claimed: false,
@@ -154,7 +88,7 @@ export const denyDevicePairing = onCall(async (request) => {
 // status "approved". Atomically flips claimed:false -> true so a retried/
 // duplicate call (e.g. from a flaky connection) can't mint two tokens.
 export const claimDevicePairing = onCall(async (request) => {
-  await enforceAnonymousRateLimit(request, "claim", 12);
+  await enforceAnonymousRateLimit(request, "display", "claim", 12);
   const pairingId = pairingIdFrom(request);
   const claimSecret = String(request.data?.claimSecret || "");
   if (!claimSecret) throw new HttpsError("invalid-argument", "claimSecret is required.");

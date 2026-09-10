@@ -4,6 +4,8 @@ import { addDays, format } from "date-fns";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
 import type { DisplayPage } from "@/hooks/useDeviceSettings";
 import type { CalendarEvent, Task } from "@/types/app";
+import type { Birthday } from "@/types/birthdays";
+import type { FamilyMessage } from "@/hooks/useFamilyMessages";
 
 const page: DisplayPage = {
   id: "main",
@@ -203,5 +205,50 @@ describe("DisplayPageRenderer", () => {
     );
     expect(screen.getByAltText("Garden")).toBeInTheDocument();
     expect(screen.queryByAltText("Broken")).not.toBeInTheDocument();
+  });
+
+  it("shows birthdays within the configured window and hides ones further out", () => {
+    const today = new Date();
+    const soon = addDays(today, 5);
+    const far = addDays(today, 200);
+    const birthdayPage: DisplayPage = {
+      id: "birthdays",
+      name: "Birthdays",
+      durationSeconds: 300,
+      background: "#09090b",
+      widgets: [{ id: "birthdays-main", type: "birthdays", x: 0, y: 0, w: 12, h: 12, birthdaysDaysAhead: 30 }],
+    };
+    const birthdays: Birthday[] = [
+      { id: "near", name: "Grandma Jean", month: soon.getMonth() + 1, day: soon.getDate(), createdBy: "owner", sharedWith: { mode: "none" }, reminders: [] },
+      { id: "far", name: "Distant Cousin", month: far.getMonth() + 1, day: far.getDate(), createdBy: "owner", sharedWith: { mode: "none" }, reminders: [] },
+    ];
+    render(
+      <DisplayPageRenderer page={birthdayPage} photos={[]} calendarEvents={[]} tasks={[]} birthdays={birthdays} />,
+    );
+    expect(screen.getByText("Grandma Jean")).toBeInTheDocument();
+    expect(screen.queryByText("Distant Cousin")).not.toBeInTheDocument();
+  });
+
+  it("shows family board notes and a friendly empty state when there are none", () => {
+    const boardPage: DisplayPage = {
+      id: "board",
+      name: "Board",
+      durationSeconds: 300,
+      background: "#09090b",
+      widgets: [{ id: "board-main", type: "familyBoard", x: 0, y: 0, w: 12, h: 12, familyBoardLimit: 6 }],
+    };
+    const { rerender } = render(
+      <DisplayPageRenderer page={boardPage} photos={[]} calendarEvents={[]} tasks={[]} familyMessages={[]} />,
+    );
+    expect(screen.getByText(/No notes yet/)).toBeInTheDocument();
+
+    const messages: FamilyMessage[] = [
+      { id: "m1", text: "Back at 6, dinner in the oven", authorUid: "owner", authorName: "Mum", createdAt: null },
+    ];
+    rerender(
+      <DisplayPageRenderer page={boardPage} photos={[]} calendarEvents={[]} tasks={[]} familyMessages={messages} />,
+    );
+    expect(screen.getByText("Mum")).toBeInTheDocument();
+    expect(screen.getByText("Back at 6, dinner in the oven")).toBeInTheDocument();
   });
 });

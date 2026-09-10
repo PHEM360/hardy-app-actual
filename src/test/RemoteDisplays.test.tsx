@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import RemoteDisplays from "@/pages/RemoteDisplays";
-import { DEFAULT_DISPLAY_PAGES, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_DISPLAY_PAGES, DEFAULT_LIGHT_SETTINGS, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
 
 const mocks = vi.hoisted(() => ({
   updatePages: vi.fn().mockResolvedValue(undefined),
@@ -14,6 +14,7 @@ const device: DeviceDoc = {
   uid: "owner",
   householdId: null,
   label: "Kitchen display",
+  deviceType: "display",
   pairedVia: "qr",
   revoked: false,
   settings: {
@@ -25,6 +26,7 @@ const device: DeviceDoc = {
     scenes: { rotateSeconds: 30 },
     pages: DEFAULT_DISPLAY_PAGES,
     nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false },
+    light: DEFAULT_LIGHT_SETTINGS,
   },
 };
 
@@ -36,7 +38,10 @@ vi.mock("@/components/layout/FeaturePageShell", () => ({
 vi.mock("@/auth/AuthContext", () => ({ useAuth: () => ({ dataUid: "owner" }) }));
 vi.mock("@/hooks/useMyDevices", () => ({
   useMyDevices: () => ({
-    devices: [{ id: "kitchen", label: "Kitchen display", pairedVia: "qr", revoked: false, createdAt: null, lastSeenAt: null }],
+    devices: [
+      { id: "kitchen", label: "Kitchen display", deviceType: "display", pairedVia: "qr", revoked: false, createdAt: null, lastSeenAt: null },
+      { id: "porch-light", label: "Porch light", deviceType: "light", pairedVia: "direct", revoked: false, createdAt: null, lastSeenAt: null },
+    ],
     loading: false,
     renameDevice: vi.fn(),
     forgetDevice: mocks.forgetDevice,
@@ -86,6 +91,12 @@ vi.mock("@/hooks/useTasks", () => ({
 }));
 vi.mock("@/hooks/useCalendar", () => ({
   useCalendar: () => ({ events: [], settings: {}, loading: false }),
+}));
+vi.mock("@/hooks/useBirthdays", () => ({
+  useBirthdays: () => ({ birthdays: [], loading: false, addBirthday: vi.fn(), updateBirthday: vi.fn(), deleteBirthday: vi.fn() }),
+}));
+vi.mock("@/hooks/useFamilyMessages", () => ({
+  useFamilyMessages: () => ({ messages: [], loading: false, householdId: null, post: vi.fn(), remove: vi.fn(), uid: "owner" }),
 }));
 
 describe("RemoteDisplays", () => {
@@ -201,5 +212,21 @@ describe("RemoteDisplays", () => {
     expect(screen.getByRole("heading", { name: "Quick library" })).toBeTruthy();
     expect(screen.getByText(/For albums, sharing and Drive folders use the Photos page/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Night mode" })).toBeTruthy();
+  });
+
+  it("keeps sunrise lights out of the connected screens list but shows them in their own panel", () => {
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    // Only the display shows up as a selectable screen in the sidebar.
+    expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
+    // The light appears exactly once — in the Sunrise lights panel, not as a screen to build.
+    expect(screen.getByText("Porch light")).toBeInTheDocument();
+  });
+
+  it("lets an alarm be linked to a sunrise light", () => {
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: /Add alarm/ }));
+    expect(screen.getByText("Also wake")).toBeInTheDocument();
+    // Now rendered twice: once in the Sunrise lights panel, once as a pickable chip.
+    expect(screen.getAllByText("Porch light").length).toBeGreaterThanOrEqual(2);
   });
 });
