@@ -5,7 +5,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, isExpired } from "./pairingUtils";
-import { hasSeenActivity, lightTopic, publishLightState, MQTT_SECRETS } from "./mqttBroker";
+import { hasSeenActivity, lightTopic, publishLightState, pollRetainedStatuses, MQTT_SECRETS } from "./mqttBroker";
 
 // Ongoing control for sunrise lights: manual on/off/brightness/colour from
 // the webapp (sendLightCommand), the once-a-minute sunrise ramp that reads
@@ -138,6 +138,25 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
     .where("revoked", "==", false)
     .get();
   const now = new Date();
+
+  // Real online/offline status, read from each light's retained MQTT status
+  // message — see pollRetainedStatuses' own comment. This is the only place
+  // settings.light.online/lastReportedAt ever get written; nothing else
+  // touches them, so the UI's "connected" state reflects actual reachability
+  // rather than just "this device is paired".
+  try {
+    const statuses = await pollRetainedStatuses(lightDocs.docs.map((d) => d.id));
+    const statusBatch = db.batch();
+    for (const lightDoc of lightDocs.docs) {
+      const seen = statuses.get(lightDoc.id);
+      const patch: Record<string, unknown> = { "settings.light.online": seen === "online" };
+      if (seen) patch["settings.light.lastReportedAt"] = FieldValue.serverTimestamp();
+      statusBatch.update(lightDoc.ref, patch);
+    }
+    await statusBatch.commit();
+  } catch (err) {
+    logger.error("tickSunriseLights: status poll failed", { err: String(err) });
+  }
 
   for (const lightDoc of lightDocs.docs) {
     const light = lightDoc.data();

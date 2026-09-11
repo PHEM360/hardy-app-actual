@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Lightbulb, Loader2, Plus, Sunrise, Trash2, Wifi } from "lucide-react";
+import { Lightbulb, Loader2, Plus, Sunrise, Trash2, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -9,13 +9,21 @@ import { Label } from "@/components/ui/label";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { useLightPairing } from "@/hooks/useLightPairing";
 import { sendLightCommand } from "@/lib/lightPairingApi";
+import { describeLightStatus } from "@/lib/deviceStatus";
 import type { LinkedDevice } from "@/hooks/useMyDevices";
+
+const STATUS_TONE_CLASS = {
+  ok: "text-emerald-500",
+  warn: "text-amber-500",
+  error: "text-destructive",
+};
 
 function LightRow({ light, onForget }: { light: LinkedDevice; onForget: (id: string) => void }) {
   const { device, updateLightSunrise } = useDeviceSettings(light.id);
   const [pending, setPending] = useState(false);
   if (!device) return null;
   const { manual, sunrise } = device.settings.light;
+  const status = describeLightStatus(device.settings.light);
 
   const send = async (patch: { on?: boolean; brightness?: number; colorHex?: string }) => {
     setPending(true);
@@ -33,7 +41,13 @@ function LightRow({ light, onForget }: { light: LinkedDevice; onForget: (id: str
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <Lightbulb className={`h-4 w-4 shrink-0 ${manual.on ? "text-amber-400" : "text-muted-foreground"}`} />
-          <p className="truncate text-sm font-semibold">{light.label}</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{light.label}</p>
+            <p className={`flex items-center gap-1 text-[11px] font-medium ${STATUS_TONE_CLASS[status.tone]}`}>
+              {status.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {status.label}
+            </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Switch checked={manual.on} disabled={pending} onCheckedChange={(value) => void send({ on: value })} />

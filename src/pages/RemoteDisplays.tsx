@@ -28,6 +28,7 @@ import { NightModeSettingsPanel } from "@/components/display/NightModeSettingsPa
 import { SunriseLightsPanel } from "@/components/display/SunriseLightsPanel";
 import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
 import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
+import { lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
 import { toast } from "sonner";
 
 const FIELD = "h-10 w-full min-w-0 rounded-xl border border-white/15 bg-white/[0.09] px-3 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-primary focus:bg-white/[0.14]";
@@ -35,23 +36,6 @@ const LABEL = "text-[11px] font-bold uppercase tracking-wider text-white/45";
 const CARD = "rounded-2xl border border-white/10 bg-white/[0.04] p-3";
 
 const BACKDROPS: DisplayBackdropKind[] = ["none", "weather", "stars", "snow", "rain", "clouds", "aurora"];
-
-function timestampMs(value: unknown) {
-  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
-    return (value as { toMillis: () => number }).toMillis();
-  }
-  return 0;
-}
-
-function lastSeenLabel(value: unknown) {
-  const ms = timestampMs(value);
-  if (!ms) return "Not seen yet";
-  const minutes = Math.max(0, Math.round((Date.now() - ms) / 60_000));
-  if (minutes < 2) return "Online now";
-  if (minutes < 60) return `Seen ${minutes} minutes ago`;
-  if (minutes < 1440) return `Seen ${Math.round(minutes / 60)} hours ago`;
-  return `Seen ${Math.round(minutes / 1440)} days ago`;
-}
 
 function PairingSteps() {
   const steps = [

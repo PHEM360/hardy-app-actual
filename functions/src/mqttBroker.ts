@@ -103,3 +103,50 @@ export async function hasSeenActivity(deviceId: string, timeoutMs = 4000): Promi
     setTimeout(() => finish(false), timeoutMs);
   });
 }
+
+/**
+ * Reads each light's actual online/offline state from its retained
+ * `{topic}/status` message (published by the firmware itself — "online" via
+ * a normal publish on connect, "offline" via MQTT's last-will, both
+ * retained). A single wildcard subscribe gets every light's last-known
+ * value pushed back immediately by the broker, connected or not, since
+ * retained messages are cached broker-side rather than requiring the
+ * publisher to be live.
+ *
+ * A deviceId absent from the returned map means its status topic has never
+ * received a single message — i.e. that light has never actually connected,
+ * as opposed to one that connected before and has since gone offline.
+ * Callers should treat those two cases differently in the UI.
+ */
+export async function pollRetainedStatuses(deviceIds: string[], timeoutMs = 2500): Promise<Map<string, "online" | "offline">> {
+  if (deviceIds.length === 0) return new Map();
+  const mqttClient = await getClient();
+  const wildcard = "hardyhub/lights/+/status";
+  const pending = new Set(deviceIds);
+  const result = new Map<string, "online" | "offline">();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      mqttClient.removeListener("message", onMessage);
+      mqttClient.unsubscribe(wildcard, () => {});
+      resolve(result);
+    };
+    const onMessage = (incomingTopic: string, payload: Buffer) => {
+      const match = incomingTopic.match(/^hardyhub\/lights\/([^/]+)\/status$/);
+      if (!match || !pending.has(match[1])) return;
+      const value = payload.toString();
+      if (value !== "online" && value !== "offline") return;
+      result.set(match[1], value);
+      pending.delete(match[1]);
+      if (pending.size === 0) finish();
+    };
+    mqttClient.on("message", onMessage);
+    mqttClient.subscribe(wildcard, { qos: 0 }, (err) => {
+      if (err) finish();
+    });
+    setTimeout(finish, timeoutMs);
+  });
+}
