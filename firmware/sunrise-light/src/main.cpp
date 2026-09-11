@@ -7,7 +7,9 @@
 // the main repo — so the app's existing "Add sunrise light" flow works
 // completely unmodified:
 //   1. First boot (nothing saved yet): broadcasts its own "WLED-AP" WiFi
-//      network at 4.3.2.1 and serves GET /json/info + POST /json/cfg there.
+//      network at 192.168.4.1 and serves GET /json/info + POST /json/cfg
+//      there (192.168.4.1, not WLED's usual 4.3.2.1 — see the comment on
+//      the WiFi.softAPConfig() call below for why).
 //   2. The app's browser joins that network and POSTs home WiFi + MQTT
 //      details to /json/cfg (see provisionWledDevice() in wledLocalApi.ts).
 //   3. Those details are saved to flash (Preferences/NVS) and the board
@@ -178,7 +180,12 @@ void handleJsonStatePost() {
 void startSetupMode() {
   setupMode = true;
   WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(IPAddress(4, 3, 2, 1), IPAddress(4, 3, 2, 1), IPAddress(255, 255, 255, 0));
+  // 192.168.4.1, not WLED's usual 4.3.2.1: it's a real private-range
+  // address, so the app's HTTPS-served browser page can actually be granted
+  // access to it (Chrome's mixed-content "local network" exemption only
+  // covers real private/loopback ranges) — see the comment in
+  // src/lib/wledLocalApi.ts in the main repo for the full explanation.
+  WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP("WLED-AP", "wled1234");
 
   setupServer.on("/json/info", HTTP_GET, handleJsonInfo);
@@ -189,7 +196,7 @@ void startSetupMode() {
   setupServer.on("/json/state", HTTP_OPTIONS, handleOptionsPreflight);
   setupServer.begin();
 
-  Serial.println("Setup mode: broadcasting WLED-AP at 4.3.2.1 — pair this light from the app.");
+  Serial.println("Setup mode: broadcasting WLED-AP at 192.168.4.1 — pair this light from the app.");
 }
 
 // ---- Station mode: normal operation ----

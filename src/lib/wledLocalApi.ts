@@ -1,17 +1,26 @@
-// Talks directly to a WLED light while this browser is joined to its own
-// temporary setup network — never over the internet. An unconfigured WLED
-// device broadcasts an open-ish "WLED-AP" network (default password
-// wled1234) and answers on 4.3.2.1 (also reachable as wled.me) until it's
-// been given real WiFi credentials, per WLED's own setup docs.
+// Talks directly to a light while this browser is joined to its own
+// temporary setup network — never over the internet. An unconfigured light
+// broadcasts an open-ish "WLED-AP" network (default password wled1234) and
+// answers on 192.168.4.1 until it's been given real WiFi credentials.
+//
+// Deliberately NOT WLED's own default of 4.3.2.1: that address isn't in any
+// private IP range, so Chrome's mixed-content policy blocks a plain-http
+// fetch to it from this HTTPS-served app with no workaround at all (no
+// permission prompt, nothing — Chrome's "local network" exemption only
+// covers real private/loopback ranges). 192.168.4.1 is both a real private
+// address and the ESP32 WiFi library's own standard AP gateway, so browsers
+// can actually grant access to it. Practical effect: this only pairs the
+// project's own firmware (firmware/sunrise-light, which uses 192.168.4.1
+// for exactly this reason) — a real stock-WLED light, hardcoded to 4.3.2.1,
+// can't be paired through this browser flow at all, regardless of firmware,
+// because of the same Chrome restriction.
 //
 // The /json/cfg field names below (nw.ins[].ssid/psk for WiFi,
 // mqtt.{en,broker,port,user,psk,cid,topics.device} for MQTT) match WLED's
-// generally-documented config shape, but WLED's exact schema does shift
-// between versions — before relying on this against real hardware, GET
-// http://4.3.2.1/json/cfg from a freshly-flashed device and diff it against
-// what's sent here.
+// generally-documented config shape and are what firmware/sunrise-light
+// implements; see handleJsonCfgPost() there for the receiving end.
 
-const WLED_AP_BASE = "http://4.3.2.1";
+const WLED_AP_BASE = "http://192.168.4.1";
 const REQUEST_TIMEOUT_MS = 6000;
 
 async function wledFetch(path: string, init?: RequestInit): Promise<Response> {
