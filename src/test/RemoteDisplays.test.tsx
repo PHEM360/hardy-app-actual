@@ -26,6 +26,7 @@ const device: DeviceDoc = {
     scenes: { rotateSeconds: 30 },
     pages: DEFAULT_DISPLAY_PAGES,
     nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false },
+    alwaysOn: true,
     light: DEFAULT_LIGHT_SETTINGS,
   },
 };
@@ -56,6 +57,7 @@ vi.mock("@/hooks/useDeviceSettings", async (importOriginal) => {
       loading: false,
       updatePages: mocks.updatePages,
       updateNightMode: vi.fn(),
+      updateAlwaysOn: vi.fn(),
       updateSceneSettings: vi.fn(),
       addAlarm: vi.fn(),
       updateAlarm: vi.fn(),

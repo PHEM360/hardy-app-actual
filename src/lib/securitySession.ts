@@ -78,3 +78,45 @@ export function clearSecuritySession(uid: string) {
   window.localStorage.removeItem(`${LOCAL_PREFIX}${uid}`);
   window.sessionStorage.removeItem(`${OPEN_PREFIX}${uid}`);
 }
+
+const TRUSTED_KEY = "hardy-hub-trusted-device";
+
+export interface TrustedDeviceHint {
+  uid: string;
+  lastPasskeyAt: number;
+}
+
+function readTrustedDevice(): TrustedDeviceHint | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TRUSTED_KEY) || "null") as Partial<TrustedDeviceHint> | null;
+    if (!parsed?.uid || !parsed.lastPasskeyAt) return null;
+    return { uid: String(parsed.uid), lastPasskeyAt: Number(parsed.lastPasskeyAt) };
+  } catch {
+    return null;
+  }
+}
+
+/** Remember this browser after a successful passkey so it can unlock itself for 7 days. */
+export function markTrustedDevice(uid: string, atMs = Date.now()) {
+  const previous = readTrustedDevice();
+  const lastPasskeyAt = previous?.uid === uid
+    ? Math.max(previous.lastPasskeyAt || 0, atMs)
+    : atMs;
+  window.localStorage.setItem(TRUSTED_KEY, JSON.stringify({ uid, lastPasskeyAt }));
+}
+
+export function clearTrustedDevice() {
+  window.localStorage.removeItem(TRUSTED_KEY);
+}
+
+export function trustedDeviceHint(): TrustedDeviceHint | null {
+  return readTrustedDevice();
+}
+
+/** True when this browser already proved a passkey inside the unlock window. */
+export function trustedDeviceCanAutoUnlock(maxAgeDays = 7) {
+  const hint = readTrustedDevice();
+  if (!hint) return false;
+  const maxAge = Math.max(1, maxAgeDays) * 24 * 60 * 60 * 1000;
+  return Date.now() - hint.lastPasskeyAt <= maxAge;
+}

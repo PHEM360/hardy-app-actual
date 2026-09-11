@@ -232,6 +232,16 @@ service cloud.firestore {
       );
     }
 
+    function displayHouseholdId() {
+      return get(/databases/$(database)/documents/devices/$(request.auth.token.deviceId)).data.get('householdId', request.auth.uid);
+    }
+
+    function isActiveDisplayForHousehold(householdId) {
+      return isFirebaseAuthenticated() &&
+        hasDisplayClaim() &&
+        displayHouseholdId() == householdId;
+    }
+
     // Users collection - users can read/write their own data, admins can manage all
     match /users/{userId} {
       allow read: if isAuthenticated() || (isFirebaseOwner(userId) && !hasDisplayClaim());
@@ -308,12 +318,19 @@ service cloud.firestore {
     // of their household (resolved against households/{householdId}.memberIds)
     // or kept private. Reminders/calendar sync are handled by Cloud Functions.
     match /birthdays/{birthdayId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() ||
-        resource.data.createdBy == request.auth.uid ||
-        (resource.data.sharedWith.mode == 'all' &&
-          request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds) ||
-        (resource.data.sharedWith.mode == 'some' && request.auth.uid in resource.data.sharedWith.uids)
+      allow read: if (
+        isAuthenticated() && (
+          isAdmin() ||
+          resource.data.createdBy == request.auth.uid ||
+          (resource.data.sharedWith.mode == 'all' &&
+            request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds) ||
+          (resource.data.sharedWith.mode == 'some' && request.auth.uid in resource.data.sharedWith.uids)
+        )
+      ) || (
+        hasDisplayClaim() && (
+          isActiveDisplayFor(resource.data.createdBy) ||
+          ('householdId' in resource.data && isActiveDisplayForHousehold(resource.data.householdId))
+        )
       );
       allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isAuthenticated() && (
@@ -956,7 +973,8 @@ service cloud.firestore {
     }
 
     match /household/{householdId}/messages/{messageId} {
-      allow read, write: if canAccessHousehold(householdId);
+      allow read: if canAccessHousehold(householdId) || isActiveDisplayForHousehold(householdId);
+      allow write: if canAccessHousehold(householdId);
     }
 
     // Joint household finance — shared with every household member (not personal finance/{uid})
@@ -995,6 +1013,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /loginEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /phone/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+    match /phoneSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // General document store - per user, shareable via pageShares
     match /documents/{userId}/items/{docId} {
       allow read: if canViewPage(userId, "documents");
@@ -1023,7 +1053,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt']) ||
           (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['settings']) &&
-            request.resource.data.settings.diff(resource.data.settings).affectedKeys().hasOnly(['alarms', 'nightMode'])
+            request.resource.data.settings.diff(resource.data.settings).affectedKeys().hasOnly(['alarms', 'nightMode', 'alwaysOn'])
           )
         )
       );

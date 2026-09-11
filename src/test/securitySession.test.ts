@@ -4,6 +4,9 @@ import {
   hasFreshSecurityAuthentication,
   markOpenSessionSatisfied,
   markSecurityAuthentication,
+  markTrustedDevice,
+  trustedDeviceCanAutoUnlock,
+  clearTrustedDevice,
 } from "@/lib/securitySession";
 import {
   DEFAULT_SECURITY_SETTINGS,
@@ -23,6 +26,7 @@ describe("app security sessions", () => {
     expect(DEFAULT_SECURITY_SETTINGS.appUnlockMethod).toBe("passkey");
     expect(DEFAULT_SECURITY_SETTINGS.moduleRequirements.personal_finance).toBe("passkey");
     expect(DEFAULT_SECURITY_SETTINGS.moduleRequirements.passwords).toBe("none");
+    expect(DEFAULT_SECURITY_SETTINGS.moduleRequirements.remote_displays).toBe("none");
     expect(normalizeSecuritySettings({
       version: 2,
       moduleRequirements: { passwords: "passkey" },
@@ -54,5 +58,16 @@ describe("app security sessions", () => {
     expect(appSessionRequiresAuthentication("user-1", settings)).toBe(true);
     markOpenSessionSatisfied("user-1");
     expect(appSessionRequiresAuthentication("user-1", settings)).toBe(false);
+  });
+
+  it("auto-unlocks a trusted device for seven days after a passkey", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T10:00:00Z"));
+    expect(trustedDeviceCanAutoUnlock(7)).toBe(false);
+    markTrustedDevice("user-1");
+    expect(trustedDeviceCanAutoUnlock(7)).toBe(true);
+    vi.advanceTimersByTime(8 * 24 * 60 * 60 * 1000);
+    expect(trustedDeviceCanAutoUnlock(7)).toBe(false);
+    clearTrustedDevice();
   });
 });

@@ -20,7 +20,8 @@ export default function Display() {
     updateAlarm,
     updateNightMode,
   } = useDeviceSettings(deviceId);
-  const { supported: wakeLockSupported } = useWakeLock(status === "ready");
+  const alwaysOn = device?.settings.alwaysOn !== false;
+  const { supported: wakeLockSupported, held: wakeLockHeld } = useWakeLock(status === "ready" && alwaysOn);
   const { unlocked: audioUnlocked, tryUnlock: tryUnlockAudio } = useAutoUnlockAudio(status === "ready");
   const localFolder = useLocalDisplayFolder();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -49,8 +50,15 @@ export default function Display() {
         <WifiOff className="w-10 h-10 text-white/40" />
         <p className="text-white text-lg font-semibold">This display was disconnected</p>
         <p className="text-white/50 text-sm max-w-sm">
-          It was removed from Remote Displays. Refresh this page to securely link it again.
+          It was removed from Remote Displays. Link it again from this screen — you will not need to keep entering a passkey on the display itself.
         </p>
+        <button
+          type="button"
+          onClick={restartPairing}
+          className="mt-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+        >
+          Link again
+        </button>
       </div>
     );
   }
@@ -90,9 +98,14 @@ export default function Display() {
         className="absolute right-4 flex items-center gap-2"
         style={{ bottom: "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))" }}
       >
-        {!wakeLockSupported && (
+        {!wakeLockSupported && alwaysOn && (
           <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
-            This browser can't keep the screen awake automatically — disable auto-sleep in the device's system settings.
+            This browser can't keep the screen awake automatically — turn off auto-sleep in the device settings, or use Guided Access / kiosk mode.
+          </span>
+        )}
+        {alwaysOn && wakeLockSupported && !wakeLockHeld && (
+          <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
+            Always-on is on, but the screen lock could not be held. Tap the page, then disable auto-sleep in system settings.
           </span>
         )}
         {localFolder.supported && (

@@ -14,6 +14,7 @@ import {
 } from "@simplewebauthn/server";
 import { PRIMARY_RP_ID, resolvePasskeyContext } from "./passkeyContext";
 import { passkeyFreshnessDays } from "./securityPolicy";
+import { mintPasskeySessionToken, writeLoginEvent } from "./loginEvents";
 
 const RP_NAME = "Hardy Hub";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -230,10 +231,7 @@ export const finishPasskeyRegistration = onCall(async (request) => {
       passkeyEnrolledAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   });
-  const token = await admin.auth().createCustomToken(uid, {
-    authMethod: "passkey",
-    passkeyVerifiedAt: Math.floor(Date.now() / 1000),
-  });
+  const token = await mintPasskeySessionToken(uid);
   return { verified: true, credentialId: credential.id, label, token };
 });
 
@@ -318,9 +316,14 @@ export const finishPasskeyAuthentication = onCall(async (request) => {
       rpID: challenge.rpID,
     });
   });
-  const token = await admin.auth().createCustomToken(passkey.uid, {
-    authMethod: "passkey",
-    passkeyVerifiedAt: Math.floor(Date.now() / 1000),
+  const token = await mintPasskeySessionToken(passkey.uid);
+  await writeLoginEvent({
+    uid: passkey.uid,
+    email: userRecord.email || "",
+    method: "passkey",
+    success: true,
+    userAgent: String(request.rawRequest?.headers?.["user-agent"] || ""),
+    ip: String(request.rawRequest?.ip || ""),
   });
   return { verified: true, token };
 });

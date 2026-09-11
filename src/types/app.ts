@@ -19,7 +19,8 @@ export type FeatureKey =
   | "notes"
   | "photos"
   | "email"
-  | "admin";
+  | "admin"
+  | "softphone";
 
 export type AvatarType = "initials" | "emoji" | "image";
 
@@ -200,6 +201,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "mail",
     route: "/email",
     color: "info",
+  },
+  {
+    key: "softphone",
+    label: "Phone",
+    description: "Calls, texts and a family softphone",
+    icon: "phone",
+    route: "/softphone",
+    color: "primary",
   },
 ];
 
@@ -846,7 +855,7 @@ export interface GoogleCalendarLink {
 }
 
 export interface CalendarSettings {
-  defaultView: "month" | "week";
+  defaultView: "month" | "week" | "agenda";
   canManage?: string[];        // user UIDs allowed to manage settings (empty = admins only)
   memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
   google?: GoogleCalendarLink;

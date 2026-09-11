@@ -25,6 +25,7 @@ import {
   Palmtree,
   Images,
   Mail,
+  Phone,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -85,6 +86,13 @@ const SECTIONS: Section[] = [
         icon: CalendarDays,
         route: "/calendar",
         gradient: "linear-gradient(135deg, hsl(218,60%,55%), hsl(230,55%,48%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Phone",
+        icon: Phone,
+        route: "/softphone",
+        gradient: "linear-gradient(135deg, hsl(152,52%,42%), hsl(168,48%,36%))",
         iconColor: "#fff",
       },
       {

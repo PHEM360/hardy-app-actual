@@ -5,7 +5,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
-  AlertTriangle, Palette,
+  AlertTriangle, Palette, ListFilter, LayoutGrid,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -61,6 +61,14 @@ const CAT: Record<CalendarEventCategory, { color: string; bg: string; label: str
   other:    { color: "#8b5cf6", bg: "bg-[#8b5cf6]", label: "Other"    },
   birthday: { color: "#f43f5e", bg: "bg-[#f43f5e]", label: "Birthday" },
 };
+
+function eventChipStyle(color: string) {
+  return {
+    background: `color-mix(in srgb, ${color} 18%, var(--card))`,
+    borderLeft: `3px solid ${color}`,
+    color: "hsl(var(--foreground))",
+  };
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -153,9 +161,10 @@ const CalendarPage = () => {
 
   const isAdmin = role === "admin" || role === "superadmin";
 
-  const [view, setView] = useState<"month" | "week">(settings.defaultView ?? "month");
+  const [view, setView] = useState<"month" | "week" | "agenda">(settings.defaultView ?? "month");
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
+  const [hiddenCats, setHiddenCats] = useState<Set<CalendarEventCategory>>(new Set());
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false);
@@ -206,6 +215,7 @@ const CalendarPage = () => {
   const eventsForDay = (day: Date) =>
     allDisplayEvents
       .filter((e) => {
+        if (hiddenCats.has(e.category)) return false;
         const start = startOfDay(parseISO(e.startDate));
         const end = endOfDay(parseISO(e.endDate));
         return !isAfter(start, endOfDay(day)) && !isBefore(end, startOfDay(day));
@@ -219,15 +229,17 @@ const CalendarPage = () => {
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
-  const prev = () =>
-    view === "month"
-      ? setCurrentDate((d) => subMonths(d, 1))
-      : setCurrentDate((d) => subWeeks(d, 1));
+  const prev = () => {
+    if (view === "month") setCurrentDate((d) => subMonths(d, 1));
+    else if (view === "agenda") setCurrentDate((d) => addDays(d, -14));
+    else setCurrentDate((d) => subWeeks(d, 1));
+  };
 
-  const next = () =>
-    view === "month"
-      ? setCurrentDate((d) => addMonths(d, 1))
-      : setCurrentDate((d) => addWeeks(d, 1));
+  const next = () => {
+    if (view === "month") setCurrentDate((d) => addMonths(d, 1));
+    else if (view === "agenda") setCurrentDate((d) => addDays(d, 14));
+    else setCurrentDate((d) => addWeeks(d, 1));
+  };
 
   // ─── Dialog openers ─────────────────────────────────────────────────────────
 
@@ -518,10 +530,18 @@ const CalendarPage = () => {
 
   // ─── Header label ────────────────────────────────────────────────────────────
 
+  const agendaDays = eachDayOfInterval({
+    start: startOfDay(view === "agenda" ? currentDate : new Date()),
+    end: addDays(startOfDay(view === "agenda" ? currentDate : new Date()), 13),
+  });
+
   const headerLabel =
     view === "month"
       ? format(currentDate, "MMMM yyyy")
-      : `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`;
+      : view === "agenda"
+        ? `${format(agendaDays[0], "d MMM")} – ${format(agendaDays[13], "d MMM yyyy")}`
+        : `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`;
+  const CAL_ACCENT = "hsl(220,60%,55%)";
 
   // ─── JSX ─────────────────────────────────────────────────────────────────────
 
@@ -532,163 +552,101 @@ const CalendarPage = () => {
       sharePage="calendar"
     >
 
-      {/* ── Top navigation bar ── */}
-      <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={prev}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
+      {/* ── Layout: left rail + calendar ── */}
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row">
+        <aside className="w-full shrink-0 lg:w-56">
+          <div
+            className="rounded-2xl border border-border/50 p-3 shadow-card"
+            style={{ background: `color-mix(in srgb, ${CAL_ACCENT} 12%, var(--card))`, borderLeftWidth: 4, borderLeftColor: CAL_ACCENT }}
           >
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="text-sm sm:text-base font-semibold text-card-foreground min-w-[130px] sm:min-w-[180px] text-center hover:text-primary transition-colors"
-          >
-            {headerLabel}
-          </button>
-          <button
-            onClick={next}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {/* Month / Week toggle */}
-          <div className="flex rounded-lg border border-border/50 overflow-hidden text-[11px] sm:text-xs font-semibold">
-            {(["month", "week"] as const).map((v) => (
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={prev} className="p-1.5 rounded-lg hover:bg-card text-muted-foreground">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <p className="min-w-0 text-sm font-bold">{headerLabel}</p>
+                <button type="button" onClick={next} className="p-1.5 rounded-lg hover:bg-card text-muted-foreground">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mb-3 grid grid-cols-3 gap-1 lg:grid-cols-1">
+              {([
+                ["month", "Month", LayoutGrid],
+                ["week", "Week", CalendarDays],
+                ["agenda", "Agenda", ListFilter],
+              ] as const).map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setView(id)}
+                  className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold lg:justify-start ${
+                    view === id ? "bg-gradient-primary text-primary-foreground" : "bg-card text-foreground hover:bg-card/80"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
+              className="mb-3 w-full rounded-xl border border-primary/30 bg-card py-2 text-xs font-semibold text-foreground"
+            >
+              Today
+            </button>
+            {canEdit && (
               <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-2.5 sm:px-3 py-1.5 capitalize transition-colors ${
-                  view === v
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted/50"
-                }`}
+                type="button"
+                onClick={() => openAdd()}
+                className="mb-3 flex w-full items-center justify-center gap-1 rounded-xl bg-gradient-primary py-2 text-xs font-semibold text-primary-foreground"
               >
-                {v}
+                <Plus className="h-3.5 w-3.5" /> Add event
               </button>
-            ))}
-          </div>
-
-          {/* Today shortcut */}
-          <button
-            onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
-            className="text-[11px] sm:text-xs font-medium text-primary px-2 sm:px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/10 transition-colors"
-          >
-            Today
-          </button>
-
-          {(isAdmin || isOwnScope) && (
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
-            >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          )}
-
-          {/* Add event */}
-          {canEdit && (
-            <button
-              onClick={() => openAdd()}
-              className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </button>
-          )}
-        </div>
-      </div>
-
-      {isOwnScope && canEdit && (
-        <div
-          className="mb-3 rounded-2xl border border-border/40 p-4 shadow-card"
-          style={{ background: "color-mix(in srgb, hsl(220,60%,55%) 10%, hsl(var(--card)))", borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)" }}
-        >
-          <p className="font-display text-base font-bold">Google Calendar</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {settings.google?.connected
-              ? `Linked as ${settings.google.email || "Google"}. Hardy Hub stays in sync with the calendars you pick.`
-              : "Connect your own Google Calendar in this app. Each person links their account — nothing is shared unless you share this page."}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {settings.google?.connected ? (
-              <>
-                <Button size="sm" disabled={gcalBusy} onClick={async () => {
-                  setGcalBusy(true);
-                  try {
-                    const result = await syncGoogleCalendar(scopeUserId || undefined);
-                    toast.success(result.upserted ? `Synced ${result.upserted} event${result.upserted === 1 ? "" : "s"}` : "Already up to date");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not sync");
-                  } finally {
-                    setGcalBusy(false);
-                  }
-                }}>Sync now</Button>
-                <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
-                  setGcalBusy(true);
-                  try {
-                    await disconnectGoogleCalendar();
-                    toast.success("Google Calendar disconnected");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not disconnect");
-                  } finally {
-                    setGcalBusy(false);
-                  }
-                }}>Disconnect</Button>
-              </>
-            ) : (
-              <Button size="sm" disabled={gcalBusy} onClick={async () => {
-                setGcalBusy(true);
-                try {
-                  window.location.href = await startGoogleCalendarConnect();
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
-                  setGcalBusy(false);
-                }
-              }}>Connect Google Calendar</Button>
             )}
-          </div>
-          {settings.google?.connected && gcalList.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs font-semibold text-muted-foreground">Keep these in sync</p>
-              {gcalList.map((item) => {
-                const selected = (settings.google?.selectedCalendarIds || ["primary"]).includes(item.id) ||
-                  (item.primary && (settings.google?.selectedCalendarIds || []).includes("primary"));
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Show</p>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {(Object.keys(CAT) as CalendarEventCategory[]).map((key) => {
+                const on = !hiddenCats.has(key);
                 return (
-                  <label key={item.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selected}
-                      onCheckedChange={async (checked) => {
-                        const current = settings.google?.selectedCalendarIds || ["primary"];
-                        const next = checked
-                          ? [...new Set([...current, item.id])]
-                          : current.filter((id) => id !== item.id && !(item.primary && id === "primary"));
-                        await saveGoogleCalendarSelection(next.length ? next : [item.id], item.primary ? item.id : settings.google?.calendarId, scopeUserId || undefined);
-                      }}
-                    />
-                    {item.name}{item.primary ? " (main)" : ""}
-                  </label>
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setHiddenCats((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(key)) next.delete(key);
+                      else next.add(key);
+                      return next;
+                    })}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${on ? "bg-card" : "opacity-40"}`}
+                    style={{ borderColor: CAT[key].color, color: CAT[key].color }}
+                  >
+                    {CAT[key].label}
+                  </button>
                 );
               })}
             </div>
-          )}
-          {settings.google?.lastSyncAt && (
-            <p className="mt-2 text-[11px] text-muted-foreground">Last synced {new Date(settings.google.lastSyncAt).toLocaleString("en-GB")}</p>
-          )}
-        </div>
-      )}
+            {(isAdmin || isOwnScope) && (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="flex w-full items-center justify-center gap-1 rounded-xl border border-border/50 bg-card py-2 text-xs text-muted-foreground"
+              >
+                <Settings className="h-3.5 w-3.5" /> Settings & Google
+              </button>
+            )}
+          </div>
+        </aside>
+        <div className="min-w-0 flex-1">
 
       {/* ── Month view ── */}
       {view === "month" && (
         <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-border/50 bg-muted/50">
+          <div className="grid grid-cols-7 border-b border-border/50 bg-[color-mix(in_srgb,hsl(220,60%,55%)_10%,var(--card))]">
             {WEEK_DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] sm:text-[11px] font-bold text-foreground/60 py-2.5 sm:py-3 uppercase tracking-wide">
+              <div key={d} className="text-center text-[10px] sm:text-[11px] font-bold text-foreground py-2.5 sm:py-3 uppercase tracking-wide">
                 {d}
               </div>
             ))}
@@ -728,10 +686,10 @@ const CalendarPage = () => {
                     <div
                       key={e.id}
                       onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
-                      className={`w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate text-white leading-tight flex items-center gap-0.5 ${
+                      className={`w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate leading-tight flex items-center gap-0.5 ${
                         e.id?.startsWith("__") ? "opacity-80 italic" : ""
                       }`}
-                      style={{ backgroundColor: getEventColor(e) }}
+                      style={eventChipStyle(getEventColor(e))}
                     >
                       {e.priority === "urgent" && <AlertTriangle className="w-2 h-2 flex-shrink-0" />}
                       {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
@@ -790,10 +748,10 @@ const CalendarPage = () => {
                       <button
                         key={e.id}
                         onClick={() => openEdit(e)}
-                        className={`w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-white text-left truncate block flex items-center gap-0.5 ${
+                        className={`w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-left truncate flex items-center gap-0.5 ${
                           e.id?.startsWith("__") ? "opacity-80 italic" : ""
                         }`}
-                        style={{ backgroundColor: getEventColor(e) }}
+                        style={eventChipStyle(getEventColor(e))}
                       >
                         {e.priority === "urgent" && <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0 inline-block mr-0.5" />}
                         {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
@@ -865,7 +823,7 @@ const CalendarPage = () => {
                     className={`w-full text-left flex items-stretch gap-3 p-3 rounded-xl transition-colors group ${
                       e.priority === "urgent"
                         ? "bg-red-500/10 hover:bg-red-500/20 border border-red-500/30"
-                        : "bg-muted/20 hover:bg-muted/40"
+                        : "bg-card hover:bg-[color-mix(in_srgb,hsl(var(--primary))_8%,var(--card))] border border-border/40"
                     } ${e.id?.startsWith("__") ? "cursor-default" : ""}`}
                   >
                     {/* Member/category colour bar */}
@@ -911,8 +869,8 @@ const CalendarPage = () => {
                     </div>
                     {/* Member colour badge */}
                     <span
-                      className="text-[9px] font-bold px-2 py-1 rounded-full text-white self-start flex-shrink-0"
-                      style={{ backgroundColor: getEventColor(e) }}
+                      className="text-[9px] font-bold px-2 py-1 rounded-full self-start flex-shrink-0"
+                      style={eventChipStyle(getEventColor(e))}
                     >
                       {e.memberId && e.memberId !== "all"
                         ? hSettings.members.find((m) => m.id === e.memberId)?.name ?? e.memberId
@@ -925,6 +883,55 @@ const CalendarPage = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {view === "agenda" && (
+        <div className="space-y-2">
+          {agendaDays.map((day) => {
+            const dayEvts = eventsForDay(day);
+            return (
+              <div
+                key={day.toISOString()}
+                className="rounded-2xl border border-border/50 bg-card p-3 shadow-card"
+                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? CAL_ACCENT : "transparent" }}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="font-display text-sm font-bold">
+                    {format(day, "EEEE d MMM")}
+                    {isToday(day) && <span className="ml-2 text-[10px] font-semibold text-primary">Today</span>}
+                  </p>
+                  {canEdit && (
+                    <button type="button" onClick={() => openAdd(day)} className="text-[11px] font-semibold text-primary">
+                      Add
+                    </button>
+                  )}
+                </div>
+                {dayEvts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nothing on this day</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {dayEvts.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => openEdit(e)}
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-sm"
+                        style={eventChipStyle(getEventColor(e))}
+                      >
+                        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">
+                          {e.allDay ? "All day" : format(parseISO(e.startDate), "H:mm")}
+                        </span>
+                        <span className="min-w-0 truncate font-semibold">{e.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+        </div>
+      </div>
 
       {/* ── Add / Edit event dialog ── */}
       <Dialog open={addOpen} onOpenChange={closeForm}>
@@ -1257,7 +1264,7 @@ const CalendarPage = () => {
             <div className="space-y-1.5">
               <Label>Default view</Label>
               <div className="flex gap-2">
-                {(["month", "week"] as const).map((v) => (
+                {(["month", "week", "agenda"] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => saveSettings({ ...settings, defaultView: v })}
@@ -1272,6 +1279,55 @@ const CalendarPage = () => {
                 ))}
               </div>
             </div>
+
+            {isOwnScope && canEdit && (
+              <div className="space-y-2 rounded-xl border border-border/40 p-3">
+                <Label>Google Calendar</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {settings.google?.connected
+                    ? `Linked as ${settings.google.email || "Google"}.`
+                    : "Connect your own Google Calendar. Nothing is shared unless you share this page."}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {settings.google?.connected ? (
+                    <>
+                      <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                        setGcalBusy(true);
+                        try {
+                          const result = await syncGoogleCalendar(scopeUserId || undefined);
+                          toast.success(result.upserted ? `Synced ${result.upserted} event${result.upserted === 1 ? "" : "s"}` : "Already up to date");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Could not sync");
+                        } finally {
+                          setGcalBusy(false);
+                        }
+                      }}>Sync now</Button>
+                      <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
+                        setGcalBusy(true);
+                        try {
+                          await disconnectGoogleCalendar();
+                          toast.success("Google Calendar disconnected");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Could not disconnect");
+                        } finally {
+                          setGcalBusy(false);
+                        }
+                      }}>Disconnect</Button>
+                    </>
+                  ) : (
+                    <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                      setGcalBusy(true);
+                      try {
+                        window.location.href = await startGoogleCalendarConnect();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
+                        setGcalBusy(false);
+                      }
+                    }}>Connect Google Calendar</Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Member colours */}
             <div className="space-y-2">

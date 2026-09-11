@@ -47,6 +47,8 @@ export const getDevicePairingStatus = onCall(async (request) => {
 export const approveDevicePairing = onCall(async (request) => {
   const uid = await requireAccountAuth(request);
   const pairingId = pairingIdFrom(request);
+  const profile = await admin.firestore().doc(`users/${uid}`).get();
+  const householdId = String(profile.data()?.householdId || uid);
 
   const ref = admin.firestore().doc(`devicePairings/${pairingId}`);
   await admin.firestore().runTransaction(async (tx) => {
@@ -58,14 +60,12 @@ export const approveDevicePairing = onCall(async (request) => {
     tx.update(ref, {
       status: "approved",
       uid,
-      // A display belongs to exactly the approving account. Never inherit
-      // the phone's currently selected household, which can change later.
-      householdId: uid,
+      householdId,
       approvedAt: FieldValue.serverTimestamp(),
     });
   });
 
-  logger.info("approveDevicePairing: approved", { pairingId, uid });
+  logger.info("approveDevicePairing: approved", { pairingId, uid, householdId });
   return { success: true };
 });
 
@@ -207,8 +207,13 @@ export const getHouseholdCalendarEvents = onCall(async (request) => {
   const uid = requireAuth(request);
   const householdId = String(request.data?.householdId || "");
   if (!householdId) throw new HttpsError("invalid-argument", "householdId is required.");
-  if (request.auth?.token?.deviceId && householdId !== uid) {
-    throw new HttpsError("permission-denied", "Remote displays are restricted to the paired account calendar.");
+  if (request.auth?.token?.deviceId) {
+    const deviceId = String(request.auth.token.deviceId);
+    const deviceSnap = await admin.firestore().doc(`devices/${deviceId}`).get();
+    const pairedHousehold = String(deviceSnap.data()?.householdId || uid);
+    if (householdId !== uid && householdId !== pairedHousehold) {
+      throw new HttpsError("permission-denied", "Remote displays can only read the household they were paired with.");
+    }
   }
 
   const memberIds = await resolveHouseholdMemberIds(uid, householdId);

@@ -154,6 +154,17 @@ export { researchHolidayDestination } from "./holidayAi";
 
 // ── Security posture scans (Admin dashboard) ──
 export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans } from "./securityScan";
+export { runDeepSecurityScan } from "./securityDeepScan";
+export { recordAuthEvent, listLoginEvents, setUserEnabled } from "./loginEvents";
+export {
+	getSoftphoneConfig,
+	getSoftphoneVoiceToken,
+	sendSoftphoneSms,
+	startSoftphoneCall,
+	twilioVoiceWebhook,
+	twilioSmsWebhook,
+	twilioStatusWebhook,
+} from "./softphone";
 
 // ── 1Password Connect sync ──
 export { onePasswordConnect } from "./onePassword";
