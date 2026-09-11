@@ -1,15 +1,9 @@
-import { useEffect, useState } from "react";
-import { Lightbulb, Loader2, Plus, Sunrise, Trash2, Wifi, WifiOff } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { Palette, Plus, Sunrise, Trash2, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
-import { useLightPairing } from "@/hooks/useLightPairing";
-import { sendLightCommand } from "@/lib/lightPairingApi";
 import { describeLightStatus } from "@/lib/deviceStatus";
+import { AddLightDialog } from "@/components/display/AddLightDialog";
 import type { LinkedDevice } from "@/hooks/useMyDevices";
 
 const STATUS_TONE_CLASS = {
@@ -18,196 +12,39 @@ const STATUS_TONE_CLASS = {
   error: "text-destructive",
 };
 
+/**
+ * Purely add/status/delete — no manual control here. Every light this app
+ * can currently pair runs the project's own single-channel firmware (see
+ * firmware/sunrise-light), so "Single colour" is accurate today rather than
+ * a real per-device capability check; revisit if/when a multi-colour light
+ * becomes pairable. Manual on/off/brightness/colour/sunrise-look controls
+ * live on the Connected Devices page instead (LightManualControls).
+ */
 function LightRow({ light, onForget }: { light: LinkedDevice; onForget: (id: string) => void }) {
-  const { device, updateLightSunrise } = useDeviceSettings(light.id);
-  const [pending, setPending] = useState(false);
+  const { device } = useDeviceSettings(light.id);
   if (!device) return null;
-  const { manual, sunrise } = device.settings.light;
   const status = describeLightStatus(device.settings.light);
 
-  const send = async (patch: { on?: boolean; brightness?: number; colorHex?: string }) => {
-    setPending(true);
-    try {
-      await sendLightCommand(light.id, patch);
-    } catch {
-      toast.error("Could not reach that light.");
-    } finally {
-      setPending(false);
-    }
-  };
-
   return (
-    <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/30 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Lightbulb className={`h-4 w-4 shrink-0 ${manual.on ? "text-amber-400" : "text-muted-foreground"}`} />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{light.label}</p>
-            <p className={`flex items-center gap-1 text-[11px] font-medium ${STATUS_TONE_CLASS[status.tone]}`}>
-              {status.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              {status.label}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Switch checked={manual.on} disabled={pending} onCheckedChange={(value) => void send({ on: value })} />
-          <button
-            type="button"
-            onClick={() => { if (window.confirm(`Disconnect ${light.label}?`)) onForget(light.id); }}
-            className="p-1.5 text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="flex items-center justify-between gap-2 rounded-2xl border border-border/50 bg-muted/30 p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{light.label}</p>
+        <p className={`flex items-center gap-1 text-[11px] font-medium ${STATUS_TONE_CLASS[status.tone]}`}>
+          {status.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+          {status.label}
+        </p>
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <Palette className="h-3 w-3" /> Single colour
+        </p>
       </div>
-      <div className="flex items-center gap-3">
-        <Label className="w-20 shrink-0 text-xs">Brightness</Label>
-        <input
-          type="range"
-          min={1}
-          max={255}
-          value={manual.brightness}
-          onChange={(event) => void send({ brightness: Number(event.target.value) })}
-          className="flex-1"
-        />
-      </div>
-      <div className="flex items-center gap-3">
-        <Label className="w-20 shrink-0 text-xs">Colour</Label>
-        <input
-          type="color"
-          value={manual.colorHex}
-          onChange={(event) => void send({ colorHex: event.target.value })}
-          className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-        />
-      </div>
-      <details className="text-xs">
-        <summary className="cursor-pointer font-semibold text-muted-foreground">Sunrise look</summary>
-        <div className="mt-2 space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="w-20 shrink-0 text-xs">Ramp over</Label>
-            <select
-              value={sunrise.rampMinutes}
-              onChange={(event) => void updateLightSunrise({ rampMinutes: Number(event.target.value) })}
-              className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-xs"
-            >
-              {[10, 15, 20, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="w-20 shrink-0 text-xs">From / to</Label>
-            <input
-              type="color"
-              value={sunrise.colorFrom}
-              onChange={(event) => void updateLightSunrise({ colorFrom: event.target.value })}
-              className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-            />
-            <input
-              type="color"
-              value={sunrise.colorTo}
-              onChange={(event) => void updateLightSunrise({ colorTo: event.target.value })}
-              className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-            />
-          </div>
-        </div>
-      </details>
+      <button
+        type="button"
+        onClick={() => { if (window.confirm(`Disconnect ${light.label}?`)) onForget(light.id); }}
+        className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </div>
-  );
-}
-
-// Pairing needs the browser to fetch a plain-http local address from this
-// https-served app — only Chromium browsers (Chrome, Edge, Brave, Opera)
-// can be granted that via a permission prompt. Firefox and Safari have no
-// equivalent and silently block the request with no prompt at all, so this
-// warns up front instead of letting the dialog fail with no explanation.
-const isChromiumBrowser = () => /Chrome|Chromium|Edg\//i.test(navigator.userAgent);
-
-function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { state, start, configure, reset } = useLightPairing();
-  const [homeSsid, setHomeSsid] = useState("");
-  const [homePassword, setHomePassword] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setHomeSsid("");
-      setHomePassword("");
-      void start();
-    } else {
-      reset();
-    }
-    // start/reset are stable across renders; this should only re-run when the dialog opens or closes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  useEffect(() => {
-    if (state.phase === "claimed") {
-      toast.success("Light connected!");
-      onOpenChange(false);
-    }
-  }, [state.phase, onOpenChange]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mx-4 max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display"><Sunrise className="h-4 w-4" /> Add a sunrise light</DialogTitle>
-        </DialogHeader>
-
-        {!isChromiumBrowser() && (
-          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-            This step needs Chrome, Edge, or another Chromium-based browser — Firefox and Safari can't grant
-            access to the light's local network, so pairing will fail here.
-          </p>
-        )}
-
-        {(state.phase === "idle" || state.phase === "starting") && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Getting ready…</p>
-        )}
-
-        {state.phase === "ready_to_join" && (
-          <div className="space-y-3 text-sm">
-            <ol className="list-inside list-decimal space-y-2 text-muted-foreground">
-              <li>Power on the light. It will broadcast its own WiFi network (usually named "WLED-AP").</li>
-              <li>On this device, join that network now — the password is usually <code className="rounded bg-muted px-1">wled1234</code>.</li>
-              <li>Come back here and enter your home WiFi details below.</li>
-            </ol>
-            <div className="space-y-2">
-              <Label className="text-xs">Home WiFi name</Label>
-              <Input value={homeSsid} onChange={(event) => setHomeSsid(event.target.value)} className="h-9 rounded-xl" />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Home WiFi password</Label>
-              <Input type="password" value={homePassword} onChange={(event) => setHomePassword(event.target.value)} className="h-9 rounded-xl" />
-            </div>
-            <Button
-              className="w-full gap-2 rounded-xl bg-gradient-primary"
-              disabled={!homeSsid.trim()}
-              onClick={() => void configure(homeSsid.trim(), homePassword)}
-            >
-              <Wifi className="h-4 w-4" /> Connect the light
-            </Button>
-          </div>
-        )}
-
-        {state.phase === "configuring" && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Sending it your WiFi details…
-          </p>
-        )}
-
-        {state.phase === "waiting" && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Reconnect this device to your home WiFi — waiting for the light to come online…
-          </p>
-        )}
-
-        {(state.phase === "error" || state.phase === "expired") && (
-          <div className="space-y-3 text-sm">
-            <p className="text-destructive">{state.error || "This pairing has expired."}</p>
-            <Button variant="outline" className="w-full rounded-xl" onClick={() => void start()}>Try again</Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -221,7 +58,7 @@ export function SunriseLightsPanel({ lights, onForget }: { lights: LinkedDevice[
           <Sunrise className="h-4 w-4 text-amber-500" />
           <div>
             <h2 className="font-display text-base font-bold">Sunrise lights</h2>
-            <p className="text-[11px] text-muted-foreground">Link an ESP32 light, then wake it alongside an alarm below.</p>
+            <p className="text-[11px] text-muted-foreground">Add or remove lights here — control them from Connected devices.</p>
           </div>
         </div>
         <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" onClick={() => setAddOpen(true)}>

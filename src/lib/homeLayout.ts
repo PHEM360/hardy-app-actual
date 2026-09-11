@@ -3,6 +3,7 @@ import {
   Activity,
   Building,
   Building2,
+  Cable,
   Calculator,
   CalendarDays,
   CheckSquare,
@@ -62,6 +63,7 @@ export const HOME_TILES: HomeTileDef[] = [
   { id: "ai", label: "AI Analysis", route: "/ai-analysis", icon: Sparkles, accent: "hsl(270,55%,52%)", gradient: "linear-gradient(135deg,hsl(270,55%,52%),hsl(250,50%,46%))" },
   { id: "email", label: "Email", route: "/email", icon: Mail, accent: "hsl(239,70%,58%)", gradient: "linear-gradient(135deg,hsl(239,70%,58%),hsl(260,60%,50%))" },
   { id: "displays", label: "Displays", route: "/remote-displays", icon: MonitorSmartphone, accent: "hsl(198,60%,46%)", gradient: "linear-gradient(135deg,hsl(198,65%,50%),hsl(210,60%,44%))" },
+  { id: "connected_devices", label: "Devices", route: "/connected-devices", icon: Cable, accent: "hsl(160,55%,40%)", gradient: "linear-gradient(135deg,hsl(160,58%,44%),hsl(172,52%,38%))" },
 ];
 
 export const HOME_TILE_BY_ID = Object.fromEntries(HOME_TILES.map((tile) => [tile.id, tile])) as Record<string, HomeTileDef>;
@@ -88,6 +90,7 @@ export const DEFAULT_HOME_TILE_ORDER = [
   "ai",
   "email",
   "displays",
+  "connected_devices",
 ];
 
 export const DEFAULT_HOME_ROW_SIZES = [1, 2, 2, 3, 3, 4];

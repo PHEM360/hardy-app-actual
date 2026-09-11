@@ -10,6 +10,7 @@ import {
   Users,
   Activity,
   Building,
+  Cable,
   Palette,
   Bell,
   Settings,
@@ -221,6 +222,13 @@ const SECTIONS: Section[] = [
         icon: MonitorSmartphone,
         route: "/remote-displays",
         gradient: "linear-gradient(135deg, hsl(198,65%,50%), hsl(210,60%,44%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Connected Devices",
+        icon: Cable,
+        route: "/connected-devices",
+        gradient: "linear-gradient(135deg, hsl(160,58%,44%), hsl(172,52%,38%))",
         iconColor: "#fff",
       },
       {
