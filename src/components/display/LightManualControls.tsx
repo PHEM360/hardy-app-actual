@@ -1,23 +1,50 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
+import { Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { sendLightCommand } from "@/lib/lightPairingApi";
 import type { LinkedDevice } from "@/hooks/useMyDevices";
 
+function LightToggle({ on, pending, onChange }: { on: boolean; pending: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <motion.button
+      type="button"
+      disabled={pending}
+      onClick={() => onChange(!on)}
+      whileTap={{ scale: 0.95 }}
+      aria-pressed={on}
+      aria-label={on ? "Turn light off" : "Turn light on"}
+      className={`relative h-9 w-16 shrink-0 rounded-full border-2 transition-colors duration-300 disabled:opacity-60 ${
+        on
+          ? "border-amber-400 bg-gradient-to-r from-amber-400 to-orange-400 shadow-[0_0_16px_rgba(251,191,36,0.55)]"
+          : "border-border bg-muted"
+      }`}
+    >
+      <motion.span
+        animate={{ x: on ? 30 : 2 }}
+        transition={{ type: "spring", stiffness: 500, damping: 32 }}
+        className={`absolute top-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-md ${on ? "bg-white" : "bg-background"}`}
+      >
+        <Lightbulb className={`h-4 w-4 ${on ? "text-amber-500" : "text-muted-foreground"}`} />
+      </motion.span>
+    </motion.button>
+  );
+}
+
 /**
- * Manual, no-alarm-needed control for a sunrise light: on/off, brightness,
- * colour, and its default sunrise look (used by the once-a-minute ramp).
- * Lives on the Connected Devices page — src/components/display/
- * SunriseLightsPanel.tsx is a pure add/status/delete list and intentionally
- * has none of this.
+ * Quick, everyday manual control: on/off and brightness/colour, for a light
+ * already turned on. Its own default sunrise look, default manual settings,
+ * and schedule live in LightDefaultsSections instead (shown alongside this
+ * on the Connected Devices page, and in the Remote Displays detail dialog),
+ * since those are edited far less often than a plain on/off/brightness flip.
  */
 export function LightManualControls({ light }: { light: LinkedDevice }) {
-  const { device, updateLightSunrise } = useDeviceSettings(light.id);
+  const { device } = useDeviceSettings(light.id);
   const [pending, setPending] = useState(false);
   if (!device) return null;
-  const { manual, sunrise } = device.settings.light;
+  const { manual, colorCapable } = device.settings.light;
 
   const send = async (patch: { on?: boolean; brightness?: number; colorHex?: string }) => {
     setPending(true);
@@ -34,7 +61,7 @@ export function LightManualControls({ light }: { light: LinkedDevice }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs">On</Label>
-        <Switch checked={manual.on} disabled={pending} onCheckedChange={(value) => void send({ on: value })} />
+        <LightToggle on={manual.on} pending={pending} onChange={(value) => void send({ on: value })} />
       </div>
       <div className="flex items-center gap-3">
         <Label className="w-20 shrink-0 text-xs">Brightness</Label>
@@ -52,40 +79,12 @@ export function LightManualControls({ light }: { light: LinkedDevice }) {
         <input
           type="color"
           value={manual.colorHex}
+          disabled={!colorCapable}
           onChange={(event) => void send({ colorHex: event.target.value })}
-          className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
+          className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         />
+        {!colorCapable && <span className="text-[11px] text-muted-foreground">Single colour — can't be changed</span>}
       </div>
-      <details className="text-xs">
-        <summary className="cursor-pointer font-semibold text-muted-foreground">Sunrise look</summary>
-        <div className="mt-2 space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="w-20 shrink-0 text-xs">Ramp over</Label>
-            <select
-              value={sunrise.rampMinutes}
-              onChange={(event) => void updateLightSunrise({ rampMinutes: Number(event.target.value) })}
-              className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-xs"
-            >
-              {[10, 15, 20, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="w-20 shrink-0 text-xs">From / to</Label>
-            <input
-              type="color"
-              value={sunrise.colorFrom}
-              onChange={(event) => void updateLightSunrise({ colorFrom: event.target.value })}
-              className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-            />
-            <input
-              type="color"
-              value={sunrise.colorTo}
-              onChange={(event) => void updateLightSunrise({ colorTo: event.target.value })}
-              className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-            />
-          </div>
-        </div>
-      </details>
     </div>
   );
 }

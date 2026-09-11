@@ -8,6 +8,7 @@ import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { lastSeenLabel, timestampMs, describeLightStatus } from "@/lib/deviceStatus";
 import { AddLightDialog } from "@/components/display/AddLightDialog";
 import { LightManualControls } from "@/components/display/LightManualControls";
+import { SunriseDefaultsSection, ManualDefaultsSection, ScheduleSection } from "@/components/display/LightDefaultsSections";
 
 const STATUS_TONE_CLASS = {
   ok: "text-emerald-500",
@@ -45,9 +46,14 @@ function DisplayRow({ device, onForget }: { device: LinkedDevice; onForget: (id:
 function LightRow({ device, onForget }: { device: LinkedDevice; onForget: (id: string) => void }) {
   const { device: full } = useDeviceSettings(device.id);
   const status = full ? describeLightStatus(full.settings.light) : null;
+  const on = full?.settings.light.manual.on ?? false;
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/30 p-3">
+    <div
+      className={`space-y-3 rounded-2xl border p-3 transition-colors duration-500 ${
+        on ? "border-amber-400/50 bg-gradient-to-br from-amber-400/10 via-orange-400/5 to-transparent shadow-[0_0_24px_-8px_rgba(251,191,36,0.5)]" : "border-border/50 bg-muted/30"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{device.label}</p>
@@ -67,12 +73,22 @@ function LightRow({ device, onForget }: { device: LinkedDevice; onForget: (id: s
         </button>
       </div>
       <LightManualControls light={device} />
+      {full && (
+        <details className="text-xs">
+          <summary className="cursor-pointer font-semibold text-muted-foreground">Defaults &amp; schedule</summary>
+          <div className="mt-3 space-y-4">
+            <SunriseDefaultsSection deviceId={device.id} colorCapable={full.settings.light.colorCapable} />
+            <ManualDefaultsSection deviceId={device.id} colorCapable={full.settings.light.colorCapable} />
+            <ScheduleSection deviceId={device.id} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
 
 export default function ConnectedDevices() {
-  const { devices, loading, forgetDevice } = useMyDevices();
+  const { devices, loading, renameDevice, forgetDevice } = useMyDevices();
   const [addLightOpen, setAddLightOpen] = useState(false);
   const displays = devices.filter((d) => d.deviceType === "display");
   const lights = devices.filter((d) => d.deviceType === "light");
@@ -122,7 +138,7 @@ export default function ConnectedDevices() {
           </div>
         </div>
       )}
-      <AddLightDialog open={addLightOpen} onOpenChange={setAddLightOpen} />
+      <AddLightDialog open={addLightOpen} onOpenChange={setAddLightOpen} onPaired={renameDevice} />
     </FeaturePageShell>
   );
 }

@@ -14,15 +14,26 @@ import { useLightPairing } from "@/hooks/useLightPairing";
 // warns up front instead of letting the dialog fail with no explanation.
 const isChromiumBrowser = () => /Chrome|Chromium|Edg\//i.test(navigator.userAgent);
 
-export function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function AddLightDialog({
+  open,
+  onOpenChange,
+  onPaired,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Called with the new device's id once claimed, so the caller can save the name entered below. */
+  onPaired?: (deviceId: string, label: string) => void;
+}) {
   const { state, start, configure, reset } = useLightPairing();
   const [homeSsid, setHomeSsid] = useState("");
   const [homePassword, setHomePassword] = useState("");
+  const [lightName, setLightName] = useState("");
 
   useEffect(() => {
     if (open) {
       setHomeSsid("");
       setHomePassword("");
+      setLightName("");
       void start();
     } else {
       reset();
@@ -31,12 +42,11 @@ export function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  useEffect(() => {
-    if (state.phase === "claimed") {
-      toast.success("Light connected!");
-      onOpenChange(false);
-    }
-  }, [state.phase, onOpenChange]);
+  const finishNaming = () => {
+    if (state.deviceId && lightName.trim() && onPaired) onPaired(state.deviceId, lightName.trim());
+    toast.success("Light connected!");
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,6 +101,27 @@ export function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Reconnect this device to your home WiFi — waiting for the light to come online…
           </p>
+        )}
+
+        {state.phase === "claimed" && (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">Connected! What should this light be called?</p>
+            <Input
+              value={lightName}
+              onChange={(event) => setLightName(event.target.value)}
+              placeholder="e.g. Kids' bedroom"
+              className="h-9 rounded-xl"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { toast.success("Light connected!"); onOpenChange(false); }}>
+                Skip
+              </Button>
+              <Button className="flex-1 rounded-xl bg-gradient-primary" disabled={!lightName.trim()} onClick={finishNaming}>
+                Save
+              </Button>
+            </div>
+          </div>
         )}
 
         {(state.phase === "error" || state.phase === "expired") && (

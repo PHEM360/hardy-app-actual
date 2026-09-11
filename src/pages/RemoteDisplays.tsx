@@ -994,7 +994,7 @@ export default function RemoteDisplays() {
             </>
           )}
 
-          <SunriseLightsPanel lights={lights} onForget={forgetDevice} />
+          <SunriseLightsPanel lights={lights} onRename={renameDevice} onForget={forgetDevice} />
         </section>
       </div>
     </FeaturePageShell>

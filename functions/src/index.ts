@@ -114,6 +114,7 @@ export {
 } from "./lightPairing";
 export {
 	sendLightCommand,
+	scheduleLightAutoOff,
 	tickSunriseLights,
 	onLightRevoked,
 } from "./sunriseLights";

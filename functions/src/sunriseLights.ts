@@ -3,7 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, isExpired } from "./pairingUtils";
 import { hasSeenActivity, lightTopic, publishLightState, pollRetainedStatuses, MQTT_SECRETS } from "./mqttBroker";
 
@@ -21,6 +21,13 @@ interface AlarmLike {
   linkedLightIds?: string[];
 }
 
+function timestampMs(value: unknown): number {
+  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return 0;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace("#", "").padStart(6, "0");
   const value = parseInt(clean, 16) || 0;
@@ -35,6 +42,36 @@ function lerpColor(fromHex: string, toHex: string, t: number): [number, number, 
     Math.round(fg + (tg - fg) * t),
     Math.round(fb + (tb - fb) * t),
   ];
+}
+
+interface ScheduleLike {
+  enabled: boolean;
+  onTime: string;
+  offTime: string;
+  days: number[];
+}
+
+/**
+ * A light's own recurring on/off schedule, independent of any alarm.
+ * Overnight spans (onTime > offTime, e.g. on 22:00 / off 06:00) are
+ * supported, but `days` is checked against the *current* calendar day —
+ * for an overnight span that crosses midnight, the day check applies to
+ * whichever side of midnight "now" currently falls on, so a schedule
+ * restricted to a single day can cut off right at midnight rather than
+ * running through to its own offTime. Acceptable for a household light;
+ * revisit with per-session state if that ever matters here.
+ */
+function isWithinSchedule(schedule: ScheduleLike, now: Date): boolean {
+  if (!schedule.enabled) return false;
+  if (schedule.days.length > 0 && !schedule.days.includes(now.getDay())) return false;
+  const [onH, onM] = schedule.onTime.split(":").map(Number);
+  const [offH, offM] = schedule.offTime.split(":").map(Number);
+  const onMinutes = onH * 60 + onM;
+  const offMinutes = offH * 60 + offM;
+  if (onMinutes === offMinutes) return false;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (onMinutes < offMinutes) return nowMinutes >= onMinutes && nowMinutes < offMinutes;
+  return nowMinutes >= onMinutes || nowMinutes < offMinutes; // overnight wrap
 }
 
 /**
@@ -80,21 +117,54 @@ export const sendLightCommand = onCall({ secrets: MQTT_SECRETS }, async (request
   }
 
   const currentManual = data.settings?.light?.manual || { on: false, brightness: 180, colorHex: "#ffd27a" };
+  const manualDefaults = data.settings?.light?.manualDefaults || { brightness: 180, colorHex: "#ffd27a", autoOffMinutes: 0 };
   const requestedOn = request.data?.on;
   const requestedBrightness = request.data?.brightness;
   const requestedColor = request.data?.colorHex;
+  // Turning on from off, with no explicit brightness/colour given, restores
+  // this light's own preferred defaults rather than whatever it happened to
+  // be last set to — matches how most smart lights behave on a plain flip-on.
+  const turningOnFromOff = requestedOn === true && !currentManual.on;
   const nextManual = {
     on: typeof requestedOn === "boolean" ? requestedOn : currentManual.on,
     brightness: typeof requestedBrightness === "number"
       ? Math.min(255, Math.max(1, Math.round(requestedBrightness)))
-      : currentManual.brightness,
-    colorHex: typeof requestedColor === "string" ? requestedColor : currentManual.colorHex,
+      : turningOnFromOff ? manualDefaults.brightness : currentManual.brightness,
+    colorHex: typeof requestedColor === "string" ? requestedColor : turningOnFromOff ? manualDefaults.colorHex : currentManual.colorHex,
   };
 
   const [r, g, b] = hexToRgb(nextManual.colorHex);
   await publishLightState(deviceId, { on: nextManual.on, bri: nextManual.brightness, seg: [{ col: [[r, g, b]] }] }, 5);
-  await deviceRef.update({ "settings.light.manual": nextManual });
 
+  const update: Record<string, unknown> = { "settings.light.manual": nextManual };
+  if (nextManual.on && manualDefaults.autoOffMinutes > 0) {
+    update["settings.light.autoOffAt"] = Timestamp.fromMillis(Date.now() + manualDefaults.autoOffMinutes * 60_000);
+  } else if (!nextManual.on) {
+    update["settings.light.autoOffAt"] = FieldValue.delete();
+  }
+  await deviceRef.update(update);
+
+  return { success: true };
+});
+
+/** Lets the app (or an alarm's "off after N minutes" dismiss behavior) schedule a one-off auto-off, independent of manualDefaults.autoOffMinutes. */
+export const scheduleLightAutoOff = onCall(async (request) => {
+  const uid = requireAuth(request);
+  const deviceId = String(request.data?.deviceId || "");
+  const minutes = Number(request.data?.minutes);
+  if (!deviceId || !Number.isFinite(minutes) || minutes <= 0) {
+    throw new HttpsError("invalid-argument", "deviceId and a positive minutes value are required.");
+  }
+
+  const deviceRef = admin.firestore().doc(`devices/${deviceId}`);
+  const snap = await deviceRef.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Light not found.");
+  const data = snap.data()!;
+  if (data.uid !== uid || data.revoked === true || data.deviceType !== "light") {
+    throw new HttpsError("permission-denied", "You don't have access to this light.");
+  }
+
+  await deviceRef.update({ "settings.light.autoOffAt": Timestamp.fromMillis(Date.now() + minutes * 60_000) });
   return { success: true };
 });
 
@@ -161,13 +231,48 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
   for (const lightDoc of lightDocs.docs) {
     const light = lightDoc.data();
     try {
+      // Auto-off: fires once, from either a manual-default auto-off timer
+      // (set in sendLightCommand) or an alarm's "off after N minutes"
+      // dismiss behavior (scheduleLightAutoOff). Skipped if the light's own
+      // recurring schedule currently wants it on — schedule wins over a
+      // stale auto-off timer rather than fighting it every tick.
+      const schedule: ScheduleLike = light.settings?.light?.schedule || { enabled: false, onTime: "00:00", offTime: "00:00", days: [] };
+      const scheduleWantsOn = isWithinSchedule(schedule, now);
+      const autoOffAtMs = timestampMs(light.settings?.light?.autoOffAt);
+      if (autoOffAtMs && autoOffAtMs <= now.getTime() && !scheduleWantsOn) {
+        await publishLightState(lightDoc.id, { on: false }, 20);
+        await lightDoc.ref.update({ "settings.light.manual.on": false, "settings.light.autoOffAt": FieldValue.delete() });
+      }
+
+      // Recurring on/off schedule — publishes only on a transition (not
+      // every tick) so it doesn't fight manual control while already in
+      // its steady state.
+      const desiredScheduleState = scheduleWantsOn ? "on" : "off";
+      if (schedule.enabled && desiredScheduleState !== light.settings?.light?.scheduleState) {
+        const defaults = light.settings?.light?.manualDefaults || { brightness: 180, colorHex: "#ffd27a" };
+        const [dr, dg, db_] = hexToRgb(defaults.colorHex);
+        await publishLightState(
+          lightDoc.id,
+          scheduleWantsOn
+            ? { on: true, bri: defaults.brightness, seg: [{ col: [[dr, dg, db_]] }] }
+            : { on: false },
+          600,
+        );
+        await lightDoc.ref.update({
+          "settings.light.scheduleState": desiredScheduleState,
+          "settings.light.manual": scheduleWantsOn
+            ? { on: true, brightness: defaults.brightness, colorHex: defaults.colorHex }
+            : { ...light.settings?.light?.manual, on: false },
+        });
+      }
+
       const displayDocs = await db.collection("devices")
         .where("uid", "==", light.uid)
         .where("deviceType", "==", "display")
         .get();
       const alarms: AlarmLike[] = displayDocs.docs.flatMap((d) => (d.data().settings?.alarms || []) as AlarmLike[]);
       const progress = sunriseProgressForLight(alarms, lightDoc.id, now);
-      if (progress <= 0) continue; // no ramp due right now — leave the light at whatever it was last manually set to
+      if (progress <= 0) continue; // no ramp due right now — leave the light at whatever it was last manually/schedule/auto-off set to
 
       const sunrise = light.settings?.light?.sunrise || {};
       const peakBrightness = sunrise.peakBrightness || 220;

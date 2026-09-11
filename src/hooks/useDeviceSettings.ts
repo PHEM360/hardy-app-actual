@@ -90,20 +90,55 @@ export interface SceneRotationSettings {
   rotateSeconds: number;
 }
 
+/** A light's own default look for the sunrise ramp — the starting point an alarm's per-alarm override is pre-filled from. */
+export interface LightSunriseDefaults {
+  rampMinutes: number;
+  peakBrightness: number;
+  colorFrom: string;
+  colorTo: string;
+  /** A separate warm-white tint, distinct from the colorFrom/colorTo gradient. */
+  warmthColor: string;
+}
+
+/** Applied whenever this light is turned on manually without explicit brightness/colour (e.g. a plain on/off flip). */
+export interface LightManualDefaults {
+  brightness: number;
+  colorHex: string;
+  /** Minutes after a manual "on" before it auto-offs. 0 = never. */
+  autoOffMinutes: number;
+}
+
+export interface LightScheduleSettings {
+  enabled: boolean;
+  onTime: string; // "HH:mm"
+  offTime: string; // "HH:mm"
+  /** 0=Sun..6=Sat; empty = every day. */
+  days: number[];
+}
+
 /**
- * An ESP32 sunrise light running stock WLED, paired once and controlled from
- * the cloud via MQTT (see functions/src/sunriseLights.ts). No MQTT password
- * ever lives here — the broker is the sole authority on that credential;
- * this is just enough metadata to address and later revoke it.
+ * An ESP32 sunrise light, paired once and controlled from the cloud via
+ * MQTT (see functions/src/sunriseLights.ts). No MQTT password ever lives
+ * here — the broker is the sole authority on that credential; this is just
+ * enough metadata to address and later revoke it.
  */
 export interface LightSettings {
   mqttTopic: string;
   mqttUsername?: string;
   brokerCredentialId?: string;
+  /** Whether this light can actually show colour — false for the project's own single-channel firmware (see firmware/sunrise-light). Colour controls grey out when false. */
+  colorCapable: boolean;
+  notes: string;
   manual: { on: boolean; brightness: number; colorHex: string };
-  sunrise: { rampMinutes: number; peakBrightness: number; colorFrom: string; colorTo: string };
+  manualDefaults: LightManualDefaults;
+  sunrise: LightSunriseDefaults;
+  schedule: LightScheduleSettings;
   online: boolean;
   lastReportedAt?: unknown;
+  /** Set by scheduleLightAutoOff / a manual-default auto-off; cleared once tickSunriseLights acts on it. */
+  autoOffAt?: unknown;
+  /** Internal — tickSunriseLights' own record of the schedule's last on/off decision, so it only publishes on a transition, not every tick. */
+  scheduleState?: "on" | "off";
 }
 
 export interface DeviceSettings {
@@ -143,8 +178,12 @@ export const DEFAULT_SCENE_ROTATION_SETTINGS: SceneRotationSettings = { rotateSe
 
 export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
   mqttTopic: "",
+  colorCapable: false,
+  notes: "",
   manual: { on: false, brightness: 180, colorHex: "#ffd27a" },
-  sunrise: { rampMinutes: 20, peakBrightness: 220, colorFrom: "#7c2d12", colorTo: "#fff7c2" },
+  manualDefaults: { brightness: 180, colorHex: "#ffd27a", autoOffMinutes: 0 },
+  sunrise: { rampMinutes: 20, peakBrightness: 220, colorFrom: "#7c2d12", colorTo: "#fff7c2", warmthColor: "#ffb347" },
+  schedule: { enabled: false, onTime: "18:00", offTime: "23:00", days: [] },
   online: false,
 };
 
@@ -219,7 +258,9 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
       ...DEFAULT_LIGHT_SETTINGS,
       ...(raw?.light ?? {}),
       manual: { ...DEFAULT_LIGHT_SETTINGS.manual, ...(raw?.light?.manual ?? {}) },
+      manualDefaults: { ...DEFAULT_LIGHT_SETTINGS.manualDefaults, ...(raw?.light?.manualDefaults ?? {}) },
       sunrise: { ...DEFAULT_LIGHT_SETTINGS.sunrise, ...(raw?.light?.sunrise ?? {}) },
+      schedule: { ...DEFAULT_LIGHT_SETTINGS.schedule, ...(raw?.light?.schedule ?? {}) },
     },
   };
 }
@@ -384,6 +425,37 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updateLightMeta = useCallback(
+    async (patch: { colorCapable?: boolean; notes?: string }) => {
+      if (!deviceId) return;
+      const update: Record<string, unknown> = {};
+      if (patch.colorCapable !== undefined) update["settings.light.colorCapable"] = patch.colorCapable;
+      if (patch.notes !== undefined) update["settings.light.notes"] = patch.notes;
+      await updateDoc(doc(db, "devices", deviceId), update);
+    },
+    [deviceId]
+  );
+
+  const updateLightManualDefaults = useCallback(
+    async (patch: Partial<LightManualDefaults>) => {
+      if (!deviceId || !device) return;
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.light.manualDefaults": { ...device.settings.light.manualDefaults, ...patch },
+      });
+    },
+    [deviceId, device]
+  );
+
+  const updateLightSchedule = useCallback(
+    async (patch: Partial<LightScheduleSettings>) => {
+      if (!deviceId || !device) return;
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.light.schedule": { ...device.settings.light.schedule, ...patch },
+      });
+    },
+    [deviceId, device]
+  );
+
   const updatePages = useCallback(
     async (pages: DisplayPage[]) => {
       if (!deviceId) return;
@@ -408,6 +480,9 @@ export function useDeviceSettings(deviceId: string | null) {
     updateSceneSettings,
     updateNightMode,
     updateLightSunrise,
+    updateLightMeta,
+    updateLightManualDefaults,
+    updateLightSchedule,
     updatePages,
   };
 }
