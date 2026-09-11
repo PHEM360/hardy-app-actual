@@ -163,6 +163,8 @@ export interface DeviceSettings {
   pages: DisplayPage[];
   nightMode: NightModeSettings;
   light: LightSettings;
+  /** Keep the kiosk screen awake (Wake Lock) whenever the display is linked. */
+  alwaysOn: boolean;
 }
 
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
@@ -266,6 +268,7 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
     pages: (Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw)).map(applyPageLayout),
     nightMode: { ...DEFAULT_NIGHT_MODE, ...(raw?.nightMode ?? {}) },
+    alwaysOn: raw?.alwaysOn !== false,
     light: {
       ...DEFAULT_LIGHT_SETTINGS,
       ...(raw?.light ?? {}),
@@ -417,6 +420,14 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updateAlwaysOn = useCallback(
+    async (alwaysOn: boolean) => {
+      if (!deviceId) return;
+      await updateDoc(doc(db, "devices", deviceId), { "settings.alwaysOn": alwaysOn });
+    },
+    [deviceId],
+  );
+
   const updateNightMode = useCallback(
     async (patch: Partial<NightModeSettings>) => {
       if (!deviceId || !device) return;
@@ -491,6 +502,7 @@ export function useDeviceSettings(deviceId: string | null) {
     updateOverviewSettings,
     updateSceneSettings,
     updateNightMode,
+    updateAlwaysOn,
     updateLightSunrise,
     updateLightMeta,
     updateLightManualDefaults,

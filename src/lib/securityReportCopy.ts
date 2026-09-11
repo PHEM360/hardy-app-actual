@@ -59,11 +59,17 @@ const KNOWN: Record<string, Partial<PlainSecurityFinding>> = {
     impact: "Nice to have to move the key to a server secret later. Not an open write hole any more.",
     fix: "Keep the key in Settings as an admin. When you can, move it to Secret Manager.",
   },
+  "arch-login-audit": {
+    summary: "Sign-ins and failed attempts are saved for the admin.",
+    meaning: "You can see recent passkey, password and failed logins on the Security dashboard.",
+    impact: "This is a strength.",
+    fix: "Leave this as it is.",
+  },
   "arch-no-login-audit": {
-    summary: "There is no saved list of who logged in or failed a passkey.",
-    meaning: "If something odd happened last Tuesday, the app cannot show you a history of logins.",
-    impact: "Nice to have for a family app. It does not mean someone is in.",
-    fix: "Add a login history later if you want one. Not urgent.",
+    summary: "Sign-ins and failed attempts are now saved for the admin.",
+    meaning: "Login history is written to loginEvents and shown on the Security dashboard.",
+    impact: "This is a strength.",
+    fix: "Leave this as it is.",
   },
   "arch-vault-strong": {
     summary: "Password vaults stay private even from admins.",
@@ -156,6 +162,8 @@ export function computeHonestSecurityScore(findings: SecurityFinding[]): number 
   let other = 0;
   let headers = 0;
   for (const finding of findings) {
+    if ((finding.kind || "security") !== "security") continue;
+    if (finding.severity === "info") continue;
     const weight = SEVERITY_WEIGHT[finding.severity] || 0;
     if (finding.id.startsWith("hdr-")) headers += weight;
     else other += weight;
@@ -163,35 +171,40 @@ export function computeHonestSecurityScore(findings: SecurityFinding[]): number 
   return Math.max(0, Math.min(100, 100 - other - Math.min(12, headers)));
 }
 
-export function scoreHeadline(score: number): string {
+export function scoreHeadline(score: number, findings: SecurityFinding[] = []): string {
+  const security = findings.filter((f) => (f.kind || "security") === "security" && f.severity !== "info");
+  if (security.some((f) => f.severity === "critical")) return "Fix these security issues now";
+  if (security.some((f) => f.severity === "high")) return "Security gaps need attention soon";
   if (score >= 90) return "In good shape";
   if (score >= 75) return "Solid, with a few tidy-ups";
   if (score >= 60) return "Fine for a private family app, with work still worth doing";
-  if (score >= 40) return "Needs attention, but this is not an emergency";
-  return "Needs prompt work";
+  if (security.every((f) => f.severity === "low") || security.length === 0) {
+    return "Not wide open — these are hardening and tidy-ups";
+  }
+  return "Some hardening is worth doing";
 }
 
 export function explainScore(report: Pick<SecurityReport, "score" | "findings" | "summary">): string {
-  const actionable = report.findings.filter((f) => f.severity !== "info");
-  const critical = actionable.filter((f) => f.severity === "critical").length;
-  const high = actionable.filter((f) => f.severity === "high").length;
-  const medium = actionable.filter((f) => f.severity === "medium").length;
+  const security = report.findings.filter((f) => (f.kind || "security") === "security" && f.severity !== "info");
+  const critical = security.filter((f) => f.severity === "critical").length;
+  const high = security.filter((f) => f.severity === "high").length;
+  const medium = security.filter((f) => f.severity === "medium").length;
   const parts: string[] = [];
 
   if (critical + high === 0 && medium === 0) {
-    parts.push("The score is high because the scan did not find anything that lets the wrong person in.");
+    parts.push("The security score is about how easy it would be for the wrong person to get in. Nothing here looks like a break-in.");
   } else if (critical + high === 0) {
     parts.push(
-      `The score is ${report.score} because of ${medium} item${medium === 1 ? "" : "s"} worth doing — seatbelts and tidy-ups, not a break-in.`,
+      `The score is ${report.score} because of ${medium} hardening item${medium === 1 ? "" : "s"} — seatbelts and tidy-ups, not a break-in.`,
     );
   } else {
     parts.push(
-      `The score is ${report.score} mainly because of ${critical + high} more serious item${critical + high === 1 ? "" : "s"} (labelled Fix now / Fix soon).`,
+      `The score is ${report.score} mainly because of ${critical + high} more serious security item${critical + high === 1 ? "" : "s"} (labelled Fix now / Fix soon).`,
     );
   }
 
   parts.push(
-    "100 is a clean bill of health. Points come off once per real issue. The same missing website header on two addresses is not counted twice. Notes marked Looking good do not lower the score.",
+    "Improvements that are not security holes sit in their own list. Notes marked Looking good do not lower the score.",
   );
 
   if (report.summary.passkeyMissing > 0) {

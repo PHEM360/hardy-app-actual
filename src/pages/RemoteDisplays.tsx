@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
-  Moon, Palette, Plus, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X,
+  Moon, Palette, Plus, Search, Sparkles, Sunrise, Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,8 @@ const BACKDROPS: DisplayBackdropKind[] = ["none", "weather", "stars", "snow", "r
 function PairingSteps() {
   const steps = [
     { title: "On the screen itself", body: "Open a browser on the tablet, TV or Pi and go to hardyapp.co.uk/display." },
-    { title: "Scan its QR code", body: "Use the phone you are signed in on. One passkey check covers seven days." },
-    { title: "Approve it", body: "Tap approve on your phone. The screen starts showing your pages here." },
+    { title: "Scan its QR code", body: "Use the phone you are signed in on. Approving a new screen uses your passkey if it is due." },
+    { title: "Approve it", body: "Tap approve. The screen stays signed in until you disconnect it — no passkey every week on the display." },
   ];
   return (
     <div className="mb-4 overflow-hidden rounded-3xl border border-primary/25 shadow-card">
@@ -97,7 +97,7 @@ export default function RemoteDisplays() {
   const loadedDeviceRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
-  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode } = useDeviceSettings(selectedDeviceId);
+  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode, updateAlwaysOn } = useDeviceSettings(selectedDeviceId);
   const { photos, loading: photosLoading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
   const photoLibrary = useOwnPhotoLibrary();
   const albumPhotos = useMemo(() => photoLibrary.photos.map((photo) => ({
@@ -932,6 +932,28 @@ export default function RemoteDisplays() {
                 onDelete={deletePhoto}
                 onAddPhotoPage={() => addPreset("photo-frame")}
               />
+
+              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                <div className="mb-3 flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-amber-400" />
+                  <div>
+                    <h2 className="font-display text-base font-bold">Always on</h2>
+                    <p className="text-[11px] text-muted-foreground">Keep this screen awake so it can be a photo frame or daily board overnight.</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-[color-mix(in_srgb,hsl(38,92%,50%)_10%,var(--card))] px-3 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">Never let this display sleep</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Uses the browser wake lock. On an iPad, also turn on Guided Access and disable Auto-Lock. On a Pi, disable screen blanking.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={device.settings.alwaysOn !== false}
+                    onCheckedChange={(checked) => void updateAlwaysOn(checked)}
+                  />
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
                 <div className="mb-3 flex items-center gap-2">

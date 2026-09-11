@@ -17,6 +17,7 @@ import {
   markOpenSessionSatisfied,
   markSecurityAuthentication,
   markSecurityAuthenticationAt,
+  markTrustedDevice,
   passkeyClaimIsFresh,
   passkeyClaimVerifiedAt,
 } from "@/lib/securitySession";
@@ -107,7 +108,10 @@ function usePasskeyClaimFreshness(maxAgeDays: number, enabled: boolean) {
         if (!active) return;
         // Remember when the passkey was actually shown so the next page opens
         // without another round trip to discover the period is still running.
-        if (claimedAt > 0) markSecurityAuthenticationAt(uid, "passkey", claimedAt);
+        if (claimedAt > 0) {
+          markSecurityAuthenticationAt(uid, "passkey", claimedAt);
+          markTrustedDevice(uid, claimedAt);
+        }
         setVerifiedAtMs(claimedAt);
         setChecking(false);
       })

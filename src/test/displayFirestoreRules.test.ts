@@ -27,14 +27,16 @@ describe("remote display Firestore enforcement", () => {
         setDoc(doc(admin.firestore(), "users", "other"), { passkeyEnrolled: true }),
         setDoc(doc(admin.firestore(), "devices", "kitchen"), {
           uid: "owner",
-          revoked: false,
+        householdId: "family",
+        revoked: false,
           label: "Kitchen",
           settings: { alarms: [], nightMode: { scheduleEnabled: true, start: "21:00", end: "07:00", screen: "clock", override: "", overrideUntil: "", withAlarms: true } },
         }),
         setDoc(doc(admin.firestore(), "displayPhotos", "owner", "items", "photo"), { url: "https://example.com/photo.jpg" }),
         setDoc(doc(admin.firestore(), "tasks", "owner", "items", "task"), { title: "Put bins out" }),
         setDoc(doc(admin.firestore(), "calendar", "owner", "events", "event"), { title: "Dentist" }),
-        setDoc(doc(admin.firestore(), "finance", "owner", "accounts", "main"), { name: "Current account" }),
+        setDoc(doc(admin.firestore(), "birthdays", "mum"), { createdBy: "owner", householdId: "family", sharedWith: { mode: "all" } }),
+        setDoc(doc(admin.firestore(), "household", "family", "messages", "note"), { text: "Dinner at 6" }),
       ]);
     });
   });
@@ -59,6 +61,23 @@ describe("remote display Firestore enforcement", () => {
     await assertFails(getDoc(doc(display, "finance", "owner", "accounts", "main")));
     await assertFails(updateDoc(doc(display, "tasks", "owner", "items", "task"), { title: "Changed" }));
     await assertFails(updateDoc(doc(display, "devices", "kitchen"), { label: "Changed at the screen" }));
+  });
+
+  it("lets a paired display read birthdays and family notes for its household", async () => {
+    const display = context("owner", { deviceId: "kitchen" });
+    await assertSucceeds(getDoc(doc(display, "birthdays", "mum")));
+    await assertSucceeds(getDoc(doc(display, "household", "family", "messages", "note")));
+  });
+
+  it("lets the screen keep always-on without rewriting pages", async () => {
+    const display = context("owner", { deviceId: "kitchen" });
+    await assertSucceeds(updateDoc(doc(display, "devices", "kitchen"), {
+      settings: {
+        alarms: [],
+        alwaysOn: true,
+        nightMode: { scheduleEnabled: true, start: "21:00", end: "07:00", screen: "clock", override: "", overrideUntil: "", withAlarms: true },
+      },
+    }));
   });
 
   it("lets the screen itself toggle night mode without rewriting pages", async () => {

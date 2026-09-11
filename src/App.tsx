@@ -36,6 +36,7 @@ import TagScan from "@/pages/TagScan";
 import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
+import Softphone from "@/pages/Softphone";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
@@ -237,6 +238,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="calendar">
                   <CalendarPage />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/softphone"
+              element={
+                <RequireFeature featureKey="softphone">
+                  <Softphone />
                 </RequireFeature>
               }
             />

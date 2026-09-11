@@ -19,10 +19,13 @@ export type SecurityDealLabel =
   | "Nice to have"
   | "Looking good";
 
+export type SecurityFindingKind = "security" | "improvement" | "activity";
+
 export interface SecurityFinding {
   id: string;
   severity: SecurityFindingSeverity;
   category: SecurityFindingCategory;
+  kind?: SecurityFindingKind;
   title: string;
   description: string;
   recommendation: string;
@@ -68,7 +71,8 @@ export interface SecurityReport {
   breakdown: SecurityScoreBreakdown;
   findings: SecurityFinding[];
   recommendations: string[];
-  triggeredBy: "manual" | "scheduled";
+  triggeredBy: "manual" | "scheduled" | "ai_deep";
+  scanKind?: "quick" | "deep";
   triggeredByUid?: string;
   triggeredByEmail?: string;
   durationMs: number;
@@ -119,11 +123,13 @@ export const SEVERITY_WEIGHT: Record<SecurityFindingSeverity, number> = {
   info: 0,
 };
 
-/** Real issues count once. Repeated website-header notes are capped. */
+/** Real security issues count once. Improvements and notes do not flatten the grade. */
 export function computeSecurityScore(findings: SecurityFinding[]): number {
   let other = 0;
   let headers = 0;
   for (const finding of findings) {
+    if ((finding.kind || "security") !== "security") continue;
+    if (finding.severity === "info") continue;
     const weight = SEVERITY_WEIGHT[finding.severity] || 0;
     if (finding.id.startsWith("hdr-")) headers += weight;
     else other += weight;

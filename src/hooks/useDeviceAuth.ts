@@ -34,6 +34,7 @@ export function useDeviceAuth() {
   const pairingIdRef = useRef<string | null>(null);
   const claimSecretRef = useRef<string | null>(null);
   const pairingGenerationRef = useRef(0);
+  const revokedRef = useRef(false);
 
   // Resolve only server-minted display sessions. A normal account session
   // visiting /display is signed out instead of being promoted into a device.
@@ -44,7 +45,7 @@ export function useDeviceAuth() {
     async function resolve() {
       if (initializing) return;
       if (!user) {
-        setStatus("signed_out");
+        setStatus(revokedRef.current ? "revoked" : "signed_out");
         return;
       }
 
@@ -64,12 +65,15 @@ export function useDeviceAuth() {
         if (cancelled) return;
         const data = snap.exists() ? snap.data() : null;
         if (!data || data.uid !== user.uid || data.revoked === true) {
+          const wasRevoked = data?.revoked === true;
+          if (wasRevoked) revokedRef.current = true;
           window.localStorage.removeItem(DEVICE_ID_KEY);
           setDeviceId(null);
           await signOut(auth);
-          if (!cancelled) setStatus("signed_out");
+          if (!cancelled) setStatus(wasRevoked ? "revoked" : "signed_out");
           return;
         }
+        revokedRef.current = false;
 
         window.localStorage.setItem(DEVICE_ID_KEY, claimedDeviceId);
         if (deviceId !== claimedDeviceId) setDeviceId(claimedDeviceId);
@@ -81,10 +85,11 @@ export function useDeviceAuth() {
         // while retrying ordinary network failures without disconnecting.
         const code = String((error as { code?: unknown })?.code || "");
         if (code.includes("permission-denied") || code.includes("unauthenticated")) {
+          revokedRef.current = true;
           window.localStorage.removeItem(DEVICE_ID_KEY);
           setDeviceId(null);
           await signOut(auth).catch(() => {});
-          if (!cancelled) setStatus("signed_out");
+          if (!cancelled) setStatus("revoked");
         } else {
           setStatus("loading");
           retryTimer = setTimeout(() => setValidationNonce((value) => value + 1), POLL_INTERVAL_MS);
@@ -168,6 +173,8 @@ export function useDeviceAuth() {
   }, [status, restartNonce]);
 
   const restartPairing = useCallback(() => {
+    revokedRef.current = false;
+    setStatus("signed_out");
     setRestartNonce((n) => n + 1);
   }, []);
 

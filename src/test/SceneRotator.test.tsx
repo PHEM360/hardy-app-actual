@@ -42,6 +42,7 @@ function deviceWith(pages: DisplayPage[]): DeviceDoc {
       scenes: { rotateSeconds: 3_600 },
       pages,
       nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false, withAlarms: false },
+      alwaysOn: true,
       light: DEFAULT_LIGHT_SETTINGS,
     },
   };
