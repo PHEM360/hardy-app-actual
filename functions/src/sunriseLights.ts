@@ -248,7 +248,15 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
       // dismiss behavior (scheduleLightAutoOff). Skipped if the light's own
       // recurring schedule currently wants it on — schedule wins over a
       // stale auto-off timer rather than fighting it every tick.
-      const schedule: ScheduleLike = light.settings?.light?.schedule || { enabled: false, blocks: [] };
+      // Defensively normalized, not just defaulted-when-absent: a doc
+      // written by an older deploy (single onTime/offTime/days, no
+      // `blocks`) would otherwise pass the `||` fallback (it's a truthy
+      // object) and then throw on `.blocks.some(...)` below.
+      const rawSchedule = light.settings?.light?.schedule;
+      const schedule: ScheduleLike = {
+        enabled: rawSchedule?.enabled === true,
+        blocks: Array.isArray(rawSchedule?.blocks) ? rawSchedule.blocks : [],
+      };
       const scheduleWantsOn = isWithinSchedule(schedule, now);
       const autoOffAtMs = timestampMs(light.settings?.light?.autoOffAt);
       if (autoOffAtMs && autoOffAtMs <= now.getTime() && !scheduleWantsOn) {
