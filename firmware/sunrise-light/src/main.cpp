@@ -33,10 +33,8 @@
 
 // MOSFET gate pin. Series ~220-470R resistor from this pin to the gate, and
 // a ~10k pulldown from gate to source, are recommended so the strip stays
-// off (rather than flickering) while the board is booting. GPIO4 is a
-// generally-safe, non-strapping pin on most ESP32 dev boards, but check your
-// specific board's pinout before wiring.
-static const int LED_GPIO = 4;
+// off (rather than flickering) while the board is booting.
+static const int LED_GPIO = 27;
 static const int PWM_CHANNEL = 0;
 static const int PWM_FREQ_HZ = 19531; // matches WLED's own ESP32 PWM dimming frequency
 static const int PWM_RESOLUTION_BITS = 8;
@@ -103,7 +101,28 @@ bool isProvisioned() {
 
 // ---- Setup mode: local API matching stock WLED's, see wledLocalApi.ts ----
 
+// The app is served over HTTPS (Firebase Hosting); the browser treats these
+// requests to a bare local IP as cross-origin (needs CORS) *and*, separately,
+// as a "private network request" from a secure context — recent Chrome
+// gates that on its own permission prompt, older versions/trials gate it on
+// the Access-Control-Allow-Private-Network response header below. Both cost
+// nothing to include. This does not exempt the request from mixed-content
+// blocking on browsers with neither mechanism (e.g. Safari) — see
+// firmware/sunrise-light/README.md for what to do there.
+void sendCorsHeaders() {
+  setupServer.sendHeader("Access-Control-Allow-Origin", "*");
+  setupServer.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  setupServer.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+  setupServer.sendHeader("Access-Control-Allow-Private-Network", "true");
+}
+
+void handleOptionsPreflight() {
+  sendCorsHeaders();
+  setupServer.send(204);
+}
+
 void handleJsonInfo() {
+  sendCorsHeaders();
   StaticJsonDocument<256> doc;
   doc["mac"] = WiFi.macAddress();
   doc["name"] = "Hardy Hub Sunrise Light";
@@ -116,7 +135,8 @@ void handleJsonInfo() {
 // Mirrors provisionWledDevice()'s POST body shape:
 // { nw: { ins: [{ ssid, psk }] }, mqtt: { broker, port, user, psk, topics: { device } } }
 void handleJsonCfgPost() {
-  StaticJsonDocument<768> doc;
+  sendCorsHeaders();
+  StaticJsonDocument<1024> doc;
   if (deserializeJson(doc, setupServer.arg("plain")) != DeserializationError::Ok) {
     setupServer.send(400, "application/json", "{\"success\":false}");
     return;
@@ -146,6 +166,7 @@ void handleJsonCfgPost() {
 }
 
 void handleJsonStatePost() {
+  sendCorsHeaders();
   StaticJsonDocument<128> doc;
   deserializeJson(doc, setupServer.arg("plain"));
   setupServer.send(200, "application/json", "{\"success\":true}");
@@ -161,8 +182,11 @@ void startSetupMode() {
   WiFi.softAP("WLED-AP", "wled1234");
 
   setupServer.on("/json/info", HTTP_GET, handleJsonInfo);
+  setupServer.on("/json/info", HTTP_OPTIONS, handleOptionsPreflight);
   setupServer.on("/json/cfg", HTTP_POST, handleJsonCfgPost);
+  setupServer.on("/json/cfg", HTTP_OPTIONS, handleOptionsPreflight);
   setupServer.on("/json/state", HTTP_POST, handleJsonStatePost);
+  setupServer.on("/json/state", HTTP_OPTIONS, handleOptionsPreflight);
   setupServer.begin();
 
   Serial.println("Setup mode: broadcasting WLED-AP at 4.3.2.1 — pair this light from the app.");
