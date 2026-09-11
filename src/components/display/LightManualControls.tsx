@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { SmoothRange } from "@/components/ui/smooth-range";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { sendLightCommand } from "@/lib/lightPairingApi";
 import type { LinkedDevice } from "@/hooks/useMyDevices";
@@ -65,12 +66,11 @@ export function LightManualControls({ light }: { light: LinkedDevice }) {
       </div>
       <div className="flex items-center gap-3">
         <Label className="w-20 shrink-0 text-xs">Brightness</Label>
-        <input
-          type="range"
+        <SmoothRange
           min={1}
           max={255}
           value={manual.brightness}
-          onChange={(event) => void send({ brightness: Number(event.target.value) })}
+          onCommit={(value) => void send({ brightness: value })}
           className="flex-1"
         />
       </div>

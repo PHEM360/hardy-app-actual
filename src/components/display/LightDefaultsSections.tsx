@@ -1,6 +1,15 @@
+import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useDeviceSettings, type LightManualDefaults, type LightScheduleSettings, type LightSunriseDefaults } from "@/hooks/useDeviceSettings";
+import { SmoothRange } from "@/components/ui/smooth-range";
+import {
+  useDeviceSettings,
+  type LightManualDefaults,
+  type LightScheduleBlock,
+  type LightSunriseDefaults,
+} from "@/hooks/useDeviceSettings";
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -23,6 +32,45 @@ function DayPicker({ days, onToggle }: { days: number[]; onToggle: (day: number)
   );
 }
 
+const RAMP_MINUTE_PRESETS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 90, 120];
+
+function RampMinutesInput({ value, onChange }: { value: number; onChange: (minutes: number) => void }) {
+  const [custom, setCustom] = useState(!RAMP_MINUTE_PRESETS.includes(value));
+
+  if (custom) {
+    return (
+      <div className="flex flex-1 items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={360}
+          value={value}
+          onChange={(event) => onChange(Math.max(1, Math.round(Number(event.target.value)) || 1))}
+          className="h-9 w-20 rounded-lg border border-border bg-background px-2 text-sm"
+        />
+        <span className="text-xs text-muted-foreground">minutes</span>
+        <button type="button" onClick={() => setCustom(false)} className="text-[11px] font-medium text-primary underline underline-offset-2">
+          Use a preset
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(event) => {
+        if (event.target.value === "other") { setCustom(true); return; }
+        onChange(Number(event.target.value));
+      }}
+      className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+    >
+      {RAMP_MINUTE_PRESETS.map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
+      <option value="other">Other…</option>
+    </select>
+  );
+}
+
 /**
  * A light's own default sunrise look — the starting point every alarm's
  * per-alarm sunrise-light override is pre-filled from (see
@@ -42,24 +90,15 @@ export function SunriseDefaultsSection({ deviceId, colorCapable }: { deviceId: s
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Default sunrise look</p>
       <div className="flex items-center gap-3">
         <Label className="w-24 shrink-0 text-xs">Ramp over</Label>
-        <select
-          value={sunrise.rampMinutes}
-          onChange={(event) => set({ rampMinutes: Number(event.target.value) })}
-          className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
-        >
-          {[10, 15, 20, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
-        </select>
+        <RampMinutesInput value={sunrise.rampMinutes} onChange={(rampMinutes) => set({ rampMinutes })} />
+      </div>
+      <div className="flex items-center gap-3">
+        <Label className="w-24 shrink-0 text-xs">Start brightness</Label>
+        <SmoothRange min={1} max={255} value={sunrise.startBrightness} onCommit={(startBrightness) => set({ startBrightness })} className="flex-1" />
       </div>
       <div className="flex items-center gap-3">
         <Label className="w-24 shrink-0 text-xs">Peak brightness</Label>
-        <input
-          type="range"
-          min={1}
-          max={255}
-          value={sunrise.peakBrightness}
-          onChange={(event) => set({ peakBrightness: Number(event.target.value) })}
-          className="flex-1"
-        />
+        <SmoothRange min={1} max={255} value={sunrise.peakBrightness} onCommit={(peakBrightness) => set({ peakBrightness })} className="flex-1" />
       </div>
       <div className="flex items-center gap-3">
         <Label className="w-24 shrink-0 text-xs">From / to</Label>
@@ -105,14 +144,7 @@ export function ManualDefaultsSection({ deviceId, colorCapable }: { deviceId: st
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Default manual settings</p>
       <div className="flex items-center gap-3">
         <Label className="w-24 shrink-0 text-xs">Brightness</Label>
-        <input
-          type="range"
-          min={1}
-          max={255}
-          value={defaults.brightness}
-          onChange={(event) => set({ brightness: Number(event.target.value) })}
-          className="flex-1"
-        />
+        <SmoothRange min={1} max={255} value={defaults.brightness} onCommit={(brightness) => set({ brightness })} className="flex-1" />
       </div>
       <div className="flex items-center gap-3">
         <Label className="w-24 shrink-0 text-xs">Colour</Label>
@@ -140,47 +172,96 @@ export function ManualDefaultsSection({ deviceId, colorCapable }: { deviceId: st
   );
 }
 
-/** A recurring daily/weekly on-off schedule, independent of any alarm. */
+function newScheduleBlock(): LightScheduleBlock {
+  return { id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, onTime: "08:00", offTime: "09:00", days: [] };
+}
+
+function ScheduleBlockRow({
+  block,
+  onChange,
+  onRemove,
+}: {
+  block: LightScheduleBlock;
+  onChange: (block: LightScheduleBlock) => void;
+  onRemove: () => void;
+}) {
+  const toggleDay = (day: number) => {
+    onChange({ ...block, days: block.days.includes(day) ? block.days.filter((d) => d !== day) : [...block.days, day].sort() });
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/50 bg-background p-3">
+      <div className="flex items-center gap-2">
+        <input
+          type="time"
+          value={block.onTime}
+          onChange={(event) => onChange({ ...block, onTime: event.target.value })}
+          className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+        />
+        <span className="text-xs text-muted-foreground">to</span>
+        <input
+          type="time"
+          value={block.offTime}
+          onChange={(event) => onChange({ ...block, offTime: event.target.value })}
+          className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+        />
+        <button type="button" onClick={onRemove} className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <DayPicker days={block.days} onToggle={toggleDay} />
+        <span className="text-[11px] text-muted-foreground">{block.days.length === 0 ? "Every day" : "Selected days only"}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A recurring on/off schedule, independent of any alarm. Each block is its
+ * own on/off window with its own day selection, so different days can have
+ * different times (separate blocks per day) and a single day can have more
+ * than one on/off cycle (multiple blocks covering that day) — e.g. on
+ * 8-9am, off 9am-2pm, on 2pm-3pm. Shared between Remote Displays and
+ * Connected Devices, same as the other sections here.
+ */
 export function ScheduleSection({ deviceId }: { deviceId: string }) {
   const { device, updateLightSchedule } = useDeviceSettings(deviceId);
   if (!device) return null;
   const schedule = device.settings.light.schedule;
-  const set = (patch: Partial<LightScheduleSettings>) => void updateLightSchedule(patch);
-  const toggleDay = (day: number) => {
-    set({ days: schedule.days.includes(day) ? schedule.days.filter((d) => d !== day) : [...schedule.days, day].sort() });
+
+  const updateBlock = (id: string, patch: LightScheduleBlock) => {
+    void updateLightSchedule({ blocks: schedule.blocks.map((b) => (b.id === id ? patch : b)) });
   };
+  const removeBlock = (id: string) => {
+    void updateLightSchedule({ blocks: schedule.blocks.filter((b) => b.id !== id) });
+  };
+  const addBlock = () => void updateLightSchedule({ blocks: [...schedule.blocks, newScheduleBlock()] });
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Schedule</p>
-        <Switch checked={schedule.enabled} onCheckedChange={(value) => set({ enabled: value })} />
+        <Switch checked={schedule.enabled} onCheckedChange={(value) => void updateLightSchedule({ enabled: value })} />
       </div>
       {schedule.enabled && (
         <>
-          <div className="flex items-center gap-3">
-            <Label className="w-24 shrink-0 text-xs">On at</Label>
-            <input
-              type="time"
-              value={schedule.onTime}
-              onChange={(event) => set({ onTime: event.target.value })}
-              className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="w-24 shrink-0 text-xs">Off at</Label>
-            <input
-              type="time"
-              value={schedule.offTime}
-              onChange={(event) => set({ offTime: event.target.value })}
-              className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="w-24 shrink-0 text-xs">Days</Label>
-            <DayPicker days={schedule.days} onToggle={toggleDay} />
-          </div>
-          <p className="text-[11px] text-muted-foreground">No days selected = every day.</p>
+          {schedule.blocks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No time blocks yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {schedule.blocks.map((block) => (
+                <ScheduleBlockRow key={block.id} block={block} onChange={(patch) => updateBlock(block.id, patch)} onRemove={() => removeBlock(block.id)} />
+              ))}
+            </div>
+          )}
+          <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 rounded-lg" onClick={addBlock}>
+            <Plus className="h-3.5 w-3.5" /> Add time block
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Leave a block's days unselected to run it every day, or pick specific days to vary times by day. Add more than one
+            block to get multiple on/off cycles in a day.
+          </p>
         </>
       )}
     </div>

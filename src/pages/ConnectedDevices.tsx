@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { Cable, ExternalLink, MonitorSmartphone, Plus, Sunrise, Trash2, Wifi, WifiOff } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -49,20 +50,37 @@ function LightRow({ device, onForget }: { device: LinkedDevice; onForget: (id: s
   const on = full?.settings.light.manual.on ?? false;
 
   return (
-    <div
+    <motion.div
+      animate={
+        on
+          ? { boxShadow: ["0 0 18px -6px rgba(251,191,36,0.45)", "0 0 34px -6px rgba(251,146,60,0.75)", "0 0 18px -6px rgba(251,191,36,0.45)"] }
+          : { boxShadow: "0 0 0px 0px rgba(251,191,36,0)" }
+      }
+      transition={on ? { duration: 2.6, repeat: Infinity, ease: "easeInOut" } : { duration: 0.4 }}
       className={`space-y-3 rounded-2xl border p-3 transition-colors duration-500 ${
-        on ? "border-amber-400/50 bg-gradient-to-br from-amber-400/10 via-orange-400/5 to-transparent shadow-[0_0_24px_-8px_rgba(251,191,36,0.5)]" : "border-border/50 bg-muted/30"
+        on
+          ? "border-amber-400/60 bg-gradient-to-br from-amber-400/15 via-orange-400/8 to-transparent"
+          : "border-border/50 bg-muted/30"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{device.label}</p>
-          {status && (
-            <p className={`flex items-center gap-1 text-[11px] font-medium ${STATUS_TONE_CLASS[status.tone]}`}>
-              {status.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              {status.label}
-            </p>
-          )}
+        <div className="flex min-w-0 items-center gap-2">
+          <motion.div
+            animate={on ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+            transition={on ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+            className={`shrink-0 ${on ? "text-amber-500" : "text-muted-foreground"}`}
+          >
+            <Sunrise className="h-4 w-4" />
+          </motion.div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{device.label}</p>
+            {status && (
+              <p className={`flex items-center gap-1 text-[11px] font-medium ${STATUS_TONE_CLASS[status.tone]}`}>
+                {status.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                {status.label}
+              </p>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -83,7 +101,7 @@ function LightRow({ device, onForget }: { device: LinkedDevice; onForget: (id: s
           </div>
         </details>
       )}
-    </div>
+    </motion.div>
   );
 }
 

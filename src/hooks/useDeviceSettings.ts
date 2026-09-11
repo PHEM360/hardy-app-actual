@@ -93,6 +93,7 @@ export interface SceneRotationSettings {
 /** A light's own default look for the sunrise ramp — the starting point an alarm's per-alarm override is pre-filled from. */
 export interface LightSunriseDefaults {
   rampMinutes: number;
+  startBrightness: number;
   peakBrightness: number;
   colorFrom: string;
   colorTo: string;
@@ -108,12 +109,23 @@ export interface LightManualDefaults {
   autoOffMinutes: number;
 }
 
-export interface LightScheduleSettings {
-  enabled: boolean;
+/**
+ * One on/off window. `days` empty = every day; otherwise the block only
+ * applies on those days, so different days can have different times by
+ * using separate blocks, and multiple blocks covering the same day give
+ * more than one on/off cycle (e.g. on 8-9am, off 9am-2pm, on 2pm-3pm...).
+ */
+export interface LightScheduleBlock {
+  id: string;
   onTime: string; // "HH:mm"
   offTime: string; // "HH:mm"
   /** 0=Sun..6=Sat; empty = every day. */
   days: number[];
+}
+
+export interface LightScheduleSettings {
+  enabled: boolean;
+  blocks: LightScheduleBlock[];
 }
 
 /**
@@ -182,8 +194,8 @@ export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
   notes: "",
   manual: { on: false, brightness: 180, colorHex: "#ffd27a" },
   manualDefaults: { brightness: 180, colorHex: "#ffd27a", autoOffMinutes: 0 },
-  sunrise: { rampMinutes: 20, peakBrightness: 220, colorFrom: "#7c2d12", colorTo: "#fff7c2", warmthColor: "#ffb347" },
-  schedule: { enabled: false, onTime: "18:00", offTime: "23:00", days: [] },
+  sunrise: { rampMinutes: 20, startBrightness: 1, peakBrightness: 220, colorFrom: "#7c2d12", colorTo: "#fff7c2", warmthColor: "#ffb347" },
+  schedule: { enabled: false, blocks: [] },
   online: false,
 };
 

@@ -44,34 +44,46 @@ function lerpColor(fromHex: string, toHex: string, t: number): [number, number, 
   ];
 }
 
-interface ScheduleLike {
-  enabled: boolean;
+interface ScheduleBlockLike {
   onTime: string;
   offTime: string;
   days: number[];
 }
 
+interface ScheduleLike {
+  enabled: boolean;
+  blocks: ScheduleBlockLike[];
+}
+
 /**
- * A light's own recurring on/off schedule, independent of any alarm.
+ * One on/off window. `days` empty = every day; different blocks can target
+ * different days (per-day times) and multiple blocks can cover the same
+ * day (more than one on/off cycle in a day) — the light is "on" whenever
+ * ANY block currently contains `now`.
+ *
  * Overnight spans (onTime > offTime, e.g. on 22:00 / off 06:00) are
- * supported, but `days` is checked against the *current* calendar day —
- * for an overnight span that crosses midnight, the day check applies to
- * whichever side of midnight "now" currently falls on, so a schedule
- * restricted to a single day can cut off right at midnight rather than
- * running through to its own offTime. Acceptable for a household light;
- * revisit with per-session state if that ever matters here.
+ * supported, but `days` is checked against the *current* calendar day — for
+ * a span crossing midnight, the day check applies to whichever side of
+ * midnight "now" currently falls on, so a block restricted to a single day
+ * can cut off right at midnight rather than running through to its own
+ * offTime. Acceptable for a household light; revisit with per-session
+ * state if that ever matters here.
  */
-function isWithinSchedule(schedule: ScheduleLike, now: Date): boolean {
-  if (!schedule.enabled) return false;
-  if (schedule.days.length > 0 && !schedule.days.includes(now.getDay())) return false;
-  const [onH, onM] = schedule.onTime.split(":").map(Number);
-  const [offH, offM] = schedule.offTime.split(":").map(Number);
+function isWithinBlock(block: ScheduleBlockLike, now: Date): boolean {
+  if (block.days.length > 0 && !block.days.includes(now.getDay())) return false;
+  const [onH, onM] = block.onTime.split(":").map(Number);
+  const [offH, offM] = block.offTime.split(":").map(Number);
   const onMinutes = onH * 60 + onM;
   const offMinutes = offH * 60 + offM;
   if (onMinutes === offMinutes) return false;
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   if (onMinutes < offMinutes) return nowMinutes >= onMinutes && nowMinutes < offMinutes;
   return nowMinutes >= onMinutes || nowMinutes < offMinutes; // overnight wrap
+}
+
+function isWithinSchedule(schedule: ScheduleLike, now: Date): boolean {
+  if (!schedule.enabled) return false;
+  return schedule.blocks.some((block) => isWithinBlock(block, now));
 }
 
 /**
@@ -236,7 +248,7 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
       // dismiss behavior (scheduleLightAutoOff). Skipped if the light's own
       // recurring schedule currently wants it on — schedule wins over a
       // stale auto-off timer rather than fighting it every tick.
-      const schedule: ScheduleLike = light.settings?.light?.schedule || { enabled: false, onTime: "00:00", offTime: "00:00", days: [] };
+      const schedule: ScheduleLike = light.settings?.light?.schedule || { enabled: false, blocks: [] };
       const scheduleWantsOn = isWithinSchedule(schedule, now);
       const autoOffAtMs = timestampMs(light.settings?.light?.autoOffAt);
       if (autoOffAtMs && autoOffAtMs <= now.getTime() && !scheduleWantsOn) {
@@ -275,13 +287,14 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
       if (progress <= 0) continue; // no ramp due right now — leave the light at whatever it was last manually/schedule/auto-off set to
 
       const sunrise = light.settings?.light?.sunrise || {};
+      const startBrightness = sunrise.startBrightness ?? 1;
       const peakBrightness = sunrise.peakBrightness || 220;
       const [r, g, b] = lerpColor(sunrise.colorFrom || "#7c2d12", sunrise.colorTo || "#fff7c2", progress);
       // An absolute target for "where the ramp should be right now", not a
       // delta from the last tick — a missed minute self-corrects on the next.
       await publishLightState(lightDoc.id, {
         on: true,
-        bri: Math.max(1, Math.round(progress * peakBrightness)),
+        bri: Math.max(1, Math.round(startBrightness + (peakBrightness - startBrightness) * progress)),
         seg: [{ col: [[r, g, b]] }],
       }, 600);
     } catch (err) {
