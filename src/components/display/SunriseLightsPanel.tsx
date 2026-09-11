@@ -100,6 +100,13 @@ function LightRow({ light, onForget }: { light: LinkedDevice; onForget: (id: str
   );
 }
 
+// Pairing needs the browser to fetch a plain-http local address from this
+// https-served app — only Chromium browsers (Chrome, Edge, Brave, Opera)
+// can be granted that via a permission prompt. Firefox and Safari have no
+// equivalent and silently block the request with no prompt at all, so this
+// warns up front instead of letting the dialog fail with no explanation.
+const isChromiumBrowser = () => /Chrome|Chromium|Edg\//i.test(navigator.userAgent);
+
 function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { state, start, configure, reset } = useLightPairing();
   const [homeSsid, setHomeSsid] = useState("");
@@ -130,6 +137,13 @@ function AddLightDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-display"><Sunrise className="h-4 w-4" /> Add a sunrise light</DialogTitle>
         </DialogHeader>
+
+        {!isChromiumBrowser() && (
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            This step needs Chrome, Edge, or another Chromium-based browser — Firefox and Safari can't grant
+            access to the light's local network, so pairing will fail here.
+          </p>
+        )}
 
         {(state.phase === "idle" || state.phase === "starting") && (
           <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Getting ready…</p>

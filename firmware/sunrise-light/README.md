@@ -72,6 +72,14 @@ to fill in.
 
 ## 3. Pair it from the app
 
+**Use Chrome, Edge, or another Chromium-based browser for this step.** The
+app's browser has to fetch a plain-http address on the light's own setup
+network while the app itself is served over https — Chromium browsers can
+be granted a one-time permission for that (a "wants to access devices on
+your local network" prompt — allow it). Firefox and Safari have no
+equivalent permission and will silently fail with no prompt at all; this is
+a browser platform limitation, not something fixable in this project's code.
+
 1. Power on the freshly-flashed board. It broadcasts its own WiFi network
    named `WLED-AP` (password `wled1234`) — same as stock WLED would.
 2. In the Hardy Hub app, go to **Sunrise lights** → **Add sunrise light**
