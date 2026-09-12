@@ -639,6 +639,7 @@ function FamilyBoardWidget({ widget, messages, accent }: { widget: DisplayWidget
 export function DisplayPageRenderer({
   page,
   photos,
+  photosLoading = false,
   calendarEvents,
   tasks,
   birthdays = [],
@@ -646,6 +647,8 @@ export function DisplayPageRenderer({
 }: {
   page: DisplayPage;
   photos: RemoteDisplayPhoto[];
+  /** Still fetching the account's photo library — lets an empty photo frame tell "still loading" apart from "nothing picked yet". */
+  photosLoading?: boolean;
   calendarEvents: CalendarEvent[];
   tasks: Task[];
   birthdays?: Birthday[];
@@ -697,9 +700,21 @@ export function DisplayPageRenderer({
           >
             {widget.type === "clock" && <WidgetClock widget={widget} accent={accent} />}
             {widget.type === "photos" && (
-              selectedPhotos.length > 0
-                ? <PhotoFrameScene photos={selectedPhotos} settings={photoSettings} />
-                : <div className="flex h-full items-center justify-center p-4 text-center text-sm text-white/45">Add photos from Remote Displays.</div>
+              selectedPhotos.length > 0 ? (
+                <PhotoFrameScene photos={selectedPhotos} settings={photoSettings} />
+              ) : photosLoading ? (
+                <div className="flex h-full animate-pulse items-center justify-center p-4 text-center text-sm text-white/35">Loading photos…</div>
+              ) : (widget.photoAlbumIds?.length || widget.photoIds?.length || widget.photoRefs?.length) ? (
+                <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
+                  <p className="text-sm font-semibold text-white/60">Those photos aren't available right now</p>
+                  <p className="text-xs text-white/35">Check the album still has pictures in it on the Photos page.</p>
+                </div>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
+                  <p className="text-sm font-semibold text-white/60">No photos picked for this frame yet</p>
+                  <p className="text-xs text-white/35">Pick albums or pictures for it in Remote Displays.</p>
+                </div>
+              )
             )}
             {widget.type === "calendar" && (
               widget.calendarView === "agenda" ? <AgendaCalendarWidget widget={widget} events={calendarEvents} accent={accent} />

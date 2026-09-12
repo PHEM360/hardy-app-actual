@@ -119,6 +119,9 @@ export {
 	onLightRevoked,
 } from "./sunriseLights";
 
+// ── Alarms — ring on every device for the account, muteable from any of them ──
+export { tickAlarms } from "./alarms";
+
 export {
 	beginPasskeyRegistration,
 	finishPasskeyRegistration,

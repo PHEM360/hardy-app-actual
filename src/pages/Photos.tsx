@@ -64,6 +64,7 @@ export default function Photos() {
   const [transfer, setTransfer] = useState<TransferState | null>(null);
   const [editingCaptionKey, setEditingCaptionKey] = useState<string | null>(null);
   const [editingCaption, setEditingCaption] = useState("");
+  const [brokenPhotos, setBrokenPhotos] = useState<Record<string, true>>({});
   const [params, setParams] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const transferClear = useRef<number>(0);
@@ -660,12 +661,40 @@ export default function Photos() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {visiblePhotos.map((photo) => (
+              {visiblePhotos.map((photo) => {
+                const key = `${photo.ownerId}:${photo.id}`;
+                const broken = brokenPhotos[key];
+                return (
                 <figure
-                  key={`${photo.ownerId}:${photo.id}`}
+                  key={key}
                   className="group relative overflow-hidden rounded-2xl border border-border/40 bg-card shadow-card"
                 >
-                  <img src={photo.url} alt={photo.caption || "Family photo"} className="aspect-square w-full object-cover" />
+                  {!broken ? (
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || "Family photo"}
+                      loading="lazy"
+                      className="aspect-square w-full bg-muted/40 object-cover"
+                      onError={() => setBrokenPhotos((current) => ({ ...current, [key]: true }))}
+                    />
+                  ) : (
+                    <div className="flex aspect-square w-full flex-col items-center justify-center gap-1.5 bg-muted/40 p-2 text-center">
+                      <p className="text-[11px] font-medium text-muted-foreground">Couldn't load this photo</p>
+                      <button
+                        type="button"
+                        className="text-[11px] font-semibold text-primary underline-offset-2 hover:underline"
+                        onClick={() =>
+                          setBrokenPhotos((current) => {
+                            const next = { ...current };
+                            delete next[key];
+                            return next;
+                          })
+                        }
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
                   {(photo.caption || (selectedAlbum && albumCanEdit)) && (
                     <figcaption className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-black/45 px-2 py-1.5">
                       {albumCanEdit ? (
@@ -696,7 +725,8 @@ export default function Photos() {
                     </figcaption>
                   )}
                 </figure>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

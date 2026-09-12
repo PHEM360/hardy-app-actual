@@ -190,7 +190,7 @@ describe("DisplayPageRenderer", () => {
       durationSeconds: 300,
       background: "#09090b",
       layout: "full",
-      widgets: [{ id: "photos-main", type: "photos", x: 0, y: 0, w: 12, h: 12, photoIds: [] }],
+      widgets: [{ id: "photos-main", type: "photos", x: 0, y: 0, w: 12, h: 12, photoIds: ["ok", "blank"] }],
     };
     render(
       <DisplayPageRenderer
@@ -205,6 +205,32 @@ describe("DisplayPageRenderer", () => {
     );
     expect(screen.getByAltText("Garden")).toBeInTheDocument();
     expect(screen.queryByAltText("Broken")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing but a clear prompt when a photo frame has no albums or pictures picked yet", () => {
+    // Regression guard: this used to silently fall back to showing every
+    // photo in the account, which made it unclear what a screen would
+    // actually display — see photoSelection.ts.
+    const album: DisplayPage = {
+      id: "photos",
+      name: "Photos",
+      durationSeconds: 300,
+      background: "#09090b",
+      layout: "full",
+      widgets: [{ id: "photos-main", type: "photos", x: 0, y: 0, w: 12, h: 12 }],
+    };
+    render(
+      <DisplayPageRenderer
+        page={album}
+        photos={[
+          { id: "ok", url: "https://cdn.example.com/garden.jpg", storagePath: "displayPhotos/owner/a.jpg", caption: "Garden", source: "upload", createdAt: null },
+        ]}
+        calendarEvents={[]}
+        tasks={[]}
+      />,
+    );
+    expect(screen.queryByAltText("Garden")).not.toBeInTheDocument();
+    expect(screen.getByText("No photos picked for this frame yet")).toBeInTheDocument();
   });
 
   it("shows birthdays within the configured window and hides ones further out", () => {

@@ -14,7 +14,7 @@ export function RemoteDisplayRuntime({
   device: DeviceDoc;
   extraPhotos?: RemoteDisplayPhoto[];
 }) {
-  const { photos } = useDisplayOwnerPhotos(device.uid);
+  const { photos, loading: photosLoading } = useDisplayOwnerPhotos(device.uid);
   const { events } = useCalendar(device.uid);
   const { tasks } = useTasks(device.uid);
   const { birthdays } = useBirthdays(device.householdId);
@@ -26,6 +26,7 @@ export function RemoteDisplayRuntime({
     <SceneRotator
       device={device}
       photos={[...photos, ...extraPhotos]}
+      photosLoading={photosLoading}
       calendarEvents={events}
       tasks={tasks}
       birthdays={birthdays}

@@ -90,6 +90,20 @@ export interface SceneRotationSettings {
   rotateSeconds: number;
 }
 
+/**
+ * Pushed live from Remote Displays to whatever screen is paired — the
+ * screen only ever reads this, it never writes back, so no Firestore rule
+ * changes are needed for it to take effect immediately.
+ */
+export interface DisplayControlSettings {
+  /** Keep the screen from ever sleeping. Defaults on since that's the point of an always-on display. */
+  keepAwake: boolean;
+  /** A page id to show right now regardless of rotation/schedule, or null for normal rotation. */
+  forcedPageId: string | null;
+  /** ms epoch after which a forced page is dropped automatically, in case it's forgotten about. */
+  forcedUntil: number | null;
+}
+
 /** A light's own default look for the sunrise ramp — the starting point an alarm's per-alarm override is pre-filled from. */
 export interface LightSunriseDefaults {
   rampMinutes: number;
@@ -163,6 +177,7 @@ export interface DeviceSettings {
   pages: DisplayPage[];
   nightMode: NightModeSettings;
   light: LightSettings;
+  control: DisplayControlSettings;
 }
 
 export const DEFAULT_CLOCK_SETTINGS: ClockSettings = {
@@ -187,6 +202,12 @@ export const DEFAULT_KIOSK_WIDGETS: WidgetType[] = ["today", "tasks", "household
 export const DEFAULT_CALENDAR_SCENE_SETTINGS: CalendarSceneSettings = { enabled: false, daysAhead: 14 };
 export const DEFAULT_OVERVIEW_SCENE_SETTINGS: OverviewSceneSettings = { enabled: false, widgets: DEFAULT_KIOSK_WIDGETS };
 export const DEFAULT_SCENE_ROTATION_SETTINGS: SceneRotationSettings = { rotateSeconds: 30 };
+
+export const DEFAULT_DISPLAY_CONTROL_SETTINGS: DisplayControlSettings = {
+  keepAwake: true,
+  forcedPageId: null,
+  forcedUntil: null,
+};
 
 export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
   mqttTopic: "",
@@ -266,6 +287,7 @@ function mergeSettings(raw: Partial<DeviceSettings> | undefined): DeviceSettings
     scenes: { ...DEFAULT_SCENE_ROTATION_SETTINGS, ...(raw?.scenes ?? {}) },
     pages: (Array.isArray(raw?.pages) && raw.pages.length > 0 ? raw.pages : legacyPages(raw)).map(applyPageLayout),
     nightMode: { ...DEFAULT_NIGHT_MODE, ...(raw?.nightMode ?? {}) },
+    control: { ...DEFAULT_DISPLAY_CONTROL_SETTINGS, ...(raw?.control ?? {}) },
     light: {
       ...DEFAULT_LIGHT_SETTINGS,
       ...(raw?.light ?? {}),
@@ -468,6 +490,16 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId, device]
   );
 
+  const updateControl = useCallback(
+    async (patch: Partial<DisplayControlSettings>) => {
+      if (!deviceId || !device) return;
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.control": { ...device.settings.control, ...patch },
+      });
+    },
+    [deviceId, device]
+  );
+
   const updatePages = useCallback(
     async (pages: DisplayPage[]) => {
       if (!deviceId) return;
@@ -495,6 +527,7 @@ export function useDeviceSettings(deviceId: string | null) {
     updateLightMeta,
     updateLightManualDefaults,
     updateLightSchedule,
+    updateControl,
     updatePages,
   };
 }

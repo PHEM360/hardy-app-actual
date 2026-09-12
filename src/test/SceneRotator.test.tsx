@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SceneRotator } from "@/components/display/SceneRotator";
-import { DEFAULT_LIGHT_SETTINGS, type DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_DISPLAY_CONTROL_SETTINGS, DEFAULT_LIGHT_SETTINGS, type DeviceDoc } from "@/hooks/useDeviceSettings";
 import { DEFAULT_NIGHT_MODE } from "@/lib/displayNightMode";
 import type { DisplayPage } from "@/lib/displayPages";
 
@@ -43,6 +43,7 @@ function deviceWith(pages: DisplayPage[]): DeviceDoc {
       pages,
       nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false, withAlarms: false },
       light: DEFAULT_LIGHT_SETTINGS,
+      control: DEFAULT_DISPLAY_CONTROL_SETTINGS,
     },
   };
 }

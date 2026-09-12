@@ -1,0 +1,19 @@
+{
+  "name": "Hardy Hub Display",
+  "short_name": "Display",
+  "description": "Always-on family screen",
+  "start_url": "/display",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/App Icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

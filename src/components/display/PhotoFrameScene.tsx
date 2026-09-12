@@ -13,7 +13,14 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPhoto[]; settings: PhotoFrameSettings }) {
-  const usable = visibleDisplayPhotos(photos);
+  // Broken links (an expired share, a deleted file) drop out of rotation
+  // instead of sitting in the slideshow as a dead black frame — self-healing
+  // the moment the underlying photo set changes again.
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+  const usable = useMemo(
+    () => visibleDisplayPhotos(photos).filter((photo) => !broken.has(photo.id)),
+    [photos, broken],
+  );
   const order = useMemo(
     () => (settings.shuffle ? shuffleArray(usable) : usable),
     // Re-shuffle only when the underlying photo set actually changes, not every render.
@@ -22,6 +29,16 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
   );
   const [index, setIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    // A photo set that changes shape (new album pick, items added/removed)
+    // may well no longer include ids we'd previously marked broken.
+    setBroken((current) => {
+      const stillPresent = new Set(photos.map((photo) => photo.id));
+      const next = new Set([...current].filter((id) => stillPresent.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [photos]);
 
   useEffect(() => {
     setIndex(0);
@@ -37,8 +54,18 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
     };
   }, [order.length, settings.intervalSeconds]);
 
-  if (order.length === 0) return null;
+  if (order.length === 0) {
+    // Only reachable once every photo passed in has actually failed to load
+    // (DisplayPageRenderer only mounts this once there's at least one) —
+    // say so instead of leaving a silent black rectangle behind.
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-black p-4 text-center text-sm text-white/40">
+        Couldn't load these photos — check they still exist on the Photos page.
+      </div>
+    );
+  }
   const current = order[index];
+  const markBroken = (id: string) => setBroken((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 
   return (
     <div className="absolute inset-0 bg-black">
@@ -56,12 +83,15 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
             src={photo.url}
             alt=""
             aria-hidden
+            loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
           />
           <img
             src={photo.url}
             alt={photo.caption || ""}
+            loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-contain"
+            onError={() => markBroken(photo.id)}
           />
         </div>
       ))}

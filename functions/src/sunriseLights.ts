@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, isExpired } from "./pairingUtils";
 import { hasSeenActivity, lightTopic, publishLightState, pollRetainedStatuses, MQTT_SECRETS } from "./mqttBroker";
+import { addLondonDays, dayOfWeekFor, londonNow, londonTimeOn } from "./londonTime";
 
 // Ongoing control for sunrise lights: manual on/off/brightness/colour from
 // the webapp (sendLightCommand), the once-a-minute sunrise ramp that reads
@@ -61,6 +62,12 @@ interface ScheduleLike {
  * day (more than one on/off cycle in a day) — the light is "on" whenever
  * ANY block currently contains `now`.
  *
+ * `nowMinutes`/`dayOfWeek` are `now`'s Europe/London wall-clock time (see
+ * londonTime.ts) — Cloud Functions run in UTC, so comparing against
+ * `now.getHours()`/`now.getDay()` directly would silently be off by the
+ * UK's current DST offset from what "onTime"/"offTime" (set by someone
+ * looking at a UK clock) actually mean.
+ *
  * Overnight spans (onTime > offTime, e.g. on 22:00 / off 06:00) are
  * supported, but `days` is checked against the *current* calendar day — for
  * a span crossing midnight, the day check applies to whichever side of
@@ -69,46 +76,50 @@ interface ScheduleLike {
  * offTime. Acceptable for a household light; revisit with per-session
  * state if that ever matters here.
  */
-function isWithinBlock(block: ScheduleBlockLike, now: Date): boolean {
-  if (block.days.length > 0 && !block.days.includes(now.getDay())) return false;
+function isWithinBlock(block: ScheduleBlockLike, nowMinutes: number, dayOfWeek: number): boolean {
+  if (block.days.length > 0 && !block.days.includes(dayOfWeek)) return false;
   const [onH, onM] = block.onTime.split(":").map(Number);
   const [offH, offM] = block.offTime.split(":").map(Number);
   const onMinutes = onH * 60 + onM;
   const offMinutes = offH * 60 + offM;
   if (onMinutes === offMinutes) return false;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   if (onMinutes < offMinutes) return nowMinutes >= onMinutes && nowMinutes < offMinutes;
   return nowMinutes >= onMinutes || nowMinutes < offMinutes; // overnight wrap
 }
 
-function isWithinSchedule(schedule: ScheduleLike, now: Date): boolean {
+function isWithinSchedule(schedule: ScheduleLike, nowMinutes: number, dayOfWeek: number): boolean {
   if (!schedule.enabled) return false;
-  return schedule.blocks.some((block) => isWithinBlock(block, now));
+  return schedule.blocks.some((block) => isWithinBlock(block, nowMinutes, dayOfWeek));
 }
 
 /**
- * Ported from src/lib/sunriseAlarm.ts's getSunriseProgress — the functions
- * package is a separate TS project from the frontend, so this ~15-line pure
- * function is duplicated rather than shared, matching the note in the plan.
+ * Adapted from src/lib/sunriseAlarm.ts's getSunriseProgress, but resolving
+ * "HH:mm on day X" against Europe/London (via londonTime.ts) rather than the
+ * Cloud Functions runtime's own UTC clock — the frontend version runs in an
+ * actual UK browser so it never had this problem, but here `now.setHours(...)`
+ * would silently target the wrong instant (by the UK's current DST offset),
+ * so a linked light's ramp could finish before or after the alarm actually
+ * meant to, or (worse) after a one-off alarm had already auto-disabled
+ * itself from the display's own correct, local-time firing — see alarms.ts.
  * Returns 0..1, the strongest ramp progress across every enabled alarm that
  * links this light, so one light waking with two overlapping alarms takes
  * whichever is furthest along.
  */
 function sunriseProgressForLight(alarms: AlarmLike[], lightId: string, now: Date): number {
   let strongest = 0;
+  const nowMs = now.getTime();
+  const { dateStr: today } = londonNow(now);
   for (const alarm of alarms) {
     if (!alarm.enabled || !alarm.linkedLightIds?.includes(lightId)) continue;
     const rampMinutes = alarm.sunriseMinutes || 0;
     if (!rampMinutes) continue;
-    const [hours, minutes] = alarm.time.split(":").map(Number);
     for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
-      const scheduled = new Date(now);
-      scheduled.setDate(now.getDate() + dayOffset);
-      scheduled.setHours(hours, minutes, 0, 0);
-      if (alarm.days.length > 0 && !alarm.days.includes(scheduled.getDay())) continue;
-      const start = scheduled.getTime() - rampMinutes * 60_000;
-      if (now.getTime() >= start && now.getTime() < scheduled.getTime()) {
-        strongest = Math.max(strongest, (now.getTime() - start) / (scheduled.getTime() - start));
+      const dateStr = dayOffset === 0 ? today : addLondonDays(today, dayOffset);
+      if (alarm.days.length > 0 && !alarm.days.includes(dayOfWeekFor(dateStr))) continue;
+      const scheduledMs = londonTimeOn(dateStr, alarm.time);
+      const startMs = scheduledMs - rampMinutes * 60_000;
+      if (nowMs >= startMs && nowMs < scheduledMs) {
+        strongest = Math.max(strongest, (nowMs - startMs) / (scheduledMs - startMs));
       }
     }
   }
@@ -220,6 +231,7 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
     .where("revoked", "==", false)
     .get();
   const now = new Date();
+  const { minutesOfDay: nowMinutes, dayOfWeek } = londonNow(now);
 
   // Real online/offline status, read from each light's retained MQTT status
   // message — see pollRetainedStatuses' own comment. This is the only place
@@ -257,7 +269,7 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
         enabled: rawSchedule?.enabled === true,
         blocks: Array.isArray(rawSchedule?.blocks) ? rawSchedule.blocks : [],
       };
-      const scheduleWantsOn = isWithinSchedule(schedule, now);
+      const scheduleWantsOn = isWithinSchedule(schedule, nowMinutes, dayOfWeek);
       const autoOffAtMs = timestampMs(light.settings?.light?.autoOffAt);
       if (autoOffAtMs && autoOffAtMs <= now.getTime() && !scheduleWantsOn) {
         await publishLightState(lightDoc.id, { on: false }, 20);

@@ -1,39 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { FolderOpen, Maximize, Moon, Sun, WifiOff } from "lucide-react";
 import DogLoader from "@/components/DogLoader";
 import { useDeviceAuth } from "@/hooks/useDeviceAuth";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import { useWakeLock } from "@/hooks/useWakeLock";
-import { useAutoUnlockAudio } from "@/hooks/useAutoUnlockAudio";
+import { useAutoFullscreen } from "@/hooks/useAutoFullscreen";
 import { useLocalDisplayFolder } from "@/hooks/useLocalDisplayFolder";
 import { DisplayLoginScreen } from "@/components/display/DisplayLoginScreen";
 import { AlarmManager } from "@/components/display/AlarmManager";
-import { AudioUnlockOverlay } from "@/components/display/AudioUnlockOverlay";
+import { AlarmRingingOverlay } from "@/components/display/AlarmRingingOverlay";
+import { FullscreenHintOverlay } from "@/components/display/FullscreenHintOverlay";
 import { RemoteDisplayRuntime } from "@/components/display/RemoteDisplayRuntime";
 import { nextNightEndIso, resolveNightMode } from "@/lib/displayNightMode";
+
+/**
+ * Swaps in the display-only manifest (fullscreen, start_url=/display) while
+ * this page is open, so "Add to Home Screen" on the kiosk itself creates a
+ * shortcut that opens straight into the display with no browser chrome,
+ * instead of the whole app's dashboard-first, standalone-only manifest.
+ */
+function useDisplayManifest() {
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const previousHref = link?.getAttribute("href") || "/manifest.webmanifest";
+    link?.setAttribute("href", "/display.webmanifest");
+    return () => {
+      link?.setAttribute("href", previousHref);
+    };
+  }, []);
+}
 
 export default function Display() {
   const { status, deviceId, pairing, restartPairing } = useDeviceAuth();
   const {
     device,
     loading: settingsLoading,
-    updateAlarm,
     updateNightMode,
   } = useDeviceSettings(deviceId);
-  const { supported: wakeLockSupported } = useWakeLock(status === "ready");
-  const { unlocked: audioUnlocked, tryUnlock: tryUnlockAudio } = useAutoUnlockAudio(status === "ready");
+  const keepAwake = device?.settings.control.keepAwake !== false;
+  const { supported: wakeLockSupported } = useWakeLock(status === "ready" && keepAwake);
+  const { isFullscreen, supported: fullscreenSupported, requestFullscreen } = useAutoFullscreen(status === "ready");
   const localFolder = useLocalDisplayFolder();
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, []);
-
-  const requestFullscreen = () => {
-    document.documentElement.requestFullscreen?.().catch(() => {});
-  };
+  useDisplayManifest();
 
   if (status === "loading") {
     return (
@@ -78,11 +86,13 @@ export default function Display() {
     <div className="relative h-[100svh] min-h-[100dvh] w-full select-none overflow-hidden bg-zinc-950">
       <RemoteDisplayRuntime device={device} extraPhotos={localFolder.photos} />
 
-      <AlarmManager alarms={device.settings.alarms} onUpdateAlarm={updateAlarm} />
-      <AudioUnlockOverlay
-        hasEnabledAlarms={device.settings.alarms.some((a) => a.enabled)}
-        unlocked={audioUnlocked}
-        onTryUnlock={tryUnlockAudio}
+      <AlarmManager alarms={device.settings.alarms} />
+      <AlarmRingingOverlay uid={device.uid} />
+      <FullscreenHintOverlay
+        supported={fullscreenSupported}
+        isFullscreen={isFullscreen}
+        offset={device.settings.alarms.some((a) => a.enabled)}
+        onRequest={requestFullscreen}
       />
 
       {/* Low-opacity control cluster — deliberately unobtrusive on an always-on screen */}
@@ -90,7 +100,7 @@ export default function Display() {
         className="absolute right-4 flex items-center gap-2"
         style={{ bottom: "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))" }}
       >
-        {!wakeLockSupported && (
+        {keepAwake && !wakeLockSupported && (
           <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
             This browser can't keep the screen awake automatically — disable auto-sleep in the device's system settings.
           </span>

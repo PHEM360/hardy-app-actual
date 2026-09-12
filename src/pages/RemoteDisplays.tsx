@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
-  Moon, Palette, Plus, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X,
+import { Cast, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
+  Moon, Palette, Plus, RotateCcw, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   applyPageLayout, durationLabel, isPageActiveAt, pageScheduleLabel,
   type DisplayBackdropKind, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
+import { useDisplayOwnerPhotos } from "@/hooks/useDisplayOwnerPhotos";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
 import { useOwnPhotoLibrary } from "@/hooks/usePhotos";
 import { DisplayAlbumPicker } from "@/components/display/DisplayAlbumPicker";
@@ -97,20 +98,16 @@ export default function RemoteDisplays() {
   const loadedDeviceRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
-  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode } = useDeviceSettings(selectedDeviceId);
-  const { photos, loading: photosLoading, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
+  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode, updateControl } = useDeviceSettings(selectedDeviceId);
+  // The exact same hook the physical screen runs at /display, so this preview
+  // and the picker below can never show something different from what
+  // actually ends up on the wall — see useDisplayOwnerPhotos.
+  const { photos: previewPhotos, loading: photosLoading } = useDisplayOwnerPhotos(dataUid);
+  // The "Quick library" box below only ever manages its own legacy
+  // displayPhotos items, never album photos — a separate, narrower hook so
+  // its delete button can never be pointed at the wrong Firestore path.
+  const { photos: quickPhotos, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
   const photoLibrary = useOwnPhotoLibrary();
-  const albumPhotos = useMemo(() => photoLibrary.photos.map((photo) => ({
-    id: `${photo.ownerId}:${photo.id}`,
-    url: photo.url,
-    storagePath: photo.storagePath,
-    caption: photo.caption,
-    source: photo.source === "upload" ? "upload" as const : "link" as const,
-    createdAt: photo.createdAt,
-    ownerId: photo.ownerId,
-    albumId: photo.albumId,
-  })), [photoLibrary.photos]);
-  const previewPhotos = useMemo(() => [...albumPhotos, ...photos], [albumPhotos, photos]);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const { birthdays } = useBirthdays(device?.householdId ?? null);
@@ -292,8 +289,19 @@ export default function RemoteDisplays() {
               <p className="mt-3 font-display text-lg font-bold">Link your first screen</p>
               <p className="mt-1 text-sm text-muted-foreground">The display will appear here immediately after you approve it.</p>
             </div>
-          ) : deviceLoading || !device || !selectedPage ? (
+          ) : deviceLoading ? (
             <div className="rounded-2xl bg-card py-16 text-center text-sm text-muted-foreground shadow-card">Loading display settings…</div>
+          ) : !device ? (
+            // Loading finished but nothing came back — e.g. it was disconnected
+            // from another tab a moment ago. A permanent "loading" spinner here
+            // would read as the page being stuck, not as this display being gone.
+            <div className="rounded-2xl border border-border/60 bg-card px-6 py-16 text-center shadow-card">
+              <WifiOff className="mx-auto h-10 w-10 text-muted-foreground" />
+              <p className="mt-3 font-display text-lg font-bold">This screen isn't available</p>
+              <p className="mt-1 text-sm text-muted-foreground">It may have just been disconnected. Pick another screen, or re-pair it from the steps above.</p>
+            </div>
+          ) : !selectedPage ? (
+            <div className="rounded-2xl bg-card py-16 text-center text-sm text-muted-foreground shadow-card">This screen has no pages yet — add one below.</div>
           ) : (
             <>
               {/* Dark console: the builder reads as the screen it is designing. */}
@@ -388,12 +396,45 @@ export default function RemoteDisplays() {
                         <DisplayPageRenderer
                           page={selectedPage}
                           photos={previewPhotos}
+                          photosLoading={photosLoading}
                           calendarEvents={calendarEvents}
                           tasks={tasks}
                           birthdays={birthdays}
                           familyMessages={familyMessages}
                         />
                       </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                      {device.settings.control.forcedPageId ? (
+                        <>
+                          <span className="flex items-center gap-1.5 rounded-lg bg-sky-500/20 px-2.5 py-1 text-[11px] font-bold text-sky-300">
+                            <Cast className="h-3.5 w-3.5" />
+                            {device.settings.pages.find((page) => page.id === device.settings.control.forcedPageId)?.name || "A page"} is pinned to the screen
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void updateControl({ forcedPageId: null, forcedUntil: null })}
+                            className="flex h-8 items-center gap-1.5 rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Resume automatic rotation
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void updateControl({
+                            forcedPageId: selectedPage.id,
+                            forcedUntil: Date.now() + 2 * 60 * 60 * 1000,
+                          })}
+                          className="flex h-8 items-center gap-1.5 rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                        >
+                          <Cast className="h-3.5 w-3.5" /> Show “{selectedPage.name}” on screen now
+                        </button>
+                      )}
+                      <p className="text-[10px] text-white/40">
+                        Overrides rotation and schedule on the physical screen for up to 2 hours, or until you resume it here.
+                      </p>
                     </div>
 
                     <RemoteLayoutEditor
@@ -621,7 +662,7 @@ export default function RemoteDisplays() {
                               </div>
                               <DisplayAlbumPicker
                                 albums={photoLibrary.albums}
-                                photos={photoLibrary.photos}
+                                photos={previewPhotos}
                                 widget={selectedWidget}
                                 onChange={updateWidget}
                               />
@@ -924,7 +965,7 @@ export default function RemoteDisplays() {
               </div>
 
               <DisplayPhotoLibrary
-                photos={photos}
+                photos={quickPhotos}
                 loading={photosLoading}
                 hasPhotoPage={pages.some((page) => page.widgets.some((widget) => widget.type === "photos"))}
                 onUpload={addPhotos}
@@ -932,6 +973,27 @@ export default function RemoteDisplays() {
                 onDelete={deletePhoto}
                 onAddPhotoPage={() => addPreset("photo-frame")}
               />
+
+              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <div>
+                      <h2 className="font-display text-base font-bold">Keep the screen awake</h2>
+                      <p className="text-[11px] text-muted-foreground">
+                        {device.settings.control.keepAwake
+                          ? "This screen is stopped from sleeping or switching off, 24/7."
+                          : "This screen can sleep or switch off on its own, like a normal device."}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={device.settings.control.keepAwake}
+                    onCheckedChange={(value) => void updateControl({ keepAwake: value })}
+                    aria-label="Keep the screen awake"
+                  />
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
                 <div className="mb-3 flex items-center gap-2">

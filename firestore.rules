@@ -1031,6 +1031,16 @@ service cloud.firestore {
       allow create: if false;
     }
 
+    // Whichever alarm most recently came due for this account — shared
+    // across every paired display and the phone app so it rings everywhere
+    // and can be dismissed/snoozed from whichever one actually has an input
+    // to do so (see functions/src/alarms.ts, which writes it, and
+    // useAlarmRinging.ts, which every client reads and can clear).
+    match /alarmRinging/{userId} {
+      allow read: if isOwner(userId) || isActiveDisplayFor(userId);
+      allow write: if isOwner(userId) || isActiveDisplayFor(userId);
+    }
+
     // Account-scoped photo library exposed only to the owning account and its
     // securely paired display sessions (which authenticate as that account).
     match /displayPhotos/{userId}/items/{photoId} {

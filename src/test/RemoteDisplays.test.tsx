@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import RemoteDisplays from "@/pages/RemoteDisplays";
-import { DEFAULT_DISPLAY_PAGES, DEFAULT_LIGHT_SETTINGS, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
+import { DEFAULT_DISPLAY_CONTROL_SETTINGS, DEFAULT_DISPLAY_PAGES, DEFAULT_LIGHT_SETTINGS, DEFAULT_NIGHT_MODE, type DeviceDoc } from "@/hooks/useDeviceSettings";
 
 const mocks = vi.hoisted(() => ({
   updatePages: vi.fn().mockResolvedValue(undefined),
@@ -27,6 +27,7 @@ const device: DeviceDoc = {
     pages: DEFAULT_DISPLAY_PAGES,
     nightMode: { ...DEFAULT_NIGHT_MODE, scheduleEnabled: false },
     light: DEFAULT_LIGHT_SETTINGS,
+    control: DEFAULT_DISPLAY_CONTROL_SETTINGS,
   },
 };
 
@@ -57,6 +58,7 @@ vi.mock("@/hooks/useDeviceSettings", async (importOriginal) => {
       updatePages: mocks.updatePages,
       updateNightMode: vi.fn(),
       updateSceneSettings: vi.fn(),
+      updateControl: vi.fn(),
       addAlarm: vi.fn(),
       updateAlarm: vi.fn(),
       deleteAlarm: vi.fn(),
@@ -65,6 +67,16 @@ vi.mock("@/hooks/useDeviceSettings", async (importOriginal) => {
 });
 vi.mock("@/hooks/useRemoteDisplayPhotos", () => ({
   useRemoteDisplayPhotos: () => ({
+    photos: [],
+    loading: false,
+    addPhotos: vi.fn(),
+    addLinkedPhotos: vi.fn(),
+    updateCaption: vi.fn(),
+    deletePhoto: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/useDisplayOwnerPhotos", () => ({
+  useDisplayOwnerPhotos: () => ({
     photos: [],
     loading: false,
     addPhotos: vi.fn(),

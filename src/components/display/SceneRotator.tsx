@@ -21,6 +21,7 @@ function isTypingTarget(target: EventTarget | null) {
 export function SceneRotator({
   device,
   photos,
+  photosLoading = false,
   calendarEvents,
   tasks,
   birthdays = [],
@@ -28,6 +29,7 @@ export function SceneRotator({
 }: {
   device: DeviceDoc;
   photos: RemoteDisplayPhoto[];
+  photosLoading?: boolean;
   calendarEvents: CalendarEvent[];
   tasks: Task[];
   birthdays?: Birthday[];
@@ -47,23 +49,32 @@ export function SceneRotator({
     [device.settings.pages, minuteTick],
   );
 
+  // A page pushed from Remote Displays' "Show this page now" wins over the
+  // normal rotation/schedule, until it's resumed from there or its own
+  // safety timeout lapses — a forgotten override can't strand the screen.
+  const control = device.settings.control;
+  const forceActive = !!control.forcedPageId && (!control.forcedUntil || control.forcedUntil > minuteTick);
+  const forced = forceActive
+    ? device.settings.pages.find((page) => page.id === control.forcedPageId) || null
+    : null;
+
   useEffect(() => {
     if (index >= pages.length) setIndex(0);
   }, [pages.length, index]);
 
   const goTo = useCallback((next: number) => {
-    if (pages.length < 2) return;
+    if (forced || pages.length < 2) return;
     setIndex(((next % pages.length) + pages.length) % pages.length);
-  }, [pages.length]);
+  }, [pages.length, forced]);
 
   useEffect(() => {
-    if (pages.length < 2) return;
+    if (forced || pages.length < 2) return;
     const currentDuration = pages[index]?.durationSeconds || device.settings.scenes.rotateSeconds;
     const timeout = setTimeout(() => {
       setIndex((current) => (current + 1) % pages.length);
     }, Math.max(10, currentDuration) * 1000);
     return () => clearTimeout(timeout);
-  }, [pages, index, device.settings.scenes.rotateSeconds]);
+  }, [pages, index, device.settings.scenes.rotateSeconds, forced]);
 
   useEffect(() => {
     if (pages.length < 2) return;
@@ -106,7 +117,7 @@ export function SceneRotator({
     return () => clearTimeout(timer);
   }, [pages.length]);
 
-  const current = pages[index] || pages[0] || DEFAULT_DISPLAY_PAGES[0];
+  const current = forced || pages[index] || pages[0] || DEFAULT_DISPLAY_PAGES[0];
   const night = resolveNightMode(device.settings.nightMode, device.settings.alarms, new Date(minuteTick));
 
   if (night.active) {
@@ -118,12 +129,26 @@ export function SceneRotator({
       <DisplayPageRenderer
         page={current}
         photos={photos}
+        photosLoading={photosLoading}
         calendarEvents={calendarEvents}
         tasks={tasks}
         birthdays={birthdays}
         familyMessages={familyMessages}
       />
-      {pages.length > 1 && (
+      {forced && (
+        <div
+          className="absolute left-1/2 z-20 -translate-x-1/2"
+          style={{ top: "max(1.6vmin, calc(env(safe-area-inset-top, 0px) + 0.6rem))" }}
+        >
+          <p
+            className="rounded-full bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
+            style={{ fontSize: "clamp(10px, 1.4vmin, 14px)" }}
+          >
+            Set from your phone · {current.name}
+          </p>
+        </div>
+      )}
+      {!forced && pages.length > 1 && (
         <>
           <button
             type="button"

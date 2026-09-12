@@ -4,9 +4,12 @@ import TopBar from "./TopBar";
 import { ModuleSecurityGate } from "@/components/security/SecurityGate";
 import { HomeLayoutGate } from "@/components/home/HomeLayoutGate";
 import { FcmBootstrap } from "@/components/notifications/FcmBootstrap";
+import { AlarmRingingOverlay } from "@/components/display/AlarmRingingOverlay";
+import { useAuth } from "@/auth/AuthContext";
 
 const AppLayout = () => {
   const location = useLocation();
+  const { dataUid } = useAuth();
   const isLogin = location.pathname === "/login";
   const hideChrome =
     location.pathname === "/notes/quick" || location.pathname.startsWith("/widget");
@@ -17,6 +20,7 @@ const AppLayout = () => {
     return (
       <div className="min-h-[100dvh] bg-background safe-top">
         <FcmBootstrap />
+        <AlarmRingingOverlay uid={dataUid} />
         <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
       </div>
     );
@@ -26,6 +30,7 @@ const AppLayout = () => {
     <HomeLayoutGate>
       <div className="flex flex-col min-h-[100dvh] bg-background">
         <FcmBootstrap />
+        <AlarmRingingOverlay uid={dataUid} />
         <TopBar />
         <main className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] w-full">
           <div className="mx-auto w-full min-w-0 max-w-screen-sm sm:max-w-screen-md md:max-w-screen-lg xl:max-w-screen-xl">

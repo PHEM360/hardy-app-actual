@@ -26,7 +26,33 @@ export function albumLibraryKey(album: { id: string; ownerId?: string }): string
   return album.ownerId ? `${album.ownerId}:${album.id}` : album.id;
 }
 
+/**
+ * Album/photo-id picks are resolved live against the current `photos` list
+ * every time, so a screen always reflects what is actually in the album now
+ * (new additions appear, deletions disappear) instead of freezing at
+ * whatever was picked. `photoRefs` is only a fallback for photos pasted in
+ * as plain links, which have no album/id to look up live — it is never
+ * allowed to shadow a live album/photo selection, or a deleted photo would
+ * keep "working" from a stale cached url long after it stopped existing.
+ */
 export function resolveDisplayPhotos<T extends PhotoPickItem>(photos: T[], pick: DisplayPhotoPick): T[] {
+  const albumIds = new Set(pick.photoAlbumIds || []);
+  const photoIds = new Set(pick.photoIds || []);
+
+  if (albumIds.size || photoIds.size) {
+    let pool = photos;
+    if (albumIds.size) {
+      pool = pool.filter((photo) =>
+        albumIds.has(photo.albumId || "") ||
+        albumIds.has(photo.ownerId && photo.albumId ? `${photo.ownerId}:${photo.albumId}` : ""),
+      );
+    }
+    if (photoIds.size) {
+      pool = pool.filter((photo) => photoIds.has(photo.id) || photoIds.has(photoLibraryKey(photo)));
+    }
+    return pool.filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
+  }
+
   if (pick.photoRefs?.length) {
     const byId = new Map(photos.map((photo) => [photo.id, photo]));
     const byKey = new Map(photos.map((photo) => [photoLibraryKey(photo), photo]));
@@ -39,19 +65,10 @@ export function resolveDisplayPhotos<T extends PhotoPickItem>(photos: T[], pick:
       .filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
   }
 
-  const albumIds = new Set(pick.photoAlbumIds || []);
-  const photoIds = new Set(pick.photoIds || []);
-  let pool = photos;
-  if (albumIds.size) {
-    pool = pool.filter((photo) =>
-      albumIds.has(photo.albumId || "") ||
-      albumIds.has(photo.ownerId && photo.albumId ? `${photo.ownerId}:${photo.albumId}` : ""),
-    );
-  }
-  if (photoIds.size) {
-    pool = pool.filter((photo) => photoIds.has(photo.id) || photoIds.has(photoLibraryKey(photo)));
-  }
-  return pool.filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
+  // Nothing picked yet — show nothing rather than every photo in the
+  // account, so it is always obvious what a screen will show before it goes
+  // on the wall.
+  return [];
 }
 
 export function snapshotPhotoRefs(photos: PhotoPickItem[]): PhotoPickRef[] {
