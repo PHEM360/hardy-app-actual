@@ -683,6 +683,22 @@ export interface HouseholdItem {
 export interface HouseholdSettings {
   members: HouseholdMember[];
   categories: string[];        // customisable list of item types
+  noteTypes?: string[];        // tags for household notes (managed in settings)
+}
+
+// ─── Household Notes ──────────────────────────────────────────────────────────
+
+export interface HouseholdNote {
+  id?: string;
+  title: string;
+  body: string;
+  /** Tag from settings.noteTypes — empty string = untyped */
+  noteType: string;
+  pinned?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 // ─── Household Documents ──────────────────────────────────────────────────────
@@ -712,6 +728,17 @@ export interface HouseholdDocument {
   updatedAt?: any;
 }
 
+export const DEFAULT_NOTE_TYPES = [
+  "General",
+  "Utilities",
+  "Maintenance",
+  "Keys & Access",
+  "Neighbours",
+  "Appliances",
+  "Handover",
+  "Other",
+];
+
 export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = {
   members: [],
   categories: [
@@ -719,6 +746,7 @@ export const DEFAULT_HOUSEHOLD_SETTINGS: HouseholdSettings = {
     "Utilities", "Council Tax", "Mortgage",
     "Phone Contract", "TV / Broadband", "Pet Insurance", "Other"
   ],
+  noteTypes: [...DEFAULT_NOTE_TYPES],
 };
 
 // ─── QR Codes ─────────────────────────────────────────────────────────────────

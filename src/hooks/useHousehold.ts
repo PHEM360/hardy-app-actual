@@ -16,8 +16,10 @@ import {
   HouseholdSettings,
   DEFAULT_HOUSEHOLD_SETTINGS,
   HouseholdDocument,
+  HouseholdNote,
 } from "@/types/app";
 import { useActiveHousehold } from "./useActiveHousehold";
+import { useAuth } from "@/auth/AuthContext";
 
 // ─── Items ────────────────────────────────────────────────────────────────────
 
@@ -96,7 +98,14 @@ export function useHouseholdSettings() {
     const ref = doc(db, "household", activeHouseholdId, "settings", "main");
     const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
-        setSettings(snap.data() as HouseholdSettings);
+        const data = snap.data() as HouseholdSettings;
+        setSettings({
+          ...DEFAULT_HOUSEHOLD_SETTINGS,
+          ...data,
+          categories: data.categories?.length ? data.categories : DEFAULT_HOUSEHOLD_SETTINGS.categories,
+          noteTypes: data.noteTypes?.length ? data.noteTypes : DEFAULT_HOUSEHOLD_SETTINGS.noteTypes,
+          members: data.members ?? [],
+        });
       } else {
         setSettings(DEFAULT_HOUSEHOLD_SETTINGS);
       }
@@ -167,4 +176,73 @@ export function useHouseholdDocuments() {
   }, [activeHouseholdId]);
 
   return { documents, loading, addDocument, updateDocument, deleteDocument };
+}
+
+// ─── Notes ────────────────────────────────────────────────────────────────────
+
+export function useHouseholdNotes() {
+  const [notes, setNotes] = useState<HouseholdNote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { activeHouseholdId } = useActiveHousehold();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!activeHouseholdId) {
+      setNotes([]);
+      setLoading(false);
+      return;
+    }
+
+    setNotes([]);
+    setLoading(true);
+    const col = collection(db, "household", activeHouseholdId, "notes");
+    const unsub = onSnapshot(col, (snap) => {
+      const next = snap.docs.map((d) => ({ id: d.id, ...(d.data() as HouseholdNote) }));
+      next.sort((a, b) => {
+        if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+        const aTime = a.updatedAt?.toMillis?.() ?? a.updatedAt?.seconds * 1000 ?? 0;
+        const bTime = b.updatedAt?.toMillis?.() ?? b.updatedAt?.seconds * 1000 ?? 0;
+        return bTime - aTime;
+      });
+      setNotes(next);
+      setLoading(false);
+    });
+    return unsub;
+  }, [activeHouseholdId]);
+
+  const addNote = useCallback(
+    async (note: Omit<HouseholdNote, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy">) => {
+      if (!activeHouseholdId) return;
+      await addDoc(collection(db, "household", activeHouseholdId, "notes"), {
+        ...note,
+        createdBy: user?.uid ?? null,
+        updatedBy: user?.uid ?? null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [activeHouseholdId, user?.uid]
+  );
+
+  const updateNote = useCallback(
+    async (id: string, data: Partial<HouseholdNote>) => {
+      if (!activeHouseholdId) return;
+      await updateDoc(doc(db, "household", activeHouseholdId, "notes", id), {
+        ...data,
+        updatedBy: user?.uid ?? null,
+        updatedAt: serverTimestamp(),
+      } as Record<string, unknown>);
+    },
+    [activeHouseholdId, user?.uid]
+  );
+
+  const deleteNote = useCallback(
+    async (id: string) => {
+      if (!activeHouseholdId) return;
+      await deleteDoc(doc(db, "household", activeHouseholdId, "notes", id));
+    },
+    [activeHouseholdId]
+  );
+
+  return { notes, loading, addNote, updateNote, deleteNote };
 }

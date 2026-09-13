@@ -53,7 +53,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof LayoutDashboa
 const ACCENT = "hsl(210,50%,50%)";
 
 function railClass(active: boolean) {
-  return `flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-semibold transition-colors ${
+  return `flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-left text-xs font-semibold transition-colors sm:justify-start sm:px-2.5 sm:py-2 ${
     active ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-foreground hover:bg-card"
   }`;
 }
@@ -105,16 +105,23 @@ export default function CompanySocial() {
       sharePage="companies"
       action={<MarketingHelpButton />}
     >
-      <div className="flex min-w-0 gap-3">
-        <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
+      <div className="flex min-w-0 gap-2 sm:gap-3">
+        <aside className="w-12 shrink-0 sm:w-[10.75rem]">
           <div
-            className="sticky top-2 space-y-1 rounded-2xl border border-border/40 p-1.5 shadow-card"
+            className="sticky top-2 max-h-[calc(100dvh-8rem)] space-y-1 overflow-y-auto rounded-2xl border border-border/40 p-1 shadow-card sm:p-1.5"
             style={{ background: `color-mix(in srgb, ${ACCENT} 12%, hsl(var(--card)))` }}
           >
             {SECTIONS.map((item) => {
               const Icon = item.icon;
               return (
-                <button key={item.id} type="button" className={railClass(section === item.id)} onClick={() => setSection(item.id)}>
+                <button
+                  key={item.id}
+                  type="button"
+                  title={item.label}
+                  aria-label={item.label}
+                  className={railClass(section === item.id)}
+                  onClick={() => setSection(item.id)}
+                >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden truncate sm:inline">{item.label}</span>
                 </button>
@@ -125,23 +132,58 @@ export default function CompanySocial() {
 
         <div className="min-w-0 flex-1 space-y-3 overflow-x-hidden">
           <div className="rounded-2xl border border-border/40 bg-card p-3 shadow-card">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" className={chipClass(companyId === "all")} onClick={() => setCompanyId("all")}>All companies</button>
-              {companies.map((company) => (
-                <button key={company.id} type="button" className={chipClass(companyId === company.id)} onClick={() => setCompanyId(company.id)}>
-                  {company.emoji} {company.name}
-                </button>
-              ))}
+            {/* Mobile: compact selects so chips don’t crush the content column */}
+            <div className="space-y-3 sm:hidden">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm"
+                  value={companyId}
+                  onChange={(event) => setCompanyId(event.target.value)}
+                >
+                  <option value="all">All companies</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.emoji ? `${company.emoji} ` : ""}{company.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Platform</p>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm"
+                  value={platform}
+                  onChange={(event) => setPlatform(event.target.value)}
+                >
+                  <option value="all">All platforms</option>
+                  {SOCIAL_PLATFORMS.map((item) => (
+                    <option key={item} value={item}>{SOCIAL_PLATFORM_LABELS[item]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <p className="mb-2 mt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Platform</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" className={chipClass(platform === "all")} onClick={() => setPlatform("all")}>All platforms</button>
-              {SOCIAL_PLATFORMS.map((item) => (
-                <button key={item} type="button" className={chipClass(platform === item)} onClick={() => setPlatform(item)}>
-                  {SOCIAL_PLATFORM_LABELS[item]}
-                </button>
-              ))}
+
+            {/* sm+: chip filters */}
+            <div className="hidden sm:block">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Company</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" className={chipClass(companyId === "all")} onClick={() => setCompanyId("all")}>All companies</button>
+                {companies.map((company) => (
+                  <button key={company.id} type="button" className={chipClass(companyId === company.id)} onClick={() => setCompanyId(company.id)}>
+                    {company.emoji} {company.name}
+                  </button>
+                ))}
+              </div>
+              <p className="mb-2 mt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Platform</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" className={chipClass(platform === "all")} onClick={() => setPlatform("all")}>All platforms</button>
+                {SOCIAL_PLATFORMS.map((item) => (
+                  <button key={item} type="button" className={chipClass(platform === item)} onClick={() => setPlatform(item)}>
+                    {SOCIAL_PLATFORM_LABELS[item]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -340,9 +382,9 @@ function QueueSection({
       )}
       {grouped.map(([id, items]) => (
         <section key={id} className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-display text-lg font-bold">{items[0].company.name}</p>
-            <Button size="sm" disabled={busy} onClick={() => void approveAll(id, items)}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="min-w-0 font-display text-lg font-bold">{items[0].company.name}</p>
+            <Button size="sm" className="w-full shrink-0 sm:w-auto" disabled={busy} onClick={() => void approveAll(id, items)}>
               <Check className="mr-1.5 h-3.5 w-3.5" /> Approve all
             </Button>
           </div>
@@ -576,12 +618,15 @@ function BrandSection({
           const rule = cadence[item] || { postsPerMonth: 0, articlesPerMonth: 0, controversialCount: 0, tone: "" };
           const patch = (updates: Partial<MarketingCadenceRule>) => setCadence({ ...cadence, [item]: { ...rule, ...updates } });
           return (
-            <div key={item} className="grid gap-2 rounded-xl bg-card p-3 shadow-card sm:grid-cols-5">
-              <p className="text-sm font-semibold sm:col-span-5">{SOCIAL_PLATFORM_LABELS[item]} <span className="font-normal text-muted-foreground">· {SOCIAL_PLATFORM_HINTS[item]}</span></p>
+            <div key={item} className="grid grid-cols-2 gap-2 rounded-xl bg-card p-3 shadow-card sm:grid-cols-5">
+              <p className="col-span-2 text-sm font-semibold sm:col-span-5">
+                {SOCIAL_PLATFORM_LABELS[item]}{" "}
+                <span className="font-normal text-muted-foreground">· {SOCIAL_PLATFORM_HINTS[item]}</span>
+              </p>
               <Field label="Posts / month"><Input type="number" min={0} max={60} value={rule.postsPerMonth || ""} onChange={(event) => patch({ postsPerMonth: Number(event.target.value) })} /></Field>
               <Field label="Articles"><Input type="number" min={0} max={12} value={rule.articlesPerMonth || ""} onChange={(event) => patch({ articlesPerMonth: Number(event.target.value) })} /></Field>
               <Field label="Opinion pieces"><Input type="number" min={0} max={8} value={rule.controversialCount || ""} onChange={(event) => patch({ controversialCount: Number(event.target.value) })} /></Field>
-              <div className="sm:col-span-2"><Field label="Tone"><Input value={rule.tone} onChange={(event) => patch({ tone: event.target.value })} /></Field></div>
+              <div className="col-span-2 sm:col-span-2"><Field label="Tone"><Input value={rule.tone} onChange={(event) => patch({ tone: event.target.value })} /></Field></div>
             </div>
           );
         })}

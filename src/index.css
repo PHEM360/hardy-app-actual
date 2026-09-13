@@ -475,6 +475,11 @@ input[type="date"] {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* Alias used by a few sheets — keep in sync with .safe-bottom */
+  .pb-safe {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  }
+
   /* Hide scrollbar but keep scroll functionality */
   .no-scrollbar {
     -ms-overflow-style: none;
@@ -506,11 +511,24 @@ input[type="date"] {
     margin-bottom: 0.75rem;
   }
 
-  /* Full-height on mobile including dynamic bars */
-  html, body, #root {
+  /* Full-height on mobile including dynamic bars.
+     Keep html/body on the dark chrome colour so any gap under the fixed bottom
+     nav (PWA home indicator / overscroll) never flashes the mint page colour.
+     #root stays transparent — page chrome paints light backgrounds themselves. */
+  html, body {
     height: 100%;
     min-height: 100dvh;
+    min-height: 100svh;
     overflow-x: hidden;
+    background-color: hsl(215, 32%, 18%);
+  }
+
+  #root {
+    height: 100%;
+    min-height: 100dvh;
+    min-height: 100svh;
+    overflow-x: hidden;
+    background-color: transparent;
   }
 
   /* Expose safe-area insets as px vars for JS (dialogs, sticky headers) */
