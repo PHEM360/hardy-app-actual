@@ -311,17 +311,18 @@ export async function generateMarketingJson(options: {
   const fetchImpl = options.fetchImpl ?? fetch;
   const flags = marketingFlagsFromSecrets(options.secrets);
   const chain = marketingFallbackChain(options.task, flags, options.overrides);
-  const adapters = { ...DEFAULT_TEXT_ADAPTERS, ...options.adapters };
+  const adapters = options.adapters ?? DEFAULT_TEXT_ADAPTERS;
   let lastError: unknown;
 
   for (const step of chain) {
     if (step.provider === "mock") {
       return { value: options.mockGenerate(), usage: { ...step } };
     }
+    const adapter = adapters[step.provider];
     const apiKey = secretForProvider(step.provider, options.secrets);
-    if (!apiKey) continue;
+    if (!adapter || !apiKey) continue;
     try {
-      const value = await adapters[step.provider]({
+      const value = await adapter({
         model: step.model,
         system: options.system,
         user: options.user,
@@ -359,16 +360,17 @@ export async function generateMarketingImageBuffer(options: {
   const fetchImpl = options.fetchImpl ?? fetch;
   const flags = marketingFlagsFromSecrets(options.secrets);
   const chain = marketingFallbackChain("image", flags, options.overrides);
-  const adapters = { ...DEFAULT_IMAGE_ADAPTERS, ...options.adapters };
+  const adapters = options.adapters ?? DEFAULT_IMAGE_ADAPTERS;
 
   for (const step of chain) {
     if (step.provider === "mock") {
       return { buffer: null, usage: { ...step } };
     }
+    const adapter = adapters[step.provider];
     const apiKey = secretForProvider(step.provider, options.secrets);
-    if (!apiKey) continue;
+    if (!adapter || !apiKey) continue;
     try {
-      const buffer = await adapters[step.provider]({
+      const buffer = await adapter({
         model: step.model,
         prompt: options.prompt,
         apiKey,

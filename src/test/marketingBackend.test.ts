@@ -94,7 +94,7 @@ describe("marketing backend validation", () => {
     const instructions = buildMarketingPlanInstructions(12, august);
     expect(instructions).toMatch(/British English/);
     expect(instructions).toMatch(/competitors/);
-    expect(instructions).toMatch(/Return exactly 12 pieces/);
+    expect(instructions).toMatch(/Return JSON with exactly 12 pieces/);
   });
 
   it("splits competitor names from public websites and blocks private URLs", () => {

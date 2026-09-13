@@ -67,16 +67,20 @@ describe("marketing provider adapters", () => {
       throw new Error("grok down");
     });
     const openai = vi.fn(async () => ({ draft: "from openai" }));
+    const gemini = vi.fn(async () => {
+      throw new Error("must not call Gemini");
+    });
     const result = await generateMarketingJson({
       task: "copy",
       system: "sys",
       user: "user",
       secrets: liveSecrets,
       mockGenerate: () => ({ draft: "demo" }),
-      adapters: { grok, openai },
+      adapters: { grok, openai, gemini },
     });
     expect(result.usage.provider).toBe("openai");
     expect(result.value).toEqual({ draft: "from openai" });
+    expect(gemini).not.toHaveBeenCalled();
   });
 
   it("falls back to mock after every live adapter fails", async () => {

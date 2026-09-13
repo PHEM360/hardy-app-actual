@@ -95,6 +95,14 @@ describe("marketing AI router", () => {
     expect(chain[0].model).toBe("gpt-4o");
   });
 
+  it("keeps preference order on fallback, not cheapest-next", () => {
+    expect(marketingFallbackChain("copy", all).map((item) => item.provider)).toEqual([
+      "grok",
+      "openai",
+      "gemini",
+    ]);
+  });
+
   it("documents a relative cost hint on every live candidate", () => {
     for (const [task, candidates] of Object.entries(MARKETING_TASK_ROUTES)) {
       expect(candidates.length).toBeGreaterThan(0);

@@ -161,9 +161,9 @@ export function marketingFallbackChain(
     chain.push(item);
   };
   push(preferred);
-  const rest = MARKETING_TASK_ROUTES[task]
-    .filter((item) => keyFor(item.provider, keys))
-    .sort((a, b) => a.relativeCost - b.relativeCost);
+  // Keep the documented preference order (quality first where that is the map).
+  // relativeCost is a hint for operators, not the fallback sort.
+  const rest = MARKETING_TASK_ROUTES[task].filter((item) => keyFor(item.provider, keys));
   for (const item of rest) {
     push({
       provider: item.provider,
