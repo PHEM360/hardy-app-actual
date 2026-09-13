@@ -539,10 +539,11 @@ export const generateMarketingPlan = onCall(
     if (!String(profile.website || "").trim() && companyWebsite) {
       profile.website = /^https?:\/\//i.test(companyWebsite) ? companyWebsite : `https://${companyWebsite}`;
     }
-    if (!profileSnap.exists || !hasMeaningfulMarketingProfile(profile)) {
+    const profileReady = profileSnap.exists && hasMeaningfulMarketingProfile(profile);
+    if (!profileReady && hasOpenAiKey()) {
       throw new HttpsError(
         "failed-precondition",
-        "Complete the brand voice, audience, industry or trading name, and objectives or key messages first."
+        "Complete the brand voice, audience, industry or trading name, and objectives or key messages first — or run Scan brand."
       );
     }
     if (input.campaignId && !campaignSnap?.exists) {
