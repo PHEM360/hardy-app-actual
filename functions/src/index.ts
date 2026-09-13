@@ -150,6 +150,11 @@ export {
 	publishMarketingContentNow,
 	processMarketingPublishJobs,
 	generateMarketingImage,
+	scanMarketingBrand,
+	analyseMarketingPresence,
+	suggestMarketingSchedule,
+	requestMarketingEdits,
+	seedMarketingDemo,
 } from "./marketing";
 
 export {

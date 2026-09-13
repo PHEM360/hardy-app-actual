@@ -57,6 +57,8 @@ function bundle(id: string, name: string, content: ContentPiece[]): CompanyMarke
   return {
     company: company(id, name),
     profile: DEFAULT_MARKETING_PROFILE,
+    plan: null,
+    analysis: null,
     content,
     assets: [],
     connections: [],

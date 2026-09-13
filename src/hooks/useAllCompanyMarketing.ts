@@ -6,8 +6,10 @@ import { DEFAULT_MARKETING_PROFILE } from "@/hooks/useCompanyMarketing";
 import type {
   Company,
   ContentPiece,
+  MarketingAnalysis,
   MarketingAsset,
   MarketingAudit,
+  MarketingPlan,
   MarketingPlatformConnection,
   MarketingProfile,
 } from "@/types/app";
@@ -15,6 +17,8 @@ import type {
 export interface CompanyMarketingBundle {
   company: Company;
   profile: MarketingProfile;
+  plan: MarketingPlan | null;
+  analysis: MarketingAnalysis | null;
   content: ContentPiece[];
   assets: MarketingAsset[];
   connections: MarketingPlatformConnection[];
@@ -39,6 +43,24 @@ export function useAllCompanyMarketing() {
             profile: snap.exists()
               ? { ...DEFAULT_MARKETING_PROFILE, ...snap.data() } as MarketingProfile
               : DEFAULT_MARKETING_PROFILE,
+          },
+        }));
+      }),
+      onSnapshot(doc(db, "companies", company.id, "marketing", "plan"), (snap) => {
+        setBundles((current) => ({
+          ...current,
+          [company.id]: {
+            ...(current[company.id] || emptyBundle()),
+            plan: snap.exists() ? snap.data() as MarketingPlan : null,
+          },
+        }));
+      }),
+      onSnapshot(doc(db, "companies", company.id, "marketing", "analysis"), (snap) => {
+        setBundles((current) => ({
+          ...current,
+          [company.id]: {
+            ...(current[company.id] || emptyBundle()),
+            analysis: snap.exists() ? snap.data() as MarketingAnalysis : null,
           },
         }));
       }),
@@ -108,6 +130,8 @@ export function useAllCompanyMarketing() {
 function emptyBundle(): Omit<CompanyMarketingBundle, "company"> {
   return {
     profile: DEFAULT_MARKETING_PROFILE,
+    plan: null,
+    analysis: null,
     content: [],
     assets: [],
     connections: [],

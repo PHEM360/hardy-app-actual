@@ -87,18 +87,32 @@ describe("company marketing Firestore enforcement", () => {
     ));
   });
 
-  it("does not let a browser approve or forge published content", async () => {
+  it("does not let a browser forge a live published post", async () => {
     await assertFails(setDoc(
       doc(context("owner"), "companies", "company", "content", "forged"),
       content("published", 1, 1),
     ));
     await assertFails(updateDoc(
-      doc(context("owner"), "companies", "company", "content", "awaiting"),
-      { status: "approved", approvedVersion: 3 },
-    ));
-    await assertFails(updateDoc(
       doc(context("owner"), "companies", "company", "content", "scheduled"),
       { status: "published", externalPostId: "fake" },
+    ));
+  });
+
+  it("lets an editor dry-run approve and publish", async () => {
+    await assertSucceeds(updateDoc(
+      doc(context("owner"), "companies", "company", "content", "awaiting"),
+      { status: "approved", approvedVersion: 3, approvedBy: "owner" },
+    ));
+    await assertSucceeds(updateDoc(
+      doc(context("owner"), "companies", "company", "content", "scheduled"),
+      { status: "published", publishMode: "dry_run", externalPostId: "dry-run_1" },
+    ));
+  });
+
+  it("lets an editor request edits by returning a post to draft", async () => {
+    await assertSucceeds(updateDoc(
+      doc(context("owner"), "companies", "company", "content", "awaiting"),
+      { status: "draft", editRequestNotes: "Make the opening warmer." },
     ));
   });
 

@@ -47,6 +47,7 @@ import {
   generateMarketingPlan,
   getMarketingConnectionUrl,
   rejectMarketingContent,
+  requestMarketingEdits,
 } from "@/lib/marketingApi";
 import type {
   Company,
@@ -276,7 +277,7 @@ function OverviewSection({
         platforms: state.profile.platforms.length ? state.profile.platforms : PLATFORMS,
         includeImages: true,
         focus: "Create the next month of engaging social posts with matching pictures.",
-      });
+      }, { company, profile: state.profile });
       toast.success(result.summary || `${result.created} posts created for review.`);
       onSection("review");
     } catch (error) {
@@ -341,13 +342,20 @@ function OverviewSection({
           {generatingMonth ? "Generating next month…" : "Generate next month"}
         </Button>
       </div>
+      {state.plan && (
+        <div className={`${cardClass} p-4 sm:p-5`} style={companySurface(company.color, 12)}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plan and budget</p>
+          <p className="mt-1 font-display text-2xl font-bold">£{state.plan.estimatedBudgetGbp.toLocaleString("en-GB")}</p>
+          <p className="mt-1 text-sm">{state.plan.summary}</p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
+        {([
           ["Needs review", counts.review, ClipboardCheck, "text-amber-600"],
           ["Scheduled", counts.scheduled, CalendarDays, "text-blue-600"],
           ["Published", counts.published, CheckCircle2, "text-emerald-600"],
           ["Failed", counts.failed, AlertCircle, "text-destructive"],
-        ].map(([label, value, Icon, colour]) => (
+        ] as const).map(([label, value, Icon, colour]) => (
           <div key={String(label)} className={`${cardClass} p-4`} style={companySurface(company.color, 8)}>
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">{label as string}</span>
@@ -597,7 +605,7 @@ function PlanGenerator({
     }
     setGenerating(true);
     try {
-      const result = await generateMarketingPlan(companyId, request);
+      const result = await generateMarketingPlan(companyId, request, { profile: state.profile });
       toast.success(result.summary || `${result.created} posts created for review.`);
     } catch (error) {
       toast.error(`Plan could not be generated: ${errorMessage(error)}`);
@@ -812,7 +820,9 @@ function ReviewSection({ state, companyId }: { state: MarketingState; companyId:
   const queue = state.content.filter((item) => item.status === "awaiting_approval" || item.status === "rejected");
   const [editing, setEditing] = useState<ContentPiece | null>(null);
   const [rejecting, setRejecting] = useState<ContentPiece | null>(null);
+  const [editingRequest, setEditingRequest] = useState<ContentPiece | null>(null);
   const [reason, setReason] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   const [busyId, setBusyId] = useState("");
 
   const approve = async (item: ContentPiece) => {
@@ -898,10 +908,16 @@ function ReviewSection({ state, companyId }: { state: MarketingState; companyId:
               <Download className="h-4 w-4" /> Download
             </Button>
             {item.status === "awaiting_approval" && (
+              <Button variant="outline" onClick={() => { setEditingRequest(item); setEditNotes(item.editRequestNotes || ""); }} className="gap-2">
+                Request edits
+              </Button>
+            )}
+            {item.status === "awaiting_approval" && (
               <Button variant="outline" onClick={() => { setRejecting(item); setReason(""); }} className="gap-2 text-destructive">
                 <XCircle className="h-4 w-4" /> Reject
               </Button>
             )}
+            {item.editRequestNotes && <p className="w-full text-sm">Edit requested: {item.editRequestNotes}</p>}
           </div>
         </article>
       )) : (
@@ -918,6 +934,31 @@ function ReviewSection({ state, companyId }: { state: MarketingState; companyId:
             await state.updateContent(editing.id!, updates);
             toast.success("Draft updated.");
           }} />}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(editingRequest)} onOpenChange={(open) => !open && setEditingRequest(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Request edits</DialogTitle><DialogDescription>Send this back to draft with a note. It will not publish until you approve a new version.</DialogDescription></DialogHeader>
+          <Field label="What should change">
+            <Textarea aria-label="Edit request notes" value={editNotes} onChange={(event) => setEditNotes(event.target.value)} rows={4} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditingRequest(null)}>Cancel</Button>
+            <Button disabled={busyId === editingRequest?.id} onClick={async () => {
+              if (!editingRequest?.id) return;
+              if (editNotes.trim().length < 3) return toast.error("Add a short note so the next rewrite knows what to change.");
+              setBusyId(editingRequest.id);
+              try {
+                await requestMarketingEdits(companyId, editingRequest.id, editingRequest.approvalVersion, editNotes.trim());
+                toast.success("Sent back with notes.");
+                setEditingRequest(null);
+              } catch (error) {
+                toast.error(`Could not request edits: ${errorMessage(error)}`);
+              } finally {
+                setBusyId("");
+              }
+            }}>Send notes</Button>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(rejecting)} onOpenChange={(open) => !open && setRejecting(null)}>
@@ -1150,6 +1191,9 @@ function BrandSection({ state }: { state: MarketingState }) {
           <Field label="Target audience" hint="Who they are, what they need and what matters to them."><Textarea aria-label="Target audience" rows={4} value={form.targetAudience} onChange={(event) => setForm({ ...form, targetAudience: event.target.value })} /></Field>
           <Field label="Industry"><Input aria-label="Industry" value={form.industry} onChange={(event) => setForm({ ...form, industry: event.target.value })} /></Field>
           <Field label="Website"><Input aria-label="Marketing website" type="url" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></Field>
+          <Field label="Style notes" hint="Colour, photography, typography, words to lean on.">
+            <Textarea aria-label="Style notes" rows={3} value={form.styleNotes || ""} onChange={(event) => setForm({ ...form, styleNotes: event.target.value })} />
+          </Field>
           <div className="sm:col-span-2">
             <Field label="What's happening now" hint="Seasonal hooks, local events, news in your sector, or what a competitor just launched.">
               <Textarea aria-label="What's happening now" rows={3} value={form.currentThemes || ""} onChange={(event) => setForm({ ...form, currentThemes: event.target.value })} />
@@ -1170,6 +1214,16 @@ function BrandSection({ state }: { state: MarketingState }) {
           ))}
         </div>
         <PlatformChecks value={form.platforms} onChange={(platforms) => setForm({ ...form, platforms })} legend="Default platforms" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox aria-label="Include TikTok for this brand" checked={Boolean(form.enableTikTok)} onCheckedChange={(checked) => setForm({ ...form, enableTikTok: Boolean(checked) })} />
+            Include TikTok (optional)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox aria-label="Include YouTube for this brand" checked={Boolean(form.enableYouTube)} onCheckedChange={(checked) => setForm({ ...form, enableYouTube: Boolean(checked) })} />
+            Include YouTube (optional)
+          </label>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Default plan days"><Input aria-label="Default plan days" type="number" min={7} max={90} value={form.defaultPlanDays || ""} onChange={(event) => setForm({ ...form, defaultPlanDays: Number(event.target.value) })} /></Field>
           <Field label="Default posts per week"><Input aria-label="Default posts per week" type="number" min={1} max={14} value={form.postsPerWeek || ""} onChange={(event) => setForm({ ...form, postsPerWeek: Number(event.target.value) })} /></Field>

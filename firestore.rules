@@ -684,6 +684,18 @@ service cloud.firestore {
             request.resource.data.status == 'awaiting_approval' &&
             request.resource.data.approvalVersion == resource.data.approvalVersion + 1 &&
             request.resource.data.approvedVersion == 0
+          ) ||
+          (
+            resource.data.status == 'awaiting_approval' &&
+            request.resource.data.status in ['approved', 'scheduled'] &&
+            request.resource.data.approvedVersion == resource.data.approvalVersion &&
+            request.resource.data.approvedBy == request.auth.uid
+          ) ||
+          (
+            resource.data.status in ['approved', 'scheduled'] &&
+            request.resource.data.status == 'published' &&
+            request.resource.data.publishMode == 'dry_run' &&
+            request.resource.data.externalPostId.matches('dry-run_.*')
           )
         );
         allow delete: if isAuthenticated() && canEditCompany(companyId);

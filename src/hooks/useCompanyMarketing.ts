@@ -17,9 +17,11 @@ import { approvalResetForMarketingEdit } from "@/lib/marketingContent";
 import { defaultCadence } from "@/lib/socialPlatforms";
 import type {
   ContentPiece,
+  MarketingAnalysis,
   MarketingAsset,
   MarketingAudit,
   MarketingCampaign,
+  MarketingPlan,
   MarketingPlatformConnection,
   MarketingProfile,
 } from "@/types/app";
@@ -42,6 +44,9 @@ export const DEFAULT_MARKETING_PROFILE: MarketingProfile = {
   website: "",
   prStrategy: "",
   marketingSpendSummary: "",
+  styleNotes: "",
+  enableTikTok: false,
+  enableYouTube: false,
   aiSuggestedFields: [],
   defaultPlanDays: 30,
   postsPerWeek: 3,
@@ -83,6 +88,8 @@ function clean<T extends object>(value: T): T {
 
 export function useCompanyMarketing(companyId: string | undefined) {
   const [profile, setProfile] = useState<MarketingProfile>(DEFAULT_MARKETING_PROFILE);
+  const [plan, setPlan] = useState<MarketingPlan | null>(null);
+  const [analysis, setAnalysis] = useState<MarketingAnalysis | null>(null);
   const [content, setContent] = useState<ContentPiece[]>([]);
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [assets, setAssets] = useState<MarketingAsset[]>([]);
@@ -96,7 +103,7 @@ export function useCompanyMarketing(companyId: string | undefined) {
       return;
     }
 
-    let remaining = 6;
+    let remaining = 8;
     const ready = () => {
       remaining -= 1;
       if (remaining <= 0) setLoading(false);
@@ -106,6 +113,14 @@ export function useCompanyMarketing(companyId: string | undefined) {
         setProfile(snapshot.exists()
           ? { ...DEFAULT_MARKETING_PROFILE, ...snapshot.data() } as MarketingProfile
           : DEFAULT_MARKETING_PROFILE);
+        ready();
+      }, ready),
+      onSnapshot(doc(db, "companies", companyId, "marketing", "plan"), (snapshot) => {
+        setPlan(snapshot.exists() ? snapshot.data() as MarketingPlan : null);
+        ready();
+      }, ready),
+      onSnapshot(doc(db, "companies", companyId, "marketing", "analysis"), (snapshot) => {
+        setAnalysis(snapshot.exists() ? snapshot.data() as MarketingAnalysis : null);
         ready();
       }, ready),
       onSnapshot(
@@ -301,6 +316,8 @@ export function useCompanyMarketing(companyId: string | undefined) {
 
   return {
     profile,
+    plan,
+    analysis,
     content,
     campaigns,
     assets,

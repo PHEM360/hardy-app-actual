@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   connectionUrl: vi.fn(),
   generateImage: vi.fn(),
   generateAudit: vi.fn(),
+  requestEdits: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock("@/lib/marketingApi", () => ({
   getMarketingConnectionUrl: mocks.connectionUrl,
   generateMarketingImage: mocks.generateImage,
   generateMarketingAudit: mocks.generateAudit,
+  requestMarketingEdits: mocks.requestEdits,
 }));
 
 vi.mock("sonner", () => ({
@@ -120,6 +122,8 @@ const company: Company = {
 function marketingState() {
   return {
     profile,
+    plan: null,
+    analysis: null,
     content: [reviewPost, scheduledPost],
     campaigns: [],
     assets: [],
@@ -164,6 +168,7 @@ describe("CompanyMarketingTab", () => {
     mocks.reject.mockResolvedValue({ status: "rejected" });
     mocks.connectionUrl.mockResolvedValue({ available: false, reason: "Provider credentials have not been configured." });
     mocks.generateAudit.mockResolvedValue({ auditId: "audit-1", headline: "Weekly PR audit" });
+    mocks.requestEdits.mockResolvedValue({ status: "draft" });
   });
 
   it("saves the complete brand profile", async () => {
@@ -192,7 +197,7 @@ describe("CompanyMarketingTab", () => {
       focus: "Autumn launch",
       platforms: ["instagram", "facebook"],
       includeImages: true,
-    })));
+    }), expect.anything()));
   });
 
   it("explains how to generate a month of posts", () => {
@@ -210,7 +215,7 @@ describe("CompanyMarketingTab", () => {
       postsPerWeek: 3,
       includeImages: true,
       platforms: ["instagram", "facebook"],
-    })));
+    }), expect.anything()));
     expect(mocks.toastSuccess).toHaveBeenCalled();
   });
 
@@ -219,6 +224,22 @@ describe("CompanyMarketingTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("company-1", "review-1", 7));
+  });
+
+  it("sends edit-request notes from the review queue", async () => {
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Request edits" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit request notes" }), {
+      target: { value: "Make the opening warmer." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send notes" }));
+    await waitFor(() => expect(mocks.requestEdits).toHaveBeenCalledWith(
+      "company-1",
+      "review-1",
+      7,
+      "Make the opening warmer.",
+    ));
   });
 
   it("requires a reason before rejecting", async () => {

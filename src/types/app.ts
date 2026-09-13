@@ -325,6 +325,12 @@ export interface MarketingProfile {
   prStrategy?: string;
   /** Freeform: what's been spent on marketing so far, e.g. "£500/mo on Instagram ads, £2k one-off rebrand". */
   marketingSpendSummary?: string;
+  /** Visual / verbal style notes: colour, photography, typography, words to lean on. */
+  styleNotes?: string;
+  /** TikTok is optional per brand. When false it stays off the default generate set. */
+  enableTikTok?: boolean;
+  /** YouTube is optional per brand. When false it stays off the default generate set. */
+  enableYouTube?: boolean;
   defaultPlanDays: number;
   postsPerWeek: number;
   approvalRequired: boolean;
@@ -417,6 +423,42 @@ export interface ContentPiece {
   brandChecks: string[];
   engagementSuggestions: string[];
   revisions: ContentRevision[];
+  /** Notes from an operator asking for a rewrite before approval. */
+  editRequestNotes?: string;
+  editRequestedAt?: string;
+  editRequestedBy?: string;
+  /** Live posting is gated. Phase 1 records dry-run publishes in-app. */
+  publishMode?: "live" | "dry_run";
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+/** Saved marketing plan + indicative budget for one company. Stored at marketing/plan. */
+export interface MarketingPlan {
+  summary: string;
+  objectives: string[];
+  estimatedBudgetGbp: number;
+  budgetNotes: string;
+  periodDays: number;
+  postsPerWeek: number;
+  platforms: SocialPlatform[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  source: "openai" | "gemini" | "mock";
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+/** Strengths / weaknesses snapshot from a presence analysis. Stored at marketing/analysis. */
+export interface MarketingAnalysis {
+  headline: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  estimatedMonthlyBudgetGbp: number;
+  source: "openai" | "gemini" | "mock";
   createdAt?: any;
   updatedAt?: any;
 }

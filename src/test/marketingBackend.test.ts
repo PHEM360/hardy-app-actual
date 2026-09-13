@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mockContentBatch } from "../../functions/src/marketingMock";
 import {
   buildMarketingPlanInstructions,
   calculateMarketingPieceCount,
@@ -121,6 +122,17 @@ describe("marketing backend validation", () => {
       description: "UK tax help for families",
       headings: ["Friendly tax advice"],
     });
+  });
+
+  it("builds a mock batch the plan function can persist without an LLM key", () => {
+    const pieces = mockContentBatch({
+      companyName: "Acme Tax",
+      platforms: ["instagram", "linkedin"],
+      periodDays: 14,
+      postsPerWeek: 2,
+    }, calculateMarketingPieceCount(14, 2));
+    expect(pieces.length).toBe(4);
+    expect(pieces.every((item) => item.scheduledFor && item.draft)).toBe(true);
   });
 
   it("keeps only public extra URLs for an audit", () => {

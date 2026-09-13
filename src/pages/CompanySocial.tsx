@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAllCompanyMarketing, filterMarketingContent } from "@/hooks/useAllCompanyMarketing";
 import { useCompanyMarketing } from "@/hooks/useCompanyMarketing";
 import {
+  analyseMarketingPresence,
   approveMarketingContent,
   bulkApproveMarketingContent,
   rejectMarketingContent,
@@ -21,7 +22,11 @@ import {
   generateMarketingPlan,
   getMarketingConnectionUrl,
   publishMarketingContentNow,
+  requestMarketingEdits,
   saveMarketingSocialLink,
+  scanMarketingBrand,
+  seedMarketingDemo,
+  suggestMarketingSchedule,
 } from "@/lib/marketingApi";
 import { isMarketingProfileReady, seedMarketingProfileFromCompany } from "@/lib/marketingContent";
 import { MarketingHelpButton, MarketingOnboarding } from "@/components/companies/MarketingOnboarding";
@@ -35,7 +40,7 @@ import {
   defaultCadence,
   platformLabel,
 } from "@/lib/socialPlatforms";
-import type { MarketingCadenceRule, SocialPlatform } from "@/types/app";
+import type { Company, MarketingAnalysis, MarketingCadenceRule, MarketingPlan, MarketingProfile, SocialPlatform } from "@/types/app";
 
 type SectionId = "dashboard" | "calendar" | "queue" | "generate" | "brand" | "media" | "presence" | "connections";
 
@@ -200,22 +205,48 @@ export default function CompanySocial() {
           ) : !companies.length ? (
             <EmptyCard title="Add a company first" body="Social & Ads plans sit on each company. Create one on the Companies page, then come back here." />
           ) : section === "dashboard" ? (
-            <DashboardSection posts={posts} awaiting={awaiting.length} companies={companyId === "all" ? companies.length : 1} />
+            <DashboardSection
+              posts={posts}
+              awaiting={awaiting.length}
+              companies={companyId === "all" ? companies.length : 1}
+              plan={companyId === "all" ? null : companyMarketing.plan}
+              analysis={companyId === "all" ? null : companyMarketing.analysis}
+              profile={companyId === "all" ? undefined : companyMarketing.profile}
+              company={selectedCompany}
+              companyId={companyId === "all" ? undefined : selectedCompany?.id}
+              onSeeded={() => setSection("queue")}
+            />
           ) : section === "calendar" ? (
             <CalendarSection posts={posts} />
           ) : section === "queue" ? (
             <QueueSection
-              posts={awaiting}
+              posts={[
+                ...awaiting,
+                ...posts.filter((row) => row.item.status === "draft" && row.item.editRequestNotes),
+              ]}
               ready={posts.filter((row) => row.item.status === "approved" || row.item.status === "scheduled")}
+              published={posts.filter((row) => row.item.status === "published")}
             />
           ) : section === "generate" ? (
-            <GenerateSection companyId={selectedCompany?.id} profile={companyMarketing.profile} disabled={companyId === "all"} />
+            <GenerateSection
+              companyId={selectedCompany?.id}
+              company={selectedCompany}
+              profile={companyMarketing.profile}
+              plan={companyMarketing.plan}
+              analysis={companyMarketing.analysis}
+              disabled={companyId === "all"}
+            />
           ) : section === "brand" ? (
             <BrandSection state={companyMarketing} company={selectedCompany} companyId={selectedCompany?.id} disabled={companyId === "all"} />
           ) : section === "media" ? (
             <MediaSection state={companyMarketing} companyId={selectedCompany?.id} disabled={companyId === "all"} />
           ) : section === "presence" ? (
-            <PresenceSection state={companyMarketing} companyId={selectedCompany?.id} disabled={companyId === "all"} />
+            <PresenceSection
+              state={companyMarketing}
+              company={selectedCompany}
+              companyId={selectedCompany?.id}
+              disabled={companyId === "all"}
+            />
           ) : (
             <ConnectionsSection state={companyMarketing} companyId={selectedCompany?.id} disabled={companyId === "all"} />
           )}
@@ -239,11 +270,24 @@ function DashboardSection({
   posts,
   awaiting,
   companies,
+  plan,
+  analysis,
+  profile,
+  company,
+  companyId,
+  onSeeded,
 }: {
   posts: ReturnType<typeof filterMarketingContent>;
   awaiting: number;
   companies: number;
+  plan: MarketingPlan | null;
+  analysis: MarketingAnalysis | null;
+  profile?: MarketingProfile;
+  company?: Company;
+  companyId?: string;
+  onSeeded?: () => void;
 }) {
+  const [seeding, setSeeding] = useState(false);
   const published = posts.filter((row) => row.item.status === "published").length;
   const scheduled = posts.filter((row) => row.item.status === "scheduled" || row.item.status === "approved").length;
   return (
@@ -265,6 +309,59 @@ function DashboardSection({
           </div>
         ))}
       </div>
+      {plan ? (
+        <article
+          className="rounded-2xl border border-border/40 p-4 shadow-card"
+          style={{ background: `color-mix(in srgb, ${ACCENT} 12%, hsl(var(--card)))`, borderLeftWidth: 4, borderLeftColor: ACCENT }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plan and budget</p>
+          <p className="mt-1 font-display text-2xl font-bold">£{plan.estimatedBudgetGbp.toLocaleString("en-GB")}</p>
+          <p className="mt-1 text-sm">{plan.summary}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{plan.budgetNotes}</p>
+        </article>
+      ) : companyId ? (
+        <article className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+          <p className="font-display text-lg font-bold">Try the full flow</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Load a 60-day demo plan for {company?.name || "this company"}: brand, budget, and a queue you can approve or send back.
+          </p>
+          <Button
+            className="mt-3"
+            disabled={seeding}
+            onClick={async () => {
+              setSeeding(true);
+              try {
+                const result = await seedMarketingDemo(companyId, { company, profile });
+                toast.success(result.summary || "Demo workspace ready");
+                onSeeded?.();
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not load the demo");
+              } finally {
+                setSeeding(false);
+              }
+            }}
+          >
+            {seeding ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
+            Load demo workspace
+          </Button>
+        </article>
+      ) : null}
+      {analysis && (
+        <article className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+          <p className="font-display text-lg font-bold">{analysis.headline}</p>
+          <p className="mt-1 text-sm">{analysis.summary}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl p-3" style={{ background: `color-mix(in srgb, ${ACCENT} 10%, hsl(var(--card)))` }}>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Strengths</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">{analysis.strengths.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: `color-mix(in srgb, ${ACCENT} 10%, hsl(var(--card)))` }}>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weaknesses</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">{analysis.weaknesses.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          </div>
+        </article>
+      )}
       <CalendarSection posts={posts} compact />
     </div>
   );
@@ -320,11 +417,15 @@ function CalendarSection({
 function QueueSection({
   posts,
   ready,
+  published,
 }: {
   posts: ReturnType<typeof filterMarketingContent>;
   ready: ReturnType<typeof filterMarketingContent>;
+  published: ReturnType<typeof filterMarketingContent>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
   const grouped = useMemo(() => {
     const map = new Map<string, typeof posts>();
     for (const row of posts) {
@@ -348,11 +449,11 @@ function QueueSection({
     }
   };
 
-  const publishNow = async (companyId: string, itemId: string, version: number) => {
+  const publishNow = async (companyId: string, itemId: string, version: number, platform?: string) => {
     setBusy(true);
     try {
-      await publishMarketingContentNow(companyId, itemId, version);
-      toast.success("Queued to post now");
+      await publishMarketingContentNow(companyId, itemId, version, { platform });
+      toast.success("Recorded a dry-run publish in Hardy. Nothing was sent to the network.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not publish that post");
     } finally {
@@ -360,12 +461,25 @@ function QueueSection({
     }
   };
 
-  if (!posts.length && !ready.length) {
-    return <EmptyCard title="Review queue is clear" body="When AI writes a batch, they wait here so you can edit, approve or reject before anything goes out." />;
+  if (!posts.length && !ready.length && !published.length) {
+    return <EmptyCard title="Review queue is clear" body="When AI writes a batch, they wait here so you can edit, approve or request changes before anything goes out." />;
   }
 
   return (
     <div className="space-y-4">
+      {published.length > 0 && (
+        <section className="space-y-2">
+          <p className="font-display text-lg font-bold">Published in-app</p>
+          <p className="text-sm text-muted-foreground">Dry-run only. Nothing was sent to Meta, Google or LinkedIn.</p>
+          {published.slice(0, 6).map((row) => (
+            <article key={row.item.id} className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+              <p className="text-xs font-semibold text-muted-foreground">{row.company.name} · {platformLabel(String(row.item.platform))}</p>
+              <p className="mt-1 font-semibold">{row.item.topic}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{row.item.externalPostId || "dry-run"}</p>
+            </article>
+          ))}
+        </section>
+      )}
       {ready.length > 0 && (
         <section className="space-y-2">
           <p className="font-display text-lg font-bold">Ready to post</p>
@@ -373,8 +487,8 @@ function QueueSection({
             <article key={row.item.id} className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
               <p className="text-xs font-semibold text-muted-foreground">{row.company.name} · {platformLabel(String(row.item.platform))}</p>
               <p className="mt-1 font-semibold">{row.item.topic}</p>
-              <Button className="mt-3" size="sm" disabled={busy} onClick={() => void publishNow(row.company.id, row.item.id!, row.item.approvalVersion)}>
-                Post now
+              <Button className="mt-3" size="sm" disabled={busy} onClick={() => void publishNow(row.company.id, row.item.id!, row.item.approvalVersion, String(row.item.platform))}>
+                Publish (dry run)
               </Button>
             </article>
           ))}
@@ -409,14 +523,43 @@ function QueueSection({
                   setBusy(true);
                   try {
                     await approveMarketingContent(row.company.id, row.item.id!, row.item.approvalVersion);
-                    await publishMarketingContentNow(row.company.id, row.item.id!, row.item.approvalVersion);
-                    toast.success("Approved and queued to post now");
+                    await publishMarketingContentNow(row.company.id, row.item.id!, row.item.approvalVersion, { platform: String(row.item.platform) });
+                    toast.success("Approved and recorded as a dry-run publish");
                   } catch (error) {
                     toast.error(error instanceof Error ? error.message : "Could not publish now");
                   } finally {
                     setBusy(false);
                   }
-                }}>Approve & post now</Button>
+                }}>Approve & dry-run</Button>
+                {row.item.status === "awaiting_approval" && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => {
+                    setEditFor(row.item.id || null);
+                    setEditNotes(row.item.editRequestNotes || "");
+                  }}>Request edits</Button>
+                )}
+                {editFor === row.item.id && (
+                  <div className="w-full space-y-2 rounded-xl p-3" style={{ background: `color-mix(in srgb, ${ACCENT} 10%, hsl(var(--card)))` }}>
+                    <Textarea rows={2} value={editNotes} onChange={(event) => setEditNotes(event.target.value)} placeholder="What should change?" />
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={busy} onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await requestMarketingEdits(row.company.id, row.item.id!, row.item.approvalVersion, editNotes);
+                          toast.success("Sent back with notes");
+                          setEditFor(null);
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : "Could not request edits");
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}>Send notes</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditFor(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
+                {row.item.editRequestNotes && (
+                  <p className="w-full text-sm text-amber-800 dark:text-amber-200">Edit requested: {row.item.editRequestNotes}</p>
+                )}
                 <Button size="sm" variant="ghost" disabled={busy} onClick={async () => {
                   setBusy(true);
                   try {
@@ -439,11 +582,17 @@ function QueueSection({
 
 function GenerateSection({
   companyId,
+  company,
   profile,
+  plan,
+  analysis,
   disabled,
 }: {
   companyId?: string;
+  company?: Company;
   profile: ReturnType<typeof useCompanyMarketing>["profile"];
+  plan: ReturnType<typeof useCompanyMarketing>["plan"];
+  analysis: ReturnType<typeof useCompanyMarketing>["analysis"];
   disabled: boolean;
 }) {
   const [days, setDays] = useState(String(profile.defaultPlanDays || 30));
@@ -468,10 +617,51 @@ function GenerateSection({
       <div>
         <p className="font-display text-lg font-bold">Generate a run</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Up to 90 days. AI writes to this company’s voice and cadence. You review the queue, then it auto-posts when accounts are linked.
+          Scan the brand, write a plan with a budget, then fill the queue. If a live model is not connected, Hardy uses a demo provider — same screens, labelled as mock.
         </p>
       </div>
-      {!ready && <p className="rounded-xl bg-amber-500/15 p-3 text-sm">Run a Presence scan or fill Brand first — AI needs a voice, audience and objective.</p>}
+      {plan && (
+        <p className="rounded-xl bg-card p-3 text-sm shadow-card">
+          Current plan: £{plan.estimatedBudgetGbp.toLocaleString("en-GB")} over {plan.periodDays} days.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const result = await scanMarketingBrand(companyId, { company, profile });
+            toast.success(result.headline || "Brand scan saved");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Scan could not finish");
+          } finally {
+            setBusy(false);
+          }
+        }}><Radar className="mr-1.5 h-3.5 w-3.5" /> Scan brand</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const result = await analyseMarketingPresence(companyId, { company, profile });
+            toast.success(result.headline || "Analysis saved");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Analysis could not finish");
+          } finally {
+            setBusy(false);
+          }
+        }}>Strengths & weaknesses</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const result = await suggestMarketingSchedule(companyId, Number(days) || 60);
+            toast.success(result.summary || "Schedule updated");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not suggest a schedule");
+          } finally {
+            setBusy(false);
+          }
+        }}><CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Suggest dates</Button>
+      </div>
+      {analysis && <p className="text-sm text-muted-foreground">{analysis.summary}</p>}
+      {!ready && <p className="rounded-xl bg-amber-500/15 p-3 text-sm">Run Scan brand or fill Brand first — we need a voice, audience and objective. The demo provider can still fill those from the company name.</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Days ahead">
           <Input type="number" min={7} max={90} value={days} onChange={(event) => setDays(event.target.value)} />
@@ -505,7 +695,7 @@ function GenerateSection({
       </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeArticles} onChange={(event) => setIncludeArticles(event.target.checked)} /> Include LinkedIn / long-form articles</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeImages} onChange={(event) => setIncludeImages(event.target.checked)} /> Generate pictures where needed</label>
-      <Button disabled={busy || !ready || !platforms.length} onClick={async () => {
+        <Button disabled={busy || !platforms.length} onClick={async () => {
         setBusy(true);
         try {
           const result = await generateMarketingPlan(companyId, {
@@ -520,7 +710,7 @@ function GenerateSection({
             imageModel,
             textProvider: TEXT_MODEL_OPTIONS.find((item) => item.id === textModel)?.provider || "auto",
             imageProvider: IMAGE_MODEL_OPTIONS.find((item) => item.id === imageModel)?.provider || "auto",
-          });
+          }, { company, profile });
           toast.success(result.summary || `Created ${result.created} posts for review`);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Could not generate that plan");
@@ -599,6 +789,9 @@ function BrandSection({
           <Input value={form.industry} onChange={(event) => editField("industry", event.target.value)} />
         </Field>
         <Field label="Website"><Input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} /></Field>
+        <Field label={<>Style notes{suggested.has("styleNotes") && <SuggestedBadge />}</>} hint="Colour, photography, words to lean on.">
+          <Textarea rows={3} value={form.styleNotes || ""} onChange={(event) => editField("styleNotes", event.target.value)} />
+        </Field>
         <Field label={<>Objectives{suggested.has("objectives") && <SuggestedBadge />}</>} hint="One per line.">
           <Textarea rows={3} value={form.objectives.join("\n")} onChange={(event) => editField("objectives", lines(event.target.value))} />
         </Field>
@@ -638,6 +831,14 @@ function BrandSection({
           onChange={(event) => setForm({ ...form, approvalRequired: event.target.checked })}
         />
         Review posts before they go out
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={Boolean(form.enableTikTok)} onChange={(event) => setForm({ ...form, enableTikTok: event.target.checked })} />
+        Include TikTok for this brand (optional)
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={Boolean(form.enableYouTube)} onChange={(event) => setForm({ ...form, enableYouTube: event.target.checked })} />
+        Include YouTube for this brand (optional)
       </label>
       <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save brand"}</Button>
     </form>
@@ -740,10 +941,12 @@ function MediaSection({
 
 function PresenceSection({
   state,
+  company,
   companyId,
   disabled,
 }: {
   state: ReturnType<typeof useCompanyMarketing>;
+  company?: Company;
   companyId?: string;
   disabled: boolean;
 }) {
@@ -755,29 +958,65 @@ function PresenceSection({
       <div className="rounded-2xl border border-border/40 p-4 shadow-card" style={{ background: `color-mix(in srgb, ${ACCENT} 10%, hsl(var(--card)))`, borderLeftWidth: 4, borderLeftColor: ACCENT }}>
         <p className="font-display text-lg font-bold">Presence scan</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          AI reads the website, linked social URLs and Google-style search clues, then writes what’s working, what’s weak, and fills empty brand fields.
+          Reads the website and linked social URLs, then writes what’s working, what’s weak, and fills empty brand fields. Uses a demo provider if no live model is configured.
         </p>
-        <Button className="mt-3" disabled={busy} onClick={async () => {
-          setBusy(true);
-          try {
-            const result = await generateMarketingAudit(companyId, {
-              extraUrls: Object.values(state.profile.socialUrls || {}).join("\n"),
-              searchNotes: "",
-              adsNotes: "",
-              socialNotes: "",
-              otherNotes: "",
-            });
-            toast.success(result.headline || "Scan ready. Brand fields updated where they were empty.");
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Scan could not finish");
-          } finally {
-            setBusy(false);
-          }
-        }}>
-          {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Radar className="mr-1.5 h-4 w-4" />}
-          Scan this company
-        </Button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button disabled={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              const result = await scanMarketingBrand(companyId, { company, profile: state.profile });
+              toast.success(result.headline || "Brand fields updated where they were empty.");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Scan could not finish");
+            } finally {
+              setBusy(false);
+            }
+          }}>
+            {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Radar className="mr-1.5 h-4 w-4" />}
+            Scan brand
+          </Button>
+          <Button variant="secondary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              const result = await analyseMarketingPresence(companyId, { company, profile: state.profile });
+              toast.success(result.headline || "Strengths and weaknesses saved.");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Analysis could not finish");
+            } finally {
+              setBusy(false);
+            }
+          }}>
+            Strengths & weaknesses
+          </Button>
+          <Button variant="secondary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              const result = await generateMarketingAudit(companyId, {
+                extraUrls: Object.values(state.profile.socialUrls || {}).join("\n"),
+                searchNotes: "",
+                adsNotes: "",
+                socialNotes: "",
+                otherNotes: "",
+              });
+              toast.success(result.headline || "Full PR audit ready.");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Audit could not finish — try Scan brand instead");
+            } finally {
+              setBusy(false);
+            }
+          }}>
+            Full PR audit
+          </Button>
+        </div>
       </div>
+      {state.analysis && (
+        <article className="space-y-3 rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+          <p className="font-display text-lg font-bold">{state.analysis.headline}</p>
+          <p className="text-sm">{state.analysis.summary}</p>
+          <Block title="Strengths" body={state.analysis.strengths.join(" · ")} />
+          <Block title="Weaknesses" body={state.analysis.weaknesses.join(" · ")} />
+        </article>
+      )}
       {latest && (
         <article className="space-y-3 rounded-2xl border border-border/40 bg-card p-4 shadow-card">
           <p className="font-display text-lg font-bold">{latest.headline}</p>
@@ -810,6 +1049,10 @@ function ConnectionsSection({
   const [urls, setUrls] = useState<Record<string, string>>({});
   if (disabled || !companyId) return <EmptyCard title="Pick one company" body="Link Instagram, LinkedIn, Google and the rest for that brand." />;
   return (
+    <div className="space-y-3">
+      <p className="rounded-2xl border border-border/40 bg-card p-4 text-sm shadow-card">
+        Phase 1 records intended publishes as a dry run. Real OAuth tokens already live in <code>marketingPlatformCredentials</code> for Facebook, Instagram, LinkedIn, Google and YouTube — turn on <code>MARKETING_LIVE_PUBLISH=true</code> on the Cloud Function to use <code>publishToSocialPlatform</code>. TikTok stays profile-only.
+      </p>
     <div className="grid gap-3 sm:grid-cols-2">
       {SOCIAL_PLATFORMS.map((item) => {
         const connection = state.connections.find((row) => row.platform === item);
@@ -861,6 +1104,7 @@ function ConnectionsSection({
           </article>
         );
       })}
+    </div>
     </div>
   );
 }
