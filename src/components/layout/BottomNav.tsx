@@ -117,12 +117,18 @@ const BottomNav = () => {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5"
       style={{
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "var(--chrome-nav, var(--gradient-hero))",
         backdropFilter: "blur(16px)",
       }}
     >
-      <div className="flex items-center justify-around h-16 px-1 max-w-screen-xl mx-auto w-full">
+      {/* Paint below the nav so iOS/Android overscroll never flashes page mint through the home-indicator gap */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-full h-[100vh]"
+        style={{ background: "hsl(215, 32%, 18%)" }}
+      />
+      <div className="flex h-16 w-full max-w-screen-xl items-center justify-around px-1 mx-auto">
         {navItems.map((item) => {
           const isActive =
             location.pathname === item.path ||
@@ -151,12 +157,12 @@ const BottomNav = () => {
             await signOut(auth);
             navigate("/", { replace: true });
           }}
-          className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full min-w-0"
+          className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-0.5"
           aria-label="Sign out"
           title="Sign out"
         >
-          <div className="flex items-center justify-center w-10 h-7">
-            <LogOut className="w-4 h-4" style={{ color: "rgba(255,255,255,0.72)" }} />
+          <div className="flex h-7 w-10 items-center justify-center">
+            <LogOut className="h-4 w-4" style={{ color: "rgba(255,255,255,0.72)" }} />
           </div>
           <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.72)" }}>Sign out</span>
         </button>

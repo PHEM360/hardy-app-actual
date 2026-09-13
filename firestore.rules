@@ -950,6 +950,11 @@ service cloud.firestore {
       allow read, write: if canAccessHousehold(householdId);
     }
 
+    // Household notes - shared by household membership (handover / house notes)
+    match /household/{householdId}/notes/{noteId} {
+      allow read, write: if canAccessHousehold(householdId);
+    }
+
     // /display photo frame library - shared by household membership, same as household items/documents
     match /household/{householdId}/photos/{photoId} {
       allow read, write: if canAccessHousehold(householdId);

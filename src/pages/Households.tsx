@@ -4,6 +4,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import DocumentScannerSheet from "@/components/DocumentScannerSheet";
 import CamerasSection from "@/components/household/CamerasSection";
 import DocumentsSection from "@/components/household/DocumentsSection";
+import NotesSection from "@/components/household/NotesSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -111,6 +112,7 @@ import {
   Dumbbell,
   Video,
   Users,
+  StickyNote,
 } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -122,6 +124,7 @@ import {
   HouseholdSettings,
   HouseholdReminder,
   CostPeriod,
+  DEFAULT_NOTE_TYPES,
 } from "@/types/app";
 import { useHouseholdItems, useHouseholdSettings } from "@/hooks/useHousehold";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -1513,9 +1516,13 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
 }) {
   const [members, setMembers] = useState<HouseholdMember[]>(settings.members);
   const [categories, setCategories] = useState<string[]>(settings.categories);
+  const [noteTypes, setNoteTypes] = useState<string[]>(
+    settings.noteTypes?.length ? settings.noteTypes : DEFAULT_NOTE_TYPES
+  );
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("👤");
   const [newCat, setNewCat] = useState("");
+  const [newNoteType, setNewNoteType] = useState("");
   const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
   const memberInputRef = useRef<HTMLInputElement>(null);
   const memberContainerRef = useRef<HTMLDivElement>(null);
@@ -1523,6 +1530,7 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
   useEffect(() => {
     setMembers(settings.members);
     setCategories(settings.categories);
+    setNoteTypes(settings.noteTypes?.length ? settings.noteTypes : DEFAULT_NOTE_TYPES);
   }, [settings, open]);
 
   // Close member dropdown on outside click
@@ -1534,7 +1542,8 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const save = (m: HouseholdMember[], c: string[]) => onSave({ members: m, categories: c });
+  const save = (m: HouseholdMember[], c: string[], nt: string[]) =>
+    onSave({ members: m, categories: c, noteTypes: nt });
 
   // Filtered app users: those not already added as members
   const filteredAppUsers = appUsers.filter(
@@ -1545,28 +1554,43 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
 
   const addAppUser = (appUser: { id: string; name: string; email: string }) => {
     const next = [...members, { id: crypto.randomUUID(), name: appUser.name, role: "member" as const, emoji: "👤", userId: appUser.id }];
-    setMembers(next); save(next, categories); setNewName(""); setMemberDropdownOpen(false);
+    setMembers(next); save(next, categories, noteTypes); setNewName(""); setMemberDropdownOpen(false);
   };
 
   const addManualMember = () => {
     if (!newName.trim()) return;
     const next = [...members, { id: crypto.randomUUID(), name: newName.trim(), role: "member" as const, emoji: newEmoji }];
-    setMembers(next); save(next, categories); setNewName(""); setNewEmoji("👤");
+    setMembers(next); save(next, categories, noteTypes); setNewName(""); setNewEmoji("👤");
     setMemberDropdownOpen(false);
   };
 
   const removeMember = (id: string) => {
-    const next = members.filter((m) => m.id !== id); setMembers(next); save(next, categories);
+    const next = members.filter((m) => m.id !== id); setMembers(next); save(next, categories, noteTypes);
   };
 
   const addCategory = () => {
     const t = newCat.trim();
     if (!t || categories.includes(t)) return;
-    const next = [...categories, t]; setCategories(next); save(members, next); setNewCat("");
+    const next = [...categories, t]; setCategories(next); save(members, next, noteTypes); setNewCat("");
   };
 
   const removeCategory = (c: string) => {
-    const next = categories.filter((x) => x !== c); setCategories(next); save(members, next);
+    const next = categories.filter((x) => x !== c); setCategories(next); save(members, next, noteTypes);
+  };
+
+  const addNoteType = () => {
+    const t = newNoteType.trim();
+    if (!t || noteTypes.includes(t)) return;
+    const next = [...noteTypes, t];
+    setNoteTypes(next);
+    save(members, categories, next);
+    setNewNoteType("");
+  };
+
+  const removeNoteType = (t: string) => {
+    const next = noteTypes.filter((x) => x !== t);
+    setNoteTypes(next);
+    save(members, categories, next);
   };
 
   return (
@@ -1722,6 +1746,58 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
               <Button
                 onClick={addCategory}
                 disabled={!newCat.trim()}
+                size="sm"
+                className="rounded-xl px-3 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </section>
+
+          {/* ── Note types ── */}
+          <section className="rounded-2xl border bg-card/50 p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                <StickyNote className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm">Note types</h3>
+                <p className="text-[11px] text-muted-foreground">Tags for household notes — used when selling or handing over.</p>
+              </div>
+            </div>
+
+            {noteTypes.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {noteTypes.map((t) => (
+                  <div
+                    key={t}
+                    className="group flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm hover:border-destructive/40 transition-colors"
+                  >
+                    <span>{t}</span>
+                    <button
+                      onClick={() => removeNoteType(t)}
+                      className="text-muted-foreground group-hover:text-destructive transition-colors -mr-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center py-2">No note types yet</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Input
+                className="flex-1 rounded-xl"
+                placeholder="New note type…"
+                value={newNoteType}
+                onChange={(e) => setNewNoteType(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addNoteType()}
+              />
+              <Button
+                onClick={addNoteType}
+                disabled={!newNoteType.trim()}
                 size="sm"
                 className="rounded-xl px-3 shrink-0"
               >
@@ -1997,7 +2073,19 @@ export default function Households() {
   const [editItem, setEditItem] = useState<Omit<HouseholdItem, "id" | "createdAt"> | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HouseholdItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"items" | "cameras" | "documents">("items");
+  const [activeTab, setActiveTab] = useState<"items" | "cameras" | "documents" | "notes">("items");
+  const HH_ACCENT = "hsl(30,60%,50%)";
+  const TABS = [
+    { id: "items" as const, label: "Items", icon: Home },
+    { id: "cameras" as const, label: "Cameras", icon: Video },
+    { id: "documents" as const, label: "Docs", icon: FileText },
+    { id: "notes" as const, label: "Notes", icon: StickyNote },
+  ];
+
+  const railClass = (active: boolean) =>
+    `flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-left text-xs font-semibold transition-colors sm:justify-start sm:px-2.5 sm:py-2 ${
+      active ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-foreground hover:bg-card"
+    }`;
 
   useEffect(() => {
     if (!loading) {
@@ -2142,127 +2230,133 @@ export default function Households() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Header actions */}
+      <div className="mb-4 flex items-center justify-between gap-2">
         {activeTab === "items" ? (
           <Button size="sm" className="rounded-full" onClick={openAdd}>
-            <Plus className="w-4 h-4 mr-1" /> Add Item
+            <Plus className="mr-1 h-4 w-4" /> Add Item
           </Button>
         ) : (
           <div />
         )}
         <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setHouseholdsOpen(true)}>
-            <Users className="w-4 h-4" />
+          <Button size="sm" variant="ghost" className="gap-1.5 rounded-full" onClick={() => setHouseholdsOpen(true)}>
+            <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Households</span>
           </Button>
-          <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={() => setSettingsOpen(true)}>
-            <Settings className="w-4 h-4" />
+          <Button size="sm" variant="ghost" className="gap-1.5 rounded-full" onClick={() => setSettingsOpen(true)}>
+            <Settings className="h-4 w-4" />
             <span className="hidden sm:inline">Settings</span>
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1.5 mb-6 p-1 bg-muted/40 rounded-2xl">
-        {([
-          { id: "items",     label: "Items",   icon: <Home className="w-4 h-4" />,     gradient: "linear-gradient(135deg,hsl(28,65%,52%),hsl(18,60%,46%))" },
-          { id: "cameras",   label: "Cameras", icon: <Video className="w-4 h-4" />,    gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))" },
-          { id: "documents", label: "Docs",    icon: <FileText className="w-4 h-4" />, gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
-        ] as const).map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-bold transition-all ${
-              activeTab === tab.id ? "text-white shadow-md" : "text-muted-foreground hover:text-foreground"
-            }`}
-            style={activeTab === tab.id ? { background: tab.gradient } : {}}
+      <div className="flex min-w-0 gap-3">
+        <aside className="w-12 shrink-0 sm:w-[10.75rem]">
+          <div
+            className="sticky top-2 max-h-[calc(100dvh-8rem)] space-y-1 overflow-y-auto rounded-2xl border border-border/40 p-1 shadow-card sm:p-1.5"
+            style={{ background: `color-mix(in srgb, ${HH_ACCENT} 12%, hsl(var(--card)))` }}
           >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
-      </div>
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  title={tab.label}
+                  aria-label={tab.label}
+                  className={railClass(activeTab === tab.id)}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden truncate sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
 
-      {/* Items tab */}
-      {activeTab === "items" && (
-      <div className="space-y-8">
+        <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden">
+          {/* Items tab */}
+          {activeTab === "items" && (
+          <div className="space-y-8">
 
-        {/* ── Expiry alert banner ── */}
-        {(() => {
-          const expiring = items.filter((i) => {
-            const d = daysUntil(i.endDate);
-            return d !== null && d <= 30;
-          }).sort((a, b) => (daysUntil(a.endDate) ?? 0) - (daysUntil(b.endDate) ?? 0));
-          if (expiring.length === 0) return null;
-          return (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3 space-y-2">
-              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-sm">
-                <span>⚠</span>
-                <span>{expiring.length === 1 ? "1 item" : `${expiring.length} items`} expiring within 30 days</span>
-              </div>
-              <div className="space-y-1.5">
-                {expiring.map((i) => {
-                  const d = daysUntil(i.endDate)!;
-                  const dateLabel = new Date(i.endDate!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-                  return (
-                    <button
-                      key={i.id}
-                      onClick={() => setDetailItem(i)}
-                      className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl bg-white/60 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 transition-colors"
-                    >
-                      <span className="text-sm font-medium text-amber-900 dark:text-amber-200 truncate">
-                        {i.type}{i.provider ? ` · ${i.provider}` : ""}
-                      </span>
-                      <span className={`text-xs font-bold ml-2 shrink-0 px-2 py-0.5 rounded-full ${d <= 7 ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
-                        {d < 0 ? "Expired" : d === 0 ? "Today" : `${d}d`} · {dateLabel}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
+            {/* ── Expiry alert banner ── */}
+            {(() => {
+              const expiring = items.filter((i) => {
+                const d = daysUntil(i.endDate);
+                return d !== null && d <= 30;
+              }).sort((a, b) => (daysUntil(a.endDate) ?? 0) - (daysUntil(b.endDate) ?? 0));
+              if (expiring.length === 0) return null;
+              return (
+                <div className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
+                    <span>⚠</span>
+                    <span>{expiring.length === 1 ? "1 item" : `${expiring.length} items`} expiring within 30 days</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {expiring.map((i) => {
+                      const d = daysUntil(i.endDate)!;
+                      const dateLabel = new Date(i.endDate!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+                      return (
+                        <button
+                          key={i.id}
+                          onClick={() => setDetailItem(i)}
+                          className="flex w-full items-center justify-between rounded-xl bg-white/60 px-3 py-2 text-left transition-colors hover:bg-white dark:bg-white/10 dark:hover:bg-white/20"
+                        >
+                          <span className="truncate text-sm font-medium text-amber-900 dark:text-amber-200">
+                            {i.type}{i.provider ? ` · ${i.provider}` : ""}
+                          </span>
+                          <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${d <= 7 ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
+                            {d < 0 ? "Expired" : d === 0 ? "Today" : `${d}d`} · {dateLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
-        <section className="space-y-3">
-          {items.length === 0 ? (
-            <EmptyState label="Add your first household item" onAdd={openAdd} />
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
-              {shared.map((item) => (
-                <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
-              ))}
-            </div>
+            <section className="space-y-3">
+              {items.length === 0 ? (
+                <EmptyState label="Add your first household item" onAdd={openAdd} />
+              ) : (
+                <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+                  {shared.map((item) => (
+                    <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {effectiveMembers.map((m) => (
+              <section key={m.id} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{m.emoji ?? "👤"}</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{m.name}'s Items</h3>
+                </div>
+                {memberItems(m.id).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No items assigned to {m.name} yet.</p>
+                ) : (
+                  <div className="grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+                    {memberItems(m.id).map((item) => (
+                      <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+
+            {items.length > 0 && <SummaryCard items={items} members={effectiveMembers} />}
+          </div>
           )}
-        </section>
 
-        {effectiveMembers.map((m) => (
-          <section key={m.id} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">{m.emoji ?? "👤"}</span>
-              <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">{m.name}'s Items</h3>
-            </div>
-            {memberItems(m.id).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No items assigned to {m.name} yet.</p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
-                {memberItems(m.id).map((item) => (
-                  <ItemTile key={item.id} item={item} onOpen={() => setDetailItem(item)} onDelete={() => setDeleteTarget(item)} />
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
-
-        {items.length > 0 && <SummaryCard items={items} members={effectiveMembers} />}
+          {activeTab === "cameras" && <CamerasSection />}
+          {activeTab === "documents" && <DocumentsSection />}
+          {activeTab === "notes" && <NotesSection />}
+        </div>
       </div>
-      )}
-
-      {/* Cameras tab */}
-      {activeTab === "cameras" && <CamerasSection />}
-
-      {/* Documents tab */}
-      {activeTab === "documents" && <DocumentsSection />}
 
       {/* Settings sheet */}
       <SettingsSheet
