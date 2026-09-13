@@ -8,7 +8,7 @@ import {
 import { signInWithCustomToken } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase";
-import { markSecurityAuthentication } from "@/lib/securitySession";
+import { markSecurityAuthentication, markTrustedDevice } from "@/lib/securitySession";
 
 interface BeginRegistrationResult {
   challengeId: string;
@@ -48,6 +48,7 @@ export async function registerPasskey(label = "My passkey") {
   if (!completed.data.verified || !completed.data.token) throw new Error("The passkey could not be verified");
   const credential = await signInWithCustomToken(auth, completed.data.token);
   markSecurityAuthentication(credential.user.uid, "passkey");
+  markTrustedDevice(credential.user.uid);
 }
 
 export async function authenticateWithPasskey(reauthenticate = false) {
@@ -66,6 +67,7 @@ export async function authenticateWithPasskey(reauthenticate = false) {
   if (!completed.data.verified || !completed.data.token) throw new Error("The passkey could not be verified");
   const credential = await signInWithCustomToken(auth, completed.data.token);
   markSecurityAuthentication(credential.user.uid, "passkey");
+  markTrustedDevice(credential.user.uid);
   return credential.user;
 }
 

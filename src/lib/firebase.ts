@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { isSupported as analyticsIsSupported } from "firebase/analytics";
-import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectAuthEmulator, getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
@@ -19,6 +19,10 @@ export const app = initializeApp(firebaseConfig);
 
 // Firebase services
 export const auth = getAuth(app);
+// Firebase already defaults to local persistence in a browser, but this makes
+// the "stays signed in for 7 days" promise (see securitySession.ts) explicit
+// rather than relying on an unstated default.
+void setPersistence(auth, browserLocalPersistence).catch(() => undefined);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
 export const storage = getStorage(app);

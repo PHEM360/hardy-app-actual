@@ -8,6 +8,12 @@ export async function runSecurityScan(): Promise<SecurityReport> {
   return res.data;
 }
 
+export async function runDeepSecurityScan(): Promise<SecurityReport> {
+  const call = httpsCallable<Record<string, never>, SecurityReport>(functions, "runDeepSecurityScan", { timeout: 320000 });
+  const res = await call({});
+  return res.data;
+}
+
 export async function saveSecurityScanPrefs(
   prefs: Omit<SecurityScanPrefs, "updatedAt" | "lastRunAt" | "nextRunAt"> & {
     lastRunAt?: string | null;

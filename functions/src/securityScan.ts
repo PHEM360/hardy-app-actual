@@ -21,10 +21,13 @@ type Category =
   | "monitoring";
 type Cadence = "off" | "daily" | "weekly" | "monthly";
 
+type Kind = "security" | "improvement" | "activity";
+
 interface Finding {
   id: string;
   severity: Severity;
   category: Category;
+  kind?: Kind;
   title: string;
   description: string;
   recommendation: string;
@@ -69,9 +72,26 @@ const DEAL: Record<Severity, Finding["dealLabel"]> = {
   info: "Looking good",
 };
 
+function kindFor(finding: Finding): Kind {
+  if (finding.kind) return finding.kind;
+  if (finding.id.startsWith("act-") || finding.id.startsWith("live-login")) return "activity";
+  const improvements = new Set([
+    "arch-hardcoded-owner",
+    "arch-default-modules",
+    "arch-appconfig-writable",
+    "hdr-referrer",
+    "hdr-permissions",
+    "hdr-xcto",
+    "hdr-fetch-failed",
+  ]);
+  if (improvements.has(finding.id)) return "improvement";
+  return "security";
+}
+
 function withPlain(finding: Finding): Finding {
   return {
     ...finding,
+    kind: kindFor(finding),
     dealLabel: finding.dealLabel || DEAL[finding.severity],
     summary: finding.summary || finding.title,
     meaning: finding.meaning || finding.description,
@@ -118,7 +138,7 @@ async function requireAdmin(uid: string, authEmail?: string) {
   }
 }
 
-function gradeFor(score: number): "A" | "B" | "C" | "D" | "F" {
+export function gradeFor(score: number): "A" | "B" | "C" | "D" | "F" {
   if (score >= 90) return "A";
   if (score >= 75) return "B";
   if (score >= 60) return "C";
@@ -126,10 +146,12 @@ function gradeFor(score: number): "A" | "B" | "C" | "D" | "F" {
   return "F";
 }
 
-function computeScore(findings: Finding[]): number {
+export function computeScore(findings: Finding[]): number {
   let other = 0;
   let headers = 0;
   for (const finding of findings) {
+    if (kindFor(finding) !== "security") continue;
+    if (finding.severity === "info") continue;
     const weight = WEIGHT[finding.severity] || 0;
     if (finding.id.startsWith("hdr-")) headers += weight;
     else other += weight;
@@ -137,27 +159,40 @@ function computeScore(findings: Finding[]): number {
   return Math.max(0, Math.min(100, 100 - other - Math.min(12, headers)));
 }
 
-function scoreHeadline(score: number): string {
+function worstSeverity(findings: Finding[]): Severity | "none" {
+  const security = findings.filter((f) => kindFor(f) === "security" && f.severity !== "info");
+  if (security.some((f) => f.severity === "critical")) return "critical";
+  if (security.some((f) => f.severity === "high")) return "high";
+  if (security.some((f) => f.severity === "medium")) return "medium";
+  if (security.some((f) => f.severity === "low")) return "low";
+  return "none";
+}
+
+export function scoreHeadline(score: number, findings: Finding[]): string {
+  const worst = worstSeverity(findings);
+  if (worst === "critical") return "Fix these security issues now";
+  if (worst === "high") return "Security gaps need attention soon";
   if (score >= 90) return "In good shape";
   if (score >= 75) return "Solid, with a few tidy-ups";
   if (score >= 60) return "Fine for a private family app, with work still worth doing";
-  if (score >= 40) return "Needs attention, but this is not an emergency";
-  return "Needs prompt work";
+  if (worst === "none" || worst === "low") return "Not wide open — these are hardening and tidy-ups";
+  return "Some hardening is worth doing";
 }
 
-function scoreWhy(score: number, findings: Finding[], passkeyMissing: number): string {
-  const critical = findings.filter((f) => f.severity === "critical").length;
-  const high = findings.filter((f) => f.severity === "high").length;
-  const medium = findings.filter((f) => f.severity === "medium").length;
+export function scoreWhy(score: number, findings: Finding[], passkeyMissing: number): string {
+  const security = findings.filter((f) => kindFor(f) === "security" && f.severity !== "info");
+  const critical = security.filter((f) => f.severity === "critical").length;
+  const high = security.filter((f) => f.severity === "high").length;
+  const medium = security.filter((f) => f.severity === "medium").length;
   const parts: string[] = [];
   if (critical + high === 0 && medium === 0) {
-    parts.push("The score is high because nothing here lets the wrong person in.");
+    parts.push("The security score is about how easy it would be for the wrong person to get in. Nothing here looks like a break-in.");
   } else if (critical + high === 0) {
-    parts.push(`The score is ${score} because of ${medium} item${medium === 1 ? "" : "s"} worth doing — seatbelts and tidy-ups, not a break-in.`);
+    parts.push(`The score is ${score} because of ${medium} hardening item${medium === 1 ? "" : "s"} — seatbelts, not a stranger on the internet.`);
   } else {
-    parts.push(`The score is ${score} mainly because of ${critical + high} more serious item${critical + high === 1 ? "" : "s"} (Fix now / Fix soon).`);
+    parts.push(`The score is ${score} mainly because of ${critical + high} more serious security item${critical + high === 1 ? "" : "s"} (Fix now / Fix soon).`);
   }
-  parts.push("100 is a clean bill of health. The same missing header on two web addresses is not counted twice. Notes marked Looking good do not lower the score.");
+  parts.push("Improvements that are not security holes sit in their own list and do not drag the grade down on their own.");
   if (passkeyMissing > 0) {
     parts.push(`${passkeyMissing} account${passkeyMissing === 1 ? " has" : "s have"} not finished passkey setup yet.`);
   }
@@ -329,6 +364,7 @@ function architectureFindings(): Finding[] {
       id: "arch-hardcoded-owner",
       severity: "low",
       category: "configuration",
+      kind: "improvement",
       title: "The main owner email is written into the app code",
       description: "Owner checks use a fixed email address. Changing it needs a code change.",
       recommendation: "Later, move the owner list into an admin setting.",
@@ -364,16 +400,17 @@ function architectureFindings(): Finding[] {
       fix: "Nothing urgent. Only an admin should save a new key in Settings.",
     },
     {
-      id: "arch-no-login-audit",
-      severity: "low",
+      id: "arch-login-audit",
+      kind: "security",
+      severity: "info",
       category: "monitoring",
-      title: "There is no saved list of who logged in or failed a passkey",
-      description: "Auth success and failure are not written to an admin-readable history.",
-      recommendation: "Add a login history later if you want one. Not urgent for a family app.",
-      summary: "There is no saved list of who logged in or failed a passkey.",
-      meaning: "If something odd happened last Tuesday, the app cannot show you a history of logins.",
-      impact: "Nice to have. It does not mean someone is in.",
-      fix: "Leave this unless you want a login history.",
+      title: "Sign-ins and failed attempts are saved for the admin",
+      description: "Successful and failed logins are written to loginEvents, which only admins can read.",
+      recommendation: "Leave this as it is.",
+      summary: "Sign-ins and failed attempts are now saved for the admin.",
+      meaning: "You can see recent passkey, password and failed logins on the Security dashboard.",
+      impact: "This is a strength.",
+      fix: "Leave this as it is.",
     },
     {
       id: "arch-vault-strong",
@@ -403,7 +440,7 @@ function architectureFindings(): Finding[] {
 }
 
 async function runScan(opts: {
-  triggeredBy: "manual" | "scheduled";
+  triggeredBy: "manual" | "scheduled" | "ai_deep";
   triggeredByUid?: string;
   triggeredByEmail?: string;
 }): Promise<{
@@ -415,7 +452,7 @@ async function runScan(opts: {
   breakdown: Record<string, number>;
   findings: Finding[];
   recommendations: string[];
-  triggeredBy: "manual" | "scheduled";
+  triggeredBy: "manual" | "scheduled" | "ai_deep";
   triggeredByUid?: string;
   triggeredByEmail?: string;
   durationMs: number;
@@ -555,6 +592,53 @@ async function runScan(opts: {
     }
   }
 
+  // Login history
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const events = await db.collection("loginEvents").where("createdAtIso", ">=", since).get();
+    const failed = events.docs.filter((d) => d.data()?.success === false).length;
+    if (events.size === 0) {
+      findings.push({
+        id: "act-no-recent-logins",
+        kind: "activity",
+        severity: "info",
+        category: "monitoring",
+        title: "No login history in the last 7 days yet",
+        description: "The app now records logins. This list fills up as people sign in.",
+        recommendation: "Nothing to do until people use the app.",
+        summary: "No login history in the last 7 days yet.",
+        meaning: "Once people sign in, failed passkeys and odd logins will show here.",
+        impact: "A note, not a problem.",
+        fix: "Wait for the next sign-in, then re-run the scan.",
+      });
+    } else {
+      findings.push({
+        id: "act-login-summary",
+        kind: "activity",
+        severity: failed >= 8 ? "medium" : "info",
+        category: "monitoring",
+        title: failed
+          ? `${failed} failed sign-in${failed === 1 ? "" : "s"} in the last 7 days`
+          : `${events.size} sign-in${events.size === 1 ? "" : "s"} recorded in the last 7 days`,
+        description: "Recent Hardy Hub logins, including passkey and password attempts.",
+        recommendation: failed >= 8
+          ? "Check the Security dashboard activity list. Repeated failures can mean a guessed password."
+          : "No unusual burst of failures in this window.",
+        evidence: `${events.size} events, ${failed} failed`,
+        summary: failed
+          ? `${failed} failed sign-in${failed === 1 ? "" : "s"} in the last 7 days.`
+          : `${events.size} recorded sign-ins look normal.`,
+        meaning: failed >= 8
+          ? "Someone — or a script — tried and failed to get in several times."
+          : "Recent sign-ins look like the family using the app.",
+        impact: failed >= 8 ? "Worth a look. It is not proof anyone got in." : "This is a strength.",
+        fix: failed >= 8 ? "Open the activity list, reset that account if needed, and keep passkeys on." : "Nothing to do.",
+      });
+    }
+  } catch (err) {
+    logger.debug("login event scan skipped", { err });
+  }
+
   // Devices
   try {
     const devices = await db.collection("devices").limit(200).get();
@@ -629,7 +713,7 @@ async function runScan(opts: {
   return {
     score,
     grade: gradeFor(score),
-    scoreHeadline: scoreHeadline(score),
+    scoreHeadline: scoreHeadline(score, findingsPlain),
     scoreWhy: scoreWhy(score, findingsPlain, passkeyMissing),
     summary,
     breakdown: {
@@ -683,12 +767,16 @@ function nextRunIso(prefs: ScanPrefs, from = new Date()): string | null {
   return null;
 }
 
-async function persistReport(report: Awaited<ReturnType<typeof runScan>>) {
+export async function persistSecurityReport(report: Awaited<ReturnType<typeof runScan>> & { triggeredBy?: string; scanKind?: string }) {
   const ref = await admin.firestore().collection("securityReports").add({
     ...report,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { id: ref.id, ...report };
+}
+
+async function persistReport(report: Awaited<ReturnType<typeof runScan>>) {
+  return persistSecurityReport(report);
 }
 
 async function maybeEmailReport(report: Awaited<ReturnType<typeof runScan>>, prefs: ScanPrefs) {
@@ -717,6 +805,18 @@ async function maybeEmailReport(report: Awaited<ReturnType<typeof runScan>>, pre
   } catch (err) {
     logger.warn("security scan email failed", { err });
   }
+}
+
+export async function runSecurityScanJob(opts: {
+  triggeredBy: "manual" | "scheduled" | "ai_deep";
+  triggeredByUid?: string;
+  triggeredByEmail?: string;
+}) {
+  return runScan({
+    triggeredBy: opts.triggeredBy,
+    triggeredByUid: opts.triggeredByUid,
+    triggeredByEmail: opts.triggeredByEmail,
+  });
 }
 
 export const runSecurityScan = onCall(

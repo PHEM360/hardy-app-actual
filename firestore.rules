@@ -28,6 +28,19 @@ service cloud.firestore {
         get(/databases/$(database)/documents/devices/$(request.auth.token.deviceId)).data.uid == userId;
     }
 
+    // A display's paired household (falling back to its own uid for a
+    // solo/legacy device with no householdId) — lets a shared kitchen screen
+    // read household-wide birthdays/family notes, not just its owner's own.
+    function displayHouseholdId() {
+      return get(/databases/$(database)/documents/devices/$(request.auth.token.deviceId)).data.get('householdId', request.auth.uid);
+    }
+
+    function isActiveDisplayForHousehold(householdId) {
+      return isFirebaseAuthenticated() &&
+        hasDisplayClaim() &&
+        displayHouseholdId() == householdId;
+    }
+
     // Interactive app users must enrol a passkey before normal application
     // data becomes available. Display credentials are deliberately excluded
     // and granted read-only access only to explicitly display-safe paths.
@@ -308,12 +321,21 @@ service cloud.firestore {
     // of their household (resolved against households/{householdId}.memberIds)
     // or kept private. Reminders/calendar sync are handled by Cloud Functions.
     match /birthdays/{birthdayId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() ||
-        resource.data.createdBy == request.auth.uid ||
-        (resource.data.sharedWith.mode == 'all' &&
-          request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds) ||
-        (resource.data.sharedWith.mode == 'some' && request.auth.uid in resource.data.sharedWith.uids)
+      allow read: if (
+        isAuthenticated() && (
+          isAdmin() ||
+          resource.data.createdBy == request.auth.uid ||
+          (resource.data.sharedWith.mode == 'all' &&
+            request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds) ||
+          (resource.data.sharedWith.mode == 'some' && request.auth.uid in resource.data.sharedWith.uids)
+        )
+      ) || (
+        // A shared display shows the household's upcoming birthdays widget
+        // regardless of which member's account it happens to be paired to.
+        hasDisplayClaim() && (
+          isActiveDisplayFor(resource.data.createdBy) ||
+          ('householdId' in resource.data && isActiveDisplayForHousehold(resource.data.householdId))
+        )
       );
       allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isAuthenticated() && (
@@ -961,7 +983,10 @@ service cloud.firestore {
     }
 
     match /household/{householdId}/messages/{messageId} {
-      allow read, write: if canAccessHousehold(householdId);
+      // A shared display shows the family board widget for its own paired
+      // household, but can never post to it.
+      allow read: if canAccessHousehold(householdId) || isActiveDisplayForHousehold(householdId);
+      allow write: if canAccessHousehold(householdId);
     }
 
     // Joint household finance — shared with every household member (not personal finance/{uid})
@@ -998,6 +1023,21 @@ service cloud.firestore {
     match /securityScanPrefs/{docId} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+    match /loginEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Functions only
+    }
+
+    // Family softphone — calls/texts/contacts are private to the owning
+    // account; a paired display's credentials are explicitly refused the
+    // phone in the callable functions themselves (see functions/src/softphone.ts),
+    // so there is no display-read exception to make here.
+    match /phone/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+    match /phoneSettings/{userId} {
+      allow read, write: if isOwner(userId);
     }
 
     // General document store - per user, shareable via pageShares

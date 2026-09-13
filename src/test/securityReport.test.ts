@@ -54,6 +54,14 @@ describe("security score", () => {
     ];
     expect(computeSecurityScore(findings)).toBe(88);
   });
+
+  it("ignores improvement findings when scoring hackability", () => {
+    const findings: SecurityFinding[] = [
+      { id: "arch-hardcoded-owner", severity: "low", category: "configuration", kind: "improvement", title: "t", description: "d", recommendation: "r" },
+      { id: "live-passkey-gap", severity: "high", category: "authentication", kind: "security", title: "t", description: "d", recommendation: "r" },
+    ];
+    expect(computeSecurityScore(findings)).toBe(90);
+  });
 });
 
 describe("plain language security copy", () => {

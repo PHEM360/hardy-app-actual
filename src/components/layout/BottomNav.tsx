@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
   CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays, Sun, StickyNote, Images,
-  MonitorSmartphone, Palmtree,
+  MonitorSmartphone, Palmtree, Phone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut } from "firebase/auth";
@@ -34,6 +34,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
   "/remote-displays":   { icon: MonitorSmartphone, label: "Remote Displays", color: "hsl(198,60%,46%)", gradient: "linear-gradient(135deg,hsl(198,65%,50%),hsl(210,60%,44%))" },
   "/holidays":          { icon: Palmtree,      label: "Holidays",   color: "hsl(172,48%,38%)",  gradient: "linear-gradient(135deg,hsl(172,52%,42%),hsl(188,48%,36%))" },
+  "/softphone":         { icon: Phone,         label: "Phone",      color: "hsl(152,48%,38%)",  gradient: "linear-gradient(135deg,hsl(152,52%,42%),hsl(168,48%,36%))" },
 };
 
 const DEFAULT_NAV = DEFAULT_BOTTOM_NAV;

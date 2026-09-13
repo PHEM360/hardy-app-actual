@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import DogLoader from "@/components/DogLoader";
 import { authenticateWithPasskey, passkeyErrorMessage, passkeysSupported } from "@/lib/passkeys";
-import { markOpenSessionSatisfied, markSecurityAuthentication } from "@/lib/securitySession";
+import { markOpenSessionSatisfied, markSecurityAuthentication, trustedDeviceCanAutoUnlock } from "@/lib/securitySession";
 import { landingPathForUser } from "@/lib/startPage";
 
 function getAuthErrorMessage(err: any): string {
@@ -55,14 +56,23 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => !trustedDeviceCanAutoUnlock(7));
   const [error, setError] = useState<string | null>(null);
   const { forbidden, user, initializing } = useAuth();
+  const trustedDevice = trustedDeviceCanAutoUnlock(7);
 
   // Helps confirm deployments are updating. Remove anytime.
-  const BUILD_STAMP = "2026-02-14T15:30Z";
+  const BUILD_STAMP = "2026-09-12T00:00Z";
 
   useEffect(() => {
+    // A device that already proved a passkey inside the trust window skips
+    // the splash animation entirely, straight to the "Continue with passkey"
+    // prompt below — the point of "stays signed in" is defeated if they have
+    // to sit through a 3 second animation to see it every time.
+    if (trustedDeviceCanAutoUnlock(7)) {
+      setShowSplash(false);
+      return;
+    }
     const timer = setTimeout(() => setShowSplash(false), 3000);
     return () => clearTimeout(timer);
   }, []);
@@ -92,9 +102,15 @@ const Login = () => {
       const credential = await signInWithEmailAndPassword(auth, email, password);
       markSecurityAuthentication(credential.user.uid, "password");
       markOpenSessionSatisfied(credential.user.uid);
+      try {
+        await httpsCallable(functions, "recordAuthEvent")({ method: "password", email });
+      } catch { /* best effort — login history is a convenience, not a gate */ }
       const from = (location.state as { from?: string } | null)?.from;
       navigate(await landingPathForUser(credential.user.uid, from), { replace: true });
     } catch (err: any) {
+      try {
+        await httpsCallable(functions, "recordAuthEvent")({ method: "failed_password", email, detail: String(err?.code || "") });
+      } catch { /* best effort */ }
       setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
@@ -105,8 +121,17 @@ const Login = () => {
     setPasskeyLoading(true);
     setError(null);
     try {
+      const wasTrusted = trustedDeviceCanAutoUnlock(7);
       const signedInUser = await authenticateWithPasskey(false);
       markOpenSessionSatisfied(signedInUser.uid);
+      if (wasTrusted) {
+        try {
+          await httpsCallable(functions, "recordAuthEvent")({
+            method: "auto_unlock",
+            email: signedInUser.email || "",
+          });
+        } catch { /* the passkey itself is already recorded server-side */ }
+      }
       const from = (location.state as { from?: string } | null)?.from;
       navigate(await landingPathForUser(signedInUser.uid, from), { replace: true });
     } catch (caught) {
@@ -119,7 +144,7 @@ const Login = () => {
   if (initializing || user) {
     return (
       <div className="min-h-[100dvh] bg-gradient-hero">
-        <DogLoader fullPage text="Opening Hardy Hub…" />
+        <DogLoader fullPage text={user ? "Opening Hardy Hub…" : "Welcome back — signing you in…"} />
       </div>
     );
   }
@@ -294,6 +319,11 @@ const Login = () => {
             >
             Welcome home 👋
           </motion.h2>
+          <p className="text-xs text-muted-foreground -mt-2 mb-4">
+            {trustedDevice
+              ? "This device is trusted. If you used a passkey in the last 7 days, tap below — no password needed."
+              : "Use your passkey on this device. After that, Hardy Hub stays signed in here for 7 days."}
+          </p>
 
           <p className="text-[10px] text-muted-foreground -mt-3 mb-4">
             Build: {BUILD_STAMP}
@@ -308,6 +338,27 @@ const Login = () => {
                 </p>
               </div>
             )}
+
+          {trustedDevice && passkeysSupported() && (
+            <div
+              className="mb-5 rounded-2xl border border-primary/25 p-4 shadow-card"
+              style={{ background: "color-mix(in srgb, hsl(var(--primary)) 12%, var(--card))", borderLeftWidth: 4, borderLeftColor: "hsl(var(--primary))" }}
+            >
+              <p className="text-sm font-semibold">Trusted device</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A passkey used here in the last 7 days is enough. Hardy Hub also stays signed in on this browser until you sign out.
+              </p>
+              <Button
+                type="button"
+                disabled={passkeyLoading || loading}
+                className="mt-3 h-12 w-full rounded-xl bg-gradient-primary text-sm font-semibold"
+                onClick={() => void handlePasskeyLogin()}
+              >
+                <Fingerprint className="mr-2 h-5 w-5" />
+                {passkeyLoading ? "Checking passkey…" : "Continue with passkey"}
+              </Button>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <motion.div

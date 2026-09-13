@@ -122,6 +122,17 @@ export {
 // ── Alarms — ring on every device for the account, muteable from any of them ──
 export { tickAlarms } from "./alarms";
 
+// ── Family softphone (Twilio) ──
+export {
+	getSoftphoneConfig,
+	getSoftphoneVoiceToken,
+	sendSoftphoneSms,
+	startSoftphoneCall,
+	twilioVoiceWebhook,
+	twilioSmsWebhook,
+	twilioStatusWebhook,
+} from "./softphone";
+
 export {
 	beginPasskeyRegistration,
 	finishPasskeyRegistration,
@@ -157,6 +168,8 @@ export { researchHolidayDestination } from "./holidayAi";
 
 // ── Security posture scans (Admin dashboard) ──
 export { runSecurityScan, saveSecurityScanPrefs, processScheduledSecurityScans } from "./securityScan";
+export { runDeepSecurityScan } from "./securityDeepScan";
+export { recordAuthEvent, listLoginEvents, setUserEnabled } from "./loginEvents";
 
 // ── 1Password Connect sync ──
 export { onePasswordConnect } from "./onePassword";

@@ -46,6 +46,7 @@ export const FEATURE_PAGE_SHARE: Partial<Record<FeatureKey, string>> = {
   notes: "notes",
   photos: "photos",
   email: "email",
+  softphone: "softphone",
 };
 
 /** Route path -> pageShares.page value (includes ungated pages like freezer). */
@@ -66,6 +67,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/notes": "notes",
   "/photos": "photos",
   "/email": "email",
+  "/softphone": "softphone",
   "/freezer": "freezer",
   "/login-details": "login_details",
   "/qr-codes": "qrcodes",

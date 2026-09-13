@@ -19,7 +19,8 @@ export type FeatureKey =
   | "notes"
   | "photos"
   | "email"
-  | "admin";
+  | "admin"
+  | "softphone";
 
 export type AvatarType = "initials" | "emoji" | "image";
 
@@ -200,6 +201,14 @@ export const FEATURE_MODULES: FeatureModule[] = [
     icon: "mail",
     route: "/email",
     color: "info",
+  },
+  {
+    key: "softphone",
+    label: "Phone",
+    description: "Calls, texts and a family softphone",
+    icon: "phone",
+    route: "/softphone",
+    color: "primary",
   },
 ];
 

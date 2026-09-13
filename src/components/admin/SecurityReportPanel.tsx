@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import DogLoader from "@/components/DogLoader";
 import { useSecurityReports } from "@/hooks/useSecurityReports";
-import { runSecurityScan, saveSecurityScanPrefs } from "@/lib/securityScanApi";
+import { runDeepSecurityScan, runSecurityScan, saveSecurityScanPrefs } from "@/lib/securityScanApi";
 import type {
   SecurityFinding,
   SecurityFindingSeverity,
@@ -127,17 +127,21 @@ function FindingRow({ finding }: { finding: SecurityFinding }) {
       </button>
       {open && (
         <div className="space-y-2.5 border-t border-border/40 bg-[color-mix(in_srgb,hsl(var(--card))_88%,hsl(var(--background)))] px-3.5 py-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">What this means</p>
-            <p className="mt-1 text-sm text-foreground">{plain.meaning}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">How big a deal</p>
-            <p className="mt-1 text-sm text-foreground">{plain.impact}</p>
-          </div>
           <div className="rounded-xl border border-border/50 bg-card p-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">What to do</p>
-            <p className="mt-1 text-sm text-foreground">{plain.fix}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">In plain English</p>
+            <p className="mt-1 text-sm text-foreground">{plain.summary}</p>
+            <p className="mt-1 text-sm text-foreground">Why it matters: {plain.impact}</p>
+            <p className="mt-1 text-sm text-foreground">The fix: {plain.fix}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">A bit more detail</p>
+            <p className="mt-1 text-sm text-foreground">{plain.meaning}</p>
+            {finding.description && finding.description !== plain.meaning && (
+              <p className="mt-1 text-sm text-muted-foreground">{finding.description}</p>
+            )}
+            {finding.recommendation && finding.recommendation !== plain.fix && (
+              <p className="mt-1 text-sm text-foreground">Technical fix: {finding.recommendation}</p>
+            )}
           </div>
           {finding.evidence && (
             <p className="text-[11px] text-muted-foreground">Detail: {finding.evidence}</p>
@@ -160,12 +164,20 @@ function FindingRow({ finding }: { finding: SecurityFinding }) {
 }
 
 function ReportBody({ report }: { report: SecurityReport }) {
-  const actionable = useMemo(
-    () => report.findings.filter((f) => f.severity !== "info"),
+  const security = useMemo(
+    () => report.findings.filter((f) => (f.kind || "security") === "security" && f.severity !== "info"),
     [report.findings],
   );
-  const info = useMemo(
-    () => report.findings.filter((f) => f.severity === "info"),
+  const activity = useMemo(
+    () => report.findings.filter((f) => f.kind === "activity"),
+    [report.findings],
+  );
+  const improvements = useMemo(
+    () => report.findings.filter((f) => f.kind === "improvement" && f.severity !== "info"),
+    [report.findings],
+  );
+  const strengths = useMemo(
+    () => report.findings.filter((f) => f.severity === "info" && f.kind !== "activity"),
     [report.findings],
   );
 
@@ -184,10 +196,10 @@ function ReportBody({ report }: { report: SecurityReport }) {
           <div className="min-w-0 flex-1 space-y-3">
             <div>
               <h2 className="font-display text-lg font-bold text-foreground">
-                {report.scoreHeadline || scoreHeadline(report.score)}
+                {report.scoreHeadline || scoreHeadline(report.score, report.findings)}
               </h2>
               <p className="text-xs text-muted-foreground">
-                Last scan {fmtWhen(report.createdAtIso)} · {report.triggeredBy}
+                Last scan {fmtWhen(report.createdAtIso)} · {report.triggeredBy === "ai_deep" ? "thorough AI scan" : report.triggeredBy}
                 {report.durationMs ? ` · ${(report.durationMs / 1000).toFixed(1)}s` : ""}
               </p>
               <p className="mt-2 text-sm text-foreground">
@@ -234,24 +246,51 @@ function ReportBody({ report }: { report: SecurityReport }) {
       )}
 
       <div className="space-y-2">
-        <h3 className="font-display text-sm font-bold">
-          What we found ({actionable.length})
-        </h3>
-        {actionable.length === 0 ? (
+        <h3 className="font-display text-sm font-bold">Security — how hackable is this? ({security.length})</h3>
+        <p className="text-xs text-muted-foreground">
+          Suspicious logins, weak locks, and anything that could let the wrong person in. This is the important list.
+        </p>
+        {security.length === 0 ? (
           <p className="rounded-2xl border border-border/50 bg-card p-4 text-sm text-muted-foreground shadow-card">
-            Nothing here needs a fix. The notes below are strengths.
+            No security holes in this scan. Strengths are listed below.
           </p>
         ) : (
-          actionable.map((f) => <FindingRow key={f.id} finding={f} />)
+          security.map((f) => <FindingRow key={f.id} finding={f} />)
         )}
       </div>
 
-      {info.length > 0 && (
+      <div className="space-y-2">
+        <h3 className="font-display text-sm font-bold">Activity ({activity.length})</h3>
+        <p className="text-xs text-muted-foreground">Recent sign-ins, failed passkeys, and odd account states.</p>
+        {activity.length === 0 ? (
+          <p className="rounded-2xl border border-border/50 bg-card p-4 text-sm text-muted-foreground shadow-card">
+            No login activity to review yet. New sign-ins appear here automatically.
+          </p>
+        ) : (
+          activity.map((f) => <FindingRow key={f.id} finding={f} />)
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="font-display text-sm font-bold">Other improvements ({improvements.length})</h3>
+        <p className="text-xs text-muted-foreground">
+          Useful tidy-ups that are not the same as “someone can break in”.
+        </p>
+        {improvements.length === 0 ? (
+          <p className="rounded-2xl border border-border/50 bg-card p-4 text-sm text-muted-foreground shadow-card">
+            No extra housekeeping items this time.
+          </p>
+        ) : (
+          improvements.map((f) => <FindingRow key={f.id} finding={f} />)
+        )}
+      </div>
+
+      {strengths.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Looking good ({info.length})
+            Looking good ({strengths.length})
           </h3>
-          {info.map((f) => (
+          {strengths.map((f) => (
             <FindingRow key={f.id} finding={f} />
           ))}
         </div>
@@ -263,6 +302,7 @@ function ReportBody({ report }: { report: SecurityReport }) {
 export default function SecurityReportPanel() {
   const { latest, history, prefs, loading, error } = useSecurityReports(true);
   const [scanning, setScanning] = useState(false);
+  const [deepScanning, setDeepScanning] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [cadence, setCadence] = useState<SecurityScanCadence>(prefs.cadence);
   const [enabled, setEnabled] = useState(prefs.enabled);
@@ -288,6 +328,18 @@ export default function SecurityReportPanel() {
       toast.error((err as Error)?.message || "Security scan failed");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleDeepScan = async () => {
+    setDeepScanning(true);
+    try {
+      const report = await runDeepSecurityScan();
+      toast.success(`Thorough scan complete — grade ${report.grade} (${report.score}/100)`);
+    } catch (err) {
+      toast.error((err as Error)?.message || "Thorough scan failed");
+    } finally {
+      setDeepScanning(false);
     }
   };
 
@@ -319,7 +371,7 @@ export default function SecurityReportPanel() {
       <div className="flex flex-wrap items-center gap-2">
         <Button
           className="rounded-xl bg-gradient-primary text-primary-foreground border-0"
-          disabled={scanning}
+          disabled={scanning || deepScanning}
           onClick={handleScan}
         >
           {scanning ? (
@@ -330,7 +382,25 @@ export default function SecurityReportPanel() {
           ) : (
             <>
               <Play className="mr-1.5 h-4 w-4" />
-              Run security scan
+              Quick security scan
+            </>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          className="rounded-xl"
+          disabled={scanning || deepScanning}
+          onClick={handleDeepScan}
+        >
+          {deepScanning ? (
+            <>
+              <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" />
+              Thorough scan…
+            </>
+          ) : (
+            <>
+              <Shield className="mr-1.5 h-4 w-4" />
+              Run thorough AI + pen-test scan
             </>
           )}
         </Button>
@@ -459,8 +529,8 @@ export default function SecurityReportPanel() {
           </div>
           <h2 className="font-display text-lg font-bold">No scan yet</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            Run a comprehensive scan to score authentication, authorisation, rules posture, hosting headers, and
-            account hygiene — with concrete fixes ranked by severity.
+            A quick scan checks live logins, passkeys, Firebase accounts and website headers.
+            The thorough scan also asks the family AI to review the architecture and runs safe internet probes.
           </p>
           <Button
             className="mt-4 rounded-xl bg-gradient-primary text-primary-foreground border-0"
@@ -507,8 +577,9 @@ export default function SecurityReportPanel() {
 
       <p className="flex items-start gap-2 text-[11px] text-muted-foreground">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        This is a family-app health check, not a hacker test. A score in the 60s or 70s usually means tidy-ups,
-        not that someone is in. Run a new scan after you deploy so the number matches the current code.
+        The security list is “could the wrong person get in?”. The improvements list is housekeeping.
+        A thorough scan adds an AI review of the code and Firebase setup, plus safe probes of the live site.
+        It is not a full hired pentest of every server.
       </p>
     </div>
   );

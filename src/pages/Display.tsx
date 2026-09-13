@@ -38,7 +38,7 @@ export default function Display() {
     updateNightMode,
   } = useDeviceSettings(deviceId);
   const keepAwake = device?.settings.control.keepAwake !== false;
-  const { supported: wakeLockSupported } = useWakeLock(status === "ready" && keepAwake);
+  const { supported: wakeLockSupported, held: wakeLockHeld } = useWakeLock(status === "ready" && keepAwake);
   const { isFullscreen, supported: fullscreenSupported, requestFullscreen } = useAutoFullscreen(status === "ready");
   const localFolder = useLocalDisplayFolder();
   useDisplayManifest();
@@ -57,8 +57,15 @@ export default function Display() {
         <WifiOff className="w-10 h-10 text-white/40" />
         <p className="text-white text-lg font-semibold">This display was disconnected</p>
         <p className="text-white/50 text-sm max-w-sm">
-          It was removed from Remote Displays. Refresh this page to securely link it again.
+          It was removed from Remote Displays. Link it again from this screen with a fresh QR code.
         </p>
+        <button
+          type="button"
+          onClick={restartPairing}
+          className="mt-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+        >
+          Link again
+        </button>
       </div>
     );
   }
@@ -103,6 +110,11 @@ export default function Display() {
         {keepAwake && !wakeLockSupported && (
           <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
             This browser can't keep the screen awake automatically — disable auto-sleep in the device's system settings.
+          </span>
+        )}
+        {keepAwake && wakeLockSupported && !wakeLockHeld && (
+          <span className="text-[10px] text-white/25 mr-1 max-w-[10rem] text-right leading-tight hidden sm:block">
+            Keep-awake is on, but the screen lock could not be held. Tap the page, then disable auto-sleep in system settings.
           </span>
         )}
         {localFolder.supported && (

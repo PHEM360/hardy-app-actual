@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
+import DogLoader from "@/components/DogLoader";
 import { Shield, Users, AlertTriangle, CheckCircle, Activity, ArrowLeft, Trash2, UserX, UserCheck, KeyRound, Mail, Eye, Fingerprint } from "lucide-react";
 import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
 import SecurityReportPanel from "@/components/admin/SecurityReportPanel";
+import { useSecurityReports } from "@/hooks/useSecurityReports";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -39,39 +41,21 @@ interface MockUser {
 }
 
 // Demo/test users have been removed.
-// Until this page is wired to Firebase Auth/Firestore admin data,
-// start with an empty list and show empty states.
 const MOCK_USERS: MockUser[] = [];
-
-const STATS = [
-  { label: "Active Users",  value: "—",              icon: Users,         gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
-  { label: "Login Events",  value: "—",              icon: Activity,      gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))" },
-  { label: "Alerts",        value: "—",              icon: AlertTriangle, gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
-  { label: "Health",        value: "Good",           icon: CheckCircle,   gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
-];
 
 type AdminView = "main" | "security" | "sharing";
 
 const Admin = () => {
-  const { user, startViewAs, viewAs } = useAuth();
+  const { user, initializing, startViewAs, viewAs } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState<AdminView>("main");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [users, setUsers] = useState(MOCK_USERS);
   const [usersLoading, setUsersLoading] = useState(true);
-
-  // ── Restrict to admin email ───────────────────────────────────────────────
-  if (user && user.email !== ADMIN_EMAIL) {
-    return (
-      <FeaturePageShell title="Admin" subtitle="System management" icon={<Shield className="w-5 h-5" />}>
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Shield className="w-10 h-10 text-muted-foreground/40" />
-          <p className="text-sm font-semibold text-muted-foreground">Access restricted</p>
-          <p className="text-xs text-muted-foreground text-center max-w-xs">This page is only accessible to the system administrator.</p>
-        </div>
-      </FeaturePageShell>
-    );
-  }
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const { latest: latestSecurity } = useSecurityReports(true);
+  const [loginEventCount, setLoginEventCount] = useState<number | null>(null);
+  const currentUser = selectedUser ? users.find((u) => u.id === selectedUser) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,14 +65,36 @@ const Admin = () => {
         const call = httpsCallable(functions, "listAppUsers");
         const result = await call();
         const next = Array.isArray((result.data as any)?.users) ? (result.data as any).users : [];
-        if (!cancelled) setUsers(next as MockUser[]);
-      } catch {
-        if (!cancelled) setUsers([]);
+        if (!cancelled) {
+          setUsers(next as MockUser[]);
+          setUsersError(null);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setUsers([]);
+          setUsersError(err?.message || "Could not load users.");
+        }
       } finally {
         if (!cancelled) setUsersLoading(false);
       }
     };
     void loadUsers();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadEvents = async () => {
+      try {
+        const call = httpsCallable(functions, "listLoginEvents");
+        const result = await call({ days: 7 });
+        const count = Number((result.data as { count?: number })?.count ?? 0);
+        if (!cancelled) setLoginEventCount(count);
+      } catch {
+        if (!cancelled) setLoginEventCount(0);
+      }
+    };
+    void loadEvents();
     return () => { cancelled = true; };
   }, []);
 
@@ -214,14 +220,17 @@ const Admin = () => {
   };
 
   const toggleSuspend = async (userId: string, currentStatus: "active" | "suspended") => {
-    const newEnabled = currentStatus === "suspended"; // reinstate → enabled:true; suspend → enabled:false
+    const newEnabled = currentStatus === "suspended";
     setActionLoading(true);
     try {
-      await setDoc(doc(db, "users", userId), { enabled: newEnabled }, { merge: true });
+      const call = httpsCallable(functions, "setUserEnabled");
+      await call({ uid: userId, enabled: newEnabled });
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         status: newEnabled ? "active" : "suspended",
       } : u));
+    } catch (err: any) {
+      window.alert(err?.message || "Could not update this account.");
     } finally {
       setActionLoading(false);
     }
@@ -395,7 +404,21 @@ const Admin = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUser, allHouseholds]);
 
-  const currentUser = selectedUser ? users.find(u => u.id === selectedUser) : null;
+  if (initializing) {
+    return <DogLoader fullPage text="Checking admin…" />;
+  }
+
+  if (user && user.email !== ADMIN_EMAIL) {
+    return (
+      <FeaturePageShell title="Admin" subtitle="System management" icon={<Shield className="w-5 h-5" />}>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Shield className="w-10 h-10 text-muted-foreground/40" />
+          <p className="text-sm font-semibold text-muted-foreground">Access restricted</p>
+          <p className="text-xs text-muted-foreground text-center max-w-xs">This page is only accessible to the system administrator.</p>
+        </div>
+      </FeaturePageShell>
+    );
+  }
 
   if (view === "security") {
     return (
@@ -618,7 +641,34 @@ const Admin = () => {
         </Dialog>
 
         <div className="grid grid-cols-4 gap-2 mb-5 mt-4">
-          {STATS.map((stat, i) => {
+          {([
+            {
+              label: "Active Users",
+              value: usersLoading ? "…" : String(users.filter((u) => u.status === "active").length),
+              icon: Users,
+              gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))",
+            },
+            {
+              label: "Login Events",
+              value: loginEventCount === null ? "…" : String(loginEventCount),
+              icon: Activity,
+              gradient: "linear-gradient(135deg,hsl(206,60%,52%),hsl(216,55%,45%))",
+            },
+            {
+              label: "Alerts",
+              value: latestSecurity
+                ? String((latestSecurity.summary.critical || 0) + (latestSecurity.summary.high || 0))
+                : "0",
+              icon: AlertTriangle,
+              gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))",
+            },
+            {
+              label: "Health",
+              value: latestSecurity ? `${latestSecurity.grade} · ${latestSecurity.score}` : "—",
+              icon: CheckCircle,
+              gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))",
+            },
+          ] as const).map((stat, i) => {
             const Icon = stat.icon;
             return (
               <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.05 * i }}
@@ -638,10 +688,16 @@ const Admin = () => {
       {/* Users */}
       <div className="mb-5">
         <div className="rounded-xl bg-card border border-border/50 shadow-soft overflow-hidden divide-y divide-border/30">
-          {!usersLoading && users.length === 0 && (
+          {!usersLoading && usersError && (
+            <div className="p-4">
+              <p className="text-sm font-medium text-card-foreground">Could not load users</p>
+              <p className="text-[10px] text-muted-foreground">{usersError}</p>
+            </div>
+          )}
+          {!usersLoading && !usersError && users.length === 0 && (
             <div className="p-4">
               <p className="text-sm font-medium text-card-foreground">No users found</p>
-              <p className="text-[10px] text-muted-foreground">This list is pulled from Firestore collection <span className="font-mono">users</span>.</p>
+              <p className="text-[10px] text-muted-foreground">This list is pulled from Firebase Auth, with profile details from <span className="font-mono">users</span>.</p>
             </div>
           )}
 

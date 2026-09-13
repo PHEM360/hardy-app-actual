@@ -31,6 +31,7 @@ export const SECURITY_MODULES = [
   { id: "ai_analysis", label: "AI Analysis", routes: ["/ai-analysis"] },
   { id: "qr_codes", label: "QR Codes", routes: ["/qr-codes"] },
   { id: "remote_displays", label: "Remote Displays", routes: ["/remote-displays"] },
+  { id: "softphone", label: "Phone", routes: ["/softphone"] },
   { id: "admin", label: "Admin", routes: ["/admin"] },
   { id: "more", label: "More", routes: ["/more"] },
   { id: "settings", label: "Settings", routes: ["/settings", "/themes", "/notifications"] },
@@ -45,7 +46,11 @@ export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
     personal_finance: "passkey",
     // Log Ins uses the vault PIN / Face ID gate instead of a page passkey.
     passwords: "none",
-    remote_displays: "passkey",
+    // Pairing a new screen still goes through PasskeyGate on /pair/:pairingId.
+    // Managing already-linked displays now just follows the app's own 7-day
+    // trust window instead of demanding a second, page-level passkey on top
+    // of it every visit.
+    remote_displays: "none",
   },
 };
 
