@@ -48,6 +48,8 @@ import AiAnalysis from "@/pages/AiAnalysis";
 import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
 import FlatsInvestmentPreview from "@/pages/FlatsInvestmentPreview";
+import HouseholdNotesPreview from "@/pages/HouseholdNotesPreview";
+import SocialMobilePreview from "@/pages/SocialMobilePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
@@ -88,6 +90,8 @@ const App = () => (
               <Route path="/dev/finance-preview" element={<FinancePreview />} />
               <Route path="/dev/holidays-preview" element={<HolidaysPreview />} />
               <Route path="/dev/flats-investment-preview" element={<FlatsInvestmentPreview />} />
+              <Route path="/dev/household-notes-preview" element={<HouseholdNotesPreview />} />
+              <Route path="/dev/social-mobile-preview" element={<SocialMobilePreview />} />
             </>
           )}
           <Route

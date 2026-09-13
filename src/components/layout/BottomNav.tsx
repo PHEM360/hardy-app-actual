@@ -115,20 +115,23 @@ const BottomNav = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-white/5"
       style={{
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "var(--chrome-nav, var(--gradient-hero))",
+        backgroundColor: "hsl(215, 32%, 18%)",
         backdropFilter: "blur(16px)",
+        /* Extra paint into any sub-pixel / overscroll gap below the bar */
+        boxShadow: "0 1px 0 0 hsl(215, 32%, 18%), 0 40px 0 40px hsl(215, 32%, 18%)",
       }}
     >
       {/* Paint below the nav so iOS/Android overscroll never flashes page mint through the home-indicator gap */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-full h-[100vh]"
-        style={{ background: "hsl(215, 32%, 18%)" }}
+        className="pointer-events-none absolute inset-x-0 top-full"
+        style={{ height: "100vh", background: "hsl(215, 32%, 18%)" }}
       />
-      <div className="flex h-16 w-full max-w-screen-xl items-center justify-around px-1 mx-auto">
+      <div className="mx-auto flex h-16 w-full max-w-screen-xl items-center justify-around px-1">
         {navItems.map((item) => {
           const isActive =
             location.pathname === item.path ||

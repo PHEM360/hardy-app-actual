@@ -63,7 +63,9 @@ function formatUpdated(note: HouseholdNote) {
       ? value.toMillis()
       : typeof value?.seconds === "number"
         ? value.seconds * 1000
-        : NaN;
+        : typeof value === "string" || typeof value === "number"
+          ? new Date(value).getTime()
+          : NaN;
   if (!Number.isFinite(ms)) return "";
   return new Date(ms).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -71,14 +73,37 @@ function formatUpdated(note: HouseholdNote) {
   });
 }
 
-export default function NotesSection() {
-  const { notes, loading, addNote, updateNote, deleteNote } = useHouseholdNotes();
-  const { settings } = useHouseholdSettings();
-  const { activeHouseholdId, availableHouseholds } = useActiveHousehold();
-  const householdName =
-    availableHouseholds.find((h) => h.id === activeHouseholdId)?.name || "Household";
+export type NotesSectionPreview = {
+  householdName?: string;
+  notes: HouseholdNote[];
+  noteTypes?: string[];
+};
 
-  const noteTypes = settings.noteTypes?.length ? settings.noteTypes : DEFAULT_NOTE_TYPES;
+export default function NotesSection({ preview }: { preview?: NotesSectionPreview } = {}) {
+  const liveNotes = useHouseholdNotes();
+  const liveSettings = useHouseholdSettings();
+  const { activeHouseholdId, availableHouseholds } = useActiveHousehold();
+
+  const [previewNotes, setPreviewNotes] = useState<HouseholdNote[]>(preview?.notes ?? []);
+  const isPreview = Boolean(preview);
+
+  const notes = isPreview ? previewNotes : liveNotes.notes;
+  const loading = isPreview ? false : liveNotes.loading;
+  const addNote = liveNotes.addNote;
+  const updateNote = liveNotes.updateNote;
+  const deleteNote = liveNotes.deleteNote;
+
+  const householdName =
+    preview?.householdName ||
+    availableHouseholds.find((h) => h.id === activeHouseholdId)?.name ||
+    "Household";
+
+  const noteTypes =
+    preview?.noteTypes?.length
+      ? preview.noteTypes
+      : liveSettings.settings.noteTypes?.length
+        ? liveSettings.settings.noteTypes
+        : DEFAULT_NOTE_TYPES;
   const [filter, setFilter] = useState<string>("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<HouseholdNote | null>(null);
@@ -118,7 +143,22 @@ export default function NotesSection() {
     const nextTitle = title.trim() || "Untitled note";
     setSaving(true);
     try {
-      if (editing?.id) {
+      if (isPreview) {
+        const next: HouseholdNote = {
+          id: editing?.id || `preview-${Date.now()}`,
+          title: nextTitle,
+          body,
+          noteType,
+          pinned,
+          updatedAt: new Date().toISOString(),
+          createdAt: editing?.createdAt || new Date().toISOString(),
+        };
+        setPreviewNotes((current) => {
+          if (editing?.id) return current.map((n) => (n.id === editing.id ? next : n));
+          return [next, ...current];
+        });
+        toast.success(editing ? "Note saved" : "Note added");
+      } else if (editing?.id) {
         await updateNote(editing.id, {
           title: nextTitle,
           body,
@@ -263,11 +303,18 @@ export default function NotesSection() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {filtered.map((note) => (
-            <button
+            <div
               key={note.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => openEdit(note)}
-              className="group rounded-2xl border border-border/40 bg-card p-4 text-left shadow-card transition-shadow hover:shadow-elevated"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openEdit(note);
+                }
+              }}
+              className="group cursor-pointer rounded-2xl border border-border/40 bg-card p-4 text-left shadow-card transition-shadow hover:shadow-elevated"
               style={{ borderLeftWidth: 4, borderLeftColor: ACCENT }}
             >
               <div className="flex items-start gap-2">
@@ -303,7 +350,7 @@ export default function NotesSection() {
                 )}
                 <span className="shrink-0 text-[11px] text-muted-foreground">{formatUpdated(note)}</span>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -384,7 +431,11 @@ export default function NotesSection() {
               onClick={async () => {
                 if (!deleteTarget?.id) return;
                 try {
-                  await deleteNote(deleteTarget.id);
+                  if (isPreview) {
+                    setPreviewNotes((current) => current.filter((n) => n.id !== deleteTarget.id));
+                  } else {
+                    await deleteNote(deleteTarget.id);
+                  }
                   toast.success("Note deleted");
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : "Could not delete");
