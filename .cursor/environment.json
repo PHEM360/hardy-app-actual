@@ -1,0 +1,15 @@
+{
+  "name": "Hardy Hub",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "Firebase Emulators",
+      "command": "firebase emulators:start --project hardyhub-7b30d"
+    },
+    {
+      "name": "Vite Dev Server",
+      "command": "VITE_USE_FIREBASE_EMULATORS=true npm run dev"
+    }
+  ],
+  "ports": [8080, 4000]
+}
