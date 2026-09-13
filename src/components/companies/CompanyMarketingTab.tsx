@@ -377,7 +377,7 @@ function OverviewSection({
                 <div key={item.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/50 bg-muted/30 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{item.topic || item.draft.slice(0, 60) || "Untitled post"}</p>
-                    <p className="text-xs text-muted-foreground">{PLATFORM_LABELS[item.platform as SocialPlatform] || item.platform} · {readableDate(item.scheduledFor)}</p>
+                    <p className="text-xs text-muted-foreground">{PLATFORM_LABELS[item.platform as SocialPlatform] || item.platform} · {readableDate(item.scheduledFor)}{item.aiModel ? ` · ${item.aiProvider === "mock" ? "demo" : item.aiModel}` : ""}</p>
                   </div>
                   <StatusPill status={item.status} />
                 </div>
@@ -722,7 +722,7 @@ function PlannerSection({ state, companyId }: { state: MarketingState; companyId
                       <div className="flex min-w-0 items-start gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{item.topic || item.draft.slice(0, 60) || "Untitled post"}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{PLATFORM_LABELS[item.platform as SocialPlatform] || item.platform} · {readableDate(item.scheduledFor)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{PLATFORM_LABELS[item.platform as SocialPlatform] || item.platform} · {readableDate(item.scheduledFor)}{item.aiModel ? ` · ${item.aiProvider === "mock" ? "demo" : item.aiModel}` : ""}</p>
                         </div>
                         <StatusPill status={item.status} />
                       </div>

@@ -5,6 +5,7 @@ export {
   MARKETING_MOCK_PROVIDER,
   mockBrandScan,
   mockContentBatch,
+  mockMarketingAudit,
   mockMarketingPlan,
   mockPresenceAnalysis,
   mockScheduleSuggestion,

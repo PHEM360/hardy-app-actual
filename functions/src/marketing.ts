@@ -11,12 +11,26 @@ import {
   MARKETING_MOCK_PROVIDER,
   mockBrandScan,
   mockContentBatch,
+  mockMarketingAudit,
   mockMarketingPlan,
   mockPresenceAnalysis,
   mockScheduleSuggestion,
+  type MockAnalysis,
   type MockHubInput,
   type MockPiece,
+  type MockPlan,
 } from "./marketingMock";
+import {
+  generateMarketingImageBuffer,
+  generateMarketingJson,
+  marketingFlagsFromSecrets,
+  type MarketingLlmUsage,
+  type MarketingSecretValues,
+} from "./marketingProviders";
+import {
+  hasLiveTextKey,
+  type MarketingRouteOverrides,
+} from "./marketingRouter";
 import {
   buildMarketingAuditInstructions,
   buildMarketingPlanInstructions,
@@ -36,7 +50,9 @@ import {
 } from "./marketingValidation";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
-const MODEL = "gpt-4o-mini";
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const xaiApiKey = defineSecret("XAI_API_KEY");
+const MARKETING_AI_SECRETS = [openaiApiKey, geminiApiKey, xaiApiKey];
 const TIMEZONE = "Europe/London";
 const MAX_GENERATED_PIECES = 120;
 const MAX_PLAN_IMAGES = 24;
@@ -61,14 +77,6 @@ interface GeneratedPiece {
   aiReasoning?: unknown;
   brandChecks?: unknown;
   engagementSuggestions?: unknown;
-}
-
-interface OpenAiChatResponse {
-  choices?: Array<{ message?: { content?: string } }>;
-}
-
-interface OpenAiImageResponse {
-  data?: Array<{ b64_json?: string; revised_prompt?: string }>;
 }
 
 interface MarketingJob {
@@ -165,13 +173,49 @@ function scheduledDate(index: number, count: number, periodDays: number): string
   return date.toISOString();
 }
 
-function hasOpenAiKey(): boolean {
+function secretValue(secret: { value: () => string }): string {
   try {
-    const key = openaiApiKey.value();
-    return Boolean(key && key.trim().length > 8);
+    return String(secret.value() || "").trim();
   } catch {
-    return false;
+    return "";
   }
+}
+
+function readMarketingSecrets(): MarketingSecretValues {
+  return {
+    openai: secretValue(openaiApiKey) || String(process.env.OPENAI_API_KEY || "").trim(),
+    gemini: secretValue(geminiApiKey) || String(process.env.GEMINI_API_KEY || "").trim(),
+    grok: secretValue(xaiApiKey)
+      || String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || "").trim(),
+  };
+}
+
+function routeOverridesFromInput(input?: {
+  textProvider?: string;
+  textModel?: string;
+  imageProvider?: string;
+  imageModel?: string;
+}): MarketingRouteOverrides {
+  const ignoreAuto = (value?: string) => {
+    const raw = String(value || "").trim();
+    return !raw || raw.toLowerCase() === "auto" ? undefined : raw;
+  };
+  return {
+    textProvider: ignoreAuto(input?.textProvider),
+    textModel: ignoreAuto(input?.textModel),
+    imageProvider: ignoreAuto(input?.imageProvider),
+    imageModel: ignoreAuto(input?.imageModel),
+  };
+}
+
+function hasLiveMarketingKey(secrets = readMarketingSecrets()): boolean {
+  return hasLiveTextKey(marketingFlagsFromSecrets(secrets));
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 /** Live Meta/Google/LinkedIn posting stays off until this env flag is set. */
@@ -231,8 +275,9 @@ function completeContentPiece(
   campaignId: string,
   scheduledFor: string,
   actor: string,
-  provider = "openai",
-  model = MODEL,
+  provider = MARKETING_MOCK_PROVIDER,
+  model = MARKETING_MOCK_MODEL,
+  routeReason = "",
 ): Record<string, unknown> {
   const draft = String(raw.draft || "").trim().slice(0, 10000);
   const refinedDraft = String(raw.refinedDraft || draft).trim().slice(0, 10000);
@@ -267,6 +312,7 @@ function completeContentPiece(
     publishError: "",
     aiProvider: provider,
     aiModel: model,
+    aiRouteReason: routeReason,
     publishMode: "dry_run",
     aiReasoning: String(raw.aiReasoning || "Generated from the saved brand profile.").trim().slice(0, 2000),
     brandChecks: stringList(raw.brandChecks, 12, 300),
@@ -278,105 +324,100 @@ function completeContentPiece(
   };
 }
 
-async function requestJsonFromOpenAi(
-  systemPrompt: string,
-  userPrompt: string,
-  pieceCount: number,
-  model = MODEL,
-): Promise<GeneratedPiece[]> {
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey.value()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.65,
-        max_tokens: 12000,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "marketing_plan",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["pieces"],
-              properties: {
-                pieces: {
-                  type: "array",
-                  minItems: pieceCount,
-                  maxItems: pieceCount,
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: [
-                      "type", "platform", "topic", "objective", "audience", "trendReason",
-                      "draft", "refinedDraft", "hashtags", "aiImagePrompt", "aiReasoning",
-                      "brandChecks", "engagementSuggestions",
-                    ],
-                    properties: {
-                      type: { type: "string", enum: ["social_post", "article", "campaign_idea", "advert"] },
-                      platform: { type: "string", enum: ["facebook", "instagram", "linkedin", "x", "tiktok", "youtube", "google"] },
-                      topic: { type: "string" },
-                      objective: { type: "string" },
-                      audience: { type: "string" },
-                      trendReason: { type: "string" },
-                      draft: { type: "string" },
-                      refinedDraft: { type: "string" },
-                      hashtags: { type: "array", items: { type: "string" } },
-                      aiImagePrompt: { type: "string" },
-                      aiReasoning: { type: "string" },
-                      brandChecks: { type: "array", items: { type: "string" } },
-                      engagementSuggestions: { type: "array", items: { type: "string" } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
-  } catch (error) {
-    logger.error("Marketing OpenAI request failed", { error });
-    throw new HttpsError("unavailable", "Could not reach the AI service. Please try again.");
+function piecesFromLlm(value: unknown, pieceCount: number): GeneratedPiece[] | null {
+  const record = asRecord(value);
+  const pieces = Array.isArray(record.pieces)
+    ? record.pieces
+    : Array.isArray(value) ? value : null;
+  if (!pieces || pieces.length !== pieceCount) return null;
+  const typed = pieces as GeneratedPiece[];
+  const incomplete = typed.some((piece) =>
+    String(piece.topic || "").trim().length < 3 ||
+    String(piece.draft || "").trim().length < 10 ||
+    stringList(piece.brandChecks, 12).length === 0 ||
+    stringList(piece.engagementSuggestions, 12).length === 0
+  );
+  return incomplete ? null : typed;
+}
+
+function planFromLlm(value: unknown, fallback: MockPlan): MockPlan {
+  const raw = asRecord(asRecord(value).plan);
+  const summary = String(raw.summary || "").trim();
+  const objectives = stringList(raw.objectives, 8, 300);
+  const budget = Number(raw.estimatedBudgetGbp);
+  if (summary.length < 12 || objectives.length === 0 || !Number.isFinite(budget) || budget <= 0) {
+    return fallback;
   }
-  if (!response.ok) {
-    const detail = await response.text();
-    logger.error("Marketing OpenAI response failed", { status: response.status, detail });
-    if (response.status === 401) {
-      throw new HttpsError("failed-precondition", "The OpenAI API key is missing or invalid.");
-    }
-    throw new HttpsError("internal", "The AI service could not generate this plan.");
+  return {
+    ...fallback,
+    summary: summary.slice(0, 2000),
+    objectives,
+    estimatedBudgetGbp: Math.round(budget),
+    budgetNotes: String(raw.budgetNotes || fallback.budgetNotes).trim().slice(0, 2000),
+    recommendations: stringList(raw.recommendations, 8, 300).length
+      ? stringList(raw.recommendations, 8, 300)
+      : fallback.recommendations,
+  };
+}
+
+function analysisFromLlm(value: unknown, fallback: MockAnalysis): MockAnalysis {
+  const raw = asRecord(asRecord(value).analysis);
+  const headline = String(raw.headline || "").trim();
+  const summary = String(raw.summary || "").trim();
+  const strengths = stringList(raw.strengths, 8, 300);
+  const weaknesses = stringList(raw.weaknesses, 8, 300);
+  if (headline.length < 8 || summary.length < 12 || !strengths.length || !weaknesses.length) {
+    return fallback;
   }
-  const body = await response.json() as OpenAiChatResponse;
-  const content = body.choices?.[0]?.message?.content;
-  if (!content) throw new HttpsError("internal", "The AI service returned an empty plan.");
-  try {
-    const parsed = JSON.parse(content) as { pieces?: GeneratedPiece[] };
-    if (!Array.isArray(parsed.pieces) || parsed.pieces.length !== pieceCount) {
-      throw new Error("Unexpected piece count");
-    }
-    const incomplete = parsed.pieces.some((piece) =>
-      String(piece.topic || "").trim().length < 3 ||
-      String(piece.draft || "").trim().length < 10 ||
-      stringList(piece.brandChecks, 12).length === 0 ||
-      stringList(piece.engagementSuggestions, 12).length === 0
-    );
-    if (incomplete) throw new Error("Generated content was incomplete");
-    return parsed.pieces;
-  } catch (error) {
-    logger.error("Marketing OpenAI JSON was invalid", { error });
-    throw new HttpsError("internal", "The AI service returned an invalid plan.");
+  const monthly = Number(raw.estimatedMonthlyBudgetGbp);
+  return {
+    headline: headline.slice(0, 200),
+    summary: summary.slice(0, 2000),
+    strengths,
+    weaknesses,
+    opportunities: stringList(raw.opportunities, 8, 300).length
+      ? stringList(raw.opportunities, 8, 300)
+      : fallback.opportunities,
+    estimatedMonthlyBudgetGbp: Number.isFinite(monthly) && monthly > 0
+      ? Math.round(monthly)
+      : fallback.estimatedMonthlyBudgetGbp,
+  };
+}
+
+function brandScanFromLlm(value: unknown, fallback: ReturnType<typeof mockBrandScan>) {
+  const raw = asRecord(value);
+  const brandVoice = String(raw.brandVoice || "").trim();
+  const targetAudience = String(raw.targetAudience || "").trim();
+  if (brandVoice.length < 12 || targetAudience.length < 8) return fallback;
+  return {
+    brandVoice: brandVoice.slice(0, 2000),
+    targetAudience: targetAudience.slice(0, 2000),
+    styleNotes: String(raw.styleNotes || fallback.styleNotes).trim().slice(0, 2000),
+    industry: String(raw.industry || fallback.industry).trim().slice(0, 200),
+    objectives: stringList(raw.objectives, 8, 200).length ? stringList(raw.objectives, 8, 200) : fallback.objectives,
+    keyMessages: stringList(raw.keyMessages, 8, 200).length ? stringList(raw.keyMessages, 8, 200) : fallback.keyMessages,
+    preferredHashtags: stringList(raw.preferredHashtags, 16, 80).length
+      ? stringList(raw.preferredHashtags, 16, 80)
+      : fallback.preferredHashtags,
+    website: String(raw.website || fallback.website).trim().slice(0, 300),
+  };
+}
+
+function scheduleFromLlm(
+  value: unknown,
+  allowedIds: Set<string>,
+): Array<{ id: string; scheduledFor: string }> | null {
+  const record = asRecord(value);
+  const rows = Array.isArray(record.items) ? record.items : Array.isArray(value) ? value : [];
+  const parsed: Array<{ id: string; scheduledFor: string }> = [];
+  for (const row of rows) {
+    const item = row && typeof row === "object" ? row as Record<string, unknown> : {};
+    const id = String(item.id || "").trim();
+    const scheduledFor = String(item.scheduledFor || "").trim();
+    if (!allowedIds.has(id) || Number.isNaN(new Date(scheduledFor).getTime())) continue;
+    parsed.push({ id, scheduledFor: new Date(scheduledFor).toISOString() });
   }
+  return parsed.length ? parsed : null;
 }
 
 async function fetchPublicPage(url: string, textLimit = 1500): Promise<{
@@ -456,41 +497,33 @@ async function mapPool<T>(
 async function saveGeneratedMarketingImage(
   companyId: string,
   actor: string,
-  prompt: string
-): Promise<{ assetId: string; url: string; storagePath: string }> {
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${openaiApiKey.value()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-image-1",
-      prompt,
-      size: "1024x1024",
-      quality: "medium",
-      output_format: "png",
-    }),
+  prompt: string,
+  overrides?: MarketingRouteOverrides,
+): Promise<{ assetId: string; url: string; storagePath: string; usage: MarketingLlmUsage }> {
+  const { buffer, usage } = await generateMarketingImageBuffer({
+    prompt,
+    secrets: readMarketingSecrets(),
+    overrides,
   });
-  if (!response.ok) {
-    const detail = await response.text();
-    logger.error("Marketing image generation failed", { status: response.status, detail });
-    throw new HttpsError("internal", "The AI service could not generate this image.");
+  if (!buffer) {
+    throw new HttpsError(
+      "failed-precondition",
+      "No image provider is configured, or image generation failed. Add GEMINI_API_KEY, OPENAI_API_KEY or XAI_API_KEY.",
+    );
   }
-  const result = await response.json() as OpenAiImageResponse;
-  const encoded = result.data?.[0]?.b64_json;
-  if (!encoded) throw new HttpsError("internal", "The AI service returned no image.");
 
   const assetId = randomUUID();
   const storagePath = `companies/${companyId}/marketing/${assetId}.png`;
   const downloadToken = randomUUID();
   const bucket = admin.storage().bucket();
-  await bucket.file(storagePath).save(Buffer.from(encoded, "base64"), {
+  await bucket.file(storagePath).save(buffer, {
     contentType: "image/png",
     metadata: {
       metadata: {
         firebaseStorageDownloadTokens: downloadToken,
         generatedBy: actor,
+        aiProvider: usage.provider,
+        aiModel: usage.model,
       },
     },
   });
@@ -504,18 +537,26 @@ async function saveGeneratedMarketingImage(
     source: "ai_generated",
     tags: ["ai-generated"],
     altText: prompt.slice(0, 300),
-    usageNotes: result.data?.[0]?.revised_prompt || prompt,
-    aiProvider: "openai",
-    aiModel: "gpt-image-1",
+    usageNotes: prompt,
+    aiProvider: usage.provider,
+    aiModel: usage.model,
+    aiRouteReason: usage.reason,
     createdBy: actor,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { assetId, url, storagePath };
+  logger.info("marketing.ai", {
+    task: "image",
+    companyId,
+    provider: usage.provider,
+    model: usage.model,
+    reason: usage.reason,
+  });
+  return { assetId, url, storagePath, usage };
 }
 
 export const generateMarketingPlan = onCall(
-  { secrets: [openaiApiKey], timeoutSeconds: 540, memory: "1GiB" },
+  { secrets: MARKETING_AI_SECRETS, timeoutSeconds: 540, memory: "1GiB" },
   async (request) => {
     const auth = requireMarketingAuth(request);
     const companyId = requireDocumentId(request.data?.companyId, "companyId");
@@ -540,7 +581,7 @@ export const generateMarketingPlan = onCall(
       profile.website = /^https?:\/\//i.test(companyWebsite) ? companyWebsite : `https://${companyWebsite}`;
     }
     const profileReady = profileSnap.exists && hasMeaningfulMarketingProfile(profile);
-    if (!profileReady && hasOpenAiKey()) {
+    if (!profileReady && hasLiveMarketingKey()) {
       throw new HttpsError(
         "failed-precondition",
         "Complete the brand voice, audience, industry or trading name, and objectives or key messages first — or run Scan brand."
@@ -591,29 +632,49 @@ export const generateMarketingPlan = onCall(
       focus: input.focus,
       includeArticles: input.includeArticles,
     });
-    let generated: GeneratedPiece[] = [];
-    let provider = "openai";
-    let model = input.textModel === "gpt-4o" ? "gpt-4o" : MODEL;
     const mockPieces = mockContentBatch(hubInput, count);
-    if (hasOpenAiKey()) {
-      try {
-        generated = await requestJsonFromOpenAi(
-          systemPrompt,
-          userPrompt,
-          count,
-          model,
-        );
-      } catch (error) {
-        logger.warn("OpenAI plan failed, using mock provider", { error });
-        generated = mockPieces.map(generatedFromMock);
-        provider = MARKETING_MOCK_PROVIDER;
-        model = MARKETING_MOCK_MODEL;
-      }
-    } else {
+    const mockAnalysis = mockPresenceAnalysis(hubInput);
+    const mockPlan = mockMarketingPlan(hubInput, mockAnalysis);
+    const overrides = routeOverridesFromInput(input);
+    const generatedPlan = await generateMarketingJson({
+      task: "plan",
+      system: systemPrompt,
+      user: userPrompt,
+      secrets: readMarketingSecrets(),
+      overrides,
+      mockGenerate: () => ({
+        pieces: mockPieces,
+        plan: mockPlan,
+        analysis: mockAnalysis,
+      }),
+    });
+    let generated = piecesFromLlm(generatedPlan.value, count);
+    let usage = generatedPlan.usage;
+    if (!generated) {
+      logger.warn("Marketing plan JSON was incomplete; using demo pieces", {
+        provider: usage.provider,
+        model: usage.model,
+      });
       generated = mockPieces.map(generatedFromMock);
-      provider = MARKETING_MOCK_PROVIDER;
-      model = MARKETING_MOCK_MODEL;
+      usage = {
+        provider: MARKETING_MOCK_PROVIDER,
+        model: MARKETING_MOCK_MODEL,
+        relativeCost: 0,
+        reason: "Live plan JSON was incomplete; demo pieces used",
+      };
     }
+    const provider = usage.provider;
+    const model = usage.model;
+    const analysis = analysisFromLlm(generatedPlan.value, mockAnalysis);
+    const plan = planFromLlm(generatedPlan.value, mockPlan);
+    logger.info("marketing.ai", {
+      task: "plan",
+      companyId,
+      provider,
+      model,
+      reason: usage.reason,
+      count: generated.length,
+    });
 
     const collectionRef = db.collection(`companies/${companyId}/content`);
     const batch = db.batch();
@@ -638,19 +699,24 @@ export const generateMarketingPlan = onCall(
         auth.uid,
         provider,
         model,
+        usage.reason,
       ));
     });
-    const analysis = mockPresenceAnalysis(hubInput);
-    const plan = mockMarketingPlan(hubInput, analysis);
     batch.set(db.doc(`companies/${companyId}/marketing/plan`), {
       ...plan,
-      source: provider === MARKETING_MOCK_PROVIDER ? "mock" : "openai",
+      source: provider,
+      aiProvider: provider,
+      aiModel: model,
+      aiRouteReason: usage.reason,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     batch.set(db.doc(`companies/${companyId}/marketing/analysis`), {
       ...analysis,
-      source: provider === MARKETING_MOCK_PROVIDER ? "mock" : "openai",
+      source: provider,
+      aiProvider: provider,
+      aiModel: model,
+      aiRouteReason: usage.reason,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
@@ -661,7 +727,7 @@ export const generateMarketingPlan = onCall(
       await mapPool(created.slice(0, MAX_PLAN_IMAGES), IMAGE_CONCURRENCY, async (item) => {
         if (item.prompt.length < 10) return;
         try {
-          const asset = await saveGeneratedMarketingImage(companyId, auth.uid, item.prompt);
+          const asset = await saveGeneratedMarketingImage(companyId, auth.uid, item.prompt, overrides);
           await db.doc(`companies/${companyId}/content/${item.id}`).update({
             assetIds: [asset.assetId],
             updatedAt: FieldValue.serverTimestamp(),
@@ -791,7 +857,12 @@ function applySuggestedBrand(
   return { profile: next, filledFields };
 }
 
-function completeMarketingAudit(raw: Record<string, unknown>, sources: string[], actor: string) {
+function completeMarketingAudit(
+  raw: Record<string, unknown>,
+  sources: string[],
+  actor: string,
+  usage?: MarketingLlmUsage,
+) {
   const search = raw.search && typeof raw.search === "object" ? raw.search as Record<string, unknown> : {};
   const ads = raw.ads && typeof raw.ads === "object" ? raw.ads as Record<string, unknown> : {};
   const social = raw.social && typeof raw.social === "object" ? raw.social as Record<string, unknown> : {};
@@ -836,146 +907,19 @@ function completeMarketingAudit(raw: Record<string, unknown>, sources: string[],
     createdBy: actor,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+    aiProvider: usage?.provider || MARKETING_MOCK_PROVIDER,
+    aiModel: usage?.model || MARKETING_MOCK_MODEL,
+    aiRouteReason: usage?.reason || "",
   };
 }
 
-async function requestAuditFromOpenAi(systemPrompt: string, userPrompt: string): Promise<Record<string, unknown>> {
-  let response: Response;
-  try {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey.value()}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        temperature: 0.4,
-        max_tokens: 5000,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "marketing_audit",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: [
-                "headline", "executiveSummary", "search", "ads", "social",
-                "website", "opportunities", "suggestedBrand", "sources", "limitations",
-              ],
-              properties: {
-                headline: { type: "string" },
-                executiveSummary: { type: "string" },
-                search: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["demand", "match", "ranking", "queries"],
-                  properties: {
-                    demand: { type: "string" },
-                    match: { type: "string" },
-                    ranking: { type: "string" },
-                    queries: { type: "array", items: { type: "string" } },
-                  },
-                },
-                ads: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["performance", "caveats"],
-                  properties: {
-                    performance: { type: "string" },
-                    caveats: { type: "string" },
-                  },
-                },
-                social: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["performance", "popularTopics"],
-                  properties: {
-                    performance: { type: "string" },
-                    popularTopics: { type: "array", items: { type: "string" } },
-                  },
-                },
-                website: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["strengths", "gaps"],
-                  properties: {
-                    strengths: { type: "array", items: { type: "string" } },
-                    gaps: { type: "array", items: { type: "string" } },
-                  },
-                },
-                opportunities: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: ["title", "why", "action", "impact"],
-                    properties: {
-                      title: { type: "string" },
-                      why: { type: "string" },
-                      action: { type: "string" },
-                      impact: { type: "string", enum: ["high", "medium", "low"] },
-                    },
-                  },
-                },
-                suggestedBrand: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: [
-                    "brandVoice", "targetAudience", "industry",
-                    "objectives", "keyMessages", "preferredHashtags",
-                  ],
-                  properties: {
-                    brandVoice: { type: "string" },
-                    targetAudience: { type: "string" },
-                    industry: { type: "string" },
-                    objectives: { type: "array", items: { type: "string" } },
-                    keyMessages: { type: "array", items: { type: "string" } },
-                    preferredHashtags: { type: "array", items: { type: "string" } },
-                  },
-                },
-                sources: { type: "array", items: { type: "string" } },
-                limitations: { type: "array", items: { type: "string" } },
-              },
-            },
-          },
-        },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
-  } catch (error) {
-    logger.error("Marketing audit OpenAI request failed", { error });
-    throw new HttpsError("unavailable", "Could not reach the AI service. Please try again.");
-  }
-  if (!response.ok) {
-    const detail = await response.text();
-    logger.error("Marketing audit OpenAI response failed", { status: response.status, detail });
-    if (response.status === 401) {
-      throw new HttpsError("failed-precondition", "The OpenAI API key is missing or invalid.");
-    }
-    throw new HttpsError("internal", "The AI service could not complete this audit.");
-  }
-  const body = await response.json() as OpenAiChatResponse;
-  const content = body.choices?.[0]?.message?.content;
-  if (!content) throw new HttpsError("internal", "The AI service returned an empty audit.");
-  try {
-    const parsed = JSON.parse(content) as Record<string, unknown>;
-    if (!String(parsed.executiveSummary || "").trim() || !Array.isArray(parsed.opportunities)) {
-      throw new Error("Incomplete audit");
-    }
-    return parsed;
-  } catch (error) {
-    logger.error("Marketing audit JSON was invalid", { error });
-    throw new HttpsError("internal", "The AI service returned an invalid audit.");
-  }
+function auditLooksComplete(value: unknown): value is Record<string, unknown> {
+  const parsed = asRecord(value);
+  return Boolean(String(parsed.executiveSummary || "").trim()) && Array.isArray(parsed.opportunities);
 }
 
 export const generateMarketingAudit = onCall(
-  { secrets: [openaiApiKey], timeoutSeconds: 180, memory: "512MiB" },
+  { secrets: MARKETING_AI_SECRETS, timeoutSeconds: 180, memory: "512MiB" },
   async (request) => {
     const auth = requireMarketingAuth(request);
     const companyId = requireDocumentId(request.data?.companyId, "companyId");
@@ -1053,9 +997,11 @@ export const generateMarketingAudit = onCall(
       extraNotes ? "pasted Search Console, ads or social notes" : "",
     ].filter(Boolean);
     const seasonal = ukSeasonalContext(new Date());
-    const generated = await requestAuditFromOpenAi(
-      buildMarketingAuditInstructions(seasonal),
-      JSON.stringify({
+    const hubInput = hubInputFromRecords(companySnap.data() || {}, profile);
+    const generatedAudit = await generateMarketingJson({
+      task: "analysis",
+      system: buildMarketingAuditInstructions(seasonal),
+      user: JSON.stringify({
         companyName: companySnap.data()?.name || "",
         companyDescription: companySnap.data()?.description || "",
         brandProfile: profile,
@@ -1074,10 +1020,23 @@ export const generateMarketingAudit = onCall(
           googleAds: false,
           metaOrLinkedInAnalytics: false,
         },
-      })
-    );
+      }),
+      secrets: readMarketingSecrets(),
+      mockGenerate: () => mockMarketingAudit(hubInput),
+    });
+    const generated = auditLooksComplete(generatedAudit.value)
+      ? asRecord(generatedAudit.value)
+      : mockMarketingAudit(hubInput);
+    const usage = auditLooksComplete(generatedAudit.value)
+      ? generatedAudit.usage
+      : {
+        provider: MARKETING_MOCK_PROVIDER,
+        model: MARKETING_MOCK_MODEL,
+        relativeCost: 0,
+        reason: "Live audit JSON was incomplete; demo audit used",
+      } satisfies MarketingLlmUsage;
 
-    const audit = completeMarketingAudit(generated, sources, auth.uid);
+    const audit = completeMarketingAudit(generated, sources, auth.uid, usage);
     const ref = db.collection(`companies/${companyId}/marketingAudits`).doc();
     await ref.set(audit);
     const profileRef = db.doc(`companies/${companyId}/marketing/profile`);
@@ -1092,8 +1051,24 @@ export const generateMarketingAudit = onCall(
       aiSuggestedFields: filledFields,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    logger.info("Generated marketing audit", { companyId, uid: auth.uid, auditId: ref.id, filledFields });
-    return { auditId: ref.id, headline: audit.headline, brandApplied: true, filledFields };
+    logger.info("marketing.ai", {
+      task: "analysis",
+      companyId,
+      uid: auth.uid,
+      auditId: ref.id,
+      provider: usage.provider,
+      model: usage.model,
+      reason: usage.reason,
+      filledFields,
+    });
+    return {
+      auditId: ref.id,
+      headline: audit.headline,
+      brandApplied: true,
+      filledFields,
+      source: usage.provider,
+      aiModel: usage.model,
+    };
   }
 );
 
@@ -1504,7 +1479,7 @@ export const processMarketingPublishJobs = onSchedule(
 );
 
 export const generateMarketingImage = onCall(
-  { secrets: [openaiApiKey], timeoutSeconds: 180, memory: "1GiB" },
+  { secrets: MARKETING_AI_SECRETS, timeoutSeconds: 180, memory: "1GiB" },
   async (request) => {
     const auth = requireMarketingAuth(request);
     const companyId = requireDocumentId(request.data?.companyId, "companyId");
@@ -1513,11 +1488,16 @@ export const generateMarketingImage = onCall(
       throw new HttpsError("invalid-argument", "A meaningful image prompt is required.");
     }
     await requireCompanyEditPermission(auth.uid, companyId);
-    return saveGeneratedMarketingImage(companyId, auth.uid, prompt);
+    return saveGeneratedMarketingImage(
+      companyId,
+      auth.uid,
+      prompt,
+      routeOverridesFromInput(request.data),
+    );
   }
 );
 
-export const scanMarketingBrand = onCall(async (request) => {
+export const scanMarketingBrand = onCall({ secrets: MARKETING_AI_SECRETS }, async (request) => {
   const auth = requireMarketingAuth(request);
   const companyId = requireDocumentId(request.data?.companyId, "companyId");
   await requireCompanyEditPermission(auth.uid, companyId);
@@ -1528,7 +1508,22 @@ export const scanMarketingBrand = onCall(async (request) => {
   ]);
   const company = companySnap.data() || {};
   const profile = (profileSnap.data() || {}) as MarketingBrandProfile;
-  const scan = mockBrandScan(hubInputFromRecords(company, profile));
+  const hubInput = hubInputFromRecords(company, profile);
+  const mockScan = mockBrandScan(hubInput);
+  const generated = await generateMarketingJson({
+    task: "brand_scan",
+    system: [
+      "You infer a British brand voice from a company name, website and notes.",
+      "Return JSON only: brandVoice, targetAudience, styleNotes, industry, objectives, keyMessages, preferredHashtags, website.",
+      "Do not invent awards, prices or reviews. Keep copy short and specific.",
+    ].join(" "),
+    user: JSON.stringify(hubInput),
+    secrets: readMarketingSecrets(),
+    overrides: routeOverridesFromInput(request.data),
+    mockGenerate: () => mockScan,
+  });
+  const scan = brandScanFromLlm(generated.value, mockScan);
+  const usage = generated.usage;
   const emptyString = (value: unknown) => typeof value !== "string" || value.trim().length < 3;
   const emptyList = (value: unknown) => !Array.isArray(value) || value.length === 0;
   const filledFields: string[] = [];
@@ -1551,14 +1546,29 @@ export const scanMarketingBrand = onCall(async (request) => {
   }, { merge: true });
   await db.doc(`companies/${companyId}/marketing/scan`).set({
     ...scan,
-    source: MARKETING_MOCK_PROVIDER,
+    source: usage.provider,
+    aiProvider: usage.provider,
+    aiModel: usage.model,
+    aiRouteReason: usage.reason,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  return { headline: `Brand scan ready for ${String(company.name || "this company")}`, filledFields, source: MARKETING_MOCK_PROVIDER };
+  logger.info("marketing.ai", {
+    task: "brand_scan",
+    companyId,
+    provider: usage.provider,
+    model: usage.model,
+    reason: usage.reason,
+  });
+  return {
+    headline: `Brand scan ready for ${String(company.name || "this company")}`,
+    filledFields,
+    source: usage.provider,
+    aiModel: usage.model,
+  };
 });
 
-export const analyseMarketingPresence = onCall(async (request) => {
+export const analyseMarketingPresence = onCall({ secrets: MARKETING_AI_SECRETS }, async (request) => {
   const auth = requireMarketingAuth(request);
   const companyId = requireDocumentId(request.data?.companyId, "companyId");
   await requireCompanyEditPermission(auth.uid, companyId);
@@ -1568,10 +1578,27 @@ export const analyseMarketingPresence = onCall(async (request) => {
     db.doc(`companies/${companyId}/marketing/profile`).get(),
   ]);
   const input = hubInputFromRecords(companySnap.data() || {}, (profileSnap.data() || {}) as MarketingBrandProfile);
-  const analysis = mockPresenceAnalysis(input);
+  const mockAnalysis = mockPresenceAnalysis(input);
+  const generated = await generateMarketingJson({
+    task: "analysis",
+    system: [
+      "You write a short UK SWOT for a family-run brand.",
+      "Return JSON: headline, summary, strengths, weaknesses, opportunities, estimatedMonthlyBudgetGbp.",
+      "Budget is indicative GBP only. Do not invent live analytics.",
+    ].join(" "),
+    user: JSON.stringify(input),
+    secrets: readMarketingSecrets(),
+    overrides: routeOverridesFromInput(request.data),
+    mockGenerate: () => mockAnalysis,
+  });
+  const analysis = analysisFromLlm({ analysis: generated.value }, mockAnalysis);
+  const usage = generated.usage;
   await db.doc(`companies/${companyId}/marketing/analysis`).set({
     ...analysis,
-    source: MARKETING_MOCK_PROVIDER,
+    source: usage.provider,
+    aiProvider: usage.provider,
+    aiModel: usage.model,
+    aiRouteReason: usage.reason,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
@@ -1581,10 +1608,17 @@ export const analyseMarketingPresence = onCall(async (request) => {
     estimatedBudgetGbp: analysis.estimatedMonthlyBudgetGbp * Math.max(1, Math.round(input.periodDays / 30)),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  return { headline: analysis.headline, source: MARKETING_MOCK_PROVIDER };
+  logger.info("marketing.ai", {
+    task: "analysis",
+    companyId,
+    provider: usage.provider,
+    model: usage.model,
+    reason: usage.reason,
+  });
+  return { headline: analysis.headline, source: usage.provider, aiModel: usage.model };
 });
 
-export const suggestMarketingSchedule = onCall(async (request) => {
+export const suggestMarketingSchedule = onCall({ secrets: MARKETING_AI_SECRETS }, async (request) => {
   const auth = requireMarketingAuth(request);
   const companyId = requireDocumentId(request.data?.companyId, "companyId");
   await requireCompanyEditPermission(auth.uid, companyId);
@@ -1603,10 +1637,34 @@ export const suggestMarketingSchedule = onCall(async (request) => {
       approvalVersion: Number(data.approvalVersion || 0),
     };
   }).filter((item) => ["awaiting_approval", "draft", "approved"].includes(item.status));
-  const suggestion = mockScheduleSuggestion(
+  const mockSuggestion = mockScheduleSuggestion(
     items.map((item) => ({ id: item.id, platform: String(item.platform || "") })),
     periodDays,
   );
+  const allowedIds = new Set(items.map((item) => item.id));
+  const generated = await generateMarketingJson({
+    task: "schedule",
+    system: [
+      "Spread these posts across the period with sensible weekday UK times.",
+      "Return JSON { items: [{ id, scheduledFor }] } using the given ids only.",
+      "scheduledFor must be an ISO timestamp. Prefer mid-morning or early afternoon UK time.",
+    ].join(" "),
+    user: JSON.stringify({
+      periodDays,
+      items: items.map((item) => ({ id: item.id, platform: item.platform, status: item.status })),
+    }),
+    secrets: readMarketingSecrets(),
+    overrides: routeOverridesFromInput(request.data),
+    mockGenerate: () => ({ items: mockSuggestion }),
+  });
+  const parsedSchedule = scheduleFromLlm(generated.value, allowedIds);
+  const suggestion = parsedSchedule || mockSuggestion;
+  const usage = parsedSchedule ? generated.usage : {
+    provider: MARKETING_MOCK_PROVIDER,
+    model: MARKETING_MOCK_MODEL,
+    relativeCost: 0,
+    reason: "Live schedule JSON was unusable; demo dates used",
+  } satisfies MarketingLlmUsage;
   let updated = 0;
   for (const row of suggestion) {
     const existing = items.find((item) => item.id === row.id);
@@ -1621,7 +1679,28 @@ export const suggestMarketingSchedule = onCall(async (request) => {
     });
     updated += 1;
   }
-  return { updated, summary: `Moved ${updated} posts across the next ${periodDays} days.` };
+  await db.doc(`companies/${companyId}/marketing/schedule`).set({
+    updated,
+    periodDays,
+    aiProvider: usage.provider,
+    aiModel: usage.model,
+    aiRouteReason: usage.reason,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  logger.info("marketing.ai", {
+    task: "schedule",
+    companyId,
+    provider: usage.provider,
+    model: usage.model,
+    reason: usage.reason,
+    updated,
+  });
+  return {
+    updated,
+    summary: `Moved ${updated} posts across the next ${periodDays} days.`,
+    source: usage.provider,
+    aiModel: usage.model,
+  };
 });
 
 export const requestMarketingEdits = onCall(async (request) => {

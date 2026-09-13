@@ -41,16 +41,17 @@ export const SOCIAL_PLATFORM_HINTS: Record<SocialPlatform, string> = {
 
 export const TEXT_MODEL_OPTIONS = [
   { id: "auto", label: "Let AI choose", provider: "auto" },
-  { id: "gpt-4o-mini", label: "OpenAI GPT-4o mini", provider: "openai" },
+  { id: "grok-4.3", label: "Grok 4.3", provider: "grok" },
   { id: "gpt-4o", label: "OpenAI GPT-4o", provider: "openai" },
-  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", provider: "gemini" },
+  { id: "gpt-4o-mini", label: "OpenAI GPT-4o mini", provider: "openai" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini" },
 ] as const;
 
 export const IMAGE_MODEL_OPTIONS = [
   { id: "auto", label: "Let AI choose", provider: "auto" },
-  { id: "dall-e-3", label: "OpenAI DALL·E 3", provider: "openai" },
+  { id: "gemini-3.1-flash-image", label: "Gemini Flash Image", provider: "gemini" },
   { id: "gpt-image-1", label: "OpenAI GPT Image", provider: "openai" },
-  { id: "gemini-imagen", label: "Gemini Imagen", provider: "gemini" },
+  { id: "grok-imagine-image-quality", label: "Grok Imagine", provider: "grok" },
 ] as const;
 
 export function platformLabel(platform: string) {

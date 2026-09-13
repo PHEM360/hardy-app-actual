@@ -337,9 +337,9 @@ export interface MarketingProfile {
   cadence?: Partial<Record<SocialPlatform, MarketingCadenceRule>>;
   controversialTheme?: string;
   socialUrls?: Partial<Record<SocialPlatform, string>>;
-  textProvider?: "auto" | "openai" | "gemini";
+  textProvider?: "auto" | "openai" | "gemini" | "grok";
   textModel?: string;
-  imageProvider?: "auto" | "openai" | "gemini";
+  imageProvider?: "auto" | "openai" | "gemini" | "grok";
   imageModel?: string;
   /** Fields the last AI audit filled in that the user hasn't reviewed/edited yet — cleared per-field on manual edit. */
   aiSuggestedFields?: string[];
@@ -419,6 +419,8 @@ export interface ContentPiece {
   publishError: string;
   aiProvider: string;
   aiModel: string;
+  /** Why the router picked this provider/model (override, auto, or fallback). */
+  aiRouteReason?: string;
   aiReasoning: string;
   brandChecks: string[];
   engagementSuggestions: string[];
@@ -445,7 +447,10 @@ export interface MarketingPlan {
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
-  source: "openai" | "gemini" | "mock";
+  source: "openai" | "gemini" | "grok" | "mock";
+  aiProvider?: string;
+  aiModel?: string;
+  aiRouteReason?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -458,7 +463,10 @@ export interface MarketingAnalysis {
   weaknesses: string[];
   opportunities: string[];
   estimatedMonthlyBudgetGbp: number;
-  source: "openai" | "gemini" | "mock";
+  source: "openai" | "gemini" | "grok" | "mock";
+  aiProvider?: string;
+  aiModel?: string;
+  aiRouteReason?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -472,9 +480,9 @@ export interface MarketingPlanRequest {
   includeImages?: boolean;
   includeArticles?: boolean;
   controversialTheme?: string;
-  textProvider?: "auto" | "openai" | "gemini";
+  textProvider?: "auto" | "openai" | "gemini" | "grok";
   textModel?: string;
-  imageProvider?: "auto" | "openai" | "gemini";
+  imageProvider?: "auto" | "openai" | "gemini" | "grok";
   imageModel?: string;
 }
 
@@ -507,6 +515,9 @@ export interface MarketingAudit {
   sources: string[];
   limitations: string[];
   createdBy: string;
+  aiProvider?: string;
+  aiModel?: string;
+  aiRouteReason?: string;
   createdAt?: any;
 }
 

@@ -504,7 +504,7 @@ function QueueSection({
           </div>
           {items.map((row) => (
             <article key={row.item.id} className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
-              <p className="text-xs font-semibold text-muted-foreground">{platformLabel(String(row.item.platform))} · {row.item.type.replace("_", " ")}</p>
+              <p className="text-xs font-semibold text-muted-foreground">{platformLabel(String(row.item.platform))} · {row.item.type.replace("_", " ")}{row.item.aiModel ? ` · ${row.item.aiProvider === "mock" ? "demo" : row.item.aiModel}` : ""}</p>
               <p className="mt-1 font-semibold">{row.item.topic}</p>
               <p className="mt-2 whitespace-pre-wrap text-sm">{row.item.refinedDraft || row.item.draft}</p>
               <div className="mt-3 flex flex-wrap gap-2">

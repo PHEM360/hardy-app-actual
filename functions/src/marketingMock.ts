@@ -1,8 +1,8 @@
 /**
  * Deterministic marketing AI stub.
- * Used when OPENAI_API_KEY is missing, the live call fails, or the client
- * falls back because Cloud Functions are not reachable.
- * Swap this for a live provider by implementing MarketingAiProvider.
+ * Used when no live marketing API keys are set, every live adapter fails,
+ * or the client falls back because Cloud Functions are not reachable.
+ * Live traffic goes through marketingRouter + marketingProviders.
  */
 
 export type MockPlatform =
@@ -215,6 +215,49 @@ export function mockContentBatch(input: MockHubInput, count: number, now = Date.
       scheduledFor: mockScheduledDate(index, count, input.periodDays, now),
     };
   });
+}
+
+export function mockMarketingAudit(input: MockHubInput): Record<string, unknown> {
+  const analysis = mockPresenceAnalysis(input);
+  const scan = mockBrandScan(input);
+  return {
+    headline: analysis.headline,
+    executiveSummary: analysis.summary,
+    search: {
+      demand: "Not measured — Search Console is not connected.",
+      match: "Queries are inferred from the brand profile and website snapshot only.",
+      ranking: "No live ranking data. Treat this as a planning note, not a league table.",
+      queries: [`${brandName(input)} UK`, inferIndustry(input.description, input.companyName)],
+    },
+    ads: {
+      performance: "No live ads account is connected.",
+      caveats: "Any spend figures in the plan are indicative only.",
+    },
+    social: {
+      performance: "This workspace is approval-first. Nothing has been posted live from Hardy.",
+      popularTopics: analysis.opportunities.slice(0, 3),
+    },
+    website: {
+      strengths: analysis.strengths.slice(0, 3),
+      gaps: analysis.weaknesses.slice(0, 3),
+    },
+    opportunities: analysis.opportunities.map((title, index) => ({
+      title: title.slice(0, 160),
+      why: analysis.summary,
+      action: "Approve the next batch and review what actually landed.",
+      impact: index === 0 ? "high" : "medium",
+    })),
+    suggestedBrand: {
+      brandVoice: scan.brandVoice,
+      targetAudience: scan.targetAudience,
+      industry: scan.industry,
+      objectives: scan.objectives,
+      keyMessages: scan.keyMessages,
+      preferredHashtags: scan.preferredHashtags,
+    },
+    sources: ["demo provider"],
+    limitations: ["No live Search Console, ads or social analytics.", "Copy is a deterministic stub."],
+  };
 }
 
 export function mockScheduleSuggestion(

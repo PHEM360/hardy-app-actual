@@ -115,7 +115,8 @@ export function buildMarketingPlanInstructions(pieceCount: number, seasonal: str
     "Vary formats across the batch: tip, story, question, proof, offer, behind-the-scenes, article.",
     "aiImagePrompt must describe a specific photograph or graphic that matches the post, including lighting, setting and mood. No text-in-image.",
     "aiReasoning must cite the brand rule, competitor gap or seasonal hook that justified this post.",
-    `Return exactly ${pieceCount} pieces and only the requested platforms.`,
+    `Return JSON with exactly ${pieceCount} pieces and only the requested platforms.`,
+    "Also include plan { summary, objectives, estimatedBudgetGbp, budgetNotes, recommendations } and analysis { headline, summary, strengths, weaknesses, opportunities, estimatedMonthlyBudgetGbp }. Budget figures are indicative planning numbers in GBP, not live spend.",
     ...seasonal,
   ].join(" ");
 }

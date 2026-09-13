@@ -22,7 +22,8 @@ export interface GeneratedMarketingPlan {
   contentIds: string[];
   imagesCreated?: number;
   summary: string;
-  source?: "openai" | "gemini" | "mock";
+  source?: "openai" | "gemini" | "grok" | "mock";
+  aiModel?: string;
 }
 
 export type MarketingCompanyHint = Pick<Company, "name" | "description" | "contact">;
