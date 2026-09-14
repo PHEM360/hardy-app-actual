@@ -29,7 +29,8 @@ function requireUid(request: { auth?: { uid: string; token?: Record<string, unkn
 
 function secretValue(secret: { value: () => string }) {
   try {
-    return String(secret.value() || "").trim();
+    const value = String(secret.value() || "").trim();
+    return value && value !== "UNSET" ? value : "";
   } catch {
     return "";
   }

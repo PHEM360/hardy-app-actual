@@ -26,7 +26,8 @@ export type FinanceAnalysisResult = {
 
 function secretValue(secret: { value: () => string }): string {
   try {
-    return String(secret.value() || "").trim();
+    const value = String(secret.value() || "").trim();
+    return value && value !== "UNSET" ? value : "";
   } catch {
     return "";
   }
