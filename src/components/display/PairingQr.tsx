@@ -44,10 +44,15 @@ export function PairingQr({ pairing, onRestart }: { pairing: PairingState; onRes
         )}
       </div>
 
-      {pairing.phase === "waiting" && (
-        <p className="text-white/35" style={{ fontSize: "clamp(9px, 1.5vmin, 14px)" }}>
-          A new code appears automatically if this one expires
-        </p>
+      {pairing.phase === "waiting" && pairing.qrUrl && (
+        <div className="max-w-full px-[1vmin]">
+          <p className="break-all font-mono text-white/70" style={{ fontSize: "clamp(10px, 1.7vmin, 16px)" }}>
+            {pairing.qrUrl.replace(/^https?:\/\//, "")}
+          </p>
+          <p className="mt-[0.8vmin] text-white/35" style={{ fontSize: "clamp(9px, 1.5vmin, 14px)" }}>
+            Scan the code, or type that address on a signed-in phone. A new code appears if this one expires.
+          </p>
+        </div>
       )}
     </div>
   );

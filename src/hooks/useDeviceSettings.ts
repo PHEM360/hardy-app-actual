@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { WidgetType } from "@/hooks/useDashboardLayout";
 import {
   applyPageLayout,
+  cloneDisplayPages,
   createDisplayWidget,
   DEFAULT_DISPLAY_PAGES,
   stripUndefined,
@@ -21,11 +22,15 @@ export {
   DURATION_CHOICES,
   PAGE_LAYOUTS,
   PAGE_PRESETS,
+  SCREEN_TEMPLATES,
   WIDGET_DESCRIPTIONS,
   WIDGET_LABELS,
   WIDGET_ORDER,
   activeDisplayPages,
+  applyLookToPages,
   applyPageLayout,
+  cloneDisplayPage,
+  cloneDisplayPages,
   createDisplayWidget,
   displayTheme,
   durationLabel,
@@ -44,6 +49,7 @@ export type {
   DisplayPage,
   DisplayPageLayout,
   DisplayPagePreset,
+  DisplayScreenTemplate,
   DisplayTheme,
   DisplayWidgetLayout,
   DisplayWidgetType,
@@ -516,6 +522,27 @@ export function useDeviceSettings(deviceId: string | null) {
     [deviceId]
   );
 
+  /**
+   * Copies another owned display's pages onto this one. Rules already prevent
+   * reading a device that isn't this account's; we still refuse a uid mismatch
+   * in the client so a stale id cannot overwrite the current screen.
+   */
+  const copyLookFrom = useCallback(
+    async (sourceDeviceId: string): Promise<DisplayPage[]> => {
+      if (!deviceId || !device || sourceDeviceId === deviceId) return device?.settings.pages || [];
+      const snap = await getDoc(doc(db, "devices", sourceDeviceId));
+      const source = snap.data();
+      if (!source || source.uid !== device.uid) {
+        throw new Error("That screen isn't on this account");
+      }
+      const copied = cloneDisplayPages(Array.isArray(source.settings?.pages) ? source.settings.pages : []);
+      if (copied.length === 0) throw new Error("That screen has no pages to copy");
+      await updatePages(copied);
+      return copied;
+    },
+    [device, deviceId, updatePages]
+  );
+
   return {
     device,
     loading,
@@ -535,5 +562,6 @@ export function useDeviceSettings(deviceId: string | null) {
     updateLightSchedule,
     updateControl,
     updatePages,
+    copyLookFrom,
   };
 }

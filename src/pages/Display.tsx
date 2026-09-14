@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FolderOpen, Maximize, Moon, Sun, WifiOff } from "lucide-react";
 import DogLoader from "@/components/DogLoader";
 import { useDeviceAuth } from "@/hooks/useDeviceAuth";
@@ -28,6 +28,27 @@ function useDisplayManifest() {
       link?.setAttribute("href", previousHref);
     };
   }, []);
+}
+
+function OfflineReconnectBanner() {
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+  if (online) return null;
+  return (
+    <div className="absolute left-1/2 top-4 z-20 w-[min(92vw,28rem)] -translate-x-1/2 rounded-2xl border border-amber-400/40 bg-zinc-900/90 px-4 py-3 text-center shadow-lg backdrop-blur-sm">
+      <p className="text-sm font-semibold text-white">This screen is offline</p>
+      <p className="mt-1 text-xs text-white/65">Keep this page open. Pages and photos come back on their own when the connection returns.</p>
+    </div>
+  );
 }
 
 export default function Display() {
@@ -91,6 +112,7 @@ export default function Display() {
 
   return (
     <div className="relative h-[100svh] min-h-[100dvh] w-full select-none overflow-hidden bg-zinc-950">
+      <OfflineReconnectBanner />
       <RemoteDisplayRuntime device={device} extraPhotos={localFolder.photos} />
 
       <AlarmManager alarms={device.settings.alarms} />

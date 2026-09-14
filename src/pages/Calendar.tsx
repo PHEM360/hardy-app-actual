@@ -4,16 +4,16 @@ import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
-  Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
+  Bell, Settings, Clock, Users, Trash2, Mail, MessageSquare, Smartphone,
   AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw,
-  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake,
+  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake, Sun, Upload,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths,
   subMonths, addWeeks, subWeeks, parseISO, isAfter, isBefore, startOfDay, endOfDay,
-  addDays,
+  addDays, subDays,
 } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ import { usePets } from "@/hooks/usePets";
 import { useTasks } from "@/hooks/useTasks";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useNotes } from "@/hooks/useNotes";
+import { useMail } from "@/hooks/useMail";
+import { useCalendarManifest } from "@/hooks/useCalendarManifest";
 import {
   disconnectGoogleCalendar,
   listGoogleCalendars,
@@ -42,13 +44,25 @@ import {
   syncGoogleCalendar,
 } from "@/lib/googleCalendarApi";
 import { applyCalendarMergeRules } from "@/lib/calendarMerge";
-import { downloadIcs, eventsToIcs } from "@/lib/calendarIcs";
+import { downloadIcs, eventsToIcs, parseIcsEvents } from "@/lib/calendarIcs";
 import { mergedCalendarSubscribeUrl, publishMergedCalendar, syncCalendarFeed } from "@/lib/calendarFeedsApi";
-import type { CalendarEvent, CalendarEventCategory, CalendarFeed, CalendarNotificationPref } from "@/types/app";
+import { weekdayLabels, weekStartsOnValue, workHours } from "@/lib/calendarLayout";
+import {
+  draftEventsFromMail,
+  draftFromPastedText,
+  draftToEventInput,
+  unsubscribeActionFromText,
+} from "@/lib/mailEventDrafts";
+import { TimedGrid } from "@/components/calendar/TimedGrid";
+import type { CalendarEvent, CalendarEventCategory, CalendarFeed, CalendarSettings } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+type CalendarView = CalendarSettings["defaultView"];
+
+function padHour(hour: number) {
+  return String(Math.min(23, Math.max(0, hour))).padStart(2, "0");
+}
 
 const MEMBER_COLOR_PRESETS = [
   "#ec4899", "#3b82f6", "#f97316", "#10b981",
@@ -150,8 +164,9 @@ interface EventForm {
   notifications: NotifRow[];
 }
 
-function defaultForm(prefillDate?: Date): EventForm {
+function defaultForm(prefillDate?: Date, hour?: number): EventForm {
   const d = prefillDate ? format(prefillDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+  const startHour = hour ?? 9;
   return {
     title: "",
     description: "",
@@ -160,9 +175,9 @@ function defaultForm(prefillDate?: Date): EventForm {
     memberId: "all",
     priority: "normal",
     startDate: d,
-    startTime: "09:00",
+    startTime: `${padHour(startHour)}:00`,
     endDate: d,
-    endTime: "10:00",
+    endTime: `${padHour(startHour + 1)}:00`,
     allDay: false,
     invitees: [],
     notifications: [],
@@ -248,15 +263,21 @@ const CalendarPage = () => {
   const { tasks } = useTasks();
   const { companies } = useCompanies();
   const { datedNotes } = useNotes(scopeUserId ?? undefined);
+  const mail = useMail(scopeUserId);
   const { role } = useEffectiveRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
+  useCalendarManifest(true);
 
   const isAdmin = role === "admin" || role === "superadmin";
 
-  const [view, setView] = useState<"month" | "week" | "agenda">(settings.defaultView ?? "month");
+  const [view, setView] = useState<CalendarView>(settings.defaultView ?? "month");
   const [hiddenSources, setHiddenSources] = useState<string[]>([]);
   const [feedDraft, setFeedDraft] = useState({ name: "", url: "" });
   const [feedBusy, setFeedBusy] = useState(false);
+  const [icsBusy, setIcsBusy] = useState(false);
+  const [pasteDraft, setPasteDraft] = useState("");
+  const [dismissedDraftIds, setDismissedDraftIds] = useState<string[]>([]);
+  const icsFileRef = useRef<HTMLInputElement>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
@@ -322,21 +343,32 @@ const CalendarPage = () => {
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
-  const prev = () =>
-    view === "month"
-      ? setCurrentDate((d) => subMonths(d, 1))
-      : setCurrentDate((d) => subWeeks(d, 1));
+  const weekStartsOn = weekStartsOnValue(settings.weekStartsOn);
+  const dayHours = workHours(settings.workDayStartHour, settings.workDayEndHour);
+  const weekDayNames = weekdayLabels(weekStartsOn);
 
-  const next = () =>
-    view === "month"
-      ? setCurrentDate((d) => addMonths(d, 1))
-      : setCurrentDate((d) => addWeeks(d, 1));
+  const mailDrafts = useMemo(
+    () => draftEventsFromMail(mail.messages).filter((draft) => !dismissedDraftIds.includes(draft.id)),
+    [mail.messages, dismissedDraftIds],
+  );
+
+  const prev = () => {
+    if (view === "month") setCurrentDate((d) => subMonths(d, 1));
+    else if (view === "day") setCurrentDate((d) => subDays(d, 1));
+    else setCurrentDate((d) => subWeeks(d, 1));
+  };
+
+  const next = () => {
+    if (view === "month") setCurrentDate((d) => addMonths(d, 1));
+    else if (view === "day") setCurrentDate((d) => addDays(d, 1));
+    else setCurrentDate((d) => addWeeks(d, 1));
+  };
 
   // ─── Dialog openers ─────────────────────────────────────────────────────────
 
-  const openAdd = (day?: Date) => {
+  const openAdd = (day?: Date, hour?: number) => {
     if (!canEdit) return;
-    setForm(defaultForm(day ?? selectedDay ?? undefined));
+    setForm(defaultForm(day ?? selectedDay ?? undefined, hour));
     setEditEvent(null);
     setConfirmDelete(false);
     setAddOpen(true);
@@ -436,18 +468,18 @@ const CalendarPage = () => {
   // ─── Month grid ──────────────────────────────────────────────────────────────
 
   const monthDays = useMemo(() => {
-    const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
-    const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
+    const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn });
+    const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn });
     return eachDayOfInterval({ start, end });
-  }, [currentDate]);
+  }, [currentDate, weekStartsOn]);
 
   // ─── Week grid ───────────────────────────────────────────────────────────────
 
   const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const end = endOfWeek(currentDate, { weekStartsOn: 1 });
+    const start = startOfWeek(currentDate, { weekStartsOn });
+    const end = endOfWeek(currentDate, { weekStartsOn });
     return eachDayOfInterval({ start, end });
-  }, [currentDate]);
+  }, [currentDate, weekStartsOn]);
 
   // ─── Member colour helper ────────────────────────────────────────────────────
 
@@ -650,7 +682,9 @@ const CalendarPage = () => {
       ? format(currentDate, "MMMM yyyy")
       : view === "week"
         ? `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`
-        : "Coming up";
+        : view === "day"
+          ? format(currentDate, "EEEE d MMMM yyyy")
+          : "Coming up";
 
   const sourceChips = [
     { key: "local", label: "Hardy Hub" },
@@ -662,6 +696,78 @@ const CalendarPage = () => {
 
   const toggleSource = (key: string) =>
     setHiddenSources((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
+
+  const goToDay = (day: Date) => {
+    setCurrentDate(day);
+    setSelectedDay(day);
+    setView("day");
+  };
+
+  const confirmMailDraft = async (draftId: string) => {
+    const draft = mailDrafts.find((item) => item.id === draftId);
+    if (!draft) return;
+    try {
+      await addEvent(draftToEventInput(draft));
+      setDismissedDraftIds((prev) => [...prev, draft.id]);
+      toast.success("Event added — you can edit the details if needed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add that event");
+    }
+  };
+
+  const importIcsFile = async (file: File) => {
+    setIcsBusy(true);
+    try {
+      const parsed = parseIcsEvents(await file.text(), `file_${Date.now()}`);
+      if (!parsed.length) {
+        toast.error("No events in that file");
+        return;
+      }
+      for (const event of parsed) {
+        await addEvent({
+          title: event.title,
+          description: event.description,
+          location: event.location,
+          category: event.category || "other",
+          startDate: event.startDate,
+          endDate: event.endDate,
+          allDay: event.allDay,
+          source: "import",
+          feedId: event.feedId,
+          googleEventId: event.googleEventId,
+        });
+      }
+      toast.success(`Imported ${parsed.length} event${parsed.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not import that calendar file");
+    } finally {
+      setIcsBusy(false);
+      if (icsFileRef.current) icsFileRef.current.value = "";
+    }
+  };
+
+  const suggestFromPaste = () => {
+    const draft = draftFromPastedText(pasteDraft);
+    if (!draft) {
+      toast.error("Couldn't find a date in that text");
+      return;
+    }
+    setForm({
+      ...defaultForm(parseISO(`${draft.suggestedDate}T12:00:00`)),
+      title: draft.suggestedTitle,
+      startTime: draft.suggestedTime,
+      endTime: draft.suggestedEndTime,
+      description: draft.notes,
+    });
+    setEditEvent(null);
+    setConfirmDelete(false);
+    setAddOpen(true);
+    toast.message("Check the event, then create it");
+  };
+
+  const editUnsubscribe = editEvent
+    ? unsubscribeActionFromText(`${editEvent.description || ""}\n${editEvent.location || ""}`)
+    : null;
 
   // ─── JSX ─────────────────────────────────────────────────────────────────────
 
@@ -676,8 +782,9 @@ const CalendarPage = () => {
         <aside className="w-[3.4rem] shrink-0 sm:w-[11rem]">
           <nav className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card">
             {([
-              { id: "month" as const, label: "Month", icon: LayoutGrid },
+              { id: "day" as const, label: "Day", icon: Sun },
               { id: "week" as const, label: "Week", icon: CalendarDays },
+              { id: "month" as const, label: "Month", icon: LayoutGrid },
               { id: "agenda" as const, label: "Agenda", icon: List },
             ]).map((item) => {
               const Icon = item.icon;
@@ -686,12 +793,15 @@ const CalendarPage = () => {
                 <button
                   key={item.id}
                   type="button"
+                  aria-label={item.label}
                   onClick={() => setView(item.id)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-1.5 py-2 text-left transition sm:px-2 ${
-                    active ? "border-primary/45 bg-primary/10 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  className={`flex w-full items-center gap-2 rounded-xl px-1.5 py-2 text-left transition sm:px-2 ${
+                    active
+                      ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-[color-mix(in_srgb,hsl(var(--primary))_12%,transparent)] hover:text-foreground"
                   }`}
                 >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-gradient-primary text-primary-foreground" : "bg-muted"}`}>
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-white/15" : "bg-muted"}`}>
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="hidden min-w-0 text-xs font-semibold sm:block">{item.label}</span>
@@ -754,6 +864,7 @@ const CalendarPage = () => {
             <button
               onClick={() => setSettingsOpen(true)}
               className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
+              aria-label="Calendar settings"
             >
               <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
@@ -763,7 +874,7 @@ const CalendarPage = () => {
           {canEdit && (
             <button
               onClick={() => openAdd()}
-              className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+              className="flex items-center gap-1 rounded-lg bg-gradient-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground sm:px-3 sm:text-xs"
             >
               <Plus className="w-3.5 h-3.5" />
               Add
@@ -772,15 +883,46 @@ const CalendarPage = () => {
         </div>
       </div>
 
+      {mailDrafts.length > 0 && canEdit && (
+        <div
+          className="mb-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-3 shadow-card"
+          style={{ borderLeftWidth: 4, borderLeftColor: "hsl(var(--primary))", background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))" }}
+        >
+          <p className="text-sm font-semibold">Suggested from mail</p>
+          <p className="mb-2 text-[11px] text-muted-foreground">Nothing is added until you confirm.</p>
+          <div className="space-y-2">
+            {mailDrafts.map((draft) => (
+              <div key={draft.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 bg-card px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{draft.suggestedTitle}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {draft.suggestedDate} · {draft.suggestedTime}–{draft.suggestedEndTime}
+                    {draft.from ? ` · ${draft.from}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => setDismissedDraftIds((prev) => [...prev, draft.id])}>
+                    Skip
+                  </Button>
+                  <Button size="sm" onClick={() => void confirmMailDraft(draft.id)}>
+                    Add event
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Month view ── */}
       {view === "month" && (
         <div
           className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
-          style={{ borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)", background: "color-mix(in srgb, hsl(220,60%,55%) 8%, hsl(var(--card)))" }}
+          style={{ borderLeftWidth: 4, borderLeftColor: "hsl(var(--primary))", background: "color-mix(in srgb, hsl(var(--primary)) 8%, hsl(var(--card)))" }}
         >
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-border/40 bg-card">
-            {WEEK_DAYS.map((d) => (
+            {weekDayNames.map((d) => (
               <div key={d} className="py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-foreground sm:py-3 sm:text-[11px]">
                 {d}
               </div>
@@ -799,6 +941,7 @@ const CalendarPage = () => {
                 <button
                   key={day.toISOString()}
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
+                  onDoubleClick={() => goToDay(day)}
                   className={`flex min-h-[78px] flex-col border border-border/20 p-1 text-left transition-colors sm:min-h-[104px] sm:p-1.5 md:min-h-[122px] ${
                     !inMonth ? "bg-background/40 text-muted-foreground" : selected ? "bg-primary/12" : today ? "bg-primary/8" : "bg-card hover:bg-primary/5"
                   }`}
@@ -838,9 +981,38 @@ const CalendarPage = () => {
         </div>
       )}
 
+      {/* ── Day view ── */}
+      {view === "day" && (
+        <TimedGrid
+          days={[currentDate]}
+          events={allDisplayEvents}
+          selectedDate={currentDate}
+          workDayStartHour={dayHours.start}
+          workDayEndHour={dayHours.end}
+          onSelectDay={goToDay}
+          onOpenEvent={openEdit}
+          onCreateAt={(day, hour) => openAdd(day, hour)}
+          accentFor={getEventColor}
+        />
+      )}
+
       {/* ── Week view ── */}
       {view === "week" && (
-        <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
+        <>
+          <div className="hidden md:block">
+            <TimedGrid
+              days={weekDays}
+              events={allDisplayEvents}
+              selectedDate={selectedDay ?? currentDate}
+              workDayStartHour={dayHours.start}
+              workDayEndHour={dayHours.end}
+              onSelectDay={goToDay}
+              onOpenEvent={openEdit}
+              onCreateAt={(day, hour) => openAdd(day, hour)}
+              accentFor={getEventColor}
+            />
+          </div>
+          <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-card md:hidden">
           <div className="grid grid-cols-7 divide-x divide-border/30">
             {weekDays.map((day) => {
               const dayEvts = eventsForDay(day);
@@ -848,19 +1020,19 @@ const CalendarPage = () => {
               const selected = selectedDay && isSameDay(day, selectedDay);
 
               return (
-                <div key={day.toISOString()} className="min-h-[200px] sm:min-h-[280px] md:min-h-[380px] flex flex-col">
-                  {/* Day header */}
+                <div key={day.toISOString()} className="min-h-[200px] flex flex-col">
                   <button
-                    onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                    className={`w-full py-2 sm:py-3 flex flex-col items-center border-b border-border/30 transition-colors ${
+                    type="button"
+                    onClick={() => goToDay(day)}
+                    className={`w-full py-2 flex flex-col items-center border-b border-border/30 transition-colors ${
                       today ? "bg-primary/10" : selected ? "bg-primary/5" : "hover:bg-muted/30"
                     }`}
                   >
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
                       {format(day, "EEE")}
                     </span>
                     <span
-                      className={`text-sm sm:text-base font-bold w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
+                      className={`text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center ${
                         today
                           ? "bg-primary text-primary-foreground"
                           : selected
@@ -871,9 +1043,7 @@ const CalendarPage = () => {
                       {format(day, "d")}
                     </span>
                   </button>
-
-                  {/* Events */}
-                  <div className="flex-1 p-1 sm:p-1.5 space-y-0.5 overflow-hidden">
+                  <div className="flex-1 p-1 space-y-0.5 overflow-hidden">
                     {dayEvts.map((e) => (
                       <button key={e.id} type="button" onClick={() => openEdit(e)} className="block w-full text-left">
                         <EventChip event={e} color={getEventColor(e)} />
@@ -881,21 +1051,22 @@ const CalendarPage = () => {
                     ))}
                     <button
                       onClick={() => openAdd(day)}
-                      className="w-full text-[9px] sm:text-[10px] text-muted-foreground/50 hover:text-muted-foreground py-0.5 flex items-center justify-center hover:bg-muted/30 rounded transition-colors"
+                      className="w-full text-[9px] text-muted-foreground/50 hover:text-muted-foreground py-0.5 flex items-center justify-center hover:bg-muted/30 rounded transition-colors"
                     >
-                      <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                      <Plus className="w-2.5 h-2.5" />
                     </button>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* ── Day detail panel ── */}
       <AnimatePresence>
-        {selectedDay && (
+        {selectedDay && view !== "day" && (
           <motion.div
             key="day-panel"
             initial={{ opacity: 0, y: 12 }}
@@ -1019,7 +1190,7 @@ const CalendarPage = () => {
               <div
                 key={day.toISOString()}
                 className="rounded-2xl border border-border/50 bg-card p-3 shadow-card"
-                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(220,60%,55%)" : "transparent" }}
+                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(var(--primary))" : "transparent" }}
               >
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {isToday(day) ? "Today · " : ""}{format(day, "EEEE d MMMM")}
@@ -1209,6 +1380,22 @@ const CalendarPage = () => {
               />
             </div>
 
+            {editUnsubscribe?.http && (
+              <a
+                href={editUnsubscribe.http}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+              >
+                Unsubscribe from this list
+              </a>
+            )}
+            {editUnsubscribe?.mailto && !editUnsubscribe.http && (
+              <a href={`mailto:${editUnsubscribe.mailto}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
+                Unsubscribe by email
+              </a>
+            )}
+
             {/* Invite household members */}
             {hSettings.members.length > 0 && (
               <div className="space-y-1.5">
@@ -1374,20 +1561,65 @@ const CalendarPage = () => {
             {/* Default view */}
             <div className="space-y-1.5">
               <Label>Default view</Label>
-              <div className="flex gap-2">
-                {(["month", "week", "agenda"] as const).map((v) => (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(["day", "week", "month", "agenda"] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => saveSettings({ ...settings, defaultView: v })}
-                    className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors capitalize ${
+                    className={`py-2 rounded-xl text-sm font-medium border transition-colors capitalize ${
                       settings.defaultView === v
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border/50 text-muted-foreground hover:bg-muted/30"
+                        ? "bg-gradient-primary text-primary-foreground border-transparent"
+                        : "border-border/50 text-muted-foreground hover:bg-[color-mix(in_srgb,hsl(var(--primary))_12%,transparent)]"
                     }`}
                   >
                     {v}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Week starts on</Label>
+              <div className="flex gap-2">
+                {([{ value: 1 as const, label: "Monday" }, { value: 0 as const, label: "Sunday" }]).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => saveSettings({ ...settings, weekStartsOn: option.value })}
+                    className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                      weekStartsOn === option.value
+                        ? "bg-gradient-primary text-primary-foreground border-transparent"
+                        : "border-border/50 text-muted-foreground hover:bg-[color-mix(in_srgb,hsl(var(--primary))_12%,transparent)]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Day starts</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={22}
+                  value={dayHours.start}
+                  onChange={(e) => saveSettings({ ...settings, workDayStartHour: Number(e.target.value) })}
+                  className="h-9 rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Day ends</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={23}
+                  value={dayHours.end}
+                  onChange={(e) => saveSettings({ ...settings, workDayEndHour: Number(e.target.value) })}
+                  className="h-9 rounded-xl"
+                />
               </div>
             </div>
 
@@ -1492,8 +1724,7 @@ const CalendarPage = () => {
               <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-3">
                 <p className="text-sm font-semibold">Bring calendars in</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Google, plus any calendar that can publish an ICS / webcal link — iCloud, Outlook, Exchange, school calendars.
-                  Tick every Google calendar you want here, including ones you joined or that were shared with you.
+                  Google login is the full two-way sync. Outlook, Exchange and iCloud use a published ICS / webcal link — no Microsoft Graph login.
                 </p>
                 {settings.google?.connected ? (
                   <div className="space-y-2">
@@ -1579,15 +1810,18 @@ const CalendarPage = () => {
                 )}
 
                 <div className="space-y-2 border-t border-border/40 pt-3">
-                  <p className="text-xs font-semibold">ICS / iCloud / Outlook link</p>
-                  <Input placeholder="Name (e.g. iCloud)" value={feedDraft.name} onChange={(e) => setFeedDraft((d) => ({ ...d, name: e.target.value }))} className="h-9 rounded-xl" />
+                  <p className="text-xs font-semibold">ICS / iCloud / Outlook / Exchange</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Outlook: calendar → Share → Publish a calendar, then paste the ICS link. Exchange is the same ICS URL. iCloud: Calendar → Sharing → Public Calendar.
+                  </p>
+                  <Input placeholder="Name (e.g. Outlook)" value={feedDraft.name} onChange={(e) => setFeedDraft((d) => ({ ...d, name: e.target.value }))} className="h-9 rounded-xl" />
                   <Input placeholder="https:// or webcal:// calendar link" value={feedDraft.url} onChange={(e) => setFeedDraft((d) => ({ ...d, url: e.target.value }))} className="h-9 rounded-xl" />
                   <Button size="sm" disabled={feedBusy || !feedDraft.url} onClick={async () => {
                     const feed: CalendarFeed = {
                       id: `feed_${Date.now()}`,
                       name: feedDraft.name.trim() || "Calendar",
                       url: feedDraft.url.trim(),
-                      kind: /icloud/i.test(feedDraft.url) ? "icloud" : /outlook|office|exchange/i.test(feedDraft.url) ? "exchange" : "ics",
+                      kind: /icloud/i.test(feedDraft.url) ? "icloud" : /outlook|office|exchange/i.test(`${feedDraft.url} ${feedDraft.name}`) ? "exchange" : "ics",
                       enabled: true,
                     };
                     setFeedBusy(true);
@@ -1630,6 +1864,22 @@ const CalendarPage = () => {
                       </div>
                     </div>
                   ))}
+                  <div className="space-y-2 border-t border-border/40 pt-3">
+                    <p className="text-xs font-semibold">Import an .ics file</p>
+                    <input
+                      ref={icsFileRef}
+                      type="file"
+                      accept=".ics,text/calendar"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void importIcsFile(file);
+                      }}
+                    />
+                    <Button size="sm" variant="outline" disabled={icsBusy} onClick={() => icsFileRef.current?.click()}>
+                      <Upload className="mr-1 h-3.5 w-3.5" /> {icsBusy ? "Importing…" : "Choose ICS file"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1644,6 +1894,14 @@ const CalendarPage = () => {
               <label className="flex items-center justify-between rounded-xl border border-border/40 px-3 py-2 text-sm">
                 Hide public-holiday all-day events
                 <Switch checked={settings.mergeRules?.hideAllDayHolidays === true} onCheckedChange={(v) => saveSettings({ mergeRules: { ...settings.mergeRules, hideAllDayHolidays: v } })} />
+              </label>
+              <label className="flex items-center justify-between rounded-xl border border-border/40 px-3 py-2 text-sm">
+                Hide likely junk invites
+                <Switch
+                  aria-label="Hide likely junk invites"
+                  checked={settings.mergeRules?.hideLikelyJunk === true}
+                  onCheckedChange={(v) => saveSettings({ mergeRules: { ...settings.mergeRules, hideLikelyJunk: v } })}
+                />
               </label>
               <Input
                 placeholder="Hide titles containing… (comma separated)"
@@ -1686,6 +1944,30 @@ const CalendarPage = () => {
                 )}
               </div>
             )}
+
+            <div className="space-y-2 rounded-2xl border border-border/50 bg-card p-3">
+              <p className="text-sm font-semibold">Suggest an event from text</p>
+              <p className="text-[11px] text-muted-foreground">
+                Paste a mail or invite. We guess a date and time — you still confirm before it is created.
+              </p>
+              <Textarea
+                rows={3}
+                value={pasteDraft}
+                onChange={(e) => setPasteDraft(e.target.value)}
+                placeholder="Parents evening, 14 September 2026 at 6pm"
+                className="resize-none rounded-xl"
+              />
+              <Button size="sm" variant="outline" disabled={!pasteDraft.trim()} onClick={suggestFromPaste}>
+                Review suggested event
+              </Button>
+            </div>
+
+            <div className="space-y-2 rounded-2xl border border-border/50 bg-card p-3">
+              <p className="text-sm font-semibold">Add Calendar to your home screen</p>
+              <p className="text-[11px] text-muted-foreground">
+                Open this page on your phone, then use your browser’s Add to Home Screen. While you are here, Hardy Hub offers a calendar-first icon and start page.
+              </p>
+            </div>
 
             {/* Auto-import */}
             <div className="space-y-2">
