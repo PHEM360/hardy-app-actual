@@ -101,6 +101,52 @@ export function inboxItemName(draft: Pick<CaptureDraft, "name">, files: { name: 
   return first.trim() || files[0]?.name || "Untitled";
 }
 
+export type CaptureBundle = { id: string; files: File[] };
+
+function newBundleId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function addFilesAsBundles(bundles: CaptureBundle[], files: File[]): CaptureBundle[] {
+  if (!files.length) return bundles;
+  return [...bundles, ...files.map((file) => ({ id: newBundleId(), files: [file] }))];
+}
+
+export function appendPagesToBundle(bundles: CaptureBundle[], bundleId: string, files: File[]): CaptureBundle[] {
+  if (!files.length) return bundles;
+  return bundles.map((bundle) =>
+    bundle.id === bundleId ? { ...bundle, files: [...bundle.files, ...files] } : bundle,
+  );
+}
+
+export function mergeBundleWithPrevious(bundles: CaptureBundle[], bundleId: string): CaptureBundle[] {
+  const index = bundles.findIndex((bundle) => bundle.id === bundleId);
+  if (index <= 0) return bundles;
+  const merged: CaptureBundle = {
+    ...bundles[index - 1],
+    files: [...bundles[index - 1].files, ...bundles[index].files],
+  };
+  return [...bundles.slice(0, index - 1), merged, ...bundles.slice(index + 1)];
+}
+
+export function removePageFromBundle(bundles: CaptureBundle[], bundleId: string, pageIndex: number): CaptureBundle[] {
+  return bundles
+    .map((bundle) =>
+      bundle.id === bundleId ? { ...bundle, files: bundle.files.filter((_, index) => index !== pageIndex) } : bundle,
+    )
+    .filter((bundle) => bundle.files.length > 0);
+}
+
+export function captureBatchCounts(bundles: CaptureBundle[]) {
+  const items = bundles.filter((bundle) => bundle.files.length > 0);
+  return {
+    items: items.length,
+    pages: items.reduce((sum, bundle) => sum + bundle.files.length, 0),
+  };
+}
+
 function safeName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "file";
 }
@@ -386,6 +432,21 @@ export async function placeCapture(uid: string, draft: CaptureDraft, files: File
   else if (draft.destType === "notes") await saveNote(uid, draft, files);
 
   return { count: 1, pages: files.length, unallocated: false };
+}
+
+export async function placeCaptureBatch(uid: string, draft: CaptureDraft, groups: File[][]) {
+  const bundles = groups.filter((files) => files.length > 0);
+  if (bundles.length === 0) throw new Error("Add at least one photo or file.");
+  if (bundles.length > 1 && draft.destType !== "unallocated") {
+    throw new Error("A pile of receipts goes to Unallocated. File each one after, or keep a single receipt here.");
+  }
+  let pages = 0;
+  for (const files of bundles) {
+    const itemDraft = bundles.length === 1 ? draft : { ...draft, name: "", description: "", amount: "" };
+    const result = await placeCapture(uid, itemDraft, files);
+    pages += result.pages;
+  }
+  return { count: bundles.length, pages, unallocated: draft.destType === "unallocated" };
 }
 
 export async function allocateInboxItem(uid: string, item: CaptureItem, draft: CaptureDraft) {

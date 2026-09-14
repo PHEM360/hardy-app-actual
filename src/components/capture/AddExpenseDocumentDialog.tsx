@@ -8,6 +8,7 @@ import {
   Heart,
   Home,
   Inbox,
+  Link2,
   Paperclip,
   Receipt,
   StickyNote,
@@ -27,11 +28,17 @@ import { useFlatsList } from "@/hooks/useFlats";
 import { usePets } from "@/hooks/usePets";
 import { useCaptureInbox } from "@/hooks/useCaptureInbox";
 import {
+  addFilesAsBundles,
+  appendPagesToBundle,
+  captureBatchCounts,
   captureExpenseAllowed,
   captureItemThumb,
   capturePagesLabel,
   categoriesForCapture,
+  mergeBundleWithPrevious,
+  removePageFromBundle,
   todayIsoDate,
+  type CaptureBundle,
   type CaptureDestType,
   type CaptureDraft,
   type CaptureItem,
@@ -54,11 +61,11 @@ function blankDraft(): CaptureDraft {
   };
 }
 
-function FileChip({ file, page, onRemove }: { file: File; page: number; onRemove: () => void }) {
+function PageThumb({ file, page, onRemove }: { file: File; page: number; onRemove: () => void }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-border/50 bg-card">
-      <ReceiptThumb source={{ file }} className="h-20 w-full rounded-none border-0" />
-      <p className="truncate px-1.5 py-1 text-[10px] font-medium">Page {page}</p>
+      <ReceiptThumb source={{ file }} className="h-16 w-full rounded-none border-0" />
+      <p className="truncate px-1 py-0.5 text-[10px] font-medium">p{page}</p>
       <button
         type="button"
         onClick={onRemove}
@@ -85,11 +92,13 @@ export function AddExpenseDocumentDialog({
   const { households } = useMyHouseholds();
   const { flats } = useFlatsList();
   const { pets } = usePets();
-  const { items, saveCapture, allocateItem: allocate, loading } = useCaptureInbox();
+  const { items, saveCaptureBatch, allocateItem: allocate, loading } = useCaptureInbox();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const attachToIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<CaptureDraft>(blankDraft());
-  const [files, setFiles] = useState<File[]>([]);
+  const [bundles, setBundles] = useState<CaptureBundle[]>([]);
+  const [attachToId, setAttachToId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [savedSummary, setSavedSummary] = useState("");
@@ -120,26 +129,33 @@ export function AddExpenseDocumentDialog({
         date: allocateItem.date || todayIsoDate(),
         category: allocateItem.category || "Other",
       });
-      setFiles([]);
+      setBundles([]);
+      attachToIdRef.current = null;
+      setAttachToId(null);
       setSavedOk(false);
       return;
     }
     setDraft(blankDraft());
-    setFiles([]);
+    setBundles([]);
+    attachToIdRef.current = null;
+    setAttachToId(null);
     setSavedOk(false);
     setSavedSummary("");
   }, [open, allocateItem]);
 
   const recentUnallocated = useMemo(() => items.slice(0, 4), [items]);
+  const batch = captureBatchCounts(bundles);
   const kind: CaptureKind = draft.kind;
   const expenseOk = captureExpenseAllowed(dest.type);
-  const showDetails = dest.type !== "unallocated";
-  const showExpenseFields = kind === "expense" && expenseOk;
+  const singleBundle = batch.items <= 1;
+  const showDetails = dest.type !== "unallocated" && singleBundle;
+  const showExpenseFields = kind === "expense" && expenseOk && singleBundle;
+  const showName = dest.type === "unallocated" ? singleBundle : showDetails || showExpenseFields;
   const canSave = allocateItem
     ? dest.type !== "unallocated" && (showExpenseFields ? Boolean(draft.description.trim() && (dest.type !== "company" || draft.amount.trim())) : Boolean(draft.name.trim()))
     : dest.type === "unallocated"
-      ? files.length > 0
-      : files.length > 0 && (showExpenseFields
+      ? batch.pages > 0
+      : singleBundle && batch.pages > 0 && (showExpenseFields
         ? Boolean(draft.description.trim() && (dest.type !== "company" || draft.amount.trim()))
         : Boolean(draft.name.trim()));
 
@@ -157,9 +173,31 @@ export function AddExpenseDocumentDialog({
     }));
   };
 
+  const setAttachTarget = (bundleId: string | null) => {
+    attachToIdRef.current = bundleId;
+    setAttachToId(bundleId);
+  };
+
   const addFiles = (list: FileList | null) => {
     if (!list?.length) return;
-    setFiles((current) => [...current, ...Array.from(list)]);
+    const incoming = Array.from(list);
+    const target = attachToIdRef.current;
+    setBundles((current) => {
+      if (target && current.some((bundle) => bundle.id === target)) {
+        return appendPagesToBundle(current, target, incoming);
+      }
+      return addFilesAsBundles(current, incoming);
+    });
+  };
+
+  const openCamera = (bundleId: string | null) => {
+    setAttachTarget(bundleId);
+    cameraInputRef.current?.click();
+  };
+
+  const openFiles = (bundleId: string | null) => {
+    setAttachTarget(bundleId);
+    fileInputRef.current?.click();
   };
 
   const save = async () => {
@@ -169,13 +207,13 @@ export function AddExpenseDocumentDialog({
         await allocate(allocateItem, draft);
         setSavedSummary(`Saved to ${draft.destLabel}.`);
       } else {
-        const result = await saveCapture(draft, files);
+        const result = await saveCaptureBatch(draft, bundles.map((bundle) => bundle.files));
         const noun = draft.kind === "expense" ? "receipt" : "document";
-        const pages = result.pages ?? files.length;
+        const nouns = result.count === 1 ? noun : `${noun}s`;
         setSavedSummary(
           result.unallocated
-            ? `1 ${noun} with ${capturePagesLabel(pages)} saved to Unallocated.`
-            : `1 ${noun} with ${capturePagesLabel(pages)} saved to ${draft.destLabel}.`,
+            ? `${result.count} ${nouns} saved to Unallocated${result.count > 1 ? ` · ${result.pages} pages` : result.pages > 1 ? ` · ${capturePagesLabel(result.pages)}` : ""}.`
+            : `1 ${noun} with ${capturePagesLabel(result.pages)} saved to ${draft.destLabel}.`,
         );
       }
       setSavedOk(true);
@@ -208,7 +246,7 @@ export function AddExpenseDocumentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-md mx-4">
+      <DialogContent aria-describedby={undefined} className="max-h-[85dvh] max-w-md mx-4 overflow-y-auto">
         {savedOk ? (
           <div className="px-1 py-4 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
@@ -224,7 +262,8 @@ export function AddExpenseDocumentDialog({
                   className="h-10 w-full rounded-xl bg-gradient-primary"
                   onClick={() => {
                     setDraft(blankDraft());
-                    setFiles([]);
+                    setBundles([]);
+                    setAttachTarget(null);
                     setSavedOk(false);
                     setSavedSummary("");
                   }}
@@ -338,7 +377,7 @@ export function AddExpenseDocumentDialog({
                 )}
                 {!allocateItem && dest.type === "unallocated" && (
                   <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                    Snap lots of receipts now and fill in the details later from the Unallocated page.
+                    Each photo is its own receipt. On a multi-page one, tap Add page — or Join with previous if you already snapped the extra sheets.
                   </p>
                 )}
               </div>
@@ -346,10 +385,11 @@ export function AddExpenseDocumentDialog({
               {!allocateItem && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <Label>Pages</Label>
-                    {files.length > 0 && (
+                    <Label>{kind === "expense" ? "Receipts" : "Documents"}</Label>
+                    {batch.pages > 0 && (
                       <span className="text-[11px] font-medium text-muted-foreground">
-                        {capturePagesLabel(files.length)} in this {kind === "expense" ? "receipt" : "document"}
+                        {batch.items} {batch.items === 1 ? (kind === "expense" ? "receipt" : "document") : kind === "expense" ? "receipts" : "documents"}
+                        {batch.pages !== batch.items ? ` · ${batch.pages} pages` : ""}
                       </span>
                     )}
                   </div>
@@ -375,32 +415,114 @@ export function AddExpenseDocumentDialog({
                       e.target.value = "";
                     }}
                   />
-                  {files.length > 0 && (
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {files.map((file, index) => (
-                        <FileChip
-                          key={`${file.name}-${index}`}
-                          file={file}
-                          page={index + 1}
-                          onRemove={() => setFiles((current) => current.filter((_, i) => i !== index))}
-                        />
-                      ))}
+                  {bundles.length > 0 && (
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-0.5">
+                      {bundles.map((bundle, index) => {
+                        const attaching = attachToId === bundle.id;
+                        const noun = kind === "expense" ? "Receipt" : "Document";
+                        return (
+                          <div
+                            key={bundle.id}
+                            className="rounded-2xl border border-border/50 bg-card p-2 shadow-card"
+                            style={{
+                              borderLeftWidth: 3,
+                              borderLeftColor: attaching ? "hsl(var(--primary))" : "color-mix(in srgb, hsl(var(--primary)) 45%, hsl(var(--border)))",
+                              background: attaching
+                                ? "color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)))"
+                                : "hsl(var(--card))",
+                            }}
+                          >
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold">
+                                {noun} {index + 1}
+                                <span className="ml-1.5 font-medium text-muted-foreground">{capturePagesLabel(bundle.files.length)}</span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBundles((current) => current.filter((item) => item.id !== bundle.id));
+                                  if (attachToIdRef.current === bundle.id) setAttachTarget(null);
+                                }}
+                                className="text-muted-foreground hover:text-destructive"
+                                aria-label={`Remove ${noun.toLowerCase()} ${index + 1}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {bundle.files.map((file, pageIndex) => (
+                                <PageThumb
+                                  key={`${file.name}-${pageIndex}`}
+                                  file={file}
+                                  page={pageIndex + 1}
+                                  onRemove={() => {
+                                    setBundles((current) => removePageFromBundle(current, bundle.id, pageIndex));
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openCamera(bundle.id)}
+                                className="rounded-lg border border-border/60 bg-background px-2 py-1 text-[11px] font-semibold text-foreground"
+                              >
+                                Add page
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openFiles(bundle.id)}
+                                className="rounded-lg border border-border/60 bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground"
+                              >
+                                Add file
+                              </button>
+                              {index > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBundles((current) => mergeBundleWithPrevious(current, bundle.id));
+                                    const previous = bundles[index - 1];
+                                    if (previous) setAttachTarget(previous.id);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background px-2 py-1 text-[11px] font-semibold text-foreground"
+                                >
+                                  <Link2 className="h-3 w-3" /> Join with {noun.toLowerCase()} {index}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
+                  )}
+                  {attachToId && bundles.some((bundle) => bundle.id === attachToId) && (
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Next photo adds a page to {kind === "expense" ? "receipt" : "document"}{" "}
+                      {bundles.findIndex((bundle) => bundle.id === attachToId) + 1}.{" "}
+                      <button type="button" className="font-semibold text-primary" onClick={() => setAttachTarget(null)}>
+                        Start next {kind === "expense" ? "receipt" : "document"} instead
+                      </button>
+                    </p>
+                  )}
+                  {!singleBundle && dest.type !== "unallocated" && (
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Several {kind === "expense" ? "receipts" : "documents"} — switch to Unallocated to save the pile, then file them.
+                    </p>
                   )}
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => cameraInputRef.current?.click()}
+                      onClick={() => openCamera(null)}
                       className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs font-semibold text-foreground hover:bg-muted/60"
                     >
-                      <Camera className="h-3.5 w-3.5" /> {files.length ? "Add another page" : "Take photo"}
+                      <Camera className="h-3.5 w-3.5" /> {bundles.length ? `New ${kind === "expense" ? "receipt" : "document"}` : "Take photo"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => openFiles(null)}
                       className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60"
                     >
-                      <Paperclip className="h-3.5 w-3.5" /> {files.length ? "Add files" : "Upload"}
+                      <Paperclip className="h-3.5 w-3.5" /> {bundles.length ? `Add ${kind === "expense" ? "receipts" : "documents"}` : "Upload"}
                     </button>
                   </div>
                 </div>
@@ -438,7 +560,7 @@ export function AddExpenseDocumentDialog({
                 </div>
               )}
 
-              {(showDetails || showExpenseFields || dest.type === "unallocated") && (
+              {showName && (
                 <div className="space-y-1">
                   <Label>
                     {kind === "document" || dest.type === "unallocated" ? "Name" : "Description"}
@@ -500,7 +622,15 @@ export function AddExpenseDocumentDialog({
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9 flex-1 rounded-xl">Cancel</Button>
                 <Button onClick={save} disabled={!canSave || saving} className="h-9 flex-1 rounded-xl bg-gradient-primary">
-                  {saving ? "Saving…" : allocateItem ? "Allocate" : dest.type === "unallocated" ? "Save to Unallocated" : "Save"}
+                  {saving
+                    ? "Saving…"
+                    : allocateItem
+                      ? "Allocate"
+                      : dest.type === "unallocated"
+                        ? batch.items > 1
+                          ? `Save ${batch.items} ${kind === "expense" ? "receipts" : "documents"}`
+                          : "Save to Unallocated"
+                        : "Save"}
                 </Button>
               </div>
 

@@ -6,6 +6,7 @@ import {
   allocateInboxItem,
   deleteInboxItem,
   placeCapture,
+  placeCaptureBatch,
   type CaptureDraft,
   type CaptureItem,
 } from "@/lib/captureInbox";
@@ -42,6 +43,14 @@ export function useCaptureInbox() {
     [uid],
   );
 
+  const saveCaptureBatch = useCallback(
+    async (draft: CaptureDraft, groups: File[][]) => {
+      if (!uid) throw new Error("Sign in to save.");
+      return placeCaptureBatch(uid, draft, groups);
+    },
+    [uid],
+  );
+
   const allocateItem = useCallback(
     async (item: CaptureItem, draft: CaptureDraft) => {
       if (!uid) throw new Error("Sign in to save.");
@@ -58,5 +67,5 @@ export function useCaptureInbox() {
     [uid],
   );
 
-  return { uid, items, loading, saveCapture, allocateItem, removeItem };
+  return { uid, items, loading, saveCapture, saveCaptureBatch, allocateItem, removeItem };
 }

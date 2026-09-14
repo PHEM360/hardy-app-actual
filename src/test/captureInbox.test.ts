@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  addFilesAsBundles,
+  appendPagesToBundle,
+  captureBatchCounts,
   captureExpenseAllowed,
   capturePagesLabel,
   categoriesForCapture,
   GENERIC_EXPENSE_CATEGORIES,
   inboxItemName,
+  mergeBundleWithPrevious,
 } from "@/lib/captureInbox";
 import { ALL_LINKS } from "@/components/widgets/QuickLinksWidget";
 
@@ -26,6 +30,8 @@ describe("capture destinations", () => {
 });
 
 describe("multi-page capture", () => {
+  const file = (name: string) => new File(["x"], name, { type: "image/jpeg" });
+
   it("labels one inbox item from the draft name, not each file", () => {
     expect(inboxItemName({ name: "Waitrose" }, [{ name: "page1.jpg" }, { name: "page2.jpg" }])).toBe("Waitrose");
     expect(inboxItemName({ name: "  " }, [{ name: "receipt-front.jpg" }])).toBe("receipt-front");
@@ -34,6 +40,30 @@ describe("multi-page capture", () => {
   it("counts extra photos as pages of the same item", () => {
     expect(capturePagesLabel(1)).toBe("1 page");
     expect(capturePagesLabel(3)).toBe("3 pages");
+  });
+
+  it("treats each new photo as its own receipt", () => {
+    const bundles = addFilesAsBundles([], [file("a.jpg"), file("b.jpg")]);
+    expect(bundles).toHaveLength(2);
+    expect(bundles.map((bundle) => bundle.files.map((item) => item.name))).toEqual([["a.jpg"], ["b.jpg"]]);
+    expect(captureBatchCounts(bundles)).toEqual({ items: 2, pages: 2 });
+  });
+
+  it("appends extra photos as pages of one receipt", () => {
+    let bundles = addFilesAsBundles([], [file("a.jpg")]);
+    bundles = appendPagesToBundle(bundles, bundles[0].id, [file("a2.jpg"), file("a3.jpg")]);
+    expect(bundles).toHaveLength(1);
+    expect(bundles[0].files.map((item) => item.name)).toEqual(["a.jpg", "a2.jpg", "a3.jpg"]);
+    expect(captureBatchCounts(bundles)).toEqual({ items: 1, pages: 3 });
+  });
+
+  it("joins a later snap onto the previous receipt", () => {
+    let bundles = addFilesAsBundles([], [file("1.jpg"), file("2.jpg"), file("3.jpg")]);
+    bundles = mergeBundleWithPrevious(bundles, bundles[1].id);
+    expect(bundles.map((bundle) => bundle.files.map((item) => item.name))).toEqual([["1.jpg", "2.jpg"], ["3.jpg"]]);
+    bundles = mergeBundleWithPrevious(bundles, bundles[1].id);
+    expect(bundles).toHaveLength(1);
+    expect(bundles[0].files.map((item) => item.name)).toEqual(["1.jpg", "2.jpg", "3.jpg"]);
   });
 });
 
