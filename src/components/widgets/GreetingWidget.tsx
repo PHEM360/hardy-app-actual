@@ -7,6 +7,8 @@ import { useHeaderBackdrop } from "@/hooks/useHeaderBackdrop";
 import { ChromeSceneLayer } from "@/components/chrome/ChromeSceneLayer";
 import { ChromePhotoRotator } from "@/components/chrome/ChromePhotoRotator";
 import { resolveChromeScene } from "@/lib/chromeScenes";
+import { isHeaderCopyBank } from "@/lib/headerCopy";
+import { useRotatingHeaderCopy } from "@/hooks/useRotatingHeaderCopy";
 
 function firstNameOf(profileFirst: string | undefined, displayName: string | undefined, email: string | undefined) {
   const fromProfile = (profileFirst || "").trim();
@@ -43,6 +45,7 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
   );
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const quote = useRotatingHeaderCopy(isHeaderCopyBank(sceneId) ? sceneId : null);
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const weatherLine = weather ? `${weather.temperature}° · ${weather.description}` : "";
 
@@ -53,7 +56,7 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
     >
       <ChromePhotoRotator urls={photoUrls} />
       <ChromeSceneLayer scene={sceneId} />
-      <div className="relative z-10 min-w-0">
+      <div className="relative z-10 min-w-0 pr-8">
         <motion.p
           key={`${greeting}-${firstName}`}
           initial={{ opacity: 0, y: 8 }}
@@ -63,9 +66,19 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
         >
           {firstName ? `${greeting} ${firstName}` : greeting}
         </motion.p>
-        <p className="mt-1 text-xs text-primary-foreground/70">
-          {today}{weatherLine ? ` · ${weatherLine}` : ""}{matchHeader && backdrop.eventLabel ? ` · ${backdrop.eventLabel}` : ""}
-        </p>
+        {quote ? (
+          <p
+            key={`${quote.bank}-${quote.index}`}
+            className="header-quote-in mt-1.5 font-display text-sm font-semibold leading-snug text-primary-foreground sm:text-base"
+            style={{ textShadow: "0 1px 10px rgba(0,0,0,0.35)" }}
+          >
+            <span className="line-clamp-3">{quote.text}</span>
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-primary-foreground/70">
+            {today}{weatherLine ? ` · ${weatherLine}` : ""}{matchHeader && backdrop.eventLabel ? ` · ${backdrop.eventLabel}` : ""}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ import Softphone from "@/pages/Softphone";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
+import Unallocated from "@/pages/Unallocated";
 import Photos from "@/pages/Photos";
 import Email from "@/pages/Email";
 import HubWidget from "@/pages/HubWidget";
@@ -285,6 +286,7 @@ const App = () => (
                 </RequireFeature>
               }
             />
+            <Route path="/unallocated" element={<Unallocated />} />
             <Route path="/photos" element={<Photos />} />
             <Route path="/email" element={<Email />} />
             <Route path="/widget" element={<HubWidget />} />

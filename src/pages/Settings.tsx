@@ -63,6 +63,7 @@ const ALL_NAV_OPTIONS = [
   { path: "/households",        label: "Households" },
   { path: "/household-finance", label: "Household Finance" },
   { path: "/tattersalls",       label: "Flats" },
+  { path: "/unallocated",       label: "Unallocated" },
   { path: "/ai-analysis",       label: "AI Analysis" },
   { path: "/holidays",          label: "Holidays" },
   { path: "/softphone",         label: "Phone" },

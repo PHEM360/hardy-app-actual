@@ -38,6 +38,8 @@ describe("quick links", () => {
   it("opens a new note the same way Notes → New note does", () => {
     const note = ALL_LINKS.find((link) => link.id === "note");
     expect(note).toMatchObject({ href: "/notes?new=1" });
+    const expense = ALL_LINKS.find((link) => link.id === "expense");
+    expect(expense).toMatchObject({ label: "Add expense or document" });
   });
 
   it("sends Email to the mailbox page", () => {

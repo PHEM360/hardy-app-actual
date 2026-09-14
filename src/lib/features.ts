@@ -109,7 +109,6 @@ export const QUICK_LINK_FEATURE_KEY: Record<string, FeatureKey> = {
   event: "calendar",
   task: "tasks",
   note: "notes",
-  expense: "companies",
 };
 
 /** Default bottom-nav order. Access filtering decides which of these actually show. */

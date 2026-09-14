@@ -459,6 +459,17 @@
   .greeting-weather * {
     animation: none !important;
   }
+  .header-quote-in {
+    animation: none !important;
+  }
+}
+
+@keyframes header-quote-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.header-quote-in {
+  animation: header-quote-in 0.45s ease-out;
 }
 
 /* Native date inputs render taller than sibling inputs of the same height

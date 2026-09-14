@@ -26,6 +26,7 @@ import {
   Images,
   Mail,
   Phone,
+  Inbox,
 } from "lucide-react";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -72,6 +73,13 @@ const SECTIONS: Section[] = [
         icon: Mail,
         route: "/email",
         gradient: "linear-gradient(135deg, hsl(239,70%,58%), hsl(260,60%,50%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Unallocated",
+        icon: Inbox,
+        route: "/unallocated",
+        gradient: "linear-gradient(135deg, hsl(12,70%,52%), hsl(25,65%,46%))",
         iconColor: "#fff",
       },
       {

@@ -5,11 +5,12 @@ import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
-  Megaphone, Repeat,
+  Megaphone, Repeat, Folder,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
 import CompanyMarketingTab from "@/components/companies/CompanyMarketingTab";
+import { CompanyDocumentsPanel } from "@/components/companies/CompanyDocumentsPanel";
 import { ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ const TABS = [
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
   { id: "expenses",    label: "Expenses",    icon: Receipt },
+  { id: "documents",   label: "Documents",   icon: Folder },
   { id: "insurance",   label: "Insurance",   icon: Shield },
   { id: "tax",         label: "Tax",         icon: FileText },
   { id: "projection",  label: "Projection",  icon: BarChart3 },
@@ -2420,6 +2422,7 @@ const CompanyDetail = () => {
             {renderTab("logins", <LoginsTab companyId={id!} />)}
             {renderTab("services", <ServicesTab companyId={id!} />)}
             {renderTab("expenses", <ExpensesTab companyId={id!} />)}
+            {renderTab("documents", <CompanyDocumentsPanel companyId={id!} />)}
             {renderTab("insurance", <InsuranceTab companyId={id!} />)}
             {renderTab("tax", <TaxTab companyId={id!} company={company} allCompanies={companies} />)}
             {renderTab("projection", <ProjectionTab companyId={id!} taxYearStart={company.taxYearStart} />)}

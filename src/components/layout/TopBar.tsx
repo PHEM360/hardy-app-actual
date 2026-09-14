@@ -12,6 +12,8 @@ import { useHeaderBackdrop } from "@/hooks/useHeaderBackdrop";
 import { ChromeSceneLayer } from "@/components/chrome/ChromeSceneLayer";
 import { ChromePhotoRotator } from "@/components/chrome/ChromePhotoRotator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isHeaderCopyBank } from "@/lib/headerCopy";
+import { useRotatingHeaderCopy } from "@/hooks/useRotatingHeaderCopy";
 import { looksLikeGeneratedId } from "@/lib/householdIds";
 
 const TopBar = () => {
@@ -25,6 +27,7 @@ const TopBar = () => {
   } = useAppearance();
   const { weather } = useDisplayWeather();
   const backdrop = useHeaderBackdrop();
+  const quote = useRotatingHeaderCopy(isHeaderCopyBank(backdrop.scene) ? backdrop.scene : null);
   const namedHouseholds = availableHouseholds.filter((h) => !looksLikeGeneratedId(h.name) && h.name !== h.id);
   const displayName = profile?.displayName || profile?.firstName || user?.displayName || user?.email?.split("@")[0] || "";
   const firstName = displayName.split(" ")[0];
@@ -97,8 +100,8 @@ const TopBar = () => {
           ))}
         </div>
       )}
-      <div className="relative flex items-center justify-between h-16 px-4 max-w-screen-xl mx-auto w-full">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className={`relative flex items-center justify-between px-4 max-w-screen-xl mx-auto w-full ${quote ? "min-h-[4.75rem] py-2" : "h-16"}`}>
+        <div className={`flex items-center gap-3 min-w-0 ${quote ? "max-w-[34%] sm:max-w-[28%]" : ""}`}>
           {renderAvatar()}
           <div className="leading-tight min-w-0">
             <motion.p
@@ -113,6 +116,16 @@ const TopBar = () => {
             {meta && <p className="text-[10px] text-white/55 font-medium tracking-wide truncate">{meta}</p>}
           </div>
         </div>
+
+        {quote && (
+          <p
+            key={`${quote.bank}-${quote.index}`}
+            className="header-quote-in mx-2 min-w-0 flex-1 font-display text-[15px] font-semibold leading-snug text-white sm:text-[17px]"
+            style={{ textShadow: "0 1px 12px rgba(0,0,0,0.45)" }}
+          >
+            <span className="line-clamp-2">{quote.text}</span>
+          </p>
+        )}
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {namedHouseholds.length > 1 && (

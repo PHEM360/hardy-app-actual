@@ -93,6 +93,10 @@ service firebase.storage {
       allow read: if canViewCompanyStorage(companyId);
       allow write: if canEditCompanyStorage(companyId);
     }
+    match /companies/{companyId}/documents/{fileName} {
+      allow read: if canViewCompanyStorage(companyId);
+      allow write: if canEditCompanyStorage(companyId);
+    }
     match /companies/{companyId}/marketing/{fileName} {
       allow read: if canViewCompanyStorage(companyId);
       allow create, update: if canEditCompanyStorage(companyId) &&
@@ -114,6 +118,9 @@ service firebase.storage {
     }
 
     match /documents/{userId}/{allPaths=**} {
+      allow read, write: if isInteractiveUser() && request.auth.uid == userId;
+    }
+    match /captureInbox/{userId}/{allPaths=**} {
       allow read, write: if isInteractiveUser() && request.auth.uid == userId;
     }
     match /petDocuments/{userId}/{allPaths=**} {
