@@ -5,6 +5,7 @@ import {
   captureBatchCounts,
   captureExpenseAllowed,
   capturePagesLabel,
+  captureProgressPercent,
   categoriesForCapture,
   GENERIC_EXPENSE_CATEGORIES,
   inboxItemName,
@@ -55,6 +56,11 @@ describe("multi-page capture", () => {
     expect(bundles).toHaveLength(1);
     expect(bundles[0].files.map((item) => item.name)).toEqual(["a.jpg", "a2.jpg", "a3.jpg"]);
     expect(captureBatchCounts(bundles)).toEqual({ items: 1, pages: 3 });
+  });
+
+  it("turns page counts into an upload percent", () => {
+    expect(captureProgressPercent({ doneItems: 1, totalItems: 4, donePages: 3, totalPages: 10 })).toBe(30);
+    expect(captureProgressPercent({ doneItems: 1, totalItems: 2, donePages: 0, totalPages: 0 })).toBe(50);
   });
 
   it("joins a later snap onto the previous receipt", () => {

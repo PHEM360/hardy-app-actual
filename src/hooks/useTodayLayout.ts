@@ -29,7 +29,8 @@ export type TodayWidgetType =
   | "week"
   | "quicklinks"
   | "clock"
-  | "lights";
+  | "lights"
+  | "unallocated";
 
 export interface TodayWidgetItem {
   id: string;
@@ -81,6 +82,7 @@ export const WIDGET_GEOMETRY_DEFAULTS: Record<TodayWidgetType, { wFrac: number; 
   quicklinks: { wFrac: 1.0, h: 160 },
   clock:      { wFrac: 0.5, h: 160 },
   lights:     { wFrac: 0.5, h: 240 },
+  unallocated:{ wFrac: 0.5, h: 220 },
 };
 
 /** Sensible starter set for a brand-new user who has never touched this page. */
@@ -124,6 +126,7 @@ export const TODAY_WIDGET_LABELS: Record<TodayWidgetType, string> = {
   quicklinks: "Quick Links",
   clock: "Clock",
   lights: "Lights",
+  unallocated: "Unallocated expenses / documents",
 };
 
 export const TODAY_WIDGET_ICONS: Record<TodayWidgetType, string> = {
@@ -153,6 +156,7 @@ export const TODAY_WIDGET_ICONS: Record<TodayWidgetType, string> = {
   quicklinks: "🔗",
   clock: "🕒",
   lights: "💡",
+  unallocated: "📥",
 };
 
 /** Widgets can be added more than once (e.g. two Quick Links boxes for different pages). */

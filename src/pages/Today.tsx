@@ -44,6 +44,7 @@ import { TdWeekWidget }        from "@/components/widgets/today/TdWeekWidget";
 import { TdQuickLinksWidget }  from "@/components/widgets/today/TdQuickLinksWidget";
 import { TdClockWidget }       from "@/components/widgets/today/TdClockWidget";
 import { TdLightsWidget }      from "@/components/widgets/today/TdLightsWidget";
+import { TdUnallocatedWidget } from "@/components/widgets/today/TdUnallocatedWidget";
 import { FamilyMessageBoardWidget } from "@/components/widgets/FamilyMessageBoardWidget";
 
 // ─── Widget content ────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ function WidgetContent({
     case "quicklinks": return <TdQuickLinksWidget config={item.config} onConfigChange={(config: Record<string, unknown>) => onUpdate({ config })} />;
     case "clock":      return <TdClockWidget config={item.config} onConfigChange={(config: Record<string, unknown>) => onUpdate({ config })} />;
     case "lights":     return <TdLightsWidget />;
+    case "unallocated": return <TdUnallocatedWidget />;
     default:           return null;
   }
 }
@@ -271,6 +273,7 @@ const WIDGET_CATALOG: TodayWidgetType[] = [
   "reminders", "bills", "messages", "photos", "ai", "focus", "intentions", "habits",
   "water", "mood", "reflection", "tomorrow", "overdue", "quick_add", "fun_fact", "pets_care", "week",
   "lights",
+  "unallocated",
 ];
 
 function AddWidgetDialog({

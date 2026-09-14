@@ -147,6 +147,19 @@ export function captureBatchCounts(bundles: CaptureBundle[]) {
   };
 }
 
+export type CaptureProgress = {
+  doneItems: number;
+  totalItems: number;
+  donePages: number;
+  totalPages: number;
+};
+
+export function captureProgressPercent(progress: CaptureProgress) {
+  if (progress.totalPages > 0) return Math.round((progress.donePages / progress.totalPages) * 100);
+  if (progress.totalItems > 0) return Math.round((progress.doneItems / progress.totalItems) * 100);
+  return 0;
+}
+
 function safeName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "file";
 }
@@ -169,11 +182,16 @@ async function uploadOne(path: string, file: File): Promise<CaptureFileMeta> {
   };
 }
 
-export async function uploadInboxFiles(uid: string, files: File[]): Promise<CaptureFileMeta[]> {
+export async function uploadInboxFiles(
+  uid: string,
+  files: File[],
+  onFile?: (done: number, total: number) => void,
+): Promise<CaptureFileMeta[]> {
   const out: CaptureFileMeta[] = [];
   for (const file of files) {
     const path = `captureInbox/${uid}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName(file.name)}`;
     out.push(await uploadOne(path, file));
+    onFile?.(out.length, files.length);
   }
   return out;
 }
@@ -388,13 +406,18 @@ async function saveNote(uid: string, draft: CaptureDraft, files: File[]) {
   });
 }
 
-export async function placeCapture(uid: string, draft: CaptureDraft, files: File[]) {
+export async function placeCapture(
+  uid: string,
+  draft: CaptureDraft,
+  files: File[],
+  options?: { onFile?: (done: number, total: number) => void },
+) {
   if (!uid) throw new Error("Sign in to save.");
   if (files.length === 0) throw new Error("Add at least one photo or file.");
   const kind: CaptureKind = draft.kind === "expense" && captureExpenseAllowed(draft.destType) ? "expense" : "document";
 
   if (draft.destType === "unallocated") {
-    const uploaded = await uploadInboxFiles(uid, files);
+    const uploaded = await uploadInboxFiles(uid, files, options?.onFile);
     const base = {
       kind,
       destType: "unallocated" as const,
@@ -434,17 +457,35 @@ export async function placeCapture(uid: string, draft: CaptureDraft, files: File
   return { count: 1, pages: files.length, unallocated: false };
 }
 
-export async function placeCaptureBatch(uid: string, draft: CaptureDraft, groups: File[][]) {
+export async function placeCaptureBatch(
+  uid: string,
+  draft: CaptureDraft,
+  groups: File[][],
+  onProgress?: (progress: CaptureProgress) => void,
+) {
   const bundles = groups.filter((files) => files.length > 0);
   if (bundles.length === 0) throw new Error("Add at least one photo or file.");
   if (bundles.length > 1 && draft.destType !== "unallocated") {
     throw new Error("A pile of receipts goes to Unallocated. File each one after, or keep a single receipt here.");
   }
+  const totalPages = bundles.reduce((sum, files) => sum + files.length, 0);
   let pages = 0;
-  for (const files of bundles) {
+  onProgress?.({ doneItems: 0, totalItems: bundles.length, donePages: 0, totalPages });
+  for (let index = 0; index < bundles.length; index += 1) {
+    const files = bundles[index];
     const itemDraft = bundles.length === 1 ? draft : { ...draft, name: "", description: "", amount: "" };
-    const result = await placeCapture(uid, itemDraft, files);
+    const result = await placeCapture(uid, itemDraft, files, {
+      onFile: (done) => {
+        onProgress?.({
+          doneItems: index,
+          totalItems: bundles.length,
+          donePages: pages + done,
+          totalPages,
+        });
+      },
+    });
     pages += result.pages;
+    onProgress?.({ doneItems: index + 1, totalItems: bundles.length, donePages: pages, totalPages });
   }
   return { count: bundles.length, pages, unallocated: draft.destType === "unallocated" };
 }

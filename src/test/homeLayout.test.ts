@@ -22,7 +22,7 @@ describe("home tile packing", () => {
       { ...DEFAULT_HOME_TILES_STATE, hidden: ["quick_links"] },
       DEFAULT_HOME_TILES_STATE.order,
     );
-    expect(rows[0].tiles[0].id).toBe("finance");
+    expect(rows[0].tiles[0].id).toBe("unallocated");
     expect(rows[0].tiles).toHaveLength(1);
   });
 
@@ -37,6 +37,7 @@ describe("home tile packing", () => {
     const merged = mergeHomeTilesState({ order: ["pets", "finance"], hidden: [], rowSizes: [2] });
     expect(merged.order[0]).toBe("pets");
     expect(merged.order).toContain("quick_links");
+    expect(merged.order).toContain("unallocated");
   });
 
   it("gives each tile preset a different surface language", () => {

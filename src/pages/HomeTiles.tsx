@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, RotateCcw } from "lucide-react";
 import { GreetingWidget } from "@/components/widgets/GreetingWidget";
 import { QuickLinksWidget } from "@/components/widgets/QuickLinksWidget";
+import { UnallocatedInboxWidget } from "@/components/widgets/UnallocatedInboxWidget";
 import { NotesWidget } from "@/components/widgets/NotesWidget";
 import { useHomeTilesLayout } from "@/hooks/useHomeTilesLayout";
 import { useNotes } from "@/hooks/useNotes";
@@ -55,6 +56,39 @@ function renderHomeTile(
           </div>
         )}
         <QuickLinksWidget />
+      </div>
+    );
+  }
+  if (tile.id === "unallocated") {
+    const surface = tileSurface(preset, tile.accent, featured);
+    const compact = cols >= 3 || preset === "compact";
+    return (
+      <div
+        key={tile.id}
+        className={`home-tile relative min-h-[108px] overflow-hidden border border-border/40 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
+        style={{
+          ["--tile-accent" as string]: tile.accent,
+          background: surface.background,
+          borderLeftWidth: surface.borderLeftWidth,
+          borderLeftColor: tile.accent,
+        }}
+      >
+        {editMode && (
+          <div className="absolute right-1.5 top-1.5 z-10 flex gap-0.5">
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, -1)} aria-label="Move Unallocated earlier">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, 1)} aria-label="Move Unallocated later">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void hideTile(tile.id)} aria-label="Hide Unallocated">
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <div className={editMode ? "pointer-events-none" : ""}>
+          <UnallocatedInboxWidget compact={compact && !featured} />
+        </div>
       </div>
     );
   }

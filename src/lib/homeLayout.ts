@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Heart,
   Images,
+  Inbox,
   KeyRound,
   Mail,
   MonitorSmartphone,
@@ -66,6 +67,7 @@ export interface HomeTilesState {
 
 export const HOME_TILES: HomeTileDef[] = [
   { id: "quick_links", label: "Quick Links", icon: Zap, accent: "hsl(178,55%,36%)", gradient: "linear-gradient(135deg,hsl(178,58%,42%),hsl(182,55%,46%))" },
+  { id: "unallocated", label: "Unallocated", route: "/unallocated", icon: Inbox, accent: "hsl(12,70%,52%)", gradient: "linear-gradient(135deg,hsl(12,70%,52%),hsl(25,65%,46%))" },
   { id: "finance", label: "Finance", route: "/finance", icon: PiggyBank, accent: "hsl(25,62%,55%)", gradient: "linear-gradient(135deg,hsl(25,65%,58%),hsl(15,58%,52%))" },
   { id: "pets", label: "Pets", route: "/pets", icon: Heart, accent: "hsl(0,65%,50%)", gradient: "linear-gradient(135deg,hsl(0,68%,55%),hsl(340,60%,48%))" },
   { id: "notes", label: "Notes", route: "/notes", icon: StickyNote, accent: "hsl(42,85%,48%)", gradient: "linear-gradient(135deg,hsl(42,92%,52%),hsl(28,85%,48%))" },
@@ -94,6 +96,7 @@ export const HOME_TILE_BY_ID = Object.fromEntries(HOME_TILES.map((tile) => [tile
 
 export const DEFAULT_HOME_TILE_ORDER = [
   "quick_links",
+  "unallocated",
   "finance",
   "pets",
   "notes",

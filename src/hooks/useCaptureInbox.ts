@@ -9,6 +9,7 @@ import {
   placeCaptureBatch,
   type CaptureDraft,
   type CaptureItem,
+  type CaptureProgress,
 } from "@/lib/captureInbox";
 
 export function useCaptureInbox() {
@@ -44,9 +45,9 @@ export function useCaptureInbox() {
   );
 
   const saveCaptureBatch = useCallback(
-    async (draft: CaptureDraft, groups: File[][]) => {
+    async (draft: CaptureDraft, groups: File[][], onProgress?: (progress: CaptureProgress) => void) => {
       if (!uid) throw new Error("Sign in to save.");
-      return placeCaptureBatch(uid, draft, groups);
+      return placeCaptureBatch(uid, draft, groups, onProgress);
     },
     [uid],
   );

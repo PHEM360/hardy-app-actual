@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Building2,
@@ -34,6 +34,7 @@ import {
   captureExpenseAllowed,
   captureItemThumb,
   capturePagesLabel,
+  captureProgressPercent,
   categoriesForCapture,
   mergeBundleWithPrevious,
   removePageFromBundle,
@@ -43,6 +44,7 @@ import {
   type CaptureDraft,
   type CaptureItem,
   type CaptureKind,
+  type CaptureProgress,
 } from "@/lib/captureInbox";
 
 type DestChoice = { type: CaptureDestType; id: string; label: string };
@@ -100,6 +102,7 @@ export function AddExpenseDocumentDialog({
   const [bundles, setBundles] = useState<CaptureBundle[]>([]);
   const [attachToId, setAttachToId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<CaptureProgress | null>(null);
   const [savedOk, setSavedOk] = useState(false);
   const [savedSummary, setSavedSummary] = useState("");
 
@@ -132,6 +135,7 @@ export function AddExpenseDocumentDialog({
       setBundles([]);
       attachToIdRef.current = null;
       setAttachToId(null);
+      setProgress(null);
       setSavedOk(false);
       return;
     }
@@ -139,11 +143,11 @@ export function AddExpenseDocumentDialog({
     setBundles([]);
     attachToIdRef.current = null;
     setAttachToId(null);
+    setProgress(null);
     setSavedOk(false);
     setSavedSummary("");
   }, [open, allocateItem]);
 
-  const recentUnallocated = useMemo(() => items.slice(0, 4), [items]);
   const batch = captureBatchCounts(bundles);
   const kind: CaptureKind = draft.kind;
   const expenseOk = captureExpenseAllowed(dest.type);
@@ -202,12 +206,18 @@ export function AddExpenseDocumentDialog({
 
   const save = async () => {
     setSaving(true);
+    setProgress({
+      doneItems: 0,
+      totalItems: allocateItem ? 1 : Math.max(1, batch.items),
+      donePages: 0,
+      totalPages: allocateItem ? allocateItem.files?.length || 1 : Math.max(1, batch.pages),
+    });
     try {
       if (allocateItem) {
         await allocate(allocateItem, draft);
         setSavedSummary(`Saved to ${draft.destLabel}.`);
       } else {
-        const result = await saveCaptureBatch(draft, bundles.map((bundle) => bundle.files));
+        const result = await saveCaptureBatch(draft, bundles.map((bundle) => bundle.files), setProgress);
         const noun = draft.kind === "expense" ? "receipt" : "document";
         const nouns = result.count === 1 ? noun : `${noun}s`;
         setSavedSummary(
@@ -222,6 +232,7 @@ export function AddExpenseDocumentDialog({
       toast.error(err instanceof Error ? err.message : "Couldn’t save. Try again.");
     } finally {
       setSaving(false);
+      setProgress(null);
     }
   };
 
@@ -245,9 +256,40 @@ export function AddExpenseDocumentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next && saving) return; onOpenChange(next); }}>
       <DialogContent aria-describedby={undefined} className="max-h-[85dvh] max-w-md mx-4 overflow-y-auto">
-        {savedOk ? (
+        {saving && progress ? (
+          <div className="px-1 py-4">
+            <DialogHeader>
+              <DialogTitle className="font-display">Uploading</DialogTitle>
+            </DialogHeader>
+            <div
+              className="mt-4 rounded-2xl border border-border/50 p-4 shadow-card"
+              style={{ background: "color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)))" }}
+            >
+              <p className="text-sm font-semibold">
+                {progress.totalItems > 1
+                  ? `${progress.doneItems} of ${progress.totalItems} ${kind === "expense" ? "receipts" : "documents"}`
+                  : `Saving ${kind === "expense" ? "receipt" : "document"}`}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {progress.totalPages > 1
+                  ? `${progress.donePages} of ${progress.totalPages} pages`
+                  : progress.doneItems === 0
+                    ? "Starting upload…"
+                    : "Finishing…"}
+              </p>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-background">
+                <div
+                  className="h-full rounded-full bg-gradient-primary transition-[width] duration-300"
+                  style={{ width: `${Math.max(4, captureProgressPercent(progress))}%` }}
+                />
+              </div>
+              <p className="mt-2 text-right text-xs font-semibold tabular-nums">{captureProgressPercent(progress)}%</p>
+            </div>
+            <p className="mt-3 text-center text-[11px] text-muted-foreground">Keep this open until it finishes.</p>
+          </div>
+        ) : savedOk ? (
           <div className="px-1 py-4 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
               <CheckCircle2 className="h-7 w-7" />
@@ -264,6 +306,7 @@ export function AddExpenseDocumentDialog({
                     setDraft(blankDraft());
                     setBundles([]);
                     setAttachTarget(null);
+                    setProgress(null);
                     setSavedOk(false);
                     setSavedSummary("");
                   }}
@@ -635,45 +678,26 @@ export function AddExpenseDocumentDialog({
               </div>
 
               {!allocateItem && (
-                <div
-                  className="rounded-2xl border border-border/50 p-2.5 shadow-card"
+                <button
+                  type="button"
+                  onClick={() => { onOpenChange(false); navigate("/unallocated"); }}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border/50 px-3 py-2.5 text-left shadow-card"
                   style={{ background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))" }}
                 >
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide">Unallocated</p>
-                    <button type="button" onClick={() => { onOpenChange(false); navigate("/unallocated"); }} className="text-[11px] font-semibold text-primary">
-                      View all
-                    </button>
-                  </div>
-                  {loading && !items.length ? (
-                    <p className="text-xs text-muted-foreground">Loading…</p>
-                  ) : recentUnallocated.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Nothing waiting. Dump receipts here, then tidy them later.</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {recentUnallocated.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => { onOpenChange(false); navigate(`/unallocated?item=${item.id}`); }}
-                          className="flex w-full items-center gap-2 rounded-xl bg-card/80 px-2 py-1.5 text-left"
-                        >
-                          <div className="h-8 w-8 overflow-hidden rounded-lg bg-muted">
-                            {captureItemThumb(item) ? (
-                              <img src={captureItemThumb(item) || ""} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <FileText className="m-1.5 h-5 w-5 text-muted-foreground" />
-                            )}
-                          </div>
-                          <span className="min-w-0 flex-1 truncate text-xs font-semibold">{item.name || "Untitled"}</span>
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {capturePagesLabel(item.files?.length || 0)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+                    <Inbox className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold">Unallocated</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {loading && !items.length
+                        ? "Loading…"
+                        : items.length
+                          ? `${items.length} waiting — open the widget or this page to sort`
+                          : "Inbox is clear"}
+                    </span>
+                  </span>
+                </button>
               )}
             </div>
           </>
