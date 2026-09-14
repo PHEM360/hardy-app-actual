@@ -75,6 +75,7 @@ export default function CalendarPreview() {
                 <button
                   key={item.id}
                   type="button"
+                  aria-label={item.label}
                   onClick={() => {
                     if (item.id === "day" || item.id === "week") setView(item.id);
                   }}
@@ -94,20 +95,35 @@ export default function CalendarPreview() {
           </nav>
         </aside>
         <div className="min-w-0 flex-1 overflow-x-hidden">
-          <TimedGrid
-            days={view === "day" ? [selected] : weekDays}
-            events={SAMPLE}
-            selectedDate={selected}
-            workDayStartHour={7}
-            workDayEndHour={19}
-            onSelectDay={(day) => {
-              setSelected(day);
-              setView("day");
-            }}
-            onOpenEvent={() => undefined}
-            onCreateAt={() => undefined}
-            accentFor={(event) => ACCENTS[event.category] || ACCENTS.personal}
-          />
+          <div className="hidden md:block">
+            <TimedGrid
+              days={view === "day" ? [selected] : weekDays}
+              events={SAMPLE}
+              selectedDate={selected}
+              workDayStartHour={7}
+              workDayEndHour={19}
+              onSelectDay={(day) => {
+                setSelected(day);
+                setView("day");
+              }}
+              onOpenEvent={() => undefined}
+              onCreateAt={() => undefined}
+              accentFor={(event) => ACCENTS[event.category] || ACCENTS.personal}
+            />
+          </div>
+          <div className="md:hidden">
+            <TimedGrid
+              days={[selected]}
+              events={SAMPLE}
+              selectedDate={selected}
+              workDayStartHour={7}
+              workDayEndHour={19}
+              onSelectDay={setSelected}
+              onOpenEvent={() => undefined}
+              onCreateAt={() => undefined}
+              accentFor={(event) => ACCENTS[event.category] || ACCENTS.personal}
+            />
+          </div>
         </div>
       </div>
     </FeaturePageShell>

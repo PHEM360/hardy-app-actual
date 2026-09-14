@@ -793,6 +793,7 @@ const CalendarPage = () => {
                 <button
                   key={item.id}
                   type="button"
+                  aria-label={item.label}
                   onClick={() => setView(item.id)}
                   className={`flex w-full items-center gap-2 rounded-xl px-1.5 py-2 text-left transition sm:px-2 ${
                     active

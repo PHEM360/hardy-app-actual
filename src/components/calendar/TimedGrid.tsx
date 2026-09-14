@@ -47,8 +47,8 @@ export function TimedGrid({
         className="grid border-b border-border/50"
         style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(0, 1fr))` }}
       >
-        <div className="bg-[color-mix(in_oklab,hsl(var(--primary))_10%,hsl(var(--card)))] px-1 py-2 text-[10px] font-semibold uppercase tracking-wide text-foreground">
-          All day
+        <div className="bg-[color-mix(in_oklab,hsl(var(--primary))_10%,hsl(var(--card)))] px-0.5 py-2 text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-foreground">
+          All-day
         </div>
         {days.map((day, i) => {
           const selected = isSameDay(day, selectedDate);

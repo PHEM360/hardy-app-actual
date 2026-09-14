@@ -112,7 +112,7 @@ describe("Calendar page", () => {
 
     expect(screen.getByRole("heading", { name: "Calendar" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Day" }));
-    expect(screen.getByText("All day")).toBeInTheDocument();
+    expect(screen.getByText("All-day")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     expect(screen.getByRole("button", { name: "Week" }).className).toMatch(/bg-gradient-primary/);
     fireEvent.click(screen.getByRole("button", { name: "Agenda" }));
