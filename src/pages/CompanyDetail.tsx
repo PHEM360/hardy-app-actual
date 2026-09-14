@@ -1408,7 +1408,11 @@ function SettingsTab({ companyId }: { companyId: string }) {
 
   const save = async () => {
     setSaving(true);
-    try { await saveSettings({ ...local, incomeCategories: settings.incomeCategories, expenseCategories: settings.expenseCategories }); } finally { setSaving(false); }
+    try {
+      await saveSettings({ corporateTaxRate: local.corporateTaxRate });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <p className="text-xs text-muted-foreground text-center py-8">Loading settings…</p>;
@@ -1421,7 +1425,7 @@ function SettingsTab({ companyId }: { companyId: string }) {
       >
         <p className="font-display text-sm font-semibold">Income & expense categories</p>
         <p className="mt-1 text-xs leading-snug text-muted-foreground">
-          These lists are shared for every company. Edit them on the Companies page or in Unallocated settings.
+          These lists are shared for every company. Edit them in Companies → Settings, or in Unallocated settings.
         </p>
       </div>
 

@@ -720,10 +720,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Company settings (per-company tax rate) plus shared family categories on "__family__"
+    // Company settings (per-company tax rate) plus shared family categories on "__family__".
+    // Keep the family doc on its own allow lines — OR-ing with canEditCompany("__family__")
+    // would call get(companies/__family__), which errors and denies the whole expression.
     match /companySettings/{companyId} {
-      allow read: if isAuthenticated() && (companyId == "__family__" || canAccessCompany(companyId));
-      allow write: if isAuthenticated() && (companyId == "__family__" || canEditCompany(companyId));
+      allow read: if isAuthenticated() && companyId == "__family__";
+      allow write: if isAuthenticated() && companyId == "__family__";
+      allow read: if isAuthenticated() && canAccessCompany(companyId);
+      allow write: if isAuthenticated() && canEditCompany(companyId);
     }
 
     // Household items - shared by household membership, with owner-uid fallback for legacy data

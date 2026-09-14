@@ -30,6 +30,14 @@ const FIELDS: { key: keyof SharedCategorySettings; label: string; tint: string; 
   },
 ];
 
+function friendlySaveError(err: unknown) {
+  const message = err instanceof Error ? err.message : "";
+  if (/permission|insufficient/i.test(message)) {
+    return "Couldn’t save categories — check you’re signed in, then try again.";
+  }
+  return message.replace(/^Firebase:\s*/i, "").replace(/\s*\(.*\)$/, "") || "Couldn’t save categories.";
+}
+
 export function SharedCategorySettingsPanel({
   showDocuments = false,
 }: {
@@ -48,8 +56,9 @@ export function SharedCategorySettingsPanel({
     setSaving(true);
     try {
       await saveSettings(next);
-    } catch {
-      toast.error("Couldn’t save categories.");
+    } catch (err) {
+      toast.error(friendlySaveError(err));
+      setLocal(settings);
     } finally {
       setSaving(false);
     }
@@ -92,6 +101,7 @@ export function SharedCategorySettingsPanel({
                   onClick={() => removeItem(field.key, cat)}
                   className="transition-colors hover:text-red-500"
                   aria-label={`Remove ${cat}`}
+                  disabled={saving}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -124,7 +134,9 @@ export function SharedCategorySettingsPanel({
         </div>
       ))}
       <p className="text-[11px] leading-snug text-muted-foreground">
-        These lists are shared. Change them here or on {showDocuments ? "Companies" : "Unallocated"} and both pages stay in step.
+        {showDocuments
+          ? "Income and expense lists stay in step with Companies settings. Document categories are only used on Unallocated."
+          : "These income and expense lists are shared with Unallocated. Document categories are edited there."}
       </p>
     </div>
   );

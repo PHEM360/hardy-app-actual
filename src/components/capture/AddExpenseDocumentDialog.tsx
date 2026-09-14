@@ -20,13 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ReceiptThumb } from "@/components/receipts/ReceiptPreview";
+import { ReceiptLightbox, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useSharedCategorySettings } from "@/hooks/useSharedCategorySettings";
 import { useMyHouseholds } from "@/hooks/useHouseholds";
 import { useFlatsList } from "@/hooks/useFlats";
 import { usePets } from "@/hooks/usePets";
 import { useCaptureInbox } from "@/hooks/useCaptureInbox";
+import type { ReceiptSource } from "@/lib/receipts";
 import {
   addFilesAsBundles,
   appendPagesToBundle,
@@ -104,6 +105,7 @@ export function AddExpenseDocumentDialog({
   const [progress, setProgress] = useState<CaptureProgress | null>(null);
   const [savedOk, setSavedOk] = useState(false);
   const [savedSummary, setSavedSummary] = useState("");
+  const [viewer, setViewer] = useState<ReceiptSource | null>(null);
 
   const { settings: sharedCats } = useSharedCategorySettings();
   const dest: DestChoice = {
@@ -272,6 +274,7 @@ export function AddExpenseDocumentDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => { if (!next && saving) return; onOpenChange(next); }}>
       <DialogContent aria-describedby={undefined} className="max-h-[85dvh] max-w-md mx-4 overflow-y-auto">
         {saving && progress ? (
@@ -596,12 +599,19 @@ export function AddExpenseDocumentDialog({
                 <div className="overflow-hidden rounded-xl border border-border/50">
                   <div className="space-y-1 bg-muted/30 p-2">
                     {(allocateItem.files?.length ? allocateItem.files : []).map((file, index) => (
-                      <div key={`${file.storagePath}-${index}`} className="relative">
+                      <button
+                        key={`${file.storagePath}-${index}`}
+                        type="button"
+                        className="relative block w-full rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+                        onClick={() => setViewer({ url: file.url, name: file.name })}
+                        aria-label={`View ${file.name || "page"} larger`}
+                      >
                         {(file.mimeType || "").startsWith("image/") ? (
                           <img src={file.url} alt="" className="mx-auto max-h-72 w-full object-contain" />
                         ) : (
                           <div className="flex h-20 items-center justify-center rounded-lg bg-card">
                             <FileText className="h-6 w-6 text-muted-foreground" />
+                            <span className="ml-2 text-xs font-semibold text-muted-foreground">Tap to view</span>
                           </div>
                         )}
                         {(allocateItem.files?.length || 0) > 1 && (
@@ -609,7 +619,7 @@ export function AddExpenseDocumentDialog({
                             {index + 1}
                           </span>
                         )}
-                      </div>
+                      </button>
                     ))}
                     {!allocateItem.files?.length && (
                       <div className="flex h-24 items-center justify-center">
@@ -617,8 +627,8 @@ export function AddExpenseDocumentDialog({
                       </div>
                     )}
                   </div>
-                  <p className="truncate px-3 py-2 text-xs text-muted-foreground">
-                    {capturePagesLabel(allocateItem.files?.length || 0)} waiting
+                  <p className="border-t border-border/40 px-3 py-2 text-[11px] text-muted-foreground">
+                    Tap a page to view it larger · {capturePagesLabel(allocateItem.files?.length || 0)} waiting
                     {allocateItem.category ? ` · ${allocateItem.category}` : ""}
                   </p>
                 </div>
@@ -726,5 +736,7 @@ export function AddExpenseDocumentDialog({
         )}
       </DialogContent>
     </Dialog>
+    <ReceiptLightbox source={viewer} open={!!viewer} onClose={() => setViewer(null)} />
+    </>
   );
 }

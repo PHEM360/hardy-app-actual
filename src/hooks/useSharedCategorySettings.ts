@@ -41,7 +41,16 @@ export function useSharedCategorySettings() {
 
   const saveSettings = useCallback(async (updated: SharedCategorySettings) => {
     const normalized = normalize(updated);
-    await setDoc(doc(db, "companySettings", SHARED_CATEGORY_SETTINGS_ID), normalized, { merge: true });
+    // Write only the shared category fields — never merge per-company tax fields onto __family__.
+    await setDoc(
+      doc(db, "companySettings", SHARED_CATEGORY_SETTINGS_ID),
+      {
+        incomeCategories: normalized.incomeCategories,
+        expenseCategories: normalized.expenseCategories,
+        documentCategories: normalized.documentCategories,
+      },
+      { merge: true },
+    );
     setSettings(normalized);
   }, []);
 

@@ -3,15 +3,27 @@ import { useSearchParams } from "react-router-dom";
 import { FileText, Inbox, Plus, Receipt, Settings2, Trash2 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
+import { ReceiptLightbox } from "@/components/receipts/ReceiptPreview";
 import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
 import { Button } from "@/components/ui/button";
 import { useCaptureInbox } from "@/hooks/useCaptureInbox";
-import { capturePagesLabel, type CaptureItem } from "@/lib/captureInbox";
+import { capturePagesLabel, type CaptureFileMeta, type CaptureItem } from "@/lib/captureInbox";
+import type { ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
 
 type Filter = "all" | "expense" | "document" | "settings";
 
-function InboxPhoto({ item }: { item: CaptureItem }) {
+function toReceiptSource(file: CaptureFileMeta): ReceiptSource {
+  return { url: file.url, name: file.name };
+}
+
+function InboxPhoto({
+  item,
+  onOpenFile,
+}: {
+  item: CaptureItem;
+  onOpenFile: (file: CaptureFileMeta) => void;
+}) {
   const files = item.files || [];
   if (!files.length) {
     return (
@@ -24,13 +36,30 @@ function InboxPhoto({ item }: { item: CaptureItem }) {
   return (
     <div className="relative space-y-1 bg-muted/30 p-2">
       {files.map((file, index) =>
-        (file.mimeType || "").startsWith("image/") ? (
-          <img
+        (file.mimeType || "").startsWith("image/") || (file.mimeType || "").includes("pdf") ? (
+          <button
             key={`${file.storagePath}-${index}`}
-            src={file.url}
-            alt=""
-            className="mx-auto max-h-80 w-full object-contain"
-          />
+            type="button"
+            className="block w-full rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenFile(file);
+            }}
+            aria-label={`View ${file.name || "page"} larger`}
+          >
+            {(file.mimeType || "").startsWith("image/") ? (
+              <img
+                src={file.url}
+                alt=""
+                className="mx-auto max-h-80 w-full object-contain"
+              />
+            ) : (
+              <div className="flex h-24 items-center justify-center rounded-lg bg-card">
+                <FileText className="h-7 w-7 text-muted-foreground" />
+                <span className="ml-2 text-xs font-semibold text-muted-foreground">Tap to view PDF</span>
+              </div>
+            )}
+          </button>
         ) : (
           <div key={`${file.storagePath}-${index}`} className="flex h-24 items-center justify-center rounded-lg bg-card">
             <FileText className="h-7 w-7 text-muted-foreground" />
@@ -52,6 +81,7 @@ export default function Unallocated() {
   const [filter, setFilter] = useState<Filter>("all");
   const [addOpen, setAddOpen] = useState(false);
   const [allocating, setAllocating] = useState<CaptureItem | null>(null);
+  const [viewer, setViewer] = useState<ReceiptSource | null>(null);
 
   const focusId = params.get("item");
   useEffect(() => {
@@ -136,7 +166,7 @@ export default function Unallocated() {
             >
               <p className="font-display text-base font-bold">Categories</p>
               <p className="mb-4 mt-1 text-sm text-muted-foreground">
-                Income and expense lists are shared with Companies. Document categories are used when you add or allocate a file.
+                Income and expense lists are shared with Companies settings. Document categories are only used here when you add or allocate a file.
               </p>
               <SharedCategorySettingsPanel showDocuments />
             </div>
@@ -164,18 +194,16 @@ export default function Unallocated() {
                   className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
                   style={{ borderLeftWidth: 3, borderLeftColor: "hsl(var(--primary))" }}
                 >
-                  <button type="button" className="block w-full text-left" onClick={() => setAllocating(item)}>
-                    <InboxPhoto item={item} />
-                    <div className="p-3">
-                      <p className="truncate font-semibold">{item.name || "Untitled"}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {item.kind === "expense" ? "Expense" : "Document"}
-                        {item.category ? ` · ${item.category}` : ""}
-                        {` · ${capturePagesLabel(item.files?.length || 0)}`}
-                        {item.amount != null ? ` · £${item.amount}` : ""}
-                        {item.date ? ` · ${item.date}` : ""}
-                      </p>
-                    </div>
+                  <InboxPhoto item={item} onOpenFile={(file) => setViewer(toReceiptSource(file))} />
+                  <button type="button" className="block w-full p-3 text-left" onClick={() => setAllocating(item)}>
+                    <p className="truncate font-semibold">{item.name || "Untitled"}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.kind === "expense" ? "Expense" : "Document"}
+                      {item.category ? ` · ${item.category}` : ""}
+                      {` · ${capturePagesLabel(item.files?.length || 0)}`}
+                      {item.amount != null ? ` · £${item.amount}` : ""}
+                      {item.date ? ` · ${item.date}` : ""}
+                    </p>
                   </button>
                   <div className="flex items-center justify-between border-t border-border/40 px-3 py-2">
                     <button
@@ -221,6 +249,7 @@ export default function Unallocated() {
           }
         }}
       />
+      <ReceiptLightbox source={viewer} open={!!viewer} onClose={() => setViewer(null)} />
     </FeaturePageShell>
   );
 }

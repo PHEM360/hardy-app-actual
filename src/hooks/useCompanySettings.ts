@@ -6,8 +6,11 @@ import { CompanySettings, DEFAULT_COMPANY_SETTINGS, sortCategoriesOtherLast } fr
 function normalize(settings: CompanySettings): CompanySettings {
   return {
     ...settings,
-    incomeCategories: sortCategoriesOtherLast(settings.incomeCategories),
-    expenseCategories: sortCategoriesOtherLast(settings.expenseCategories),
+    incomeCategories: sortCategoriesOtherLast(settings.incomeCategories || DEFAULT_COMPANY_SETTINGS.incomeCategories),
+    expenseCategories: sortCategoriesOtherLast(settings.expenseCategories || DEFAULT_COMPANY_SETTINGS.expenseCategories),
+    corporateTaxRate: Number.isFinite(settings.corporateTaxRate)
+      ? settings.corporateTaxRate
+      : DEFAULT_COMPANY_SETTINGS.corporateTaxRate,
   };
 }
 
@@ -28,11 +31,12 @@ export function useCompanySettings(companyId: string) {
     }).finally(() => setLoading(false));
   }, [companyId]);
 
-  async function saveSettings(updated: CompanySettings) {
-    const normalized = normalize(updated);
+  async function saveSettings(updated: Partial<CompanySettings>) {
+    const next = normalize({ ...settings, ...updated });
     const ref = doc(db, "companySettings", companyId);
-    await setDoc(ref, normalized);
-    setSettings(normalized);
+    // Persist tax rate only — shared income/expense lists live on companySettings/__family__.
+    await setDoc(ref, { corporateTaxRate: next.corporateTaxRate }, { merge: true });
+    setSettings(next);
   }
 
   return { settings, loading, saveSettings };

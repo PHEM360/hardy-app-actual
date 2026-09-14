@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
-  ImagePlus, ExternalLink, Mail, Phone, Megaphone,
+  ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
@@ -587,6 +587,7 @@ const Companies = () => {
   const { user } = useAuth();
   const appUsers = useAppUsers();
   const navigate = useNavigate();
+  const [view, setView] = useState<"overview" | "settings">("overview");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
   const [saving, setSaving] = useState(false);
@@ -709,20 +710,73 @@ const Companies = () => {
         </div>
       }
     >
-      <div
-        className="mb-5 rounded-2xl border border-border/50 p-4 shadow-card"
-        style={{
-          background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))",
-          borderLeft: "4px solid hsl(var(--primary))",
-        }}
-      >
-        <p className="font-display text-base font-bold">Income & expense categories</p>
-        <p className="mb-4 mt-1 text-sm text-muted-foreground">
-          Shared across every company and Unallocated. Change them here or in Unallocated settings.
-        </p>
-        <SharedCategorySettingsPanel />
-      </div>
-      {companies.length === 0 ? (
+      <div className="flex min-w-0 gap-3">
+        <aside className="hidden w-[11rem] shrink-0 lg:block">
+          <nav className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card">
+            {([
+              { id: "overview" as const, label: "Overview", icon: LayoutGrid },
+              { id: "settings" as const, label: "Settings", icon: Settings2 },
+            ]).map((item) => {
+              const Icon = item.icon;
+              const on = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setView(item.id)}
+                  className={`flex w-full items-center gap-2 rounded-xl border px-2 py-2 text-left text-xs font-semibold transition ${
+                    on
+                      ? "border-primary/45 bg-primary/10 text-foreground"
+                      : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${on ? "bg-gradient-primary text-primary-foreground" : "bg-muted"}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="flex flex-wrap gap-1.5 lg:hidden">
+            {([
+              { id: "overview" as const, label: "Overview" },
+              { id: "settings" as const, label: "Settings" },
+            ]).map((item) => {
+              const on = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setView(item.id)}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+                    on ? "border-primary/45 bg-primary/10" : "border-border/50 bg-card text-muted-foreground"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {view === "settings" ? (
+            <div
+              className="rounded-2xl border border-border/50 p-4 shadow-card"
+              style={{
+                background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))",
+                borderLeft: "4px solid hsl(var(--primary))",
+              }}
+            >
+              <p className="font-display text-base font-bold">Income & expense categories</p>
+              <p className="mb-4 mt-1 text-sm text-muted-foreground">
+                Shared across every company and Unallocated. Document categories stay in Unallocated settings.
+              </p>
+              <SharedCategorySettingsPanel />
+            </div>
+          ) : companies.length === 0 ? (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-20">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-primary text-3xl shadow-elevated">🏢</div>
           <div className="text-center">
@@ -801,6 +855,8 @@ const Companies = () => {
           </section>
         </div>
       )}
+        </div>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditCompany(null); }}>
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
