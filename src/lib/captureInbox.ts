@@ -90,6 +90,17 @@ export function todayIsoDate() {
   return new Date().toISOString().split("T")[0];
 }
 
+export function capturePagesLabel(count: number) {
+  return count === 1 ? "1 page" : `${count} pages`;
+}
+
+export function inboxItemName(draft: Pick<CaptureDraft, "name">, files: { name: string }[]) {
+  const fromDraft = draft.name.trim();
+  if (fromDraft) return fromDraft;
+  const first = files[0]?.name.replace(/\.[^.]+$/, "") || "";
+  return first.trim() || files[0]?.name || "Untitled";
+}
+
 function safeName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "file";
 }
@@ -350,14 +361,12 @@ export async function placeCapture(uid: string, draft: CaptureDraft, files: File
       createdAt: serverTimestamp(),
       createdBy: uid,
     };
-    for (const file of uploaded) {
-      await addDoc(collection(db, "captureInbox", uid, "items"), {
-        ...base,
-        name: (draft.name || file.name.replace(/\.[^.]+$/, "")).trim() || file.name,
-        files: [file],
-      });
-    }
-    return { count: uploaded.length, unallocated: true };
+    await addDoc(collection(db, "captureInbox", uid, "items"), {
+      ...base,
+      name: inboxItemName(draft, uploaded),
+      files: uploaded,
+    });
+    return { count: 1, pages: uploaded.length, unallocated: true };
   }
 
   if (!draft.destId && draft.destType !== "pets" && draft.destType !== "notes") {
@@ -376,7 +385,7 @@ export async function placeCapture(uid: string, draft: CaptureDraft, files: File
   else if (draft.destType === "pets") await savePetDocuments(uid, draft.destId, draft, files);
   else if (draft.destType === "notes") await saveNote(uid, draft, files);
 
-  return { count: files.length, unallocated: false };
+  return { count: 1, pages: files.length, unallocated: false };
 }
 
 export async function allocateInboxItem(uid: string, item: CaptureItem, draft: CaptureDraft) {

@@ -28,17 +28,17 @@ const AppLayout = () => {
 
   return (
     <HomeLayoutGate>
-      <div className="flex min-h-[100dvh] flex-col bg-background">
+      <div className="flex min-h-[100dvh] min-h-[100svh] flex-col bg-background">
         <FcmBootstrap />
         <AlarmRingingOverlay uid={dataUid} />
         <TopBar />
-        <main className="w-full flex-1 overflow-x-hidden overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))]">
+        <main className="w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))]">
           <div className="mx-auto w-full min-w-0 max-w-screen-sm sm:max-w-screen-md md:max-w-screen-lg xl:max-w-screen-xl">
             <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
           </div>
         </main>
-        <BottomNav />
       </div>
+      <BottomNav />
     </HomeLayoutGate>
   );
 };

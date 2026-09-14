@@ -187,8 +187,8 @@ export default function HomeTiles({
     .filter((tile) => tile && accessibleIds.includes(tile.id));
 
   return (
-    <div className="mx-auto w-full max-w-6xl overflow-x-hidden pb-6">
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/30 bg-background/95 px-3 py-3 backdrop-blur-sm">
+    <div className="page-gutter-x mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden pb-6">
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/30 bg-background/95 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div>
             <p className="text-sm font-semibold text-foreground">Home</p>
@@ -229,7 +229,7 @@ export default function HomeTiles({
         </div>
       </div>
 
-      <div className={`space-y-3 px-3 pt-3 sm:px-4 ${homeTileSkinClass(preset)}`}>
+      <div className={`space-y-3 pt-3 ${homeTileSkinClass(preset)}`}>
         <div className="h-[100px] overflow-hidden rounded-2xl shadow-card">
           <GreetingWidget />
         </div>

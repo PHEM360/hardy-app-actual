@@ -5,7 +5,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
 import { Button } from "@/components/ui/button";
 import { useCaptureInbox } from "@/hooks/useCaptureInbox";
-import { captureItemThumb, type CaptureItem } from "@/lib/captureInbox";
+import { captureItemThumb, capturePagesLabel, type CaptureItem } from "@/lib/captureInbox";
 import { toast } from "sonner";
 
 type Filter = "all" | "expense" | "document";
@@ -115,17 +115,25 @@ export default function Unallocated() {
                     style={{ borderLeftWidth: 3, borderLeftColor: "hsl(var(--primary))" }}
                   >
                     <button type="button" className="block w-full text-left" onClick={() => setAllocating(item)}>
-                      {thumb ? (
-                        <img src={thumb} alt="" className="h-36 w-full object-cover" />
-                      ) : (
-                        <div className="flex h-28 items-center justify-center bg-muted/40">
-                          {item.kind === "expense" ? <Receipt className="h-8 w-8 text-muted-foreground" /> : <FileText className="h-8 w-8 text-muted-foreground" />}
-                        </div>
-                      )}
+                      <div className="relative">
+                        {thumb ? (
+                          <img src={thumb} alt="" className="h-36 w-full object-cover" />
+                        ) : (
+                          <div className="flex h-28 items-center justify-center bg-muted/40">
+                            {item.kind === "expense" ? <Receipt className="h-8 w-8 text-muted-foreground" /> : <FileText className="h-8 w-8 text-muted-foreground" />}
+                          </div>
+                        )}
+                        {(item.files?.length || 0) > 1 && (
+                          <span className="absolute bottom-2 right-2 rounded-lg bg-card/95 px-1.5 py-0.5 text-[10px] font-semibold shadow-sm">
+                            {capturePagesLabel(item.files.length)}
+                          </span>
+                        )}
+                      </div>
                       <div className="p-3">
                         <p className="truncate font-semibold">{item.name || "Untitled"}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {item.kind === "expense" ? "Expense" : "Document"}
+                          {` · ${capturePagesLabel(item.files?.length || 0)}`}
                           {item.amount != null ? ` · £${item.amount}` : ""}
                           {item.date ? ` · ${item.date}` : ""}
                         </p>

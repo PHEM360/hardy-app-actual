@@ -29,6 +29,7 @@ import { useCaptureInbox } from "@/hooks/useCaptureInbox";
 import {
   captureExpenseAllowed,
   captureItemThumb,
+  capturePagesLabel,
   categoriesForCapture,
   todayIsoDate,
   type CaptureDestType,
@@ -53,16 +54,16 @@ function blankDraft(): CaptureDraft {
   };
 }
 
-function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
+function FileChip({ file, page, onRemove }: { file: File; page: number; onRemove: () => void }) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-border/50 bg-card">
       <ReceiptThumb source={{ file }} className="h-20 w-full rounded-none border-0" />
-      <p className="truncate px-1.5 py-1 text-[10px] font-medium">{file.name}</p>
+      <p className="truncate px-1.5 py-1 text-[10px] font-medium">Page {page}</p>
       <button
         type="button"
         onClick={onRemove}
         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-card/90 text-muted-foreground shadow"
-        aria-label={`Remove ${file.name}`}
+        aria-label={`Remove page ${page}`}
       >
         <X className="h-3 w-3" />
       </button>
@@ -169,10 +170,12 @@ export function AddExpenseDocumentDialog({
         setSavedSummary(`Saved to ${draft.destLabel}.`);
       } else {
         const result = await saveCapture(draft, files);
+        const noun = draft.kind === "expense" ? "receipt" : "document";
+        const pages = result.pages ?? files.length;
         setSavedSummary(
           result.unallocated
-            ? `${result.count} saved to Unallocated. Open the inbox on a computer to fill in the details.`
-            : `${result.count} saved to ${draft.destLabel}.`,
+            ? `1 ${noun} with ${capturePagesLabel(pages)} saved to Unallocated.`
+            : `1 ${noun} with ${capturePagesLabel(pages)} saved to ${draft.destLabel}.`,
         );
       }
       setSavedOk(true);
@@ -215,27 +218,43 @@ export function AddExpenseDocumentDialog({
               <DialogTitle className="text-center font-display">Saved</DialogTitle>
             </DialogHeader>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{savedSummary}</p>
-            <div className="mt-5 flex gap-2">
-              <Button
-                variant="outline"
-                className="h-10 flex-1 rounded-xl"
-                onClick={() => {
-                  onOpenChange(false);
-                }}
-              >
-                Done
-              </Button>
-              {dest.type === "unallocated" && (
+            <div className="mt-5 flex flex-col gap-2">
+              {!allocateItem && (
                 <Button
-                  className="h-10 flex-1 rounded-xl bg-gradient-primary"
+                  className="h-10 w-full rounded-xl bg-gradient-primary"
                   onClick={() => {
-                    onOpenChange(false);
-                    navigate("/unallocated");
+                    setDraft(blankDraft());
+                    setFiles([]);
+                    setSavedOk(false);
+                    setSavedSummary("");
                   }}
                 >
-                  View all
+                  Add another
                 </Button>
               )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="h-10 flex-1 rounded-xl"
+                  onClick={() => {
+                    onOpenChange(false);
+                  }}
+                >
+                  Done
+                </Button>
+                {dest.type === "unallocated" && (
+                  <Button
+                    variant={allocateItem ? "default" : "outline"}
+                    className={`h-10 flex-1 rounded-xl ${allocateItem ? "bg-gradient-primary" : ""}`}
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/unallocated");
+                    }}
+                  >
+                    View all
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -326,7 +345,14 @@ export function AddExpenseDocumentDialog({
 
               {!allocateItem && (
                 <div className="space-y-1.5">
-                  <Label>Files</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Pages</Label>
+                    {files.length > 0 && (
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        {capturePagesLabel(files.length)} in this {kind === "expense" ? "receipt" : "document"}
+                      </span>
+                    )}
+                  </div>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -343,7 +369,6 @@ export function AddExpenseDocumentDialog({
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    multiple
                     className="hidden"
                     onChange={(e) => {
                       addFiles(e.target.files);
@@ -356,6 +381,7 @@ export function AddExpenseDocumentDialog({
                         <FileChip
                           key={`${file.name}-${index}`}
                           file={file}
+                          page={index + 1}
                           onRemove={() => setFiles((current) => current.filter((_, i) => i !== index))}
                         />
                       ))}
@@ -364,17 +390,17 @@ export function AddExpenseDocumentDialog({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs font-semibold text-foreground hover:bg-muted/60"
                     >
-                      <Paperclip className="h-3.5 w-3.5" /> {files.length ? "Add files" : "Upload"}
+                      <Camera className="h-3.5 w-3.5" /> {files.length ? "Add another page" : "Take photo"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => cameraInputRef.current?.click()}
-                      className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/30 text-xs text-muted-foreground hover:bg-muted/60"
                     >
-                      <Camera className="h-3.5 w-3.5" /> Take photos
+                      <Paperclip className="h-3.5 w-3.5" /> {files.length ? "Add files" : "Upload"}
                     </button>
                   </div>
                 </div>
@@ -382,7 +408,24 @@ export function AddExpenseDocumentDialog({
 
               {allocateItem && (
                 <div className="overflow-hidden rounded-xl border border-border/50">
-                  {captureItemThumb(allocateItem) ? (
+                  {allocateItem.files?.length > 1 ? (
+                    <div className="grid grid-cols-3 gap-px bg-border/40">
+                      {allocateItem.files.slice(0, 6).map((file, index) => (
+                        <div key={`${file.storagePath}-${index}`} className="relative bg-card">
+                          {(file.mimeType || "").startsWith("image/") ? (
+                            <img src={file.url} alt="" className="h-20 w-full object-cover" />
+                          ) : (
+                            <div className="flex h-20 items-center justify-center bg-muted/40">
+                              <FileText className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                          <span className="absolute bottom-1 left-1 rounded-md bg-card/90 px-1 text-[9px] font-semibold">
+                            {index + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : captureItemThumb(allocateItem) ? (
                     <img src={captureItemThumb(allocateItem) || ""} alt="" className="h-36 w-full object-cover" />
                   ) : (
                     <div className="flex h-24 items-center justify-center bg-muted/40">
@@ -390,7 +433,7 @@ export function AddExpenseDocumentDialog({
                     </div>
                   )}
                   <p className="truncate px-3 py-2 text-xs text-muted-foreground">
-                    {allocateItem.files?.length || 0} file{(allocateItem.files?.length || 0) === 1 ? "" : "s"} waiting
+                    {capturePagesLabel(allocateItem.files?.length || 0)} waiting
                   </p>
                 </div>
               )}
@@ -493,7 +536,9 @@ export function AddExpenseDocumentDialog({
                             )}
                           </div>
                           <span className="min-w-0 flex-1 truncate text-xs font-semibold">{item.name || "Untitled"}</span>
-                          <span className="text-[10px] text-muted-foreground">{item.kind === "expense" ? "Expense" : "Doc"}</span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {capturePagesLabel(item.files?.length || 0)}
+                          </span>
                         </button>
                       ))}
                     </div>

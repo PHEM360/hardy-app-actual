@@ -753,7 +753,8 @@ input[type="date"] {
     height: 100%;
     min-height: 100dvh;
     min-height: 100svh;
-    overflow-x: hidden;
+    /* clip (not hidden) so position:fixed bottom nav stays pinned to the screen */
+    overflow-x: clip;
     background-color: hsl(215, 32%, 18%);
   }
 
@@ -761,7 +762,7 @@ input[type="date"] {
     height: 100%;
     min-height: 100dvh;
     min-height: 100svh;
-    overflow-x: hidden;
+    overflow-x: clip;
     background-color: transparent;
   }
 
@@ -775,6 +776,12 @@ input[type="date"] {
 
   .safe-top {
     padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  }
+
+  /* Equal left/right page inset on phones, including notch/home-indicator sides. */
+  .page-gutter-x {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
   }
 
   .page-back {

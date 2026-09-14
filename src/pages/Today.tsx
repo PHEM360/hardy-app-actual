@@ -93,7 +93,7 @@ function WidgetContent({
 const MIN_H      = 100;
 const MIN_W_FRAC = 0.18;
 const GAP        = 18;
-const PADDING    = 16;
+const PADDING    = 0;
 
 interface Rect { x: number; y: number; w: number; h: number }
 
@@ -334,11 +334,10 @@ const Today = ({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      setContainerWidth(entries[0]?.contentRect.width ?? 0);
-    });
+    const measure = () => setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setContainerWidth(el.clientWidth);
+    measure();
     return () => ro.disconnect();
   }, []);
 
@@ -352,11 +351,11 @@ const Today = ({
   const today = new Date();
 
   return (
-    <div className="pb-28" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
+    <div className="page-gutter-x min-w-0 overflow-x-hidden pb-6" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
       {/* Toolbar */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
         <div
-          className="px-3 py-2 flex items-center justify-between"
+          className="py-2 flex items-center justify-between"
           style={{ background: pageStyle.headerColor || "var(--gradient-primary)" }}
         >
           <div className="flex items-center gap-2">
@@ -367,7 +366,7 @@ const Today = ({
             {format(today, "EEEE d MMMM")}
           </p>
         </div>
-        <div className="flex items-center justify-between px-3 py-2">
+        <div className="flex items-center justify-between py-2">
           <div className="flex items-center gap-2">
             {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
           <button
@@ -458,7 +457,7 @@ const Today = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mx-3 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
+            className="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
           >
             Drag anywhere — they stay where you drop them, with a little space so they never touch.
           </motion.div>
@@ -467,7 +466,7 @@ const Today = ({
 
       {/* Empty state */}
       {loaded && layout.length === 0 && (
-        <div className="mx-3 mt-6 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border/60 py-12 text-center">
+        <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border/60 py-12 text-center">
           <p className="text-sm font-semibold text-foreground">Nothing here yet</p>
           <p className="max-w-xs text-xs text-muted-foreground">
             Tap "Add widget" to start building your page — tasks, calendar, quick links, a clock and more.

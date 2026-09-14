@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
@@ -114,16 +115,20 @@ const BottomNav = () => {
   const isMoreActive = location.pathname === "/more" || location.pathname.startsWith("/more");
   const moreItem = ALL_NAV_ITEMS["/more"];
 
-  return (
+  return createPortal(
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-white/5"
+      className="z-50 w-full border-t border-white/5"
       style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100%",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "var(--chrome-nav, var(--gradient-hero))",
         backgroundColor: "hsl(215, 32%, 18%)",
         backdropFilter: "blur(16px)",
-        /* Extra paint into any sub-pixel / overscroll gap below the bar */
-        boxShadow: "0 1px 0 0 hsl(215, 32%, 18%), 0 40px 0 40px hsl(215, 32%, 18%)",
+        boxShadow: "0 1px 0 0 hsl(215, 32%, 18%)",
       }}
     >
       {/* Paint below the nav so iOS/Android overscroll never flashes page mint through the home-indicator gap */}
@@ -171,7 +176,8 @@ const BottomNav = () => {
           <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.72)" }}>Sign out</span>
         </button>
       </div>
-    </nav>
+    </nav>,
+    document.body,
   );
 };
 
