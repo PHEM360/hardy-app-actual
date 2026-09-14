@@ -6,11 +6,13 @@ type Cloud = { x: number; y: number; s: number; speed: number; shade: number };
 type Flake = { x: number; y: number; vx: number; vy: number; r: number; layer: number; a: number; spin: number };
 
 export function DisplayPlaceCanvas({ scene, stormy = false }: { scene: PlaceScene; stormy?: boolean }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
-    if (!canvas) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
@@ -23,10 +25,10 @@ export function DisplayPlaceCanvas({ scene, stormy = false }: { scene: PlaceScen
     const flakes: Flake[] = [];
 
     const resize = () => {
-      const rect = canvas.getBoundingClientRect();
+      const rect = wrap.getBoundingClientRect();
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = Math.max(1, Math.floor(rect.width));
-      h = Math.max(1, Math.floor(rect.height));
+      w = Math.max(2, Math.floor(rect.width));
+      h = Math.max(2, Math.floor(rect.height));
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -77,15 +79,21 @@ export function DisplayPlaceCanvas({ scene, stormy = false }: { scene: PlaceScen
 
     resize();
     const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
+    ro.observe(wrap);
+    window.addEventListener("resize", resize);
     raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      window.removeEventListener("resize", resize);
     };
   }, [scene, stormy]);
 
-  return <canvas ref={ref} className="absolute inset-0 h-full w-full" />;
+  return (
+    <div ref={wrapRef} className="absolute inset-0">
+      <canvas ref={ref} className="absolute inset-0 h-full w-full" />
+    </div>
+  );
 }
 
 function glow(

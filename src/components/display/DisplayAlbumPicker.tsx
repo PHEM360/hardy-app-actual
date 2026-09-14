@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Check, ImageOff } from "lucide-react";
 import { PhotoThumb } from "@/components/photos/PhotoThumb";
-import { albumLibraryKey, photoLibraryKey, resolveDisplayPhotos, type PhotoPickItem } from "@/lib/photoSelection";
+import { albumLibraryKey, photoLibraryKey, resolveDisplayPhotos, snapshotPhotoRefs, type PhotoPickItem } from "@/lib/photoSelection";
 import type { PhotoAlbum } from "@/types/photos";
 import type { DisplayWidgetLayout } from "@/lib/displayPages";
 
@@ -36,7 +36,12 @@ export function DisplayAlbumPicker<T extends PhotoPickItem>({
   // one removed here stops appearing on the screen instead of turning into
   // a dead black tile.
   const commit = (albumIds: string[], photoIds: string[]) => {
-    onChange({ photoAlbumIds: albumIds, photoIds, photoRefs: [] });
+    const resolved = resolveDisplayPhotos(photos, { photoAlbumIds: albumIds, photoIds });
+    onChange({
+      photoAlbumIds: albumIds,
+      photoIds,
+      photoRefs: snapshotPhotoRefs(resolved),
+    });
   };
 
   return (

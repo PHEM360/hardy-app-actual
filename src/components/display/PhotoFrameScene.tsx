@@ -95,12 +95,14 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
             src={revived[photo.id] || photo.url}
             alt=""
             aria-hidden
+            referrerPolicy="no-referrer"
             loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
           />
           <img
             src={revived[photo.id] || photo.url}
             alt={photo.caption || ""}
+            referrerPolicy="no-referrer"
             loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-contain"
             onError={() => handleError(photo)}

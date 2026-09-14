@@ -1,8 +1,9 @@
-import { Fog, Lightning, Rain, Stars, SunSky } from "@/components/chrome/ChromeSceneLayer";
+import { ChromeSceneLayer, Fog, Lightning, Rain, Stars, SunSky } from "@/components/chrome/ChromeSceneLayer";
 import { ChromeCanvasScene } from "@/components/chrome/ChromeCanvasScene";
 import { DisplayPlaceCanvas } from "@/components/display/DisplayPlaceCanvas";
+import { DisplayAtmosphereCanvas } from "@/components/display/DisplayAtmosphereCanvas";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
-import type { DisplayBackdropKind } from "@/lib/displayPages";
+import { BACKDROP_THUMBS, type DisplayBackdropKind } from "@/lib/displayPages";
 import { weatherSceneFromForecast } from "@/lib/displayWeatherScene";
 import type { WeatherScene } from "@/hooks/useLocalWeather";
 
@@ -10,6 +11,9 @@ import type { WeatherScene } from "@/hooks/useLocalWeather";
  * Full-screen atmosphere behind remote-display widgets. Live weather follows
  * the page’s weather-widget place when one is set, otherwise the screen’s own
  * location — so a kitchen display in Cornwall snows when Cornwall snows.
+ *
+ * A CSS gradient is always painted first so the wall screen still shows the
+ * chosen look if the canvas sizes late (common on TVs) or fails entirely.
  */
 export function DisplayBackdrop({
   kind,
@@ -26,9 +30,11 @@ export function DisplayBackdrop({
   if (!kind || kind === "none") return null;
 
   const weatherScene = live ? weatherSceneFromForecast(weather, failed) : null;
+  const fallback = BACKDROP_THUMBS[kind] || BACKDROP_THUMBS.none;
 
   return (
     <div className="greeting-weather pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <div className="absolute inset-0" style={{ background: fallback }} />
       {kind === "weather" && weatherScene && <LiveWeather scene={weatherScene} />}
       {kind === "stars" && <Stars compact={false} />}
       {kind === "aurora" && <DisplayPlaceCanvas scene="aurora" />}
@@ -44,6 +50,16 @@ export function DisplayBackdrop({
       {kind === "sailing" && <DisplayPlaceCanvas scene="sailing" />}
       {kind === "pasture" && <DisplayPlaceCanvas scene="pasture" />}
       {kind === "harvest" && <DisplayPlaceCanvas scene="harvest" />}
+      {kind === "galaxy" && <ChromeSceneLayer scene="galaxy" />}
+      {kind === "silk" && <ChromeSceneLayer scene="silk" />}
+      {kind === "caustics" && <ChromeSceneLayer scene="caustics" />}
+      {kind === "bokeh" && <ChromeCanvasScene scene="bokeh" />}
+      {kind === "plasma" && <DisplayAtmosphereCanvas scene="plasma" />}
+      {kind === "orion" && <DisplayAtmosphereCanvas scene="orion" />}
+      {kind === "biolume" && <DisplayAtmosphereCanvas scene="biolume" />}
+      {kind === "startrails" && <DisplayAtmosphereCanvas scene="startrails" />}
+      {kind === "lava" && <DisplayAtmosphereCanvas scene="lava" />}
+      {kind === "ionstorm" && <DisplayAtmosphereCanvas scene="ionstorm" />}
     </div>
   );
 }

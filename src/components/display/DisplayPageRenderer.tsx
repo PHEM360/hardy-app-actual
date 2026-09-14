@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { CalendarEvent, Task } from "@/types/app";
 import type { DisplayPage, DisplayWidgetLayout, PhotoFrameSettings } from "@/hooks/useDeviceSettings";
-import { applyPageLayout, displayTheme, isEmptyDisplayWidget } from "@/lib/displayPages";
+import { applyPageLayout, displayInkColor, displayInkShadow, displayTheme, isEmptyDisplayWidget } from "@/lib/displayPages";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import { visibleDisplayPhotos } from "@/lib/displayPhotos";
 import { resolveDisplayPhotos } from "@/lib/photoSelection";
@@ -74,15 +74,17 @@ function WidgetHeading({ icon, title, accent }: { icon: React.ReactNode; title: 
   return (
     <div className="mb-[1.2vmin] flex shrink-0 items-center gap-[1vmin]" style={{ color: accent }}>
       {icon}
-      <h2 className="truncate font-display font-bold text-white" style={{ fontSize: "clamp(13px, 2.3vmin, 30px)" }}>
+      <h2 className="truncate font-display font-bold" style={{ fontSize: "clamp(13px, 2.3vmin, 30px)", color: "var(--display-ink)" }}>
         {title}
       </h2>
     </div>
   );
 }
 
-function WidgetClock({ widget, accent }: { widget: DisplayWidgetLayout; accent: string }) {
+function WidgetClock({ widget, accent, ink }: { widget: DisplayWidgetLayout; accent: string; ink: string }) {
   const now = useNow(1000);
+  const clockColor = ink;
+  const dateStyle = { color: ink, opacity: 0.72, textShadow: displayInkShadow(ink) };
   if (widget.clockStyle === "analog") {
     const hours = now.getHours() % 12;
     const minutes = now.getMinutes();
@@ -90,17 +92,17 @@ function WidgetClock({ widget, accent }: { widget: DisplayWidgetLayout; accent: 
     return (
       <div className="flex h-full flex-col items-center justify-center p-3">
         <svg viewBox="0 0 200 200" className="min-h-0 max-h-[78%] max-w-full flex-1">
-          <circle cx="100" cy="100" r="94" fill="rgba(255,255,255,.035)" stroke="rgba(255,255,255,.25)" strokeWidth="3" />
+          <circle cx="100" cy="100" r="94" fill="color-mix(in srgb, var(--display-ink) 8%, transparent)" stroke="color-mix(in srgb, var(--display-ink) 35%, transparent)" strokeWidth="3" />
           {Array.from({ length: 12 }, (_, index) => {
             const angle = index * Math.PI / 6;
-            return <line key={index} x1={100 + 78 * Math.sin(angle)} y1={100 - 78 * Math.cos(angle)} x2={100 + 88 * Math.sin(angle)} y2={100 - 88 * Math.cos(angle)} stroke="rgba(255,255,255,.55)" strokeWidth="3" strokeLinecap="round" />;
+            return <line key={index} x1={100 + 78 * Math.sin(angle)} y1={100 - 78 * Math.cos(angle)} x2={100 + 88 * Math.sin(angle)} y2={100 - 88 * Math.cos(angle)} stroke="color-mix(in srgb, var(--display-ink) 55%, transparent)" strokeWidth="3" strokeLinecap="round" />;
           })}
-          <line x1="100" y1="100" x2={100 + 48 * Math.sin((hours * 30 + minutes * .5) * Math.PI / 180)} y2={100 - 48 * Math.cos((hours * 30 + minutes * .5) * Math.PI / 180)} stroke="white" strokeWidth="7" strokeLinecap="round" />
-          <line x1="100" y1="100" x2={100 + 70 * Math.sin(minutes * 6 * Math.PI / 180)} y2={100 - 70 * Math.cos(minutes * 6 * Math.PI / 180)} stroke="white" strokeWidth="4" strokeLinecap="round" />
+          <line x1="100" y1="100" x2={100 + 48 * Math.sin((hours * 30 + minutes * .5) * Math.PI / 180)} y2={100 - 48 * Math.cos((hours * 30 + minutes * .5) * Math.PI / 180)} stroke={clockColor} strokeWidth="7" strokeLinecap="round" />
+          <line x1="100" y1="100" x2={100 + 70 * Math.sin(minutes * 6 * Math.PI / 180)} y2={100 - 70 * Math.cos(minutes * 6 * Math.PI / 180)} stroke={clockColor} strokeWidth="4" strokeLinecap="round" />
           {widget.showSeconds && <line x1="100" y1="100" x2={100 + 76 * Math.sin(seconds * 6 * Math.PI / 180)} y2={100 - 76 * Math.cos(seconds * 6 * Math.PI / 180)} stroke={accent} strokeWidth="2" />}
           <circle cx="100" cy="100" r="5" fill={accent} />
         </svg>
-        {widget.showDate !== false && <p className="mt-2 text-[clamp(.65rem,1.5vw,1.25rem)] font-medium text-white/70">{format(now, "EEEE d MMMM")}</p>}
+        {widget.showDate !== false && <p className="mt-2 text-[clamp(.65rem,1.5vw,1.25rem)] font-medium" style={dateStyle}>{format(now, "EEEE d MMMM")}</p>}
       </div>
     );
   }
@@ -109,10 +111,13 @@ function WidgetClock({ widget, accent }: { widget: DisplayWidgetLayout; accent: 
     : format(now, widget.showSeconds ? "HH:mm:ss" : "HH:mm");
   return (
     <div className="flex h-full flex-col items-center justify-center p-3 text-center">
-      <p className="font-display text-[clamp(2rem,9vw,8rem)] font-bold leading-none tabular-nums" style={{ color: accent }}>
+      <p
+        className="font-display text-[clamp(2rem,9vw,8rem)] font-bold leading-none tabular-nums"
+        style={{ color: clockColor, textShadow: displayInkShadow(clockColor) }}
+      >
         {time}
       </p>
-      {widget.showDate !== false && <p className="mt-2 text-[clamp(.7rem,1.8vw,1.5rem)] font-medium text-white/70">{format(now, "EEEE d MMMM")}</p>}
+      {widget.showDate !== false && <p className="mt-2 text-[clamp(.7rem,1.8vw,1.5rem)] font-medium" style={dateStyle}>{format(now, "EEEE d MMMM")}</p>}
     </div>
   );
 }
@@ -153,14 +158,14 @@ function DayEvents({ events, style, colour }: { events: CalendarEvent[]; style: 
       {events.slice(0, 3).map((event) => (
         <p
           key={event.id}
-          className="truncate rounded-[0.6vmin] px-[0.5vmin] leading-tight text-white/95"
+          className="truncate rounded-[0.6vmin] px-[0.5vmin] leading-tight opacity-95"
           style={{ backgroundColor: `${colour}44`, fontSize: "clamp(.45rem,.85vw,.8rem)" }}
         >
           {!event.allDay && `${format(parseISO(event.startDate), "HH:mm")} `}{event.title}
         </p>
       ))}
       {events.length > 3 && (
-        <p className="text-white/45" style={{ fontSize: "clamp(.4rem,.8vw,.7rem)" }}>+{events.length - 3} more</p>
+        <p className="opacity-45" style={{ fontSize: "clamp(.4rem,.8vw,.7rem)" }}>+{events.length - 3} more</p>
       )}
     </div>
   );
@@ -183,16 +188,16 @@ function MonthCalendarWidget({ widget, events, accent }: { widget: DisplayWidget
   const byDay = useMemo(() => eventsByDay(events, categories), [events, categories]);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <div className="mb-[1vmin] flex shrink-0 items-baseline gap-[1.5vmin]">
         <h2 className="font-display font-bold" style={{ fontSize: "clamp(1rem,2.6vw,2.25rem)" }}>
           {widget.title || format(today, "MMMM yyyy")}
         </h2>
-        <p className="text-white/55" style={{ fontSize: "clamp(.6rem,1.2vw,1rem)" }}>{format(today, "EEEE d MMMM")}</p>
+        <p className="opacity-55" style={{ fontSize: "clamp(.6rem,1.2vw,1rem)" }}>{format(today, "EEEE d MMMM")}</p>
       </div>
       <div className="grid shrink-0 grid-cols-7 gap-[0.6vmin] pb-[0.6vmin]">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-          <p key={label} className="text-center font-bold uppercase tracking-wider text-white/45" style={{ fontSize: "clamp(.5rem,1vw,.85rem)" }}>
+          <p key={label} className="text-center font-bold uppercase tracking-wider opacity-45" style={{ fontSize: "clamp(.5rem,1vw,.85rem)" }}>
             {label}
           </p>
         ))}
@@ -209,7 +214,7 @@ function MonthCalendarWidget({ widget, events, accent }: { widget: DisplayWidget
                 now ? "bg-white/[.16] ring-1 ring-white/40" : current ? "bg-white/[.06]" : "bg-white/[.02]"
               }`}
             >
-              <p className={`font-bold ${current ? "text-white/85" : "text-white/30"}`} style={{ fontSize: "clamp(.55rem,1.1vw,1rem)" }}>
+              <p className={`font-bold ${current ? "opacity-85" : "opacity-30"}`} style={{ fontSize: "clamp(.55rem,1.1vw,1rem)" }}>
                 {format(day, "d")}
               </p>
               <DayEvents events={dayEvents} style={style} colour={colour} />
@@ -239,7 +244,7 @@ function WeekCalendarWidget({ widget, events, accent }: { widget: DisplayWidgetL
   const byDay = useMemo(() => eventsByDay(events, categories), [events, categories]);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <WidgetHeading
         icon={<CalendarDays style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
         title={widget.title || "This week"}
@@ -253,10 +258,10 @@ function WeekCalendarWidget({ widget, events, accent }: { widget: DisplayWidgetL
               key={day.toISOString()}
               className={`flex min-h-0 flex-col overflow-hidden rounded-[1vmin] p-[0.8vmin] ${isToday(day) ? "bg-white/[.16] ring-1 ring-white/40" : "bg-white/[.05]"}`}
             >
-              <p className="shrink-0 font-bold uppercase tracking-wide text-white/50" style={{ fontSize: "clamp(.45rem,.9vw,.8rem)" }}>
+              <p className="shrink-0 font-bold uppercase tracking-wide opacity-50" style={{ fontSize: "clamp(.45rem,.9vw,.8rem)" }}>
                 {format(day, "EEE")}
               </p>
-              <p className="shrink-0 font-bold text-white/90" style={{ fontSize: "clamp(.7rem,1.5vw,1.4rem)" }}>{format(day, "d")}</p>
+              <p className="shrink-0 font-bold opacity-90" style={{ fontSize: "clamp(.7rem,1.5vw,1.4rem)" }}>{format(day, "d")}</p>
               <DayEvents events={dayEvents} style={style} colour={colour} />
             </div>
           );
@@ -283,14 +288,14 @@ function AgendaCalendarWidget({ widget, events, accent }: { widget: DisplayWidge
   const { visible: page, pages, index } = useCyclingChunk(visible, 8, widget.autoCycleSeconds || 20);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <WidgetHeading
         icon={<CalendarDays style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
         title={widget.title || "Coming up"}
         accent={accent}
       />
       <div className="min-h-0 flex-1 space-y-[0.8vmin] overflow-hidden">
-        {page.length === 0 && <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing coming up.</p>}
+        {page.length === 0 && <p className="opacity-45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing coming up.</p>}
         {page.map((event) => {
           const start = parseISO(event.startDate);
           return (
@@ -298,7 +303,7 @@ function AgendaCalendarWidget({ widget, events, accent }: { widget: DisplayWidge
               <span className="mt-[0.6vmin] h-[1vmin] w-[1vmin] min-h-[6px] min-w-[6px] shrink-0 rounded-full" style={{ backgroundColor: colour }} />
               <div className="min-w-0">
                 <p className="truncate font-semibold" style={{ fontSize: "clamp(.7rem,1.5vw,1.3rem)" }}>{event.title}</p>
-                <p className="text-white/55" style={{ fontSize: "clamp(.55rem,1.1vw,1rem)" }}>
+                <p className="opacity-55" style={{ fontSize: "clamp(.55rem,1.1vw,1rem)" }}>
                   {isToday(start) ? "Today" : format(start, "EEE d MMM")}
                   {!event.allDay ? ` · ${format(start, "HH:mm")}` : " · All day"}
                 </p>
@@ -363,14 +368,14 @@ function TasksWidget({ widget, tasks, accent }: { widget: DisplayWidgetLayout; t
   const { visible, pages, index } = useCyclingChunk(rows, widget.taskLimit || 8, widget.autoCycleSeconds || 20);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <WidgetHeading
         icon={<ListChecks style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
         title={widget.title || "To do"}
         accent={accent}
       />
       <div className="min-h-0 flex-1 space-y-[0.6vmin] overflow-hidden">
-        {visible.length === 0 && <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing to do.</p>}
+        {visible.length === 0 && <p className="opacity-45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing to do.</p>}
         {visible.map((row) => (
           <div
             key={row.key}
@@ -378,19 +383,19 @@ function TasksWidget({ widget, tasks, accent }: { widget: DisplayWidgetLayout; t
             style={row.child ? { marginLeft: "2.4vmin" } : undefined}
           >
             {row.child
-              ? <CornerDownRight className="shrink-0 text-white/30" style={{ width: "1.6vmin", height: "1.6vmin", minWidth: 11, minHeight: 11 }} />
+              ? <CornerDownRight className="shrink-0 opacity-30" style={{ width: "1.6vmin", height: "1.6vmin", minWidth: 11, minHeight: 11 }} />
               : row.done
                 ? <CheckCircle2 className="shrink-0 text-emerald-400" style={{ width: "2vmin", height: "2vmin", minWidth: 13, minHeight: 13 }} />
                 : <Circle className="shrink-0" style={{ width: "2vmin", height: "2vmin", minWidth: 13, minHeight: 13, color: accent }} />}
             <div className="min-w-0 flex-1">
               <p
-                className={`truncate ${row.child ? "font-medium text-white/80" : "font-semibold"} ${row.done ? "text-white/40 line-through" : ""}`}
+                className={`truncate ${row.child ? "font-medium opacity-80" : "font-semibold"} ${row.done ? "opacity-40 line-through" : ""}`}
                 style={{ fontSize: row.child ? "clamp(.6rem,1.25vw,1.05rem)" : "clamp(.7rem,1.5vw,1.25rem)" }}
               >
                 {row.title}
               </p>
               {row.meta && (
-                <p className="truncate text-white/45" style={{ fontSize: "clamp(.5rem,1vw,.85rem)" }}>{row.meta}</p>
+                <p className="truncate opacity-45" style={{ fontSize: "clamp(.5rem,1vw,.85rem)" }}>{row.meta}</p>
               )}
             </div>
           </div>
@@ -421,22 +426,22 @@ function TodayWidget({
   const { visible, pages, index } = useCyclingChunk(rows, widget.taskLimit || 6, widget.autoCycleSeconds || 20);
 
   return (
-    <div className="flex h-full flex-col gap-[1.5vmin] p-[2vmin] text-white">
+    <div className="flex h-full flex-col gap-[1.5vmin] p-[2vmin]">
       <div className="shrink-0">
         <p className="font-display font-bold leading-none tabular-nums" style={{ color: accent, fontSize: "clamp(1.75rem,6vw,5rem)" }}>
           {format(now, widget.format24h === false ? "h:mm a" : "HH:mm")}
         </p>
-        <p className="mt-[0.5vmin] font-medium text-white/70" style={{ fontSize: "clamp(.75rem,2vw,1.75rem)" }}>
+        <p className="mt-[0.5vmin] font-medium opacity-70" style={{ fontSize: "clamp(.75rem,2vw,1.75rem)" }}>
           {format(now, "EEEE d MMMM")}
         </p>
       </div>
       <div className="grid min-h-0 flex-1 gap-[1.5vmin] sm:grid-cols-2">
         <div className="flex min-h-0 flex-col">
-          <p className="mb-[0.8vmin] flex shrink-0 items-center gap-[0.8vmin] font-bold uppercase tracking-wider text-white/50" style={{ fontSize: "clamp(.6rem,1.3vw,1.1rem)" }}>
+          <p className="mb-[0.8vmin] flex shrink-0 items-center gap-[0.8vmin] font-bold uppercase tracking-wider opacity-50" style={{ fontSize: "clamp(.6rem,1.3vw,1.1rem)" }}>
             <CalendarDays style={{ width: "1.8vmin", height: "1.8vmin", minWidth: 12, minHeight: 12 }} /> What’s on
           </p>
           <div className="min-h-0 flex-1 space-y-[0.7vmin] overflow-hidden">
-            {upcoming.length === 0 && <p className="text-white/40" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>Nothing coming up.</p>}
+            {upcoming.length === 0 && <p className="opacity-40" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>Nothing coming up.</p>}
             {upcoming.map((event) => {
               const start = parseISO(event.startDate);
               return (
@@ -444,7 +449,7 @@ function TodayWidget({
                   <span className="mt-[0.7vmin] h-[0.9vmin] w-[0.9vmin] min-h-[5px] min-w-[5px] shrink-0 rounded-full" style={{ backgroundColor: colour }} />
                   <div className="min-w-0">
                     <p className="truncate font-semibold" style={{ fontSize: "clamp(.7rem,1.5vw,1.25rem)" }}>{event.title}</p>
-                    <p className="text-white/55" style={{ fontSize: "clamp(.55rem,1.1vw,.95rem)" }}>
+                    <p className="opacity-55" style={{ fontSize: "clamp(.55rem,1.1vw,.95rem)" }}>
                       {isToday(start) ? "Today" : format(start, "EEE d MMM")}{event.allDay ? " · All day" : ` · ${format(start, "HH:mm")}`}
                     </p>
                   </div>
@@ -454,11 +459,11 @@ function TodayWidget({
           </div>
         </div>
         <div className="flex min-h-0 flex-col">
-          <p className="mb-[0.8vmin] flex shrink-0 items-center gap-[0.8vmin] font-bold uppercase tracking-wider text-white/50" style={{ fontSize: "clamp(.6rem,1.3vw,1.1rem)" }}>
+          <p className="mb-[0.8vmin] flex shrink-0 items-center gap-[0.8vmin] font-bold uppercase tracking-wider opacity-50" style={{ fontSize: "clamp(.6rem,1.3vw,1.1rem)" }}>
             <ListChecks style={{ width: "1.8vmin", height: "1.8vmin", minWidth: 12, minHeight: 12 }} /> To do
           </p>
           <div className="min-h-0 flex-1 space-y-[0.6vmin] overflow-hidden">
-            {visible.length === 0 && <p className="text-white/40" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>All clear.</p>}
+            {visible.length === 0 && <p className="opacity-40" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>All clear.</p>}
             {visible.map((row) => (
               <div
                 key={row.key}
@@ -466,14 +471,14 @@ function TodayWidget({
                 style={row.child ? { marginLeft: "2vmin" } : undefined}
               >
                 {row.child
-                  ? <CornerDownRight className="shrink-0 text-white/30" style={{ width: "1.4vmin", height: "1.4vmin", minWidth: 10, minHeight: 10 }} />
+                  ? <CornerDownRight className="shrink-0 opacity-30" style={{ width: "1.4vmin", height: "1.4vmin", minWidth: 10, minHeight: 10 }} />
                   : <Circle className="shrink-0" style={{ width: "1.6vmin", height: "1.6vmin", minWidth: 11, minHeight: 11, color: accent }} />}
                 <div className="min-w-0 flex-1">
-                  <p className={`truncate ${row.child ? "text-white/80" : "font-medium"}`} style={{ fontSize: row.child ? "clamp(.6rem,1.2vw,1rem)" : "clamp(.7rem,1.45vw,1.2rem)" }}>
+                  <p className={`truncate ${row.child ? "opacity-80" : "font-medium"}`} style={{ fontSize: row.child ? "clamp(.6rem,1.2vw,1rem)" : "clamp(.7rem,1.45vw,1.2rem)" }}>
                     {row.title}
                   </p>
                   {row.meta && !row.child && (
-                    <p className="truncate text-white/45" style={{ fontSize: "clamp(.5rem,.95vw,.8rem)" }}>{row.meta}</p>
+                    <p className="truncate opacity-45" style={{ fontSize: "clamp(.5rem,.95vw,.8rem)" }}>{row.meta}</p>
                   )}
                 </div>
               </div>
@@ -501,7 +506,7 @@ function WeatherWidget({ widget, accent }: { widget: DisplayWidgetLayout; accent
 
   if (!weather) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-[1vmin] p-[2vmin] text-center text-white/45">
+      <div className="flex h-full flex-col items-center justify-center gap-[1vmin] p-[2vmin] text-center opacity-45">
         <Cloud style={{ width: "6vmin", height: "6vmin", minWidth: 24, minHeight: 24 }} />
         <p style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>
           {failed ? "Choose a location for this widget in Remote Displays." : "Checking the forecast…"}
@@ -511,17 +516,17 @@ function WeatherWidget({ widget, accent }: { widget: DisplayWidgetLayout; accent
   }
 
   return (
-    <div className="flex h-full flex-col justify-center p-[2vmin] text-white">
+    <div className="flex h-full flex-col justify-center p-[2vmin]">
       <div className="flex items-center gap-[2vmin]">
         <Icon style={{ width: "9vmin", height: "9vmin", minWidth: 34, minHeight: 34, color: accent }} />
         <div className="min-w-0">
           <p className="font-display font-bold leading-none tabular-nums" style={{ fontSize: "clamp(1.75rem,5.5vw,4.5rem)" }}>
             {weather.temperature}°
           </p>
-          <p className="truncate font-medium text-white/70" style={{ fontSize: "clamp(.7rem,1.6vw,1.4rem)" }}>{weather.description}</p>
+          <p className="truncate font-medium opacity-70" style={{ fontSize: "clamp(.7rem,1.6vw,1.4rem)" }}>{weather.description}</p>
         </div>
       </div>
-      <p className="mt-[1.2vmin] text-white/50" style={{ fontSize: "clamp(.6rem,1.2vw,1.1rem)" }}>
+      <p className="mt-[1.2vmin] opacity-50" style={{ fontSize: "clamp(.6rem,1.2vw,1.1rem)" }}>
         High {weather.high}° · Low {weather.low}°{widget.weatherPlace ? ` · ${widget.weatherPlace}` : ""}
       </p>
     </div>
@@ -538,7 +543,7 @@ function MessageWidget({ widget, accent }: { widget: DisplayWidgetLayout; accent
         </p>
       )}
       <p
-        className="font-display font-bold leading-tight text-white"
+        className="font-display font-bold leading-tight"
         style={{ fontSize: text.length > 90 ? "clamp(.85rem,2.2vw,2rem)" : "clamp(1.1rem,3.4vw,3.5rem)" }}
       >
         {text || "Add a message in Remote Displays."}
@@ -553,10 +558,10 @@ function CountdownWidget({ widget, accent }: { widget: DisplayWidgetLayout; acce
   const days = target && !Number.isNaN(target.getTime()) ? differenceInCalendarDays(target, now) : null;
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-[1vmin] p-[2vmin] text-center text-white">
+    <div className="flex h-full flex-col items-center justify-center gap-[1vmin] p-[2vmin] text-center">
       <Timer style={{ width: "4vmin", height: "4vmin", minWidth: 18, minHeight: 18, color: accent }} />
       {days === null ? (
-        <p className="text-white/45" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>Pick a date in Remote Displays.</p>
+        <p className="opacity-45" style={{ fontSize: "clamp(.65rem,1.3vw,1.1rem)" }}>Pick a date in Remote Displays.</p>
       ) : (
         <>
           <p className="font-display font-bold leading-none tabular-nums" style={{ color: accent, fontSize: "clamp(2rem,7vw,6rem)" }}>
@@ -565,7 +570,7 @@ function CountdownWidget({ widget, accent }: { widget: DisplayWidgetLayout; acce
           <p className="font-semibold" style={{ fontSize: "clamp(.75rem,1.8vw,1.6rem)" }}>
             {days === 0 ? "Today" : days > 0 ? `day${days === 1 ? "" : "s"} to go` : `day${days === -1 ? "" : "s"} ago`}
           </p>
-          <p className="text-white/60" style={{ fontSize: "clamp(.6rem,1.3vw,1.2rem)" }}>
+          <p className="opacity-60" style={{ fontSize: "clamp(.6rem,1.3vw,1.2rem)" }}>
             {widget.countdownLabel || (target ? format(target, "EEEE d MMMM") : "")}
           </p>
         </>
@@ -585,7 +590,7 @@ function BirthdaysWidget({ widget, birthdays, accent }: { widget: DisplayWidgetL
   const { visible, pages, index } = useCyclingChunk(upcoming, 5, widget.autoCycleSeconds || 20);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <WidgetHeading
         icon={<Cake style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
         title={widget.title || "Birthdays"}
@@ -593,7 +598,7 @@ function BirthdaysWidget({ widget, birthdays, accent }: { widget: DisplayWidgetL
       />
       <div className="min-h-0 flex-1 space-y-[0.6vmin] overflow-hidden">
         {visible.length === 0 && (
-          <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing in the next {daysAhead} days.</p>
+          <p className="opacity-45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>Nothing in the next {daysAhead} days.</p>
         )}
         {visible.map((birthday) => (
           <div key={birthday.id} className="flex items-center justify-between gap-[1vmin] rounded-[1vmin] bg-white/[.09] px-[1.2vmin] py-[0.9vmin]">
@@ -614,7 +619,7 @@ function FamilyBoardWidget({ widget, messages, accent }: { widget: DisplayWidget
   const { visible, pages, index } = useCyclingChunk(rows, 3, widget.autoCycleSeconds || 20);
 
   return (
-    <div className="flex h-full flex-col p-[1.5vmin] text-white">
+    <div className="flex h-full flex-col p-[1.5vmin]">
       <WidgetHeading
         icon={<MessageCircle style={{ width: "2.4vmin", height: "2.4vmin", minWidth: 16, minHeight: 16 }} />}
         title={widget.title || "Family board"}
@@ -622,7 +627,7 @@ function FamilyBoardWidget({ widget, messages, accent }: { widget: DisplayWidget
       />
       <div className="min-h-0 flex-1 space-y-[0.8vmin] overflow-hidden">
         {visible.length === 0 && (
-          <p className="text-white/45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>No notes yet — post one from your phone.</p>
+          <p className="opacity-45" style={{ fontSize: "clamp(.7rem,1.4vw,1.1rem)" }}>No notes yet — post one from your phone.</p>
         )}
         {visible.map((message) => (
           <div key={message.id} className="rounded-[1vmin] bg-white/[.09] px-[1.2vmin] py-[0.9vmin]">
@@ -656,6 +661,8 @@ export function DisplayPageRenderer({
 }) {
   const laidOut = useMemo(() => applyPageLayout(page), [page]);
   const theme = displayTheme(laidOut);
+  const ink = displayInkColor(laidOut, theme);
+  const inkShadow = displayInkShadow(ink);
 
   // Notch/home-indicator insets are rarely equal on opposite edges (e.g. a
   // taller top inset than bottom), so padding each side by its own raw inset
@@ -669,7 +676,15 @@ export function DisplayPageRenderer({
   );
 
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: theme.background }}>
+    <div
+      className="absolute inset-0 overflow-hidden"
+      style={{
+        backgroundColor: theme.background,
+        color: ink,
+        ["--display-ink" as string]: ink,
+        textShadow: inkShadow,
+      }}
+    >
       <DisplayBackdrop
         kind={laidOut.backdrop}
         accent={theme.accent}
@@ -696,33 +711,41 @@ export function DisplayPageRenderer({
           showCaptions: true,
           photoIds: widget.photoIds || [],
         };
+        const glass = widget.type !== "photos";
         return (
           <div
             key={widget.id}
-            className="absolute overflow-hidden rounded-[clamp(.75rem,1.5vw,1.5rem)] border border-white/10 shadow-2xl"
+            className="absolute overflow-hidden rounded-[clamp(.75rem,1.5vw,1.5rem)]"
             style={{
               left: `${(widget.x / 12) * 100}%`,
               top: `${(widget.y / 12) * 100}%`,
               width: `${(widget.w / 12) * 100}%`,
               height: `${(widget.h / 12) * 100}%`,
-              backgroundColor: theme.panel,
+              backgroundColor: glass ? "transparent" : "#000",
+              border: glass ? `1px solid color-mix(in srgb, ${ink} 16%, transparent)` : "1px solid rgba(255,255,255,.08)",
+              boxShadow: glass ? "none" : "0 25px 50px -12px rgb(0 0 0 / 0.35)",
+              backdropFilter: glass ? "blur(14px) saturate(1.15)" : undefined,
+              WebkitBackdropFilter: glass ? "blur(14px) saturate(1.15)" : undefined,
+              backgroundImage: glass
+                ? `linear-gradient(180deg, color-mix(in srgb, ${ink} 8%, transparent), transparent 78%)`
+                : undefined,
             }}
           >
-            {widget.type === "clock" && <WidgetClock widget={widget} accent={accent} />}
+            {widget.type === "clock" && <WidgetClock widget={widget} accent={accent} ink={ink} />}
             {widget.type === "photos" && (
               selectedPhotos.length > 0 ? (
                 <PhotoFrameScene photos={selectedPhotos} settings={photoSettings} />
               ) : photosLoading ? (
-                <div className="flex h-full animate-pulse items-center justify-center p-4 text-center text-sm text-white/35">Loading photos…</div>
+                <div className="flex h-full animate-pulse items-center justify-center p-4 text-center text-sm opacity-35">Loading photos…</div>
               ) : (widget.photoAlbumIds?.length || widget.photoIds?.length || widget.photoRefs?.length) ? (
                 <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
-                  <p className="text-sm font-semibold text-white/60">Those photos aren't available right now</p>
-                  <p className="text-xs text-white/35">Check the album still has pictures in it on the Photos page.</p>
+                  <p className="text-sm font-semibold opacity-60">Those photos aren't available right now</p>
+                  <p className="text-xs opacity-35">Check the album still has pictures in it on the Photos page.</p>
                 </div>
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
-                  <p className="text-sm font-semibold text-white/60">No photos picked for this frame yet</p>
-                  <p className="text-xs text-white/35">Pick albums or pictures for it in Remote Displays.</p>
+                  <p className="text-sm font-semibold opacity-60">No photos picked for this frame yet</p>
+                  <p className="text-xs opacity-35">Pick albums or pictures for it in Remote Displays.</p>
                 </div>
               )
             )}

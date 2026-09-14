@@ -23,7 +23,7 @@ service firebase.storage {
         'deviceId' in request.auth.token &&
         request.auth.uid == userId &&
         firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.uid == userId &&
-        firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.revoked == false;
+        firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.revoked != true;
     }
 
     function canAccessHousehold(householdId) {

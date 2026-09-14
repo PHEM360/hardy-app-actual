@@ -56,7 +56,11 @@ export function resolveDisplayPhotos<T extends PhotoPickItem>(photos: T[], pick:
     if (photoIds.size) {
       pool = pool.filter((photo) => photoIds.has(photo.id) || photoIds.has(photoLibraryKey(photo)));
     }
-    return pool.filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
+    const live = pool.filter((photo) => typeof photo.url === "string" && photo.url.trim().length > 0);
+    if (live.length > 0 || !pick.photoRefs?.length) return live;
+    // The wall screen sometimes cannot list the live album (display session
+    // rules, a slow first snapshot). Keep the urls saved with the page so
+    // it still matches the Remote Displays preview instead of going blank.
   }
 
   if (pick.photoRefs?.length) {

@@ -41,6 +41,7 @@ export { DEFAULT_NIGHT_MODE } from "@/lib/displayNightMode";
 
 export type {
   DisplayBackdropKind,
+  DisplayInkMode,
   DisplayPage,
   DisplayPageLayout,
   DisplayPagePreset,

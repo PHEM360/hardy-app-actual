@@ -11,9 +11,9 @@ import { useMyDevices } from "@/hooks/useMyDevices";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import {
   BACKDROP_GROUPS, BACKDROP_HINTS, BACKDROP_LABELS, BACKDROP_THUMBS, DEFAULT_DISPLAY_PAGES, DISPLAY_THEMES,
-  DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS,
+  DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS, displayInkColor, displayTheme,
   applyPageLayout, durationLabel, isEmptyDisplayWidget, isPageActiveAt, pageScheduleLabel,
-  type DisplayPage, type DisplayWidgetLayout,
+  type DisplayInkMode, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
 import { useDisplayOwnerPhotos } from "@/hooks/useDisplayOwnerPhotos";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
@@ -30,6 +30,7 @@ import { SunriseLightsPanel } from "@/components/display/SunriseLightsPanel";
 import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
 import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
 import { lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
+import { resolveDisplayPhotos, snapshotPhotoRefs } from "@/lib/photoSelection";
 import { toast } from "sonner";
 
 const FIELD = "h-10 w-full min-w-0 rounded-xl border border-white/15 bg-white/[0.09] px-3 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-primary focus:bg-white/[0.14]";
@@ -163,10 +164,6 @@ export default function RemoteDisplays() {
     };
   }, [updatePages]);
 
-  useEffect(() => {
-    setDeviceName(device?.label || "");
-  }, [device?.label]);
-
   // The settings rail sits beside the builder on wide screens but below it on a
   // laptop, where opening it off-screen looks like the button did nothing.
   useEffect(() => {
@@ -206,6 +203,31 @@ export default function RemoteDisplays() {
       widgets: selectedPage.widgets.map((widget) => widget.id === selectedWidget.id ? { ...widget, ...patch } : widget),
     });
   };
+
+  useEffect(() => {
+    if (photosLoading || !editorPages.length) return;
+    let changed = false;
+    const next = editorPages.map((page) => ({
+      ...page,
+      widgets: page.widgets.map((widget) => {
+        if (widget.type !== "photos") return widget;
+        if (!(widget.photoAlbumIds?.length || widget.photoIds?.length)) return widget;
+        if (widget.photoRefs?.length) return widget;
+        const resolved = resolveDisplayPhotos(previewPhotos, {
+          photoAlbumIds: widget.photoAlbumIds,
+          photoIds: widget.photoIds,
+        });
+        if (!resolved.length) return widget;
+        changed = true;
+        return { ...widget, photoRefs: snapshotPhotoRefs(resolved) };
+      }),
+    }));
+    if (changed) savePages(next);
+    // Snapshot urls into the page once so the wall screen can show them even
+    // if its own album listener is empty. savePages updates editorPages and
+    // the next pass is a no-op because photoRefs are then filled.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorPages, previewPhotos, photosLoading]);
 
   const addPreset = (presetId: string) => {
     const preset = PAGE_PRESETS.find((item) => item.id === presetId);
@@ -637,6 +659,43 @@ export default function RemoteDisplays() {
                             </p>
                           )}
                         </div>
+                        <div>
+                          <p className="text-xs font-semibold text-white/80">Clock and text colour</p>
+                          <p className="mt-0.5 text-[10px] text-white/40">
+                            Auto picks a colour that stays readable on the background. Theme colour used to only tint accents — this is the actual type.
+                          </p>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {([
+                              ["auto", "Auto"],
+                              ["light", "Light"],
+                              ["dark", "Dark"],
+                            ] as [DisplayInkMode, string][]).map(([mode, label]) => {
+                              const active = (selectedPage.ink || "auto") === mode && !selectedPage.textColor;
+                              return (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  onClick={() => updatePage({ ...selectedPage, ink: mode, textColor: "" })}
+                                  className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold ${
+                                    active ? "bg-gradient-primary text-primary-foreground" : "bg-white/10 text-white/80 hover:bg-white/16"
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                            <label className={`flex items-center gap-1.5 rounded-xl px-2 py-1 text-[11px] font-semibold ${selectedPage.textColor ? "bg-gradient-primary text-primary-foreground" : "bg-white/10 text-white/80"}`}>
+                              Custom
+                              <input
+                                type="color"
+                                value={selectedPage.textColor || displayInkColor(selectedPage, displayTheme(selectedPage))}
+                                onChange={(event) => updatePage({ ...selectedPage, textColor: event.target.value, ink: "auto" })}
+                                aria-label="Custom clock and text colour"
+                                className="h-6 w-8 cursor-pointer rounded-md border border-white/20 bg-transparent p-0.5"
+                              />
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -666,7 +725,7 @@ export default function RemoteDisplays() {
                             />
                           </div>
                           <div className="flex items-center justify-between gap-2">
-                            <label className="text-xs font-semibold text-white/80" htmlFor="widget-accent">Accent colour</label>
+                            <label className="text-xs font-semibold text-white/80" htmlFor="widget-accent">Highlight colour</label>
                             <input
                               id="widget-accent"
                               type="color"

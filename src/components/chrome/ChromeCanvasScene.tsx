@@ -86,11 +86,13 @@ function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
 }
 
 export function ChromeCanvasScene({ scene, compact = false }: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
-    if (!canvas) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
@@ -103,10 +105,10 @@ export function ChromeCanvasScene({ scene, compact = false }: Props) {
     const extras: Particle[] = [];
 
     const resize = () => {
-      const rect = canvas.getBoundingClientRect();
+      const rect = wrap.getBoundingClientRect();
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = Math.max(1, Math.floor(rect.width));
-      h = Math.max(1, Math.floor(rect.height));
+      w = Math.max(2, Math.floor(rect.width));
+      h = Math.max(2, Math.floor(rect.height));
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -194,15 +196,21 @@ export function ChromeCanvasScene({ scene, compact = false }: Props) {
 
     resize();
     const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
+    ro.observe(wrap);
+    window.addEventListener("resize", resize);
     raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      window.removeEventListener("resize", resize);
     };
   }, [scene, compact]);
 
-  return <canvas ref={ref} className="absolute inset-0 h-full w-full" />;
+  return (
+    <div ref={wrapRef} className="absolute inset-0">
+      <canvas ref={ref} className="absolute inset-0 h-full w-full" />
+    </div>
+  );
 }
 
 function drawGoldenHour(ctx: CanvasRenderingContext2D, t: number, w: number, h: number, dust: Particle[]) {

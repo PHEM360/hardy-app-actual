@@ -342,6 +342,20 @@ const CalendarPage = () => {
     setAddOpen(true);
   };
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!canEdit || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (event.key === "c" || event.key === "C") {
+        event.preventDefault();
+        openAdd(selectedDay ?? undefined);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canEdit, selectedDay]);
+
   const openEdit = (event: CalendarEvent) => {
     // Virtual events (auto-imported) and birthdays synced from the Birthdays
     // widget are read-only here — manage birthdays from that widget instead,
@@ -798,13 +812,14 @@ const CalendarPage = () => {
               return (
                 <button
                   key={day.toISOString()}
-                  onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`flex min-h-[78px] flex-col border border-border/20 p-1 text-left transition-colors sm:min-h-[104px] sm:p-1.5 md:min-h-[122px] ${
+                  type="button"
+                  onClick={() => openAdd(day)}
+                  className={`group relative flex min-h-[78px] flex-col border border-border/20 p-1 text-left transition-colors sm:min-h-[104px] sm:p-1.5 md:min-h-[122px] ${
                     !inMonth ? "bg-background/40 text-muted-foreground" : selected ? "bg-primary/12" : today ? "bg-primary/8" : "bg-card hover:bg-primary/5"
                   }`}
                 >
                   <span
-                    className={`text-[11px] sm:text-xs font-semibold w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center mb-0.5 ${
+                    className={`mb-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-7 sm:w-7 sm:text-xs ${
                       today
                         ? "bg-primary text-primary-foreground"
                         : selected
@@ -813,6 +828,19 @@ const CalendarPage = () => {
                         ? "text-card-foreground"
                         : "text-muted-foreground/50"
                     }`}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day));
+                    }}
+                    onKeyDown={(ev) => {
+                      if (ev.key !== "Enter" && ev.key !== " ") return;
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day));
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title="Show this day's events"
                   >
                     {format(day, "d")}
                   </span>
@@ -827,8 +855,13 @@ const CalendarPage = () => {
                     </div>
                   ))}
                   {dayEvts.length > 3 && (
-                    <span className="text-[8px] sm:text-[9px] text-muted-foreground px-1">
+                    <span className="px-1 text-[8px] text-muted-foreground sm:text-[9px]">
                       +{dayEvts.length - 3} more
+                    </span>
+                  )}
+                  {canEdit && (
+                    <span className="pointer-events-none mt-auto hidden items-center justify-center rounded-md py-0.5 text-muted-foreground/40 group-hover:flex">
+                      <Plus className="h-3 w-3" />
                     </span>
                   )}
                 </button>
@@ -873,18 +906,23 @@ const CalendarPage = () => {
                   </button>
 
                   {/* Events */}
-                  <div className="flex-1 p-1 sm:p-1.5 space-y-0.5 overflow-hidden">
+                  <div
+                    className="flex-1 space-y-0.5 overflow-hidden p-1 sm:p-1.5"
+                    onClick={() => openAdd(day)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") openAdd(day);
+                    }}
+                  >
                     {dayEvts.map((e) => (
-                      <button key={e.id} type="button" onClick={() => openEdit(e)} className="block w-full text-left">
+                      <button key={e.id} type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="block w-full text-left">
                         <EventChip event={e} color={getEventColor(e)} />
                       </button>
                     ))}
-                    <button
-                      onClick={() => openAdd(day)}
-                      className="w-full text-[9px] sm:text-[10px] text-muted-foreground/50 hover:text-muted-foreground py-0.5 flex items-center justify-center hover:bg-muted/30 rounded transition-colors"
-                    >
-                      <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    </button>
+                    <span className="flex w-full items-center justify-center rounded py-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:bg-muted/30 hover:text-muted-foreground sm:text-[10px]">
+                      <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    </span>
                   </div>
                 </div>
               );
@@ -1021,11 +1059,28 @@ const CalendarPage = () => {
                 className="rounded-2xl border border-border/50 bg-card p-3 shadow-card"
                 style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(220,60%,55%)" : "transparent" }}
               >
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {isToday(day) ? "Today · " : ""}{format(day, "EEEE d MMMM")}
-                </p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {isToday(day) ? "Today · " : ""}{format(day, "EEEE d MMMM")}
+                  </p>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => openAdd(day)}
+                      className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/15"
+                    >
+                      <Plus className="h-3 w-3" /> Add
+                    </button>
+                  )}
+                </div>
                 {dayEvts.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nothing planned</p>
+                  <button
+                    type="button"
+                    onClick={() => openAdd(day)}
+                    className="w-full rounded-xl py-2 text-left text-sm text-muted-foreground hover:bg-muted/40"
+                  >
+                    Nothing planned — tap to add
+                  </button>
                 ) : (
                   <div className="space-y-1.5">
                     {dayEvts.map((e) => (

@@ -34,6 +34,15 @@ describe("photo selection for displays", () => {
     expect(resolveDisplayPhotos(photos, stalePick).map((photo) => photo.id)).toEqual(["a", "b"]);
   });
 
+  it("falls back to saved photo urls when the live album list is empty", () => {
+    const pick = {
+      photoAlbumIds: ["chris:hols"],
+      photoRefs: [{ id: "chris:a", url: "https://img/a.jpg", caption: "A" }],
+    };
+    expect(resolveDisplayPhotos([], pick).map((photo) => photo.url)).toEqual(["https://img/a.jpg"]);
+    expect(resolveDisplayPhotos(photos, pick).map((photo) => photo.id)).toEqual(["a", "b"]);
+  });
+
   it("shows nothing when nothing has been picked yet, instead of every photo", () => {
     expect(resolveDisplayPhotos(photos, {})).toEqual([]);
   });

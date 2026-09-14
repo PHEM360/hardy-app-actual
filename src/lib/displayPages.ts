@@ -31,7 +31,19 @@ export type DisplayBackdropKind =
   | "ocean"
   | "sailing"
   | "pasture"
-  | "harvest";
+  | "harvest"
+  | "galaxy"
+  | "silk"
+  | "caustics"
+  | "bokeh"
+  | "plasma"
+  | "orion"
+  | "biolume"
+  | "startrails"
+  | "lava"
+  | "ionstorm";
+
+export type DisplayInkMode = "auto" | "light" | "dark";
 
 export interface DisplayWidgetLayout {
   id: string;
@@ -81,6 +93,10 @@ export interface DisplayPage {
   splitRatio?: number;
   theme?: string;
   backdrop?: DisplayBackdropKind;
+  /** Auto follows the backdrop; light/dark force clock and body text. */
+  ink?: DisplayInkMode;
+  /** Hex override for clock and body text. Empty/omitted means use ink + theme. */
+  textColor?: string;
   /** "HH:mm" window this page may appear in. Omitted means all day. */
   activeFrom?: string;
   activeTo?: string;
@@ -131,17 +147,19 @@ export interface DisplayTheme {
   label: string;
   background: string;
   accent: string;
+  /** Clock and body text when the backdrop does not force a contrast colour. */
+  ink: string;
   /** Tint layered over the background behind each widget. */
   panel: string;
 }
 
 export const DISPLAY_THEMES: DisplayTheme[] = [
-  { id: "midnight", label: "Midnight", background: "#09090b", accent: "#7dd3fc", panel: "rgba(255,255,255,0.055)" },
-  { id: "harbour", label: "Harbour", background: "#0b1524", accent: "#93c5fd", panel: "rgba(147,197,253,0.09)" },
-  { id: "forest", label: "Forest", background: "#0a1a14", accent: "#6ee7b7", panel: "rgba(110,231,183,0.08)" },
-  { id: "plum", label: "Plum", background: "#170d1e", accent: "#f0abfc", panel: "rgba(240,171,252,0.09)" },
-  { id: "ember", label: "Ember", background: "#1b0f07", accent: "#fbbf24", panel: "rgba(251,191,36,0.09)" },
-  { id: "slate", label: "Slate", background: "#131417", accent: "#e4e4e7", panel: "rgba(255,255,255,0.07)" },
+  { id: "midnight", label: "Midnight", background: "#09090b", accent: "#7dd3fc", ink: "#e0f2fe", panel: "rgba(255,255,255,0.055)" },
+  { id: "harbour", label: "Harbour", background: "#0b1524", accent: "#93c5fd", ink: "#dbeafe", panel: "rgba(147,197,253,0.09)" },
+  { id: "forest", label: "Forest", background: "#0a1a14", accent: "#6ee7b7", ink: "#d1fae5", panel: "rgba(110,231,183,0.08)" },
+  { id: "plum", label: "Plum", background: "#170d1e", accent: "#f0abfc", ink: "#fae8ff", panel: "rgba(240,171,252,0.09)" },
+  { id: "ember", label: "Ember", background: "#1b0f07", accent: "#fbbf24", ink: "#fef3c7", panel: "rgba(251,191,36,0.09)" },
+  { id: "slate", label: "Slate", background: "#131417", accent: "#e4e4e7", ink: "#f4f4f5", panel: "rgba(255,255,255,0.07)" },
 ];
 
 export const BACKDROP_LABELS: Record<DisplayBackdropKind, string> = {
@@ -161,6 +179,16 @@ export const BACKDROP_LABELS: Record<DisplayBackdropKind, string> = {
   sailing: "Under sail",
   pasture: "Summer pasture",
   harvest: "Harvest fields",
+  galaxy: "Spiral galaxy",
+  silk: "Iridescent silk",
+  caustics: "Sunlit water",
+  bokeh: "Soft lights",
+  plasma: "Plasma ribbons",
+  orion: "Orion pillars",
+  biolume: "Bioluminescence",
+  startrails: "Star trails",
+  lava: "Lava lamp",
+  ionstorm: "Ion storm",
 };
 
 export const BACKDROP_HINTS: Record<DisplayBackdropKind, string> = {
@@ -180,13 +208,23 @@ export const BACKDROP_HINTS: Record<DisplayBackdropKind, string> = {
   sailing: "A yacht on open water",
   pasture: "Wind moving through summer grass",
   harvest: "Gold fields and hay at dusk",
+  galaxy: "A slow spiral with a ringed planet",
+  silk: "Iridescent cloth catching the light",
+  caustics: "Sun through water, shifting on the floor",
+  bokeh: "Out-of-focus lights drifting past",
+  plasma: "Electric colour folding through darkness",
+  orion: "A denser nebula with a dark dust lane",
+  biolume: "Creatures lighting a deep-sea night",
+  startrails: "Long-exposure rings around the pole",
+  lava: "Slow molten blobs rising and falling",
+  ionstorm: "Violet sky with the odd lightning fork",
 };
 
 export const BACKDROP_GROUPS: { id: string; label: string; options: DisplayBackdropKind[] }[] = [
-  { id: "calm", label: "Calm", options: ["none", "golden", "stars", "aurora", "nebula", "fireflies"] },
-  { id: "weather", label: "Weather", options: ["weather", "snow", "rain", "clouds"] },
+  { id: "space", label: "Space", options: ["none", "stars", "nebula", "orion", "galaxy", "startrails", "meteors", "plasma", "ionstorm"] },
+  { id: "light", label: "Light & water", options: ["aurora", "silk", "bokeh", "caustics", "biolume", "lava", "golden"] },
+  { id: "weather", label: "Weather", options: ["weather", "snow", "rain"] },
   { id: "places", label: "Places", options: ["harbour", "ocean", "sailing", "pasture", "harvest"] },
-  { id: "lively", label: "Lively", options: ["meteors"] },
 ];
 
 export const BACKDROP_THUMBS: Record<DisplayBackdropKind, string> = {
@@ -206,7 +244,43 @@ export const BACKDROP_THUMBS: Record<DisplayBackdropKind, string> = {
   sailing: "linear-gradient(180deg, #7dd3fc 0%, #0284c7 40%, #0c4a6e 100%)",
   pasture: "linear-gradient(180deg, #7dd3fc 0%, #86efac 42%, #365314 100%)",
   harvest: "linear-gradient(180deg, #fdba74 0%, #f59e0b 40%, #78350f 100%)",
+  galaxy: "conic-gradient(from 120deg at 40% 45%, #2e1065, #db2777, #1d4ed8, #020617)",
+  silk: "linear-gradient(135deg, #fda4af 0%, #c4b5fd 45%, #7dd3fc 100%)",
+  caustics: "radial-gradient(circle at 40% 30%, #fef9c3 0%, #22d3ee 38%, #0e7490 100%)",
+  bokeh: "radial-gradient(circle at 30% 40%, #f9a8d4 0%, #7c3aed 48%, #0f172a 100%)",
+  plasma: "linear-gradient(120deg, #4c1d95 0%, #db2777 40%, #0ea5e9 100%)",
+  orion: "radial-gradient(circle at 48% 50%, #fda4af 0%, #7c3aed 32%, #083344 70%, #020617 100%)",
+  biolume: "linear-gradient(180deg, #082f49 0%, #155e75 40%, #022c22 100%)",
+  startrails: "radial-gradient(circle at 52% 42%, #93c5fd 0%, #1e3a8a 42%, #020617 100%)",
+  lava: "radial-gradient(circle at 50% 80%, #fb923c 0%, #b91c1c 40%, #1c1917 100%)",
+  ionstorm: "linear-gradient(180deg, #5b21b6 0%, #1e1b4b 48%, #0f0320 100%)",
 };
+
+/** Light scenes need dark type so the clock stays readable. */
+export const BACKDROP_DARK_TEXT = new Set<DisplayBackdropKind>([
+  "golden", "snow", "clouds", "pasture", "harvest",
+]);
+
+export function displayInkColor(page: DisplayPage, theme: DisplayTheme = displayTheme(page)): string {
+  const custom = page.textColor?.trim();
+  if (custom) return custom;
+  if (page.ink === "dark") return "#1c1917";
+  if (page.ink === "light") return "#f8fafc";
+  const kind = page.backdrop || "none";
+  if (BACKDROP_DARK_TEXT.has(kind)) return "#1c1917";
+  return theme.ink;
+}
+
+export function displayInkShadow(ink: string): string {
+  const hex = ink.replace("#", "");
+  const n = hex.length === 3
+    ? hex.split("").map((c) => parseInt(c + c, 16))
+    : [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+  const luma = (n[0] * 299 + n[1] * 587 + n[2] * 114) / 1000;
+  return luma > 150
+    ? "0 1px 10px rgba(0,0,0,.55), 0 0 2px rgba(0,0,0,.4)"
+    : "0 1px 10px rgba(255,255,255,.35), 0 0 2px rgba(255,255,255,.25)";
+}
 
 export function displayTheme(page: DisplayPage): DisplayTheme {
   const found = DISPLAY_THEMES.find((theme) => theme.id === page.theme);

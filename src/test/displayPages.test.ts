@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  BACKDROP_DARK_TEXT,
   BACKDROP_GROUPS,
   BACKDROP_LABELS,
   PAGE_PRESETS,
   activeDisplayPages,
   applyPageLayout,
   createDisplayWidget,
+  displayInkColor,
+  displayTheme,
   durationLabel,
   isPageActiveAt,
   layoutSlots,
@@ -163,5 +166,24 @@ describe("display backdrops", () => {
     expect(BACKDROP_LABELS.sailing).toMatch(/sail/i);
     expect(BACKDROP_LABELS.pasture).toMatch(/pasture/i);
     expect(BACKDROP_LABELS.harvest).toMatch(/harvest/i);
+  });
+
+  it("adds distinctive space and light scenes beyond nebula", () => {
+    const options = BACKDROP_GROUPS.flatMap((group) => group.options);
+    const added: DisplayBackdropKind[] = [
+      "galaxy", "silk", "caustics", "bokeh", "plasma", "orion", "biolume", "startrails", "lava", "ionstorm",
+    ];
+    expect(added.every((kind) => options.includes(kind))).toBe(true);
+    expect(options).not.toContain("fireflies");
+    expect(options).not.toContain("clouds");
+  });
+
+  it("uses dark type on pale backdrops so the clock stays readable", () => {
+    const clouds = page({ backdrop: "clouds", theme: "midnight" });
+    expect(displayInkColor(clouds, displayTheme(clouds))).toBe("#1c1917");
+    expect(displayInkColor({ ...clouds, textColor: "#ff0000" }, displayTheme(clouds))).toBe("#ff0000");
+    const nebula = page({ backdrop: "nebula", theme: "midnight" });
+    expect(displayInkColor(nebula, displayTheme(nebula))).toBe("#e0f2fe");
+    expect(BACKDROP_DARK_TEXT.has("golden")).toBe(true);
   });
 });
