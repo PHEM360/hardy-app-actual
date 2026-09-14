@@ -109,6 +109,7 @@ describe("RemoteDisplays", () => {
       disconnect() {}
       unobserve() {}
     });
+    HTMLCanvasElement.prototype.getContext = () => null;
   });
 
   afterEach(() => {
@@ -223,6 +224,22 @@ describe("RemoteDisplays", () => {
     expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
     // The light appears exactly once — in the Sunrise lights panel, not as a screen to build.
     expect(screen.getByText("Porch light")).toBeInTheDocument();
+  });
+
+  it("lets a page pick a coastal or farming background", async () => {
+    vi.useFakeTimers();
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+
+    expect(screen.getByRole("button", { name: /Harbour evening/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Under sail/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Summer pasture/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Harvest fields/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Under sail/ }));
+    await vi.advanceTimersByTimeAsync(400);
+
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { backdrop?: string }[];
+    expect(saved[0].backdrop).toBe("sailing");
   });
 
   it("lets an alarm be linked to a sunrise light", () => {

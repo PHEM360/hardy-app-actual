@@ -10,7 +10,7 @@ import {
   googleAuthUrl,
   loadGoogleCredentials,
 } from "./googleOAuth";
-import { googleCalendarDocId, mapGoogleCalendarEvent, toGoogleCalendarBody } from "./googleCalendarParse";
+import { googleCalendarDocId, mapGoogleCalendarEvent, selectedGoogleCalendarIds, toGoogleCalendarBody } from "./googleCalendarParse";
 
 const CALLBACK = `${APP_HOST}/api/calendar/callback`;
 const SCOPES = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email";
@@ -124,18 +124,36 @@ export const googleCalendarCallback = onRequest(GOOGLE_SECRET_OPTS, async (req, 
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const profile = await profileRes.json() as { email?: string };
-    await db().doc(`calendarSecrets/${stateData.uid}`).set({
+    const secret: Record<string, unknown> = {
       accessToken,
-      refreshToken: token.refresh_token || null,
       accessExpiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    };
+    if (token.refresh_token) secret.refreshToken = token.refresh_token;
+    await db().doc(`calendarSecrets/${stateData.uid}`).set(secret, { merge: true });
+
+    let selectedCalendarIds = ["primary"];
+    let writeCalendarId = "primary";
+    try {
+      const list = await googleJson(
+        accessToken,
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&showHidden=true",
+      );
+      const items = Array.isArray(list.items)
+        ? list.items as Array<{ id?: string; primary?: boolean; selected?: boolean }>
+        : [];
+      selectedCalendarIds = selectedGoogleCalendarIds(items);
+      writeCalendarId = items.find((item) => item.primary)?.id || selectedCalendarIds[0] || "primary";
+    } catch (err) {
+      logger.warn("google calendar list after connect failed", err);
+    }
+
     await db().doc(`calendar/${stateData.uid}/meta/settings`).set({
       google: {
         connected: true,
         email: profile.email || "",
-        calendarId: "primary",
-        selectedCalendarIds: ["primary"],
+        calendarId: writeCalendarId,
+        selectedCalendarIds,
         lastError: null,
       },
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -153,13 +171,19 @@ export const listGoogleCalendars = onCall(GOOGLE_SECRET_OPTS, async (request) =>
   const owner = String(request.data?.ownerUid || uid);
   await requireCalendarAccess(uid, owner, "view");
   const { accessToken } = await getTokens(owner);
-  const data = await googleJson(accessToken, "https://www.googleapis.com/calendar/v3/users/me/calendarList");
-  const items = Array.isArray(data.items) ? data.items as Array<{ id?: string; summary?: string; primary?: boolean }> : [];
+  const data = await googleJson(
+    accessToken,
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&showHidden=true",
+  );
+  const items = Array.isArray(data.items)
+    ? data.items as Array<{ id?: string; summary?: string; primary?: boolean; selected?: boolean }>
+    : [];
   return {
     calendars: items.map((item) => ({
       id: item.id || "",
       name: item.summary || item.id || "Calendar",
       primary: Boolean(item.primary),
+      selected: Boolean(item.selected),
     })).filter((item) => item.id),
   };
 });
@@ -190,8 +214,19 @@ async function syncOwner(owner: string) {
     selectedCalendarIds?: string[];
     calendarId?: string;
   };
-  const calendarIds = google.selectedCalendarIds?.length ? google.selectedCalendarIds : [google.calendarId || "primary"];
   const { accessToken } = await getTokens(owner);
+  const list = await googleJson(
+    accessToken,
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250&showHidden=true",
+  );
+  const listed = Array.isArray(list.items)
+    ? list.items as Array<{ id?: string; primary?: boolean; selected?: boolean }>
+    : [];
+  const stored = google.selectedCalendarIds?.length
+    ? google.selectedCalendarIds
+    : [google.calendarId || "primary"];
+  const stillDefault = stored.length === 1 && stored[0] === "primary";
+  const calendarIds = stillDefault ? selectedGoogleCalendarIds(listed) : stored;
   const min = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const max = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   let upserted = 0;
@@ -236,6 +271,10 @@ async function syncOwner(owner: string) {
   await db().doc(`calendar/${owner}/meta/settings`).set({
     google: {
       ...google,
+      selectedCalendarIds: calendarIds,
+      calendarId: google.calendarId && google.calendarId !== "primary"
+        ? google.calendarId
+        : (listed.find((item) => item.primary)?.id || calendarIds[0] || "primary"),
       lastSyncAt: new Date().toISOString(),
       lastError: null,
     },

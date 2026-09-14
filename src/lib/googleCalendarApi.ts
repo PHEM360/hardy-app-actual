@@ -18,7 +18,10 @@ export async function startGoogleCalendarConnect(): Promise<string> {
 }
 
 export async function listGoogleCalendars(ownerUid?: string) {
-  const call = httpsCallable<{ ownerUid?: string }, { calendars: Array<{ id: string; name: string; primary: boolean }> }>(
+  const call = httpsCallable<
+    { ownerUid?: string },
+    { calendars: Array<{ id: string; name: string; primary: boolean; selected?: boolean }> }
+  >(
     functions,
     "listGoogleCalendars",
   );

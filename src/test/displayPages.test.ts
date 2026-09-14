@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BACKDROP_GROUPS,
+  BACKDROP_LABELS,
   PAGE_PRESETS,
   activeDisplayPages,
   applyPageLayout,
@@ -8,6 +10,7 @@ import {
   isPageActiveAt,
   layoutSlots,
   stripUndefined,
+  type DisplayBackdropKind,
   type DisplayPage,
 } from "@/lib/displayPages";
 
@@ -146,5 +149,19 @@ describe("display page presets", () => {
     expect(durationLabel(30)).toBe("30 seconds");
     expect(durationLabel(300)).toBe("5 minutes");
     expect(durationLabel(3600)).toBe("1 hour");
+  });
+});
+
+describe("display backdrops", () => {
+  it("includes at least two coastal and two farming scenes", () => {
+    const options = BACKDROP_GROUPS.flatMap((group) => group.options);
+    const coastal: DisplayBackdropKind[] = ["harbour", "ocean", "sailing"];
+    const farming: DisplayBackdropKind[] = ["pasture", "harvest"];
+    expect(coastal.every((kind) => options.includes(kind))).toBe(true);
+    expect(farming.every((kind) => options.includes(kind))).toBe(true);
+    expect(BACKDROP_LABELS.harbour).toMatch(/harbour/i);
+    expect(BACKDROP_LABELS.sailing).toMatch(/sail/i);
+    expect(BACKDROP_LABELS.pasture).toMatch(/pasture/i);
+    expect(BACKDROP_LABELS.harvest).toMatch(/harvest/i);
   });
 });

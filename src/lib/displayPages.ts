@@ -15,7 +15,23 @@ export type DisplayPageLayout = "full" | "halves" | "stack" | "main-side" | "qua
 export type DisplayCalendarView = "agenda" | "month" | "week";
 export type DisplayEventStyle = "titles" | "compact" | "dots";
 export type DisplaySubtaskMode = "hide" | "open" | "all";
-export type DisplayBackdropKind = "none" | "weather" | "stars" | "snow" | "rain" | "clouds" | "aurora";
+export type DisplayBackdropKind =
+  | "none"
+  | "weather"
+  | "stars"
+  | "aurora"
+  | "nebula"
+  | "meteors"
+  | "golden"
+  | "fireflies"
+  | "snow"
+  | "rain"
+  | "clouds"
+  | "harbour"
+  | "ocean"
+  | "sailing"
+  | "pasture"
+  | "harvest";
 
 export interface DisplayWidgetLayout {
   id: string;
@@ -130,12 +146,66 @@ export const DISPLAY_THEMES: DisplayTheme[] = [
 
 export const BACKDROP_LABELS: Record<DisplayBackdropKind, string> = {
   none: "Plain",
-  weather: "Match the weather",
+  weather: "Live weather",
   stars: "Night sky",
-  snow: "Falling snow",
+  aurora: "Northern lights",
+  nebula: "Nebula",
+  meteors: "Meteor shower",
+  golden: "Golden hour",
+  fireflies: "Candlelight",
+  snow: "Snowfall",
   rain: "Rain",
-  clouds: "Drifting cloud",
-  aurora: "Soft aurora",
+  clouds: "Passing clouds",
+  harbour: "Harbour evening",
+  ocean: "Open water",
+  sailing: "Under sail",
+  pasture: "Summer pasture",
+  harvest: "Harvest fields",
+};
+
+export const BACKDROP_HINTS: Record<DisplayBackdropKind, string> = {
+  none: "Just the page colour",
+  weather: "Snow, rain, sun or stars from the real forecast",
+  stars: "Moon, constellations and the odd shooting star",
+  aurora: "Slow curtains of green and violet light",
+  nebula: "Deep-space colour drifting behind the widgets",
+  meteors: "A quiet sky with ion trails",
+  golden: "Warm late-day light and dust",
+  fireflies: "Warm lights in a quiet evening",
+  snow: "Deep, slow flakes with a winter haze",
+  rain: "Streaks on glass and a dark wet sky",
+  clouds: "Layered cloud sliding across the sun",
+  harbour: "Tide, a lighthouse and a small boat",
+  ocean: "A long sunset swell",
+  sailing: "A yacht on open water",
+  pasture: "Wind moving through summer grass",
+  harvest: "Gold fields and hay at dusk",
+};
+
+export const BACKDROP_GROUPS: { id: string; label: string; options: DisplayBackdropKind[] }[] = [
+  { id: "calm", label: "Calm", options: ["none", "golden", "stars", "aurora", "nebula", "fireflies"] },
+  { id: "weather", label: "Weather", options: ["weather", "snow", "rain", "clouds"] },
+  { id: "places", label: "Places", options: ["harbour", "ocean", "sailing", "pasture", "harvest"] },
+  { id: "lively", label: "Lively", options: ["meteors"] },
+];
+
+export const BACKDROP_THUMBS: Record<DisplayBackdropKind, string> = {
+  none: "linear-gradient(180deg, #18181b, #09090b)",
+  weather: "linear-gradient(180deg, #7dd3fc 0%, #0ea5e9 38%, #0f172a 100%)",
+  stars: "radial-gradient(circle at 76% 18%, #93c5fd 0%, #0b1228 42%, #020617 100%)",
+  aurora: "linear-gradient(180deg, #022c22 0%, #14532d 28%, #5b21b6 72%, #0f172a 100%)",
+  nebula: "radial-gradient(circle at 30% 40%, #db2777 0%, #1e1b4b 46%, #020617 100%)",
+  meteors: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #312e81 100%)",
+  golden: "linear-gradient(180deg, #fdba74 0%, #fb7185 42%, #7c2d12 100%)",
+  fireflies: "radial-gradient(circle at 30% 70%, #fbbf24 0%, #1c1917 55%, #09090b 100%)",
+  snow: "linear-gradient(180deg, #e2e8f0 0%, #94a3b8 40%, #1e293b 100%)",
+  rain: "linear-gradient(180deg, #334155 0%, #1e3a5f 50%, #0f172a 100%)",
+  clouds: "linear-gradient(180deg, #f8fafc 0%, #94a3b8 45%, #334155 100%)",
+  harbour: "linear-gradient(180deg, #fdba74 0%, #0369a1 48%, #082f49 100%)",
+  ocean: "linear-gradient(180deg, #fdba74 0%, #fb7185 28%, #0c4a6e 100%)",
+  sailing: "linear-gradient(180deg, #7dd3fc 0%, #0284c7 40%, #0c4a6e 100%)",
+  pasture: "linear-gradient(180deg, #7dd3fc 0%, #86efac 42%, #365314 100%)",
+  harvest: "linear-gradient(180deg, #fdba74 0%, #f59e0b 40%, #78350f 100%)",
 };
 
 export function displayTheme(page: DisplayPage): DisplayTheme {

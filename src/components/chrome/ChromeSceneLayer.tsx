@@ -27,7 +27,7 @@ function Snowflake({ size }: { size: number }) {
   );
 }
 
-function Stars({ compact }: { compact: boolean }) {
+export function Stars({ compact }: { compact: boolean }) {
   const dim = useMemo(() => seeded(compact ? 22 : 42, 7.2), [compact]);
   const bright = useMemo(() => seeded(compact ? 5 : 10, 3.8), [compact]);
   return (
@@ -98,7 +98,7 @@ function Stars({ compact }: { compact: boolean }) {
   );
 }
 
-function Snow({ compact }: { compact: boolean }) {
+export function Snow({ compact }: { compact: boolean }) {
   const flakes = useMemo(() => seeded(compact ? 12 : 22, 4.4), [compact]);
   return (
     <>
@@ -127,7 +127,7 @@ function Snow({ compact }: { compact: boolean }) {
   );
 }
 
-function Rain({ heavy }: { heavy?: boolean }) {
+export function Rain({ heavy }: { heavy?: boolean }) {
   const streaks = useMemo(() => seeded(heavy ? 28 : 18, 3.1), [heavy]);
   const splashes = useMemo(() => seeded(10, 9.4), []);
   return (
@@ -164,7 +164,7 @@ function Rain({ heavy }: { heavy?: boolean }) {
   );
 }
 
-function Lightning() {
+export function Lightning() {
   return (
     <>
       <div className="absolute inset-0 bg-white" style={{ animation: "greeting-flash 7.2s ease-in-out infinite" }} />
@@ -175,7 +175,7 @@ function Lightning() {
   );
 }
 
-function SunSky({ dusk }: { dusk?: boolean }) {
+export function SunSky({ dusk }: { dusk?: boolean }) {
   const motes = useMemo(() => seeded(10, 2.2), []);
   return (
     <>
@@ -213,7 +213,7 @@ function SunSky({ dusk }: { dusk?: boolean }) {
   );
 }
 
-function Clouds({ stormy }: { stormy?: boolean }) {
+export function Clouds({ stormy }: { stormy?: boolean }) {
   const layers = useMemo(() => seeded(4, 5.1), []);
   return (
     <>
@@ -234,7 +234,7 @@ function Clouds({ stormy }: { stormy?: boolean }) {
   );
 }
 
-function Fog() {
+export function Fog() {
   return (
     <>
       <div className="absolute inset-x-[-10%] top-[10%] h-[50%] rounded-full bg-white/20 blur-3xl" style={{ animation: "greeting-fog 11s ease-in-out infinite" }} />
@@ -244,7 +244,7 @@ function Fog() {
   );
 }
 
-function WeatherFX({ scene, compact }: { scene: WeatherScene; compact: boolean }) {
+export function WeatherFX({ scene, compact }: { scene: WeatherScene; compact: boolean }) {
   if (scene === "snow") return <Snow compact={compact} />;
   if (scene === "rain") return <Rain />;
   if (scene === "storm") {
@@ -318,7 +318,7 @@ function SeasonFX({ season, compact }: { season: ChromeSeason; compact: boolean 
   );
 }
 
-function Aurora() {
+export function Aurora() {
   return (
     <>
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,12,30,0.5),rgba(10,38,45,0.16))]" />
@@ -434,7 +434,7 @@ function Blossom({ compact }: { compact: boolean }) {
   );
 }
 
-function Harbour() {
+export function Harbour() {
   return (
     <>
       <ChromeCanvasScene scene="ocean" />

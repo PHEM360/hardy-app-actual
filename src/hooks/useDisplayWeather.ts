@@ -53,13 +53,17 @@ function coordsFromDevice(): Promise<{ lat: number; lon: number } | null> {
  * Current conditions for a wall display. A place chosen in the widget settings
  * wins, because a screen in a hallway is often refused location permission.
  */
-export function useDisplayWeather(latitude?: number, longitude?: number) {
+export function useDisplayWeather(latitude?: number, longitude?: number, enabled = true) {
   const fixed = !!latitude && !!longitude;
   const cacheKey = fixed ? `${latitude!.toFixed(2)},${longitude!.toFixed(2)}` : "device";
-  const [weather, setWeather] = useState<DisplayWeather | null>(() => readCache(cacheKey));
+  const [weather, setWeather] = useState<DisplayWeather | null>(() => (enabled ? readCache(cacheKey) : null));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setFailed(false);
+      return;
+    }
     let cancelled = false;
     const cached = readCache(cacheKey);
     if (cached) setWeather(cached);
@@ -105,7 +109,7 @@ export function useDisplayWeather(latitude?: number, longitude?: number) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cacheKey, fixed, latitude, longitude]);
+  }, [cacheKey, enabled, fixed, latitude, longitude]);
 
   return { weather, failed };
 }

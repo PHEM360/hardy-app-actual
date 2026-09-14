@@ -21,6 +21,15 @@ export interface LocalGoogleEvent {
   googleCalendarId: string;
 }
 
+export function selectedGoogleCalendarIds(
+  items: Array<{ id?: string; primary?: boolean; selected?: boolean }>,
+): string[] {
+  const picked = items
+    .filter((item) => item.id && (item.primary || item.selected))
+    .map((item) => String(item.id));
+  return picked.length ? [...new Set(picked)] : ["primary"];
+}
+
 export function googleCalendarDocId(calendarId: string, eventId: string) {
   return `g_${calendarId}_${eventId}`.replace(/[^\w.-]+/g, "_").slice(0, 700);
 }

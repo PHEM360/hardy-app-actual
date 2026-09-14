@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { pushCalendarEvent } from "@/lib/googleCalendarApi";
+import { calendarWriteData } from "@/lib/calendarWrite";
 import type { CalendarEvent, CalendarSettings } from "@/types/app";
 
 const DEFAULT_SETTINGS: CalendarSettings = { defaultView: "month" };
@@ -23,20 +24,22 @@ export function useCalendar(scopeUserId?: string) {
   const { dataUid } = useAuth();
   const uid = scopeUserId ?? dataUid;
 
-  // Subscribe to events
   useEffect(() => {
     if (!uid) return;
     const col = collection(db, "calendar", uid, "events");
-    const unsub = onSnapshot(col, (snap) => {
-      setEvents(
-        snap.docs.map((d) => ({ id: d.id, ...(d.data() as CalendarEvent) }))
-      );
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      col,
+      (snap) => {
+        setEvents(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as CalendarEvent) })),
+        );
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
     return unsub;
   }, [uid]);
 
-  // Subscribe to settings
   useEffect(() => {
     if (!uid) return;
     const ref = doc(db, "calendar", uid, "meta", "settings");
@@ -47,33 +50,41 @@ export function useCalendar(scopeUserId?: string) {
   }, [uid]);
 
   const addEvent = useCallback(async (event: Omit<CalendarEvent, "id">) => {
-    if (!uid) return;
-    const ref = await addDoc(collection(db, "calendar", uid, "events"), {
+    if (!uid) throw new Error("You need to be signed in to add an event.");
+    const ref = await addDoc(collection(db, "calendar", uid, "events"), calendarWriteData({
       ...event,
       source: event.source || "local",
       createdBy: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }));
     if (settings.google?.connected) {
-      void pushCalendarEvent(ref.id, uid).catch(() => undefined);
+      try {
+        await pushCalendarEvent(ref.id, uid);
+      } catch {
+        /* Local save already succeeded; Google can catch up on the next sync. */
+      }
     }
     return ref.id;
   }, [settings.google?.connected, uid]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CalendarEvent>) => {
-    if (!uid) return;
-    await updateDoc(doc(db, "calendar", uid, "events", id), {
+    if (!uid) throw new Error("You need to be signed in to change an event.");
+    await updateDoc(doc(db, "calendar", uid, "events", id), calendarWriteData({
       ...data,
       updatedAt: serverTimestamp(),
-    });
+    }));
     if (settings.google?.connected) {
-      void pushCalendarEvent(id, uid).catch(() => undefined);
+      try {
+        await pushCalendarEvent(id, uid);
+      } catch {
+        /* Local save already succeeded. */
+      }
     }
   }, [settings.google?.connected, uid]);
 
   const deleteEvent = useCallback(async (id: string) => {
-    if (!uid) return;
+    if (!uid) throw new Error("You need to be signed in to delete an event.");
     await deleteDoc(doc(db, "calendar", uid, "events", id));
   }, [uid]);
 
@@ -82,8 +93,8 @@ export function useCalendar(scopeUserId?: string) {
     const merged = { ...settings, ...data, updatedAt: serverTimestamp() };
     await setDoc(
       doc(db, "calendar", uid, "meta", "settings"),
-      merged,
-      { merge: true }
+      calendarWriteData(merged as Record<string, unknown>),
+      { merge: true },
     );
     setSettings((s) => ({ ...s, ...data }));
   }, [settings, uid]);

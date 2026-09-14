@@ -664,9 +664,18 @@ export function DisplayPageRenderer({
   const insetX = "max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))";
   const insetY = "max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px))";
 
+  const weatherPlace = laidOut.widgets.find(
+    (widget) => widget.type === "weather" && widget.weatherLatitude && widget.weatherLongitude,
+  );
+
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: theme.background }}>
-      <DisplayBackdrop kind={laidOut.backdrop} accent={theme.accent} />
+      <DisplayBackdrop
+        kind={laidOut.backdrop}
+        accent={theme.accent}
+        latitude={weatherPlace?.weatherLatitude}
+        longitude={weatherPlace?.weatherLongitude}
+      />
       <div
         className="absolute overflow-hidden"
         style={{ top: insetY, bottom: insetY, left: insetX, right: insetX }}

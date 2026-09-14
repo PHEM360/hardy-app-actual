@@ -12,7 +12,10 @@ import {
 import { DEFAULT_NIGHT_MODE, type NightModeSettings } from "@/lib/displayNightMode";
 
 export {
+  BACKDROP_GROUPS,
+  BACKDROP_HINTS,
   BACKDROP_LABELS,
+  BACKDROP_THUMBS,
   DEFAULT_DISPLAY_PAGES,
   DISPLAY_THEMES,
   DURATION_CHOICES,

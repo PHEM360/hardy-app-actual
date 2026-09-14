@@ -10,9 +10,10 @@ import { useAuth } from "@/auth/AuthContext";
 import { useMyDevices } from "@/hooks/useMyDevices";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import {
-  BACKDROP_LABELS, DEFAULT_DISPLAY_PAGES, DISPLAY_THEMES, DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS,
+  BACKDROP_GROUPS, BACKDROP_HINTS, BACKDROP_LABELS, BACKDROP_THUMBS, DEFAULT_DISPLAY_PAGES, DISPLAY_THEMES,
+  DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS,
   applyPageLayout, durationLabel, isEmptyDisplayWidget, isPageActiveAt, pageScheduleLabel,
-  type DisplayBackdropKind, type DisplayPage, type DisplayWidgetLayout,
+  type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
 import { useDisplayOwnerPhotos } from "@/hooks/useDisplayOwnerPhotos";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
@@ -34,8 +35,6 @@ import { toast } from "sonner";
 const FIELD = "h-10 w-full min-w-0 rounded-xl border border-white/15 bg-white/[0.09] px-3 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-primary focus:bg-white/[0.14]";
 const LABEL = "text-[11px] font-bold uppercase tracking-wider text-white/45";
 const CARD = "rounded-2xl border border-white/10 bg-white/[0.04] p-3";
-
-const BACKDROPS: DisplayBackdropKind[] = ["none", "weather", "stars", "snow", "rain", "clouds", "aurora"];
 
 function PairingSteps() {
   const steps = [
@@ -595,19 +594,47 @@ export default function RemoteDisplays() {
                           </div>
                         </div>
                         <div>
-                          <label htmlFor="page-backdrop" className="text-xs font-semibold text-white/80">Background animation</label>
-                          <select
-                            id="page-backdrop"
-                            value={selectedPage.backdrop || "none"}
-                            onChange={(event) => updatePage({ ...selectedPage, backdrop: event.target.value as DisplayBackdropKind })}
-                            className={`${FIELD} mt-1`}
-                          >
-                            {BACKDROPS.map((kind) => (
-                              <option key={kind} value={kind}>{BACKDROP_LABELS[kind]}</option>
+                          <p className="text-xs font-semibold text-white/80">Background animation</p>
+                          <p className="mt-0.5 text-[10px] text-white/40">
+                            {BACKDROP_HINTS[selectedPage.backdrop || "none"]}
+                          </p>
+                          <div className="mt-2 space-y-2.5">
+                            {BACKDROP_GROUPS.map((group) => (
+                              <div key={group.id}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-white/35">{group.label}</p>
+                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                  {group.options.map((kind) => {
+                                    const active = (selectedPage.backdrop || "none") === kind;
+                                    return (
+                                      <button
+                                        key={kind}
+                                        type="button"
+                                        onClick={() => updatePage({ ...selectedPage, backdrop: kind })}
+                                        aria-pressed={active}
+                                        className={`overflow-hidden rounded-xl border text-left transition ${
+                                          active
+                                            ? "border-primary ring-2 ring-primary/50"
+                                            : "border-white/12 hover:border-white/30"
+                                        }`}
+                                      >
+                                        <span
+                                          className="block h-9 w-full"
+                                          style={{ background: BACKDROP_THUMBS[kind] }}
+                                        />
+                                        <span className={`block truncate px-1.5 py-1 text-[10px] font-semibold ${active ? "text-white" : "text-white/70"}`}>
+                                          {BACKDROP_LABELS[kind]}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             ))}
-                          </select>
+                          </div>
                           {selectedPage.backdrop === "weather" && (
-                            <p className="mt-1 text-[10px] text-white/40">Snow when it snows, rain when it rains, stars after dark.</p>
+                            <p className="mt-1.5 text-[10px] text-white/40">
+                              Uses this page’s weather place if you’ve set one, otherwise the screen’s own location.
+                            </p>
                           )}
                         </div>
                       </div>
