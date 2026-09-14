@@ -1,6 +1,7 @@
 import type { CalendarEvent, CalendarMergeRules } from "@/types/app";
 
 const HOLIDAY_HINT = /\b(holiday|bank holiday|bank hol|public holiday|uk holidays?|us holidays?)\b/i;
+const JUNK_HINT = /\b(webinar|newsletter|limited[- ]time|act now|don't miss|do not miss|% off|flash sale|you('re| are) invited to (our|a|an) (webinar|demo|sale|event)|unsubscr)/i;
 
 export function normalizeEventTitle(title: string): string {
   return title.replace(/\s+/g, " ").trim().toLowerCase();
@@ -14,6 +15,12 @@ export function eventDayKey(event: CalendarEvent): string {
   } catch {
     return raw;
   }
+}
+
+export function looksLikeJunkInvite(event: Pick<CalendarEvent, "title" | "description" | "source">) {
+  if (event.source === "local" || event.source === "birthday") return false;
+  const haystack = `${event.title || ""} ${event.description || ""}`;
+  return JUNK_HINT.test(haystack);
 }
 
 export function applyCalendarMergeRules(
@@ -32,6 +39,7 @@ export function applyCalendarMergeRules(
     const title = normalizeEventTitle(event.title || "");
     if (needles.some((needle) => title.includes(needle))) return false;
     if (hideHolidays && event.allDay && HOLIDAY_HINT.test(event.title || "")) return false;
+    if (rules?.hideLikelyJunk && looksLikeJunkInvite(event)) return false;
     return true;
   });
 

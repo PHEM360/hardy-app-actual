@@ -38,7 +38,7 @@ import { toast } from "sonner";
 type StudioSection = "look" | "layout" | "screen" | "photos" | "lights";
 type PreviewShape = "tv" | "tablet" | "portrait";
 
-const ACCENT = "hsl(198,60%,46%)";
+const ACCENT = "hsl(var(--primary))";
 const SECTIONS: { id: StudioSection; label: string; icon: typeof Palette }[] = [
   { id: "look", label: "Look", icon: Palette },
   { id: "layout", label: "Layout", icon: LayoutGrid },
@@ -57,7 +57,7 @@ function railButtonClass(active: boolean) {
   return `flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold transition ${
     active
       ? "bg-gradient-primary text-primary-foreground shadow-sm"
-      : "hover:bg-[color-mix(in_srgb,hsl(198,60%,46%)_12%,transparent)]"
+      : "hover:bg-[color-mix(in_srgb,hsl(var(--primary))_12%,transparent)]"
   }`;
 }
 
@@ -315,7 +315,7 @@ export default function RemoteDisplays() {
               ) : devices.length === 0 ? (
                 <div
                   className="rounded-xl p-4 text-center"
-                  style={{ background: "color-mix(in srgb, hsl(198,60%,46%) 12%, hsl(var(--card)))" }}
+                  style={{ background: "color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)))" }}
                 >
                   <MonitorSmartphone className="mx-auto h-7 w-7 text-primary" />
                   <p className="mt-2 text-xs font-semibold">No screens linked</p>

@@ -987,10 +987,16 @@ export interface CalendarMergeRules {
   hideTitleContains?: string[];
   hideDuplicates?: boolean;
   hideAllDayHolidays?: boolean;
+  /** Hide imported webinars, newsletters and unsolicited “you’re invited” spam. */
+  hideLikelyJunk?: boolean;
 }
 
 export interface CalendarSettings {
-  defaultView: "month" | "week" | "agenda";
+  defaultView: "day" | "month" | "week" | "agenda";
+  /** 1 = Monday (default), 0 = Sunday. */
+  weekStartsOn?: 0 | 1;
+  workDayStartHour?: number;
+  workDayEndHour?: number;
   canManage?: string[];        // user UIDs allowed to manage settings (empty = admins only)
   memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
   google?: GoogleCalendarLink;

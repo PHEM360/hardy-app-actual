@@ -52,6 +52,7 @@ import FinancePreview from "@/pages/FinancePreview";
 import FlatsInvestmentPreview from "@/pages/FlatsInvestmentPreview";
 import HouseholdNotesPreview from "@/pages/HouseholdNotesPreview";
 import SocialMobilePreview from "@/pages/SocialMobilePreview";
+import CalendarPreview from "@/pages/CalendarPreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
@@ -90,6 +91,7 @@ const App = () => (
               <Route path="/dev/household-notes-preview" element={<HouseholdNotesPreview />} />
               <Route path="/dev/social-mobile-preview" element={<SocialMobilePreview />} />
               <Route path="/dev/remote-displays-preview" element={<RemoteDisplays />} />
+              <Route path="/dev/calendar-preview" element={<CalendarPreview />} />
             </>
           )}
           <Route

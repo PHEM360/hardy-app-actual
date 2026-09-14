@@ -45,4 +45,32 @@ describe("calendar merge", () => {
     expect(parsed[0].source).toBe("import");
     expect(parsed[0].feedId).toBe("feed1");
   });
+
+  it("hides likely junk invites without touching family events", () => {
+    const merged = applyCalendarMergeRules(
+      [
+        event({ title: "You're invited to our webinar", source: "import", description: "50% off" }),
+        event({ title: "Dentist", source: "local" }),
+        event({ title: "Newsletter planning", source: "local" }),
+      ],
+      { hideLikelyJunk: true, hideDuplicates: false },
+    );
+    expect(merged.map((item) => item.title)).toEqual(["Dentist", "Newsletter planning"]);
+  });
+
+  it("imports events from a downloaded ICS file", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "UID:file-1",
+      "SUMMARY:Imported swim",
+      "DTSTART:20260914T100000Z",
+      "DTEND:20260914T110000Z",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const parsed = parseIcsEvents(ics, "file_1");
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({ title: "Imported swim", source: "import", feedId: "file_1" });
+  });
 });
