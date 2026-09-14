@@ -55,7 +55,7 @@ import SocialMobilePreview from "@/pages/SocialMobilePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
-import { MandatoryPasskeyGate, PasskeyGate } from "@/components/security/SecurityGate";
+import { MandatoryPasskeyGate } from "@/components/security/SecurityGate";
 
 const queryClient = new QueryClient();
 
@@ -74,12 +74,7 @@ const App = () => (
             element={
               <RequireAuth>
                 <MandatoryPasskeyGate>
-                  <PasskeyGate
-                    title="Approve a trusted display"
-                    description="Use your passkey before giving this screen access to your photos, calendar and tasks."
-                  >
-                    <DisplayPair />
-                  </PasskeyGate>
+                  <DisplayPair />
                 </MandatoryPasskeyGate>
               </RequireAuth>
             }

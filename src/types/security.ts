@@ -46,10 +46,7 @@ export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
     personal_finance: "passkey",
     // Log Ins uses the vault PIN / Face ID gate instead of a page passkey.
     passwords: "none",
-    // Pairing a new screen still goes through PasskeyGate on /pair/:pairingId.
-    // Managing already-linked displays now just follows the app's own 7-day
-    // trust window instead of demanding a second, page-level passkey on top
-    // of it every visit.
+    // Remote Displays only needs a signed-in account — no extra page passkey.
     remote_displays: "none",
   },
 };
@@ -75,6 +72,8 @@ export function normalizeSecuritySettings(value?: StoredSecuritySettings | null)
       ...(value?.moduleRequirements || {}),
       // Always vault-gated — never stack a page passkey in front of Log Ins.
       passwords: "none",
+      // Logged-in family members can open Remote Displays without a second check.
+      remote_displays: "none",
     },
   };
 }

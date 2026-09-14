@@ -65,6 +65,16 @@ describe("display page layouts", () => {
     expect(layoutSlots("stack", 4)[0].h).toBe(9);
   });
 
+  it("pads unused sidebar slots so a Today widget cannot cover them", () => {
+    const snapped = applyPageLayout(page({
+      layout: "main-side",
+      widgets: [{ id: "today-main", type: "today", x: 0, y: 0, w: 12, h: 12 }],
+    }));
+    expect(snapped.widgets.map((widget) => widget.type)).toEqual(["today", "empty", "empty"]);
+    expect(snapped.widgets[0]).toMatchObject(layoutSlots("main-side")[0]);
+    expect(snapped.widgets[1]).toMatchObject({ type: "empty", ...layoutSlots("main-side")[1] });
+  });
+
   it("infers a layout for pages built before layouts existed", () => {
     const legacy = applyPageLayout({
       id: "legacy",

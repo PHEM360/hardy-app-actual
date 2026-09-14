@@ -37,7 +37,7 @@ const KNOWN: Record<string, Partial<PlainSecurityFinding>> = {
   },
   "arch-default-modules": {
     summary: "Some private pages do not ask for a passkey unless you turn that on.",
-    meaning: "Money and remote displays are locked by default. Health, notes and similar pages stay open unless someone sets a lock in Settings.",
+    meaning: "Money is locked by default. Remote displays only need a signed-in account. Health, notes and similar pages stay open unless someone sets a lock in Settings.",
     impact: "Worth doing if a phone is shared or an account might be borrowed. Not an internet break-in.",
     fix: "In Settings → Security, require a passkey for any page you want extra-private.",
   },

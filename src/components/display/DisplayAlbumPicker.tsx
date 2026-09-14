@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Check, ImageOff } from "lucide-react";
+import { PhotoThumb } from "@/components/photos/PhotoThumb";
 import { albumLibraryKey, photoLibraryKey, resolveDisplayPhotos, type PhotoPickItem } from "@/lib/photoSelection";
 import type { PhotoAlbum } from "@/types/photos";
 import type { DisplayWidgetLayout } from "@/lib/displayPages";
@@ -104,12 +105,11 @@ export function DisplayAlbumPicker<T extends PhotoPickItem>({
               }}
               className={`relative overflow-hidden rounded-lg border-2 ${active ? "border-primary" : "border-transparent"}`}
             >
-              <img
-                src={photo.url}
+              <PhotoThumb
+                url={photo.url}
+                storagePath={photo.storagePath}
                 alt={photo.caption || ""}
-                loading="lazy"
                 className="h-16 w-full bg-white/5 object-cover"
-                onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
               />
               {active && (
                 <span className="absolute right-0.5 top-0.5 rounded-md bg-primary p-0.5 text-primary-foreground">

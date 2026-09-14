@@ -1024,19 +1024,24 @@ const Settings = () => {
             <div>
               <p className="text-sm font-semibold">Page security</p>
               <p className="text-[11px] text-muted-foreground">
-                Protected pages reuse a passkey presented within your chosen period. Log Ins uses its own vault passcode / device biometrics instead of a second page passkey.
+                Protected pages reuse a passkey presented within your chosen period. Log Ins uses its own vault passcode / device biometrics. Remote Displays only needs you to be signed in.
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {SECURITY_MODULES.map((module) => {
                 const requirement = securityDraft.moduleRequirements[module.id] || "none";
                 const isLogins = module.id === "passwords";
+                const isRemoteDisplays = module.id === "remote_displays";
                 return (
                   <label key={module.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
                     <span className="min-w-0 flex-1 truncate text-xs font-semibold">{module.label}</span>
                     {isLogins ? (
                       <span className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
                         Vault unlock
+                      </span>
+                    ) : isRemoteDisplays ? (
+                      <span className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
+                        Signed in
                       </span>
                     ) : (
                       <select

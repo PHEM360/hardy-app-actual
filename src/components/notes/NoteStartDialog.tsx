@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { CheckSquare, GitBranch, PenLine, StickyNote } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
 import { DIAGRAM_TEMPLATES } from "@/lib/noteDiagram";
 import type { NoteDiagram, NoteKind } from "@/types/notes";
@@ -8,10 +10,11 @@ import type { NoteDiagram, NoteKind } from "@/types/notes";
 export type NoteStartChoice = {
   kind: NoteKind;
   diagram?: NoteDiagram | null;
+  title?: string;
 };
 
 const KINDS: { id: NoteKind; label: string; hint: string; icon: typeof StickyNote }[] = [
-  { id: "note", label: "Note", hint: "Write, pin photos, keep it loose.", icon: StickyNote },
+  { id: "note", label: "Note", hint: "A blank sheet. Just start typing.", icon: StickyNote },
   { id: "checklist", label: "Checklist", hint: "Jobs you can tick off.", icon: CheckSquare },
   { id: "drawing", label: "Sketch", hint: "Draw on paper.", icon: PenLine },
   { id: "note", label: "Diagram", hint: "Flows, networks, family maps.", icon: GitBranch },
@@ -26,23 +29,48 @@ export function NoteStartDialog({
   onOpenChange: (open: boolean) => void;
   onPick: (choice: NoteStartChoice) => void;
 }) {
-  const [step, setStep] = useState<"kind" | "diagram">("kind");
+  const [step, setStep] = useState<"kind" | "diagram" | "title">("kind");
+  const [pending, setPending] = useState<NoteStartChoice | null>(null);
+  const [title, setTitle] = useState("");
 
-  const close = (open: boolean) => {
-    if (!open) setStep("kind");
-    onOpenChange(open);
+  const close = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setStep("kind");
+      setPending(null);
+      setTitle("");
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const askTitle = (choice: NoteStartChoice) => {
+    setPending(choice);
+    setTitle("");
+    setStep("title");
+  };
+
+  const finish = () => {
+    const trimmed = title.trim();
+    if (!pending || !trimmed) return;
+    onPick({ ...pending, title: trimmed });
+    close(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display">{step === "diagram" ? "Choose a diagram" : "Start a note"}</DialogTitle>
+          <DialogTitle className="font-display">
+            {step === "diagram" ? "Choose a diagram" : step === "title" ? "Give it a name" : "Start a note"}
+          </DialogTitle>
           <DialogDescription>
-            {step === "diagram" ? "Use a ready-made board or start blank." : "Pick the kind of note, then write or draw."}
+            {step === "diagram"
+              ? "Use a ready-made board or start blank."
+              : step === "title"
+                ? "Checklists, sketches and diagrams need a title so you can find them later."
+                : "A note is just paper. The others ask for a name first."}
           </DialogDescription>
         </DialogHeader>
-        {step === "kind" ? (
+        {step === "kind" && (
           <div className="grid grid-cols-2 gap-2">
             {KINDS.map((kind, index) => {
               const Icon = kind.icon;
@@ -55,8 +83,12 @@ export function NoteStartDialog({
                       setStep("diagram");
                       return;
                     }
-                    onPick({ kind: kind.id });
-                    close(false);
+                    if (kind.label === "Note") {
+                      onPick({ kind: "note" });
+                      close(false);
+                      return;
+                    }
+                    askTitle({ kind: kind.id });
                   }}
                   className="rounded-2xl border border-border/50 bg-card p-4 text-left shadow-card transition hover:border-primary/40"
                 >
@@ -69,7 +101,8 @@ export function NoteStartDialog({
               );
             })}
           </div>
-        ) : (
+        )}
+        {step === "diagram" && (
           <div className="space-y-2">
             <button type="button" className="text-xs font-semibold text-primary" onClick={() => setStep("kind")}>
               Back
@@ -81,10 +114,7 @@ export function NoteStartDialog({
                   <button
                     key={template.id}
                     type="button"
-                    onClick={() => {
-                      onPick({ kind: "note", diagram: template.build() });
-                      close(false);
-                    }}
+                    onClick={() => askTitle({ kind: "note", diagram: template.build() })}
                     className="rounded-2xl border border-border/50 bg-card p-3 text-left shadow-card transition hover:border-primary/40"
                   >
                     <div className="mb-2 h-20 overflow-hidden rounded-xl bg-background">
@@ -100,6 +130,29 @@ export function NoteStartDialog({
                 );
               })}
             </div>
+          </div>
+        )}
+        {step === "title" && (
+          <div className="space-y-3">
+            <button type="button" className="text-xs font-semibold text-primary" onClick={() => setStep(pending?.diagram !== undefined ? "diagram" : "kind")}>
+              Back
+            </button>
+            <Input
+              autoFocus
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  finish();
+                }
+              }}
+              placeholder="Title"
+              aria-label="Note title"
+            />
+            <Button className="w-full rounded-xl bg-gradient-primary" disabled={!title.trim()} onClick={finish}>
+              Continue
+            </Button>
           </div>
         )}
       </DialogContent>

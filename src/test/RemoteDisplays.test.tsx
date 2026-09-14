@@ -78,21 +78,12 @@ vi.mock("@/hooks/useRemoteDisplayPhotos", () => ({
 vi.mock("@/hooks/useDisplayOwnerPhotos", () => ({
   useDisplayOwnerPhotos: () => ({
     photos: [],
+    albums: [],
     loading: false,
     addPhotos: vi.fn(),
     addLinkedPhotos: vi.fn(),
     updateCaption: vi.fn(),
     deletePhoto: vi.fn(),
-  }),
-}));
-vi.mock("@/hooks/usePhotos", () => ({
-  useOwnPhotoLibrary: () => ({
-    photos: [],
-    albums: [],
-    items: [],
-    sharedAlbums: [],
-    sharedItems: [],
-    loading: false,
   }),
 }));
 vi.mock("@/hooks/useTasks", () => ({

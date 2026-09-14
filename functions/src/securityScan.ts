@@ -112,7 +112,6 @@ const SENSITIVE_MODULES = [
   "health",
   "notes",
   "inheritance",
-  "remote_displays",
   "companies",
   "admin",
 ] as const;
@@ -352,7 +351,7 @@ function architectureFindings(): Finding[] {
       category: "authorization",
       title: "Some private pages do not ask for a passkey unless you turn that on",
       description:
-        "Money, the password vault and remote displays ask for a passkey by default. Health, notes and similar pages stay open unless someone sets a lock in Settings.",
+        "Money and the password vault ask for a passkey by default. Remote displays only need a signed-in account. Health, notes and similar pages stay open unless someone sets a lock in Settings.",
       recommendation: "In Settings → Security, require a passkey for any page you want extra-private.",
       actionPath: "/settings",
       summary: "Some private pages do not ask for a passkey unless you turn that on.",

@@ -45,7 +45,7 @@ export const getDevicePairingStatus = onCall(async (request) => {
 });
 
 export const approveDevicePairing = onCall(async (request) => {
-  const uid = await requireAccountAuth(request);
+  const uid = await requireAccountAuth(request, { requireFreshPasskey: false });
   const pairingId = pairingIdFrom(request);
   // The approver's own real household (not whichever household the phone's
   // UI currently has selected, which can change later) — falls back to their
@@ -73,7 +73,7 @@ export const approveDevicePairing = onCall(async (request) => {
 });
 
 export const denyDevicePairing = onCall(async (request) => {
-  await requireAccountAuth(request);
+  await requireAccountAuth(request, { requireFreshPasskey: false });
   const pairingId = pairingIdFrom(request);
 
   const ref = admin.firestore().doc(`devicePairings/${pairingId}`);

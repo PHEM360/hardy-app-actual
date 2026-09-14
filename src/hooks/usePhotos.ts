@@ -17,59 +17,19 @@ import { useAuth } from "@/auth/AuthContext";
 import { useAppUsers } from "@/hooks/useAppUsers";
 import { usePageShares } from "@/hooks/usePageShares";
 import { displayPhotoSrcFromLink, parseDisplayPhotoLinks } from "@/lib/displayPhotos";
+import { albumFromDoc, itemFromDoc } from "@/lib/photoDocs";
+import { resolveStoredPhotoUrl } from "@/lib/photoUrl";
 import type {
   DriveConnectionStatus,
   PhotoAlbum,
-  PhotoAlbumShare,
   PhotoGrant,
   PhotoItem,
   PhotoSharePermission,
   PhotosConnectionStatus,
-  PhotoSource,
 } from "@/types/photos";
 
-function parseShares(data: Record<string, unknown>): PhotoAlbumShare[] {
-  if (Array.isArray(data.shares)) {
-    return (data.shares as PhotoAlbumShare[]).filter((share) => share?.uid && share.permission);
-  }
-  const sharedWith = Array.isArray(data.sharedWith) ? (data.sharedWith as string[]) : [];
-  const fallback = data.sharePermission === "edit" ? "edit" : "view";
-  return sharedWith.map((uid) => ({ uid, permission: fallback as PhotoSharePermission }));
-}
-
-function albumFromDoc(id: string, ownerId: string, data: Record<string, unknown>): PhotoAlbum {
-  const shares = parseShares(data);
-  return {
-    id,
-    ownerId,
-    name: String(data.name || "Album"),
-    coverPhotoId: (data.coverPhotoId as string | null) ?? null,
-    shares,
-    sharedWith: shares.map((share) => share.uid),
-    driveFolderId: (data.driveFolderId as string | null) ?? null,
-    driveFolderName: (data.driveFolderName as string | null) ?? null,
-    googlePhotosShareUrl: (data.googlePhotosShareUrl as string | null) ?? null,
-    googlePhotosAlbumName: (data.googlePhotosAlbumName as string | null) ?? null,
-    googlePhotosLinked: Boolean(data.googlePhotosLinked),
-    lastSyncedAt: data.lastSyncedAt,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  };
-}
-
-function itemFromDoc(id: string, ownerId: string, albumId: string, data: Record<string, unknown>): PhotoItem {
-  return {
-    id,
-    ownerId,
-    albumId,
-    url: String(data.url || ""),
-    storagePath: String(data.storagePath || ""),
-    caption: String(data.caption || ""),
-    source: (data.source as PhotoSource) || "upload",
-    driveFileId: (data.driveFileId as string | null) ?? null,
-    googlePhotosId: (data.googlePhotosId as string | null) ?? null,
-    createdAt: data.createdAt,
-  };
+async function hydratePhoto(photo: PhotoItem): Promise<PhotoItem> {
+  return { ...photo, url: await resolveStoredPhotoUrl(photo) };
 }
 
 export function usePhotos(scopeUserId?: string | null) {
@@ -132,10 +92,12 @@ export function usePhotos(scopeUserId?: string | null) {
       return;
     }
     const unsubs = albums.map((album) =>
-      onSnapshot(collection(db, "photos", uid, "albums", album.id, "items"), (snap) => {
+      onSnapshot(collection(db, "photos", uid, "albums", album.id, "items"), async (snap) => {
+        const next = await Promise.all(
+          snap.docs.map((d) => hydratePhoto(itemFromDoc(d.id, uid, album.id, d.data() as Record<string, unknown>))),
+        );
         setItems((current) => {
           const others = current.filter((item) => !(item.ownerId === uid && item.albumId === album.id));
-          const next = snap.docs.map((d) => itemFromDoc(d.id, uid, album.id, d.data() as Record<string, unknown>));
           return [...others, ...next];
         });
       }),
@@ -181,10 +143,12 @@ export function usePhotos(scopeUserId?: string | null) {
           return [...others, album];
         });
       }),
-      onSnapshot(collection(db, "photos", grant.ownerId, "albums", grant.albumId, "items"), (snap) => {
+      onSnapshot(collection(db, "photos", grant.ownerId, "albums", grant.albumId, "items"), async (snap) => {
+        const next = await Promise.all(
+          snap.docs.map((d) => hydratePhoto(itemFromDoc(d.id, grant.ownerId, grant.albumId, d.data() as Record<string, unknown>))),
+        );
         setSharedItems((current) => {
           const others = current.filter((item) => !(item.ownerId === grant.ownerId && item.albumId === grant.albumId));
-          const next = snap.docs.map((d) => itemFromDoc(d.id, grant.ownerId, grant.albumId, d.data() as Record<string, unknown>));
           return [...others, ...next];
         });
       }),

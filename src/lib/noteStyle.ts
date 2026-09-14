@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { HubNote, NoteFolder, NotesColorMode, NotesListStyle } from "@/types/notes";
-import { NOTE_CATEGORIES, NOTE_COLORS } from "@/types/notes";
+import { NOTE_COLORS, resolveNoteCategory } from "@/types/notes";
 
 const KIND_SWATCH: Record<string, string> = {
   note: "#fde68a",
@@ -55,7 +55,7 @@ export function noteSwatch(
   }
   if (mode === "kind") return KIND_SWATCH[note.kind] ?? KIND_SWATCH.note;
   if (mode === "category") {
-    return NOTE_CATEGORIES.find((c) => c.id === note.category)?.swatch ?? NOTE_CATEGORIES[6].swatch;
+    return resolveNoteCategory(note.category).swatch;
   }
   if (mode === "status") {
     const items = note.checklist ?? [];

@@ -11,12 +11,11 @@ import { useMyDevices } from "@/hooks/useMyDevices";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import {
   BACKDROP_LABELS, DEFAULT_DISPLAY_PAGES, DISPLAY_THEMES, DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS,
-  applyPageLayout, durationLabel, isPageActiveAt, pageScheduleLabel,
+  applyPageLayout, durationLabel, isEmptyDisplayWidget, isPageActiveAt, pageScheduleLabel,
   type DisplayBackdropKind, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
 import { useDisplayOwnerPhotos } from "@/hooks/useDisplayOwnerPhotos";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
-import { useOwnPhotoLibrary } from "@/hooks/usePhotos";
 import { DisplayAlbumPicker } from "@/components/display/DisplayAlbumPicker";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
@@ -41,7 +40,7 @@ const BACKDROPS: DisplayBackdropKind[] = ["none", "weather", "stars", "snow", "r
 function PairingSteps() {
   const steps = [
     { title: "On the screen itself", body: "Open a browser on the tablet, TV or Pi and go to hardyapp.co.uk/display." },
-    { title: "Scan its QR code", body: "Use the phone you are signed in on. One passkey check covers seven days." },
+    { title: "Scan its QR code", body: "Use the phone you are signed in on." },
     { title: "Approve it", body: "Tap approve on your phone. The screen starts showing your pages here." },
   ];
   return (
@@ -97,17 +96,18 @@ export default function RemoteDisplays() {
   const [editorPages, setEditorPages] = useState<DisplayPage[]>([]);
   const loadedDeviceRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPagesRef = useRef<DisplayPage[] | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode, updateControl } = useDeviceSettings(selectedDeviceId);
+  const photoOwnerId = device?.uid || dataUid;
   // The exact same hook the physical screen runs at /display, so this preview
   // and the picker below can never show something different from what
   // actually ends up on the wall — see useDisplayOwnerPhotos.
-  const { photos: previewPhotos, loading: photosLoading } = useDisplayOwnerPhotos(dataUid);
+  const { photos: previewPhotos, albums: previewAlbums, loading: photosLoading } = useDisplayOwnerPhotos(photoOwnerId);
   // The "Quick library" box below only ever manages its own legacy
   // displayPhotos items, never album photos — a separate, narrower hook so
   // its delete button can never be pointed at the wrong Firestore path.
-  const { photos: quickPhotos, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(dataUid);
-  const photoLibrary = useOwnPhotoLibrary();
+  const { photos: quickPhotos, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(photoOwnerId);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const { birthdays } = useBirthdays(device?.householdId ?? null);
@@ -139,9 +139,30 @@ export default function RemoteDisplays() {
     }
   }, [editorPages, selectedPageId]);
 
-  useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-  }, []);
+  useEffect(() => {
+    const flush = () => {
+      if (!pendingPagesRef.current) return;
+      const pending = pendingPagesRef.current;
+      pendingPagesRef.current = null;
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      void updatePages(pending).catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Could not update this display");
+      });
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [updatePages]);
 
   useEffect(() => {
     setDeviceName(device?.label || "");
@@ -155,16 +176,24 @@ export default function RemoteDisplays() {
 
   const pages = editorPages.length > 0 ? editorPages : device?.settings.pages || DEFAULT_DISPLAY_PAGES;
   const selectedPage = pages.find((page) => page.id === selectedPageId) || pages[0];
-  const selectedWidget = selectedPage?.widgets.find((widget) => widget.id === selectedWidgetId) || null;
+  const selectedWidget = selectedPage?.widgets.find((widget) =>
+    widget.id === selectedWidgetId && !isEmptyDisplayWidget(widget),
+  ) || null;
 
   const savePages = (next: DisplayPage[]) => {
-    setEditorPages(next);
+    const prepared = next.map(applyPageLayout);
+    setEditorPages(prepared);
+    pendingPagesRef.current = prepared;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      void updatePages(next).catch((error) => {
+      const pending = pendingPagesRef.current;
+      pendingPagesRef.current = null;
+      saveTimerRef.current = null;
+      if (!pending) return;
+      void updatePages(pending).catch((error) => {
         toast.error(error instanceof Error ? error.message : "Could not update this display");
       });
-    }, 350);
+    }, 150);
   };
 
   const updatePage = (nextPage: DisplayPage) => {
@@ -226,9 +255,12 @@ export default function RemoteDisplays() {
 
   const selectDevice = (id: string) => {
     if (id === selectedDeviceId) return;
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      void updatePages(editorPages);
+    if (saveTimerRef.current || pendingPagesRef.current) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      const pending = pendingPagesRef.current || editorPages;
+      pendingPagesRef.current = null;
+      void updatePages(pending);
     }
     loadedDeviceRef.current = null;
     setEditorPages([]);
@@ -661,7 +693,7 @@ export default function RemoteDisplays() {
                                 </Link>
                               </div>
                               <DisplayAlbumPicker
-                                albums={photoLibrary.albums}
+                                albums={previewAlbums}
                                 photos={previewPhotos}
                                 widget={selectedWidget}
                                 onChange={updateWidget}

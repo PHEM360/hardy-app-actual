@@ -138,7 +138,7 @@ service firebase.storage {
 
     match /photos/{userId}/{albumId}/{fileName} {
       allow read: if canViewPageStorage(userId, "photos") || isActiveDisplayFor(userId) ||
-        (isInteractiveUser() &&
+        (request.auth != null &&
           firestore.exists(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)) &&
           request.auth.uid in firestore.get(/databases/(default)/documents/photos/$(userId)/albums/$(albumId)).data.sharedWith);
       allow create, update: if request.resource.size < 20 * 1024 * 1024 &&

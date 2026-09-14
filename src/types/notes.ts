@@ -13,7 +13,8 @@ export type NotesColorMode =
   | "shades"
   | "none";
 export type NotesListStyle = "keep" | "paper" | "outlined" | "filled" | "compact";
-export type NoteCategory = "personal" | "family" | "work" | "ideas" | "shopping" | "health" | "other";
+export type NoteCategory = string;
+export type NoteCategoryOption = { id: string; label: string; swatch: string };
 
 export interface NoteChecklistItem {
   id: string;
@@ -37,7 +38,11 @@ export type NoteDiagramShape =
   | "hexagon"
   | "cylinder"
   | "cloud"
-  | "document";
+  | "document"
+  | "triangle"
+  | "stadium"
+  | "note"
+  | "chevron";
 
 export type NoteDiagramIcon =
   | "none"
@@ -59,7 +64,17 @@ export type NoteDiagramIcon =
   | "user"
   | "users"
   | "harddrive"
-  | "speaker";
+  | "speaker"
+  | "car"
+  | "mail"
+  | "calendar"
+  | "map"
+  | "star"
+  | "heart"
+  | "bolt"
+  | "key"
+  | "light"
+  | "plug";
 
 export type NoteDiagramEdgeStyle = "solid" | "dashed";
 export type NoteDiagramArrow = "end" | "both" | "none";
@@ -151,6 +166,7 @@ export type NoteCanvasBlock =
       y: number;
       width: number;
       height: number;
+      title?: string;
       items: NoteChecklistItem[];
     }
   | {
@@ -228,6 +244,8 @@ export interface NotesPrefs {
   shadeHue: string;
   /** Own note shown as the first dashboard widget. */
   dashboardNoteId: string | null;
+  customCategories: NoteCategoryOption[];
+  hiddenCategoryIds: string[];
 }
 
 export interface NotesVaultSettings {
@@ -251,7 +269,7 @@ export const NOTE_COLORS = [
   { id: "gray", label: "Grey", swatch: "#e2e8f0", text: "text-slate-900 dark:text-slate-100" },
 ] as const;
 
-export const NOTE_CATEGORIES: { id: NoteCategory; label: string; swatch: string }[] = [
+export const NOTE_CATEGORIES: NoteCategoryOption[] = [
   { id: "personal", label: "Personal", swatch: "#fde68a" },
   { id: "family", label: "Family", swatch: "#fdba74" },
   { id: "work", label: "Work", swatch: "#93c5fd" },
@@ -261,6 +279,39 @@ export const NOTE_CATEGORIES: { id: NoteCategory; label: string; swatch: string 
   { id: "other", label: "Other", swatch: "#e2e8f0" },
 ];
 
+export function slugifyNoteCategory(label: string): string {
+  const slug = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return slug || `cat-${Date.now().toString(36)}`;
+}
+
+export function noteCategoryOptions(prefs?: Pick<NotesPrefs, "customCategories" | "hiddenCategoryIds"> | null): NoteCategoryOption[] {
+  const hidden = new Set(prefs?.hiddenCategoryIds ?? []);
+  const byId = new Map(
+    NOTE_CATEGORIES.filter((category) => !hidden.has(category.id)).map((category) => [category.id, { ...category }]),
+  );
+  for (const category of prefs?.customCategories ?? []) {
+    if (!category.id || hidden.has(category.id)) continue;
+    byId.set(category.id, {
+      id: category.id,
+      label: category.label || category.id,
+      swatch: category.swatch || "#e2e8f0",
+    });
+  }
+  return [...byId.values()];
+}
+
+export function resolveNoteCategory(
+  id: string | undefined,
+  prefs?: Pick<NotesPrefs, "customCategories" | "hiddenCategoryIds"> | null,
+): NoteCategoryOption {
+  const options = noteCategoryOptions(prefs);
+  return options.find((category) => category.id === id) ?? {
+    id: id || "personal",
+    label: id || "Personal",
+    swatch: "#e2e8f0",
+  };
+}
+
 export const DEFAULT_NOTES_PREFS: NotesPrefs = {
   defaultView: "grid",
   showTasksPageItems: true,
@@ -269,4 +320,6 @@ export const DEFAULT_NOTES_PREFS: NotesPrefs = {
   listStyle: "keep",
   shadeHue: "#f59e0b",
   dashboardNoteId: null,
+  customCategories: [],
+  hiddenCategoryIds: [],
 };

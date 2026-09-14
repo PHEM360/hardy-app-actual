@@ -93,7 +93,7 @@ describe("NoteCanvasEditor", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
     const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
-    expect(withChecklist.blocks[0]).toEqual(expect.objectContaining({ type: "checklist" }));
+    expect(withChecklist.blocks[0]).toEqual(expect.objectContaining({ type: "checklist", title: "Checklist" }));
 
     rerender(<PaperNoteCanvasEditor canvas={withChecklist} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "Diagram" }));
@@ -146,5 +146,19 @@ describe("NoteCanvasEditor", () => {
     const items = screen.getAllByPlaceholderText("List item");
     expect(items).toHaveLength(2);
     expect(items[1]).toHaveFocus();
+  });
+
+  it("lets you rename the checklist heading", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
+    rerender(<PaperNoteCanvasEditor canvas={withChecklist} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText("Checklist title"), { target: { value: "Packing list" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      blocks: [expect.objectContaining({ type: "checklist", title: "Packing list" })],
+    }));
   });
 });

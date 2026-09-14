@@ -113,6 +113,16 @@ describe("security gates", () => {
     expect(screen.queryByText("Finance content")).not.toBeInTheDocument();
   });
 
+  it("opens remote displays without an extra page passkey", () => {
+    enrolled = true;
+    render(
+      <MemoryRouter initialEntries={["/remote-displays"]}>
+        <ModuleSecurityGate><p>Displays content</p></ModuleSecurityGate>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Displays content")).toBeInTheDocument();
+  });
+
   it("opens modules with no additional security requirement", () => {
     enrolled = true;
     render(

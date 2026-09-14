@@ -1,8 +1,8 @@
 import { useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  Camera, Cloud, Computer, Database, Globe, HardDrive, Hexagon, Home, Laptop,
-  MonitorSpeaker, Phone, Printer, Router, Server, Shield, Smartphone, Square, Trash2, Tv,
-  User, Users, Wifi, Workflow,
+  Calendar, Camera, Car, Cloud, Computer, Copy, Database, Globe, HardDrive, Heart, Hexagon, Home, KeyRound,
+  Laptop, Lightbulb, Mail, MapPin, MonitorSpeaker, Phone, Plug, Printer, Router, Server, Shield, Smartphone,
+  Square, Star, Trash2, Tv, User, Users, Wifi, Workflow, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,9 @@ import {
   addDiagramNode,
   connectDiagramNodes,
   diagramBoundaryPoint,
+  diagramNodeAtPoint,
   diagramNodeMetrics,
+  duplicateDiagramNode,
   emptyDiagram,
   removeDiagramSelection,
   type DiagramNodeMetrics,
@@ -42,6 +44,16 @@ const ICON: Record<Exclude<NoteDiagramIcon, "none">, LucideIcon> = {
   users: Users,
   harddrive: HardDrive,
   speaker: MonitorSpeaker,
+  car: Car,
+  mail: Mail,
+  calendar: Calendar,
+  map: MapPin,
+  star: Star,
+  heart: Heart,
+  bolt: Zap,
+  key: KeyRound,
+  light: Lightbulb,
+  plug: Plug,
 };
 
 function nodePath(node: NoteDiagramNode, m: DiagramNodeMetrics) {
@@ -50,6 +62,9 @@ function nodePath(node: NoteDiagramNode, m: DiagramNodeMetrics) {
   const cy = node.y;
   if (node.shape === "diamond") {
     return { type: "polygon" as const, points: `${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}` };
+  }
+  if (node.shape === "triangle") {
+    return { type: "polygon" as const, points: `${cx},${y} ${x + w},${y + h} ${x},${y + h}` };
   }
   if (node.shape === "parallelogram") {
     const skew = Math.min(22, w * 0.18);
@@ -62,6 +77,13 @@ function nodePath(node: NoteDiagramNode, m: DiagramNodeMetrics) {
       points: `${x + inset},${y} ${x + w - inset},${y} ${x + w},${cy} ${x + w - inset},${y + h} ${x + inset},${y + h} ${x},${cy}`,
     };
   }
+  if (node.shape === "chevron") {
+    const cut = Math.min(22, w * 0.22);
+    return {
+      type: "polygon" as const,
+      points: `${x},${y} ${x + w - cut},${y} ${x + w},${cy} ${x + w - cut},${y + h} ${x},${y + h} ${x + cut},${cy}`,
+    };
+  }
   if (node.shape === "cloud") {
     return {
       type: "path" as const,
@@ -69,17 +91,27 @@ function nodePath(node: NoteDiagramNode, m: DiagramNodeMetrics) {
     };
   }
   if (node.shape === "document") {
-    return {
-      type: "path" as const,
-      d: `M${x} ${y} H${x + w - 16} L${x + w} ${y + 16} V${y + h} H${x} Z`,
-    };
+    return { type: "path" as const, d: `M${x} ${y} H${x + w - 16} L${x + w} ${y + 16} V${y + h} H${x} Z` };
+  }
+  if (node.shape === "note") {
+    return { type: "path" as const, d: `M${x} ${y} H${x + w - 16} L${x + w} ${y + 16} V${y + h} H${x} Z M${x + w - 16} ${y} V${y + 16} H${x + w}` };
   }
   if (node.shape === "circle" || node.shape === "oval") return { type: "ellipse" as const };
   if (node.shape === "cylinder") return { type: "cylinder" as const };
-  return { type: "rect" as const, radius: node.shape === "rounded" ? 16 : 8 };
+  return { type: "rect" as const, radius: node.shape === "stadium" ? h / 2 : node.shape === "rounded" ? 16 : 8 };
 }
 
-function NodeGlyph({ node, metrics, selected }: { node: NoteDiagramNode; metrics: DiagramNodeMetrics; selected?: boolean }) {
+function NodeGlyph({
+  node,
+  metrics,
+  selected,
+  hideLabel,
+}: {
+  node: NoteDiagramNode;
+  metrics: DiagramNodeMetrics;
+  selected?: boolean;
+  hideLabel?: boolean;
+}) {
   const path = nodePath(node, metrics);
   const fill = node.fill || "hsl(var(--card))";
   const stroke = selected ? "hsl(var(--primary))" : "rgba(15,23,42,0.55)";
@@ -108,18 +140,20 @@ function NodeGlyph({ node, metrics, selected }: { node: NoteDiagramNode; metrics
           <Icon className="h-4 w-4 text-slate-700" />
         </foreignObject>
       )}
-      <text textAnchor="middle" fontSize="11" fontWeight="650" fill="#1e293b">
-        {metrics.lines.map((line, index) => (
-          <tspan
-            key={`${index}-${line}`}
-            x={node.x}
-            y={node.y + textOffset + (index - (metrics.lines.length - 1) / 2) * 14}
-            dominantBaseline="central"
-          >
-            {line}
-          </tspan>
-        ))}
-      </text>
+      {!hideLabel && (
+        <text textAnchor="middle" fontSize="11" fontWeight="650" fill="#1e293b">
+          {metrics.lines.map((line, index) => (
+            <tspan
+              key={`${index}-${line}`}
+              x={node.x}
+              y={node.y + textOffset + (index - (metrics.lines.length - 1) / 2) * 14}
+              dominantBaseline="central"
+            >
+              {line}
+            </tspan>
+          ))}
+        </text>
+      )}
     </g>
   );
 }
@@ -244,6 +278,15 @@ function TemplateGallery({ onPick }: { onPick: (diagram: NoteDiagram) => void })
 
 type Selection = { kind: "node" | "edge"; id: string } | null;
 
+function nodeHandles(node: NoteDiagramNode, metrics: DiagramNodeMetrics) {
+  return [
+    { x: node.x, y: metrics.y },
+    { x: metrics.x + metrics.w, y: node.y },
+    { x: node.x, y: metrics.y + metrics.h },
+    { x: metrics.x, y: node.y },
+  ];
+}
+
 export function NoteDiagramEditor({
   diagram,
   onChange,
@@ -257,7 +300,10 @@ export function NoteDiagramEditor({
   const [tool, setTool] = useState<"select" | "connect">("select");
   const [selected, setSelected] = useState<Selection>(null);
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [rubber, setRubber] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const linkDrag = useRef<{ fromId: string } | null>(null);
   const current = diagram ?? emptyDiagram();
 
   if (!diagram) {
@@ -291,13 +337,25 @@ export function NoteDiagramEditor({
     onChange({ ...current, edges: current.edges.map((edge) => edge.id === id ? { ...edge, ...patch } : edge) });
   };
 
+  const finishLink = (event: ReactPointerEvent) => {
+    if (!linkDrag.current) return;
+    const point = pointOnBoard(event);
+    const target = diagramNodeAtPoint(current, point.x, point.y);
+    if (target && target !== linkDrag.current.fromId) {
+      onChange(connectDiagramNodes(current, linkDrag.current.fromId, target));
+    }
+    linkDrag.current = null;
+    setRubber(null);
+    setTool("select");
+  };
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
-        <p className="flex items-center gap-1.5 text-sm font-semibold">
-          <Workflow className="h-4 w-4" /> Diagram
-        </p>
-        {canEdit && (
+      {canEdit && (
+        <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
+            <Workflow className="h-4 w-4" /> Diagram
+          </p>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button type="button" size="sm" variant={tool === "select" ? "default" : "outline"} className="h-8 rounded-lg" onClick={() => { setTool("select"); setConnectFrom(null); }}>
               Move
@@ -305,6 +363,21 @@ export function NoteDiagramEditor({
             <Button type="button" size="sm" variant={tool === "connect" ? "default" : "outline"} className="h-8 rounded-lg" onClick={() => setTool("connect")}>
               Connect
             </Button>
+            {selectedNode && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-lg"
+                onClick={() => {
+                  const next = duplicateDiagramNode(current, selectedNode.id);
+                  onChange(next);
+                  setSelected({ kind: "node", id: next.nodes.at(-1)!.id });
+                }}
+              >
+                <Copy className="mr-1 h-3.5 w-3.5" /> Duplicate
+              </Button>
+            )}
             <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => { setSelected(null); onChange(null); }}>
               Templates
             </Button>
@@ -323,10 +396,10 @@ export function NoteDiagramEditor({
               </Button>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="grid gap-0 lg:grid-cols-[7.5rem_minmax(0,1fr)]">
+      <div className={`grid gap-0 ${canEdit ? "lg:grid-cols-[7.5rem_minmax(0,1fr)]" : ""}`}>
         {canEdit && (
           <aside className="flex gap-1 overflow-x-auto border-b border-border/40 p-2 lg:flex-col lg:overflow-x-hidden lg:border-b-0 lg:border-r">
             {DIAGRAM_SHAPES.map((shape) => (
@@ -342,7 +415,7 @@ export function NoteDiagramEditor({
                 }}
                 className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-border/50 bg-background text-[10px] font-semibold hover:border-primary/40"
               >
-                {shape.id === "diamond" ? <Hexagon className="h-3.5 w-3.5 rotate-90" /> : <Square className="h-3.5 w-3.5" />}
+                {shape.id === "diamond" || shape.id === "triangle" ? <Hexagon className="h-3.5 w-3.5 rotate-90" /> : <Square className="h-3.5 w-3.5" />}
               </button>
             ))}
           </aside>
@@ -357,16 +430,30 @@ export function NoteDiagramEditor({
               role="img"
               aria-label="Diagram board"
               onPointerMove={(event) => {
-                if (!canEdit || !drag.current) return;
+                if (!canEdit) return;
                 const point = pointOnBoard(event);
+                if (linkDrag.current) {
+                  const from = current.nodes.find((node) => node.id === linkDrag.current?.fromId);
+                  if (!from) return;
+                  setRubber({ x1: from.x, y1: from.y, x2: point.x, y2: point.y });
+                  return;
+                }
+                if (!drag.current) return;
                 patchNode(drag.current.id, { x: point.x - drag.current.ox, y: point.y - drag.current.oy });
               }}
-              onPointerUp={() => { drag.current = null; }}
-              onPointerLeave={() => { drag.current = null; }}
+              onPointerUp={(event) => {
+                if (linkDrag.current) finishLink(event);
+                drag.current = null;
+              }}
+              onPointerLeave={(event) => {
+                if (linkDrag.current) finishLink(event);
+                drag.current = null;
+              }}
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
                   setSelected(null);
                   setConnectFrom(null);
+                  setEditingLabelId(null);
                 }
               }}
             >
@@ -383,7 +470,7 @@ export function NoteDiagramEditor({
                 const end = diagramBoundaryPoint(to, metrics[to.id], from.x - to.x, from.y - to.y);
                 const on = selected?.kind === "edge" && selected.id === edge.id;
                 return (
-                  <g key={edge.id} onPointerDown={(event) => { event.stopPropagation(); setSelected({ kind: "edge", id: edge.id }); }}>
+                  <g key={edge.id} onPointerDown={(event) => { event.stopPropagation(); setSelected({ kind: "edge", id: edge.id }); setEditingLabelId(null); }}>
                     <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
                     <line
                       x1={start.x}
@@ -403,39 +490,98 @@ export function NoteDiagramEditor({
                   </g>
                 );
               })}
-              {current.nodes.map((node) => (
-                <g
-                  key={node.id}
-                  className={canEdit ? "cursor-grab" : undefined}
-                  onPointerDown={(event) => {
-                    if (!canEdit) return;
-                    event.stopPropagation();
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    if (tool === "connect") {
-                      if (!connectFrom) {
-                        setConnectFrom(node.id);
-                        setSelected({ kind: "node", id: node.id });
+              {rubber && (
+                <line x1={rubber.x1} y1={rubber.y1} x2={rubber.x2} y2={rubber.y2} stroke="hsl(var(--primary))" strokeWidth="2" strokeDasharray="6 4" />
+              )}
+              {current.nodes.map((node) => {
+                const m = metrics[node.id];
+                const on = selected?.kind === "node" && selected.id === node.id;
+                return (
+                  <g
+                    key={node.id}
+                    className={canEdit ? "cursor-grab" : undefined}
+                    onPointerDown={(event) => {
+                      if (!canEdit) return;
+                      event.stopPropagation();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      if (tool === "connect") {
+                        if (!connectFrom) {
+                          setConnectFrom(node.id);
+                          setSelected({ kind: "node", id: node.id });
+                          return;
+                        }
+                        onChange(connectDiagramNodes(current, connectFrom, node.id));
+                        setConnectFrom(null);
+                        setTool("select");
                         return;
                       }
-                      onChange(connectDiagramNodes(current, connectFrom, node.id));
-                      setConnectFrom(null);
-                      setTool("select");
-                      return;
-                    }
-                    setSelected({ kind: "node", id: node.id });
-                    const point = pointOnBoard(event);
-                    drag.current = { id: node.id, ox: point.x - node.x, oy: point.y - node.y };
-                  }}
-                >
-                  <NodeGlyph node={node} metrics={metrics[node.id]} selected={selected?.kind === "node" && selected.id === node.id} />
-                </g>
-              ))}
+                      setSelected({ kind: "node", id: node.id });
+                      const point = pointOnBoard(event);
+                      drag.current = { id: node.id, ox: point.x - node.x, oy: point.y - node.y };
+                    }}
+                    onDoubleClick={(event) => {
+                      if (!canEdit) return;
+                      event.stopPropagation();
+                      setEditingLabelId(node.id);
+                      setSelected({ kind: "node", id: node.id });
+                    }}
+                  >
+                    <NodeGlyph node={node} metrics={m} selected={on} hideLabel={editingLabelId === node.id} />
+                    {editingLabelId === node.id && (
+                      <foreignObject x={m.x + 8} y={node.y - 14} width={Math.max(80, m.w - 16)} height={28}>
+                        <input
+                          autoFocus
+                          defaultValue={node.label}
+                          aria-label="Shape text"
+                          className="h-7 w-full rounded-md border border-primary bg-white px-1.5 text-center text-[11px] font-semibold text-slate-900 outline-none"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onBlur={(event) => {
+                            patchNode(node.id, { label: event.target.value });
+                            setEditingLabelId(null);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              patchNode(node.id, { label: (event.target as HTMLInputElement).value });
+                              setEditingLabelId(null);
+                            }
+                          }}
+                        />
+                      </foreignObject>
+                    )}
+                    {canEdit && on && nodeHandles(node, m).map((handle, index) => (
+                      <circle
+                        key={`${node.id}-h${index}`}
+                        cx={handle.x}
+                        cy={handle.y}
+                        r={6}
+                        fill="white"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth="2"
+                        className="cursor-crosshair"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          linkDrag.current = { fromId: node.id };
+                          setRubber({ x1: handle.x, y1: handle.y, x2: handle.x, y2: handle.y });
+                          setSelected({ kind: "node", id: node.id });
+                        }}
+                      />
+                    ))}
+                  </g>
+                );
+              })}
             </svg>
           </div>
 
           {canEdit && selectedNode && (
             <div className="space-y-2 border-t border-border/40 p-3">
-              <Input value={selectedNode.label} onChange={(event) => patchNode(selectedNode.id, { label: event.target.value })} placeholder="Label" />
+              <Input
+                value={selectedNode.label}
+                onChange={(event) => patchNode(selectedNode.id, { label: event.target.value })}
+                placeholder="Label"
+                aria-label="Shape text"
+              />
               <div className="flex flex-wrap gap-1.5">
                 {DIAGRAM_SHAPES.map((shape) => (
                   <button
@@ -489,9 +635,9 @@ export function NoteDiagramEditor({
             </div>
           )}
 
-          {canEdit && tool === "connect" && (
+          {canEdit && (
             <p className="px-3 pb-3 text-[11px] text-muted-foreground">
-              {connectFrom ? "Now tap the shape it should point to." : "Tap a shape, then tap the next one to draw a line."}
+              Drag a blue handle to join boxes. Double-click a shape to type on it.
             </p>
           )}
         </div>
@@ -500,4 +646,3 @@ export function NoteDiagramEditor({
   );
 }
 
-export { DIAGRAM_TEMPLATES };

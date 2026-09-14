@@ -38,6 +38,22 @@ describe("remote display Firestore enforcement", () => {
         setDoc(doc(admin.firestore(), "finance", "owner", "accounts", "main"), { name: "Current account" }),
         setDoc(doc(admin.firestore(), "birthdays", "mum"), { createdBy: "owner", householdId: "family", sharedWith: { mode: "all" } }),
         setDoc(doc(admin.firestore(), "household", "family", "messages", "note"), { text: "Dinner at 6" }),
+        setDoc(doc(admin.firestore(), "photos", "other", "albums", "hols"), {
+          ownerId: "other",
+          name: "Holidays",
+          sharedWith: ["owner"],
+        }),
+        setDoc(doc(admin.firestore(), "photos", "other", "albums", "hols", "items", "pic"), {
+          url: "https://example.com/shared.jpg",
+          ownerId: "other",
+          albumId: "hols",
+        }),
+        setDoc(doc(admin.firestore(), "photoGrants", "share-hols"), {
+          ownerId: "other",
+          targetUid: "owner",
+          albumId: "hols",
+          permission: "view",
+        }),
       ]);
     });
   });
@@ -62,6 +78,13 @@ describe("remote display Firestore enforcement", () => {
     await assertFails(getDoc(doc(display, "finance", "owner", "accounts", "main")));
     await assertFails(updateDoc(doc(display, "tasks", "owner", "items", "task"), { title: "Changed" }));
     await assertFails(updateDoc(doc(display, "devices", "kitchen"), { label: "Changed at the screen" }));
+  });
+
+  it("lets a paired display read albums shared with its owner", async () => {
+    const display = context("owner", { deviceId: "kitchen" });
+    await assertSucceeds(getDoc(doc(display, "photoGrants", "share-hols")));
+    await assertSucceeds(getDoc(doc(display, "photos", "other", "albums", "hols")));
+    await assertSucceeds(getDoc(doc(display, "photos", "other", "albums", "hols", "items", "pic")));
   });
 
   it("lets a paired display read birthdays and family notes for its household", async () => {

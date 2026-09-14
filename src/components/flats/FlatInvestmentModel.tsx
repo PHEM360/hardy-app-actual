@@ -27,9 +27,14 @@ import { Switch } from "@/components/ui/switch";
 import { useFlat } from "@/hooks/useFlats";
 import { fmtGbp } from "@/lib/flatFinance";
 import {
+  addMonthsToKey,
   buildVerdict,
+  currentMonthKey,
   defaultInvestmentInputs,
+  formatMonthKey,
   inputsFromFlatDefaults,
+  monthsBetweenKeys,
+  parseMonthKey,
   runFlatInvestmentModel,
   STRATEGY_LABELS,
   type FlatInvestmentInputs,
@@ -48,6 +53,10 @@ function tint(pct = 14) {
 function num(v: string): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function monthsBetweenSafe(from: string, to: string): number {
+  return monthsBetweenKeys(from || currentMonthKey(), to || currentMonthKey());
 }
 
 function Field({
@@ -145,13 +154,56 @@ function Section({
   );
 }
 
+function MonthYearField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const parsed = parseMonthKey(value) || parseMonthKey(currentMonthKey())!;
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="grid grid-cols-[minmax(0,1fr)_5.25rem] gap-2">
+        <select
+          value={parsed.m}
+          onChange={(e) => onChange(`${parsed.y}-${String(Number(e.target.value)).padStart(2, "0")}`)}
+          className="h-10 min-w-0 rounded-xl border border-input bg-background px-3 text-sm"
+        >
+          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((name, index) => (
+            <option key={name} value={index + 1}>{name}</option>
+          ))}
+        </select>
+        <Input
+          type="number"
+          value={parsed.y}
+          onChange={(e) => {
+            const y = Math.max(2000, Math.round(Number(e.target.value) || parsed.y));
+            onChange(`${y}-${String(parsed.m).padStart(2, "0")}`);
+          }}
+          className="h-10 rounded-xl"
+        />
+      </div>
+    </div>
+  );
+}
+
 function inputsToForm(inputs: FlatInvestmentInputs) {
+  const duration = inputs.rentalDurationMonths ?? inputs.horizonYears * 12;
+  const voidTotal = inputs.voidMonthsTotal ?? inputs.voidMonthsPerYear * (duration / 12);
   return {
     marketValueGbp: String(inputs.marketValueGbp),
     offerPriceGbp: String(inputs.offerPriceGbp),
     mortgageBalanceGbp: String(inputs.mortgageBalanceGbp),
     rentMonthlyGbp: String(inputs.rentMonthlyGbp),
-    voidMonthsPerYear: String(inputs.voidMonthsPerYear),
+    voidMonthsTotal: String(voidTotal),
+    asOfMonth: inputs.asOfMonth || currentMonthKey(),
+    saleCompletionMonth: inputs.saleCompletionMonth || inputs.asOfMonth || currentMonthKey(),
+    rentalStartMonth: inputs.rentalStartMonth || inputs.asOfMonth || currentMonthKey(),
+    rentalDurationYears: String(Math.max(1, Math.round((duration / 12) * 10) / 10)),
     serviceChargeAnnualGbp: String(inputs.serviceChargeAnnualGbp),
     maintenanceAnnualGbp: String(inputs.maintenanceAnnualGbp),
     insuranceAnnualGbp: String(inputs.insuranceAnnualGbp),
@@ -160,6 +212,13 @@ function inputsToForm(inputs: FlatInvestmentInputs) {
     otherAnnualCostsGbp: String(inputs.otherAnnualCostsGbp),
     mortgageInterestAnnualGbp: String(inputs.mortgageInterestAnnualGbp),
     councilTaxAnnualGbp: String(inputs.councilTaxAnnualGbp),
+    councilTaxSecondHomeEnabled: parseMonthKey(inputs.councilTaxSecondHomeFromMonth) ? "yes" : "",
+    councilTaxSecondHomeFromMonth: inputs.councilTaxSecondHomeFromMonth || inputs.asOfMonth || currentMonthKey(),
+    councilTaxSecondHomeAnnualGbp: String(
+      inputs.councilTaxSecondHomeAnnualGbp && inputs.councilTaxSecondHomeAnnualGbp > 0
+        ? inputs.councilTaxSecondHomeAnnualGbp
+        : Math.max(0, inputs.councilTaxAnnualGbp) * 2 || 0,
+    ),
     sellingCostsPct: String(inputs.sellingCostsPct),
     sellingFixedGbp: String(inputs.sellingFixedGbp),
     capitalGrowthPctPa: String(inputs.capitalGrowthPctPa),
@@ -175,12 +234,20 @@ function inputsToForm(inputs: FlatInvestmentInputs) {
 type FormState = ReturnType<typeof inputsToForm>;
 
 function formToInputs(form: FormState, oneOffs: FlatInvestmentOneOff[]): FlatInvestmentInputs {
+  const horizonYears = num(form.horizonYears);
+  const rentalDurationMonths = Math.max(1, Math.round(num(form.rentalDurationYears) * 12) || horizonYears * 12);
+  const voidMonthsTotal = num(form.voidMonthsTotal);
   return defaultInvestmentInputs({
     marketValueGbp: num(form.marketValueGbp),
     offerPriceGbp: num(form.offerPriceGbp),
     mortgageBalanceGbp: num(form.mortgageBalanceGbp),
     rentMonthlyGbp: num(form.rentMonthlyGbp),
-    voidMonthsPerYear: num(form.voidMonthsPerYear),
+    voidMonthsPerYear: rentalDurationMonths > 0 ? (voidMonthsTotal * 12) / rentalDurationMonths : 0,
+    voidMonthsTotal,
+    asOfMonth: form.asOfMonth,
+    saleCompletionMonth: form.saleCompletionMonth,
+    rentalStartMonth: form.rentalStartMonth,
+    rentalDurationMonths,
     serviceChargeAnnualGbp: num(form.serviceChargeAnnualGbp),
     maintenanceAnnualGbp: num(form.maintenanceAnnualGbp),
     insuranceAnnualGbp: num(form.insuranceAnnualGbp),
@@ -189,6 +256,9 @@ function formToInputs(form: FormState, oneOffs: FlatInvestmentOneOff[]): FlatInv
     otherAnnualCostsGbp: num(form.otherAnnualCostsGbp),
     mortgageInterestAnnualGbp: num(form.mortgageInterestAnnualGbp),
     councilTaxAnnualGbp: num(form.councilTaxAnnualGbp),
+    councilTaxSecondHomeFromMonth: form.councilTaxSecondHomeEnabled === "yes" ? form.councilTaxSecondHomeFromMonth : "",
+    councilTaxSecondHomeAnnualGbp:
+      form.councilTaxSecondHomeEnabled === "yes" ? num(form.councilTaxSecondHomeAnnualGbp) : 0,
     sellingCostsPct: num(form.sellingCostsPct),
     sellingFixedGbp: num(form.sellingFixedGbp),
     capitalGrowthPctPa: num(form.capitalGrowthPctPa),
@@ -197,7 +267,7 @@ function formToInputs(form: FormState, oneOffs: FlatInvestmentOneOff[]): FlatInv
     alternativeReturnPctPa: num(form.alternativeReturnPctPa),
     incomeTaxRatePct: num(form.incomeTaxRatePct),
     financeCostReliefPct: num(form.financeCostReliefPct),
-    horizonYears: num(form.horizonYears),
+    horizonYears,
     oneOffs,
   });
 }
@@ -355,6 +425,7 @@ export default function FlatInvestmentModelPanel({
         label: "One-off cost",
         amountGbp: 0,
         year: 0,
+        monthKey: form.rentalStartMonth || form.asOfMonth || currentMonthKey(),
       },
     ]);
   };
@@ -393,8 +464,8 @@ export default function FlatInvestmentModelPanel({
             </p>
             <h2 className="font-display text-lg font-bold text-foreground">Sell, hold, or rent?</h2>
             <p className="max-w-xl text-sm text-muted-foreground">
-              Treat the flat as a to-let investment. Compare taking an offer, waiting for market value,
-              holding vacant, or letting — with break-even sale price and years to win.
+              Set when a sale would complete and when a let would start. The model waits through empty months,
+              then compares invested sale proceeds with renting — including voids and one-off costs.
             </p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -486,10 +557,10 @@ export default function FlatInvestmentModelPanel({
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">{verdict.recommendationDetail}</p>
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  These four figures are total wealth after {verdictYearsLabel} year{verdictYearsLabel === 1 ? "" : "s"}
-                  {verdictYearsLabel === 1
-                    ? " — sell paths are the cash in your pocket after costs, then grown for one year; rent is the flat’s sale equity plus this year’s leftover rent."
-                    : " — sell paths grow the cash from a sale today; rent is the grown flat plus leftover rent invested along the way. Year-by-year rent cash is not the same as rent-path wealth."}
+                  Figures are total wealth after {verdictYearsLabel} year{verdictYearsLabel === 1 ? "" : "s"} from {formatMonthKey(result.timing.asOfMonth)}.
+                  Sell paths invest cash after a sale completing {formatMonthKey(result.timing.saleCompletionMonth)}.
+                  Rent runs from {formatMonthKey(result.timing.rentalStartMonth)} for {result.timing.rentalDurationMonths} months
+                  ({result.timing.voidMonthsTotal.toFixed(result.timing.voidMonthsTotal % 1 ? 1 : 0)} void), and still counts the flat’s value at the end.
                   {clampedYear === 1 && (
                     <> This year’s leftover rent is {fmtGbp(selectedRow.netRentCashGbp)}.</>
                   )}
@@ -512,13 +583,38 @@ export default function FlatInvestmentModelPanel({
                   </div>
                 ))}
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile
+                  label="Difference (rent − offer)"
+                  value={fmtGbp(verdict.differencesAtHorizon.rentMinusOfferGbp)}
+                  hint={`After ${verdictYearsLabel} years from ${formatMonthKey(result.timing.asOfMonth)}`}
+                  emphasise
+                />
                 <StatTile
                   label="Break-even sale price"
                   value={fmtGbp(result.breakEvenSalePriceGbp)}
-                  hint="Price today that matches renting to the horizon"
+                  hint={`Sale completing ${formatMonthKey(result.timing.saleCompletionMonth)} to match renting`}
                   emphasise
                 />
+                <StatTile
+                  label="Break-even monthly rent"
+                  value={fmtGbp(result.breakEvenMonthlyRentGbp)}
+                  hint={`Let from ${formatMonthKey(result.timing.rentalStartMonth)} to match the offer`}
+                />
+                <StatTile
+                  label="Break-even return"
+                  value={result.breakEvenAltReturnPctPa == null ? "Over 40%" : `${result.breakEvenAltReturnPctPa.toFixed(1)}%`}
+                  hint={`Needed on the ${formatMonthKey(result.timing.saleCompletionMonth)} sale to match renting`}
+                />
+              </div>
+              <div className="mt-3 space-y-2 rounded-2xl border border-border/50 bg-card p-3 text-xs leading-relaxed text-muted-foreground">
+                <p>{result.breakEvenSaleHint}</p>
+                <p>{result.breakEvenRentHint}</p>
+                <p>{result.breakEvenReturnHint}</p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatTile label="Net offer proceeds" value={fmtGbp(result.netOfferProceedsGbp)} hint={`Cash from the offer in ${formatMonthKey(result.timing.saleCompletionMonth)}, before investing`} />
+                <StatTile label="Net market proceeds" value={fmtGbp(result.netMarketProceedsGbp)} hint="What full market value would net" />
                 <StatTile
                   label="Years until rent beats offer"
                   value={
@@ -526,21 +622,6 @@ export default function FlatInvestmentModelPanel({
                       ? `${result.yearsUntilRentBeatsOffer} yr`
                       : "Not within horizon"
                   }
-                  hint="First year renting wealth overtakes selling at the offer"
-                  emphasise
-                />
-                <StatTile
-                  label="Break-even monthly rent"
-                  value={fmtGbp(result.breakEvenMonthlyRentGbp)}
-                  hint="Rent needed for letting to match the offer path"
-                />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatTile label="Net offer proceeds" value={fmtGbp(result.netOfferProceedsGbp)} hint="What the offer nets today, before any investing" />
-                <StatTile label="Net market proceeds" value={fmtGbp(result.netMarketProceedsGbp)} hint="What full market value would net today" />
-                <StatTile
-                  label={`Rent − offer (${verdictYearsLabel}y)`}
-                  value={fmtGbp(verdict.differencesAtHorizon.rentMinusOfferGbp)}
                 />
                 <StatTile
                   label="Year-1 net rent (after tax)"
@@ -553,6 +634,16 @@ export default function FlatInvestmentModelPanel({
           <div className="grid min-w-0 gap-4 xl:grid-cols-2">
             <Section title="Values & sale" icon={<TrendingUp className="h-4 w-4" />}>
               <div className="grid grid-cols-2 gap-3">
+                <MonthYearField
+                  label="Compare from"
+                  value={form.asOfMonth}
+                  onChange={(v) => setField("asOfMonth", v)}
+                />
+                <MonthYearField
+                  label="Sale completes"
+                  value={form.saleCompletionMonth}
+                  onChange={(v) => setField("saleCompletionMonth", v)}
+                />
                 <Field
                   label="Market value"
                   value={form.marketValueGbp}
@@ -560,7 +651,7 @@ export default function FlatInvestmentModelPanel({
                   suffix="£"
                 />
                 <Field
-                  label="Current offer"
+                  label="Offer / sale price"
                   value={form.offerPriceGbp}
                   onChange={(v) => setField("offerPriceGbp", v)}
                   suffix="£"
@@ -591,10 +682,25 @@ export default function FlatInvestmentModelPanel({
                   suffix="£"
                 />
               </div>
+              <p className="mt-3 text-[11px] leading-snug text-muted-foreground">
+                Empty months before completion still cost service charge, insurance and council tax. Proceeds then earn the alternative return until the horizon.
+              </p>
             </Section>
 
             <Section title="Rent & running costs" icon={<Calculator className="h-4 w-4" />}>
               <div className="grid grid-cols-2 gap-3">
+                <MonthYearField
+                  label="Rent from"
+                  value={form.rentalStartMonth}
+                  onChange={(v) => setField("rentalStartMonth", v)}
+                />
+                <Field
+                  label="Rent for"
+                  value={form.rentalDurationYears}
+                  onChange={(v) => setField("rentalDurationYears", v)}
+                  suffix="yrs"
+                  step="0.5"
+                />
                 <Field
                   label="Monthly rent"
                   value={form.rentMonthlyGbp}
@@ -602,9 +708,9 @@ export default function FlatInvestmentModelPanel({
                   suffix="£"
                 />
                 <Field
-                  label="Void months / yr"
-                  value={form.voidMonthsPerYear}
-                  onChange={(v) => setField("voidMonthsPerYear", v)}
+                  label="Void months in that period"
+                  value={form.voidMonthsTotal}
+                  onChange={(v) => setField("voidMonthsTotal", v)}
                   step="0.25"
                 />
                 <Field
@@ -645,12 +751,64 @@ export default function FlatInvestmentModelPanel({
                   suffix="£"
                 />
                 <Field
-                  label="Council tax (if unoccupied)"
+                  label="Council tax while empty"
                   value={form.councilTaxAnnualGbp}
-                  onChange={(v) => setField("councilTaxAnnualGbp", v)}
+                  onChange={(v) => {
+                    setField("councilTaxAnnualGbp", v);
+                    if (form.councilTaxSecondHomeEnabled !== "yes") {
+                      setField("councilTaxSecondHomeAnnualGbp", String(num(v) * 2));
+                    }
+                  }}
                   suffix="£/yr"
                 />
               </div>
+              <div
+                className="mt-3 rounded-xl border border-border/50 p-3"
+                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 8%, hsl(var(--card)))" }}
+              >
+                <label className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-foreground">Second-home / empty-home rate</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      You only pay council tax while the flat is empty. Occupied months are the tenant’s bill. Turn this on if empty months after a date are charged a higher rate (often double).
+                    </span>
+                  </span>
+                  <Switch
+                    checked={form.councilTaxSecondHomeEnabled === "yes"}
+                    onCheckedChange={(on) => {
+                      setField("councilTaxSecondHomeEnabled", on ? "yes" : "");
+                      if (on && !num(form.councilTaxSecondHomeAnnualGbp)) {
+                        setField("councilTaxSecondHomeAnnualGbp", String(num(form.councilTaxAnnualGbp) * 2));
+                      }
+                    }}
+                  />
+                </label>
+                {form.councilTaxSecondHomeEnabled === "yes" && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <MonthYearField
+                      label="Higher rate from"
+                      value={form.councilTaxSecondHomeFromMonth}
+                      onChange={(v) => setField("councilTaxSecondHomeFromMonth", v)}
+                    />
+                    <Field
+                      label="Council tax from then"
+                      value={form.councilTaxSecondHomeAnnualGbp}
+                      onChange={(v) => setField("councilTaxSecondHomeAnnualGbp", v)}
+                      suffix="£/yr"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-[11px] leading-snug text-muted-foreground">
+                The flat is empty from “Compare from” until “Rent from”. Void months are extra empty months inside the tenancy, not that wait.
+                {result.timing.rentStartIndex + result.timing.rentalDurationMonths > result.timing.horizonMonths ? (
+                  <> Raise the horizon if you want the whole tenancy inside the comparison.</>
+                ) : null}
+                {result.timing.saleMonthIndex >= result.timing.horizonMonths - 1 &&
+                monthsBetweenKeys(result.timing.asOfMonth, form.saleCompletionMonth) >= result.timing.horizonMonths ? (
+                  <> The sale sits on or after the comparison date — move completion earlier or raise the horizon.</>
+                ) : null}
+              </p>
             </Section>
           </div>
 
@@ -666,15 +824,14 @@ export default function FlatInvestmentModelPanel({
           >
             {oneOffs.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Add lease extensions, deeds of variation, major works, or other one-offs and which year they
-                fall in (0 = this year).
+                Add doing-up, major works, lease extensions, or other one-offs and the month they fall in.
               </p>
             ) : (
               <div className="space-y-2">
                 {oneOffs.map((o) => (
                   <div
                     key={o.id}
-                    className="grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_5.5rem_2.5rem]"
+                    className="grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_minmax(11rem,12rem)_2.5rem]"
                   >
                     <div className="min-w-0 space-y-1.5">
                       <Label className="text-xs">Label</Label>
@@ -686,7 +843,7 @@ export default function FlatInvestmentModelPanel({
                           )
                         }
                         className="h-10 rounded-xl"
-                        placeholder="Lease extension, DoV…"
+                        placeholder="Doing up, major works…"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -704,23 +861,23 @@ export default function FlatInvestmentModelPanel({
                         className="h-10 rounded-xl"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Year</Label>
-                      <Input
-                        type="number"
-                        value={o.year || ""}
-                        onChange={(e) =>
-                          setOneOffs((prev) =>
-                            prev.map((x) =>
-                              x.id === o.id
-                                ? { ...x, year: Math.max(0, Math.round(num(e.target.value))) }
-                                : x,
-                            ),
-                          )
-                        }
-                        className="h-10 rounded-xl"
-                      />
-                    </div>
+                    <MonthYearField
+                      label="When"
+                      value={o.monthKey || addMonthsToKey(form.asOfMonth || currentMonthKey(), (o.year || 0) * 12)}
+                      onChange={(v) =>
+                        setOneOffs((prev) =>
+                          prev.map((x) =>
+                            x.id === o.id
+                              ? {
+                                  ...x,
+                                  monthKey: v,
+                                  year: Math.max(0, Math.floor(Math.max(0, monthsBetweenSafe(form.asOfMonth, v)) / 12)),
+                                }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
                     <Button
                       size="icon"
                       variant="ghost"
@@ -786,10 +943,7 @@ export default function FlatInvestmentModelPanel({
               />
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              Sell paths invest net proceeds at the alternative return. Rent / vacant paths grow the property,
-              accumulate after-tax cash (or costs), then assume a sale at year-end with the same selling costs.
-              Tax is a simplified personal-landlord model (marginal rate on profit, basic-rate relief on
-              interest). Not advice.
+              Comparison runs from the start month for the horizon. A sale waits until completion, pays empty-flat costs until then, then invests net proceeds. Rent waits until the start month, then lets for the chosen length with voids and one-offs. Both paths still count the flat’s sale value at the horizon if you still own it. Tax is a simplified personal-landlord model. Not advice.
             </p>
           </Section>
 

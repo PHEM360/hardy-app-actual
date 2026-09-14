@@ -23,10 +23,19 @@ describe("capture destinations", () => {
     expect(captureExpenseAllowed("notes")).toBe(false);
   });
 
-  it("uses company and flat category lists when those destinations are picked", () => {
+  it("uses shared expense lists for unallocated and companies, and flat lists for flats", () => {
     expect(categoriesForCapture("unallocated")).toEqual(GENERIC_EXPENSE_CATEGORIES);
-    expect(categoriesForCapture("company", ["Travel", "Other"])).toEqual(["Travel", "Other"]);
+    expect(categoriesForCapture("company", { expense: ["Travel", "Other"] })).toEqual(["Travel", "Other"]);
+    expect(categoriesForCapture("unallocated", { expense: ["Travel", "Other"] })).toEqual(["Travel", "Other"]);
     expect(categoriesForCapture("flat")).toContain("Ground Rent");
+  });
+
+  it("uses document categories when the capture kind is a document", () => {
+    expect(categoriesForCapture("unallocated", { kind: "document", document: ["Invoice", "Contract"] })).toEqual([
+      "Invoice",
+      "Contract",
+    ]);
+    expect(categoriesForCapture("company", { kind: "document" })).toContain("Invoice");
   });
 });
 

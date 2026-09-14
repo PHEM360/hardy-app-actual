@@ -8,7 +8,7 @@ import {
 import {
   StickyNote, Plus, Search, LayoutGrid, List, Columns2, CalendarDays, ListChecks,
   FolderPlus, Shield, Share2, Pin, Archive, CheckSquare, Settings2,
-  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Inbox, Folder, PenLine, GitBranch,
+  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Inbox, Folder, PenLine, GitBranch, Tag,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
@@ -32,13 +32,15 @@ import { ShareNoteDialog } from "@/components/notes/ShareNoteDialog";
 import { VaultGate } from "@/components/notes/VaultGate";
 import { NoteCard } from "@/components/notes/NoteCard";
 import { NoteStartDialog } from "@/components/notes/NoteStartDialog";
+import { NoteCategorySettings } from "@/components/notes/NoteCategorySettings";
 import { noteHasDiagram } from "@/lib/noteDiagram";
 import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
+import { noteCategoryOptions } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
 import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteCardStyle, noteSwatch } from "@/lib/noteStyle";
 import { toast } from "sonner";
 
-type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}`;
+type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}` | `category:${string}`;
 
 const FOLDER_ACCENT: Record<string, string> = {
   yellow: "hsl(42, 85%, 48%)",
@@ -102,6 +104,7 @@ export default function Notes() {
   const [creatingKind, setCreatingKind] = useState<NoteKind>("note");
   const [creatingId, setCreatingId] = useState(() => crypto.randomUUID());
   const [creatingDiagram, setCreatingDiagram] = useState<NoteDiagram | null>(null);
+  const [creatingTitle, setCreatingTitle] = useState("");
   const [startOpen, setStartOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ type: "note" | "folder"; note?: HubNote; folder?: NoteFolder } | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
@@ -193,6 +196,7 @@ export default function Notes() {
       if (filter === "diagrams") return noteHasDiagram(n);
       if (filter === "inbox") return !n.folderId;
       if (filter.startsWith("folder:")) return n.folderId === filter.slice(7);
+      if (filter.startsWith("category:")) return n.category === filter.slice(9);
       return true;
     });
 
@@ -215,9 +219,10 @@ export default function Notes() {
     return [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (a.title || "").localeCompare(b.title || ""));
   }, [filter, notesApi.notes, notesApi.vaultNotes, notesApi.sharedNotes, vault.unlocked, query]);
 
-  const openNote = (note: HubNote | null, kind: NoteKind = "note", diagram: NoteDiagram | null = null) => {
+  const openNote = (note: HubNote | null, kind: NoteKind = "note", diagram: NoteDiagram | null = null, title = "") => {
     setCreatingKind(kind);
     setCreatingDiagram(note ? null : diagram);
+    setCreatingTitle(note ? "" : title);
     if (!note) setCreatingId(crypto.randomUUID());
     setActive(note);
     setEditorOpen(true);
@@ -391,6 +396,9 @@ export default function Notes() {
             {railItem("diagrams", "Diagrams", GitBranch, FOLDER_ACCENT.teal)}
             {railItem("drawings", "Drawings", PenLine, FOLDER_ACCENT.purple)}
             {railItem("inbox", "Inbox", Inbox)}
+            {noteCategoryOptions(notesApi.prefs).map((category) =>
+              railItem(`category:${category.id}`, category.label, Tag, category.swatch)
+            )}
             {notesApi.folders.map((f) =>
               railItem(`folder:${f.id}`, `${f.emoji ? `${f.emoji} ` : ""}${f.name}`, Folder, FOLDER_ACCENT[f.color] || FOLDER_ACCENT.default)
             )}
@@ -546,6 +554,7 @@ export default function Notes() {
                 style={styleFor(n, i)}
                 canEdit={canEdit && !n.locked}
                 featured={notesApi.prefs.dashboardNoteId === n.id}
+                prefs={notesApi.prefs}
                 onOpen={() => openNote(n)}
                 onToggleItem={(itemId, done) => {
                   notesApi.updateNote(n, {
@@ -603,6 +612,7 @@ export default function Notes() {
                         style={styleFor(n, i, col.notes.length)}
                         canEdit={canEdit && !n.locked}
                         featured={notesApi.prefs.dashboardNoteId === n.id}
+                        prefs={notesApi.prefs}
                         onOpen={() => openNote(n)}
                         onToggleItem={(itemId, done) => {
                           notesApi.updateNote(n, {
@@ -696,8 +706,10 @@ export default function Notes() {
         isOwn={isOwnScope}
         defaultKind={creatingKind}
         initialDiagram={creatingDiagram}
+        initialTitle={creatingTitle}
         ownerId={active?.ownerId || notesApi.uid || ""}
         noteId={active?.id || creatingId}
+        prefs={notesApi.prefs}
         showOnDashboard={!!active && notesApi.prefs.dashboardNoteId === active.id}
         onSave={saveNote}
         onDelete={async () => {
@@ -733,7 +745,7 @@ export default function Notes() {
       <NoteStartDialog
         open={startOpen}
         onOpenChange={setStartOpen}
-        onPick={(choice) => openNote(null, choice.kind, choice.diagram ?? null)}
+        onPick={(choice) => openNote(null, choice.kind, choice.diagram ?? null, choice.title ?? "")}
       />
 
       <ShareNoteDialog
@@ -783,6 +795,13 @@ export default function Notes() {
               <Switch
                 checked={notesApi.prefs.showTasksPageItems}
                 onCheckedChange={(v) => notesApi.savePrefs({ showTasksPageItems: v })}
+              />
+            </div>
+
+            <div className="rounded-xl border border-border p-3">
+              <NoteCategorySettings
+                prefs={notesApi.prefs}
+                onChange={(next) => notesApi.savePrefs(next)}
               />
             </div>
 

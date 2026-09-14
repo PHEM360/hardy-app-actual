@@ -4,19 +4,22 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { DEFAULT_ACCOUNT_TYPES, withOtherLast } from "@/lib/financeAccounts";
 import { mergeDisplayStats, type FinanceStatId } from "@/lib/financeDisplay";
+import { defaultPensionModel, mergePensionModel, type PensionModelDoc } from "@/lib/pensionModel";
 
 export function useFinanceSettings(scopeUserId?: string) {
   const { dataUid } = useAuth();
   const uid = scopeUserId ?? dataUid;
   const [accountTypes, setAccountTypes] = useState<string[]>([...DEFAULT_ACCOUNT_TYPES]);
   const [displayStats, setDisplayStats] = useState<Record<FinanceStatId, boolean>>(mergeDisplayStats());
+  const [pensionModel, setPensionModel] = useState<PensionModelDoc>(defaultPensionModel());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!uid) {
-      setAccountTypes([...DEFAULT_ACCOUNT_TYPES]);
-      setDisplayStats(mergeDisplayStats());
-      setLoading(false);
+        setAccountTypes([...DEFAULT_ACCOUNT_TYPES]);
+        setDisplayStats(mergeDisplayStats());
+        setPensionModel(defaultPensionModel());
+        setLoading(false);
       return;
     }
     const unsub = onSnapshot(
@@ -30,6 +33,7 @@ export function useFinanceSettings(scopeUserId?: string) {
           setAccountTypes([...DEFAULT_ACCOUNT_TYPES]);
         }
         setDisplayStats(mergeDisplayStats(data?.displayStats));
+        setPensionModel(mergePensionModel(data?.pensionModel));
         setLoading(false);
       },
       () => setLoading(false)
@@ -66,6 +70,19 @@ export function useFinanceSettings(scopeUserId?: string) {
     [uid]
   );
 
+  const savePensionModel = useCallback(
+    async (next: PensionModelDoc) => {
+      if (!uid) return;
+      setPensionModel(next);
+      await setDoc(
+        doc(db, "finance", uid, "settings", "default"),
+        { pensionModel: next, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    },
+    [uid]
+  );
+
   const ensureType = useCallback(
     async (type: string) => {
       const trimmed = type.trim();
@@ -76,5 +93,5 @@ export function useFinanceSettings(scopeUserId?: string) {
     [accountTypes, saveAccountTypes]
   );
 
-  return { accountTypes, displayStats, loading, saveAccountTypes, saveDisplayStats, ensureType };
+  return { accountTypes, displayStats, pensionModel, loading, saveAccountTypes, saveDisplayStats, savePensionModel, ensureType };
 }

@@ -8,7 +8,8 @@ export type DisplayWidgetType =
   | "message"
   | "countdown"
   | "birthdays"
-  | "familyBoard";
+  | "familyBoard"
+  | "empty";
 
 export type DisplayPageLayout = "full" | "halves" | "stack" | "main-side" | "quarters";
 export type DisplayCalendarView = "agenda" | "month" | "week";
@@ -88,6 +89,7 @@ export const WIDGET_LABELS: Record<DisplayWidgetType, string> = {
   countdown: "Countdown",
   birthdays: "Birthdays",
   familyBoard: "Family board",
+  empty: "Empty area",
 };
 
 export const WIDGET_DESCRIPTIONS: Record<DisplayWidgetType, string> = {
@@ -101,6 +103,7 @@ export const WIDGET_DESCRIPTIONS: Record<DisplayWidgetType, string> = {
   countdown: "Days to go until a date that matters",
   birthdays: "Upcoming birthdays with a countdown",
   familyBoard: "Notes anyone in the household has posted from their phone",
+  empty: "Nothing in this area",
 };
 
 export const WIDGET_ORDER: DisplayWidgetType[] = [
@@ -218,6 +221,8 @@ export function createDisplayWidget(type: DisplayWidgetType): DisplayWidgetLayou
     showSeconds: false,
     showDate: true,
     photoIds: [],
+    photoAlbumIds: [],
+    photoRefs: [],
     photoIntervalSeconds: 20,
     calendarView: type === "calendar" ? "month" : "agenda",
     calendarEventStyle: "titles",
@@ -240,12 +245,18 @@ export function createDisplayWidget(type: DisplayWidgetType): DisplayWidgetLayou
   };
 }
 
+export function isEmptyDisplayWidget(widget?: Pick<DisplayWidgetLayout, "type"> | null): boolean {
+  return !widget || widget.type === "empty";
+}
+
 /** Legacy pages were free-form, so infer the closest layout from widget count. */
 function inferLayout(page: DisplayPage): DisplayPageLayout {
   if (page.layout) return page.layout;
-  if (page.widgets.length >= 4) return "quarters";
-  if (page.widgets.length === 3) return "main-side";
-  if (page.widgets.length === 2) return "halves";
+  const filled = page.widgets.filter((widget) => !isEmptyDisplayWidget(widget)).length;
+  const count = Math.max(filled, page.widgets.length);
+  if (count >= 4) return "quarters";
+  if (count === 3) return "main-side";
+  if (count === 2) return "halves";
   return "full";
 }
 
@@ -256,11 +267,21 @@ export function applyPageLayout(page: DisplayPage): DisplayPage {
   return {
     ...page,
     layout,
-    widgets: page.widgets.slice(0, slots.length).map((widget, index) => ({
-      ...createDisplayWidget(widget.type),
-      ...widget,
-      ...slots[index],
-    })),
+    widgets: slots.map((slot, index) => {
+      const widget = page.widgets[index];
+      if (isEmptyDisplayWidget(widget)) {
+        return {
+          ...createDisplayWidget("empty"),
+          ...(widget?.id ? { id: widget.id } : {}),
+          ...slot,
+        };
+      }
+      return {
+        ...createDisplayWidget(widget.type),
+        ...widget,
+        ...slot,
+      };
+    }),
   };
 }
 
@@ -390,7 +411,7 @@ export const PAGE_PRESETS: DisplayPagePreset[] = [
 ];
 
 export const DEFAULT_DISPLAY_PAGES: DisplayPage[] = [
-  {
+  applyPageLayout({
     id: "today",
     name: "Today",
     durationSeconds: 300,
@@ -399,5 +420,5 @@ export const DEFAULT_DISPLAY_PAGES: DisplayPage[] = [
     backdrop: "none",
     layout: "full",
     widgets: [{ ...createDisplayWidget("today"), id: "today-main" }],
-  },
+  }),
 ];

@@ -29,8 +29,12 @@ describe("app security sessions", () => {
     expect(DEFAULT_SECURITY_SETTINGS.moduleRequirements.remote_displays).toBe("none");
     expect(normalizeSecuritySettings({
       version: 2,
-      moduleRequirements: { passwords: "passkey" },
+      moduleRequirements: { passwords: "passkey", remote_displays: "passkey" },
     }).moduleRequirements.passwords).toBe("none");
+    expect(normalizeSecuritySettings({
+      version: 2,
+      moduleRequirements: { remote_displays: "passkey" },
+    }).moduleRequirements.remote_displays).toBe("none");
     expect(normalizeSecuritySettings({ version: 1, appUnlockIntervalDays: 30 }).appUnlockIntervalDays).toBe(7);
     expect(moduleForPath("/finance/accounts")).toBe("personal_finance");
     expect(moduleForPath("/login-details")).toBe("passwords");

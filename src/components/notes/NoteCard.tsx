@@ -1,6 +1,6 @@
 import { CheckSquare, GitBranch, Home, Lock, PenLine, Pin } from "lucide-react";
 import type { HubNote, NotesListStyle } from "@/types/notes";
-import { NOTE_CATEGORIES } from "@/types/notes";
+import { NOTE_CATEGORIES, noteCategoryOptions, type NotesPrefs } from "@/types/notes";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
 import { format, parseISO } from "date-fns";
 
@@ -12,6 +12,7 @@ export function NoteCard({
   onToggleItem,
   canEdit,
   featured,
+  prefs,
 }: {
   note: HubNote;
   style?: React.CSSProperties;
@@ -20,13 +21,14 @@ export function NoteCard({
   onToggleItem?: (itemId: string, done: boolean) => void;
   canEdit?: boolean;
   featured?: boolean;
+  prefs?: Pick<NotesPrefs, "customCategories" | "hiddenCategoryIds">;
 }) {
   const filled = listStyle === "filled";
   const compact = listStyle === "compact";
   const paper = listStyle === "paper";
   const items = (note.checklist ?? []).filter((i) => i.text.trim());
   const done = items.filter((i) => i.done).length;
-  const cat = NOTE_CATEGORIES.find((c) => c.id === note.category);
+  const cat = noteCategoryOptions(prefs).find((c) => c.id === note.category) ?? NOTE_CATEGORIES.find((c) => c.id === note.category);
   const drawing = note.canvas?.blocks.find((block) => block.type === "drawing");
   const image = note.canvas?.blocks.find((block) => block.type === "media" && block.mediaType === "image");
 

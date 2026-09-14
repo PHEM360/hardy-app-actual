@@ -68,11 +68,15 @@ export function requireAuth(request: { auth?: { uid: string } }): string {
  * /display kiosk or, in future, another device type carrying its own claim)
  * pairing itself in, and not a stale login someone forgot to re-verify.
  */
-export async function requireAccountAuth(request: { auth?: { uid: string; token?: Record<string, unknown> } }): Promise<string> {
+export async function requireAccountAuth(
+  request: { auth?: { uid: string; token?: Record<string, unknown> } },
+  options?: { requireFreshPasskey?: boolean },
+): Promise<string> {
   const uid = requireAuth(request);
   if (request.auth?.token?.deviceId) {
     throw new HttpsError("permission-denied", "Pairing must be approved from your phone or computer.");
   }
+  if (options?.requireFreshPasskey === false) return uid;
   const days = await passkeyFreshnessDays(uid);
   if (!hasFreshPasskey(request.auth?.token, days)) {
     throw new HttpsError("failed-precondition", "Confirm your passkey before linking a new device.");

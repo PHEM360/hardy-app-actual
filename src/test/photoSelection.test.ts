@@ -43,4 +43,13 @@ describe("photo selection for displays", () => {
     expect(albumLibraryKey({ id: "hols", ownerId: "chris" })).toBe("chris:hols");
     expect(snapshotPhotoRefs([photos[0]])).toEqual([{ id: "chris:a", url: "https://img/a.jpg", caption: "A" }]);
   });
+
+  it("does not double-prefix ids the display pool already namespaced", () => {
+    expect(photoLibraryKey({ id: "chris:a", ownerId: "chris", albumId: "hols" })).toBe("chris:a");
+    const fromDisplayPool = resolveDisplayPhotos(
+      [{ id: "chris:a", ownerId: "chris", albumId: "hols", url: "https://img/a.jpg" }],
+      { photoAlbumIds: ["chris:hols"] },
+    );
+    expect(fromDisplayPool.map((photo) => photo.id)).toEqual(["chris:a"]);
+  });
 });

@@ -9,6 +9,7 @@ import {
   WIDGET_ORDER,
   applyPageLayout,
   createDisplayWidget,
+  isEmptyDisplayWidget,
   layoutIsResizable,
   layoutSlots,
   type DisplayPage,
@@ -27,6 +28,7 @@ const ICONS: Record<DisplayWidgetType, typeof Clock3> = {
   countdown: Timer,
   birthdays: Cake,
   familyBoard: MessageCircle,
+  empty: Plus,
 };
 
 const TINTS: Record<DisplayWidgetType, string> = {
@@ -40,6 +42,7 @@ const TINTS: Record<DisplayWidgetType, string> = {
   countdown: "border-lime-400/40 bg-lime-400/15 text-lime-100",
   birthdays: "border-pink-400/40 bg-pink-400/15 text-pink-100",
   familyBoard: "border-orange-400/40 bg-orange-400/15 text-orange-100",
+  empty: "border-dashed border-white/20 bg-white/[0.03] text-white/50",
 };
 
 function LayoutThumbnail({ layout, ratio }: { layout: DisplayPageLayout; ratio?: number }) {
@@ -78,15 +81,11 @@ export function RemoteLayoutEditor({
 
   const setSlotWidget = (index: number, type: DisplayWidgetType | "") => {
     const widgets = [...page.widgets];
-    if (type === "") {
-      widgets.splice(index, 1);
-    } else if (widgets[index]) {
-      // Keep the id so the settings panel stays open on the same area.
-      widgets[index] = { ...createDisplayWidget(type), id: widgets[index].id };
-    } else {
-      while (widgets.length < index) widgets.push(createDisplayWidget("today"));
-      widgets[index] = createDisplayWidget(type);
-    }
+    while (widgets.length <= index) widgets.push(createDisplayWidget("empty"));
+    const keepId = widgets[index]?.id;
+    widgets[index] = type
+      ? { ...createDisplayWidget(type), ...(keepId ? { id: keepId } : {}) }
+      : { ...createDisplayWidget("empty"), ...(keepId ? { id: keepId } : {}) };
     const next = applyPageLayout({ ...page, widgets });
     onChange(next);
     onSelectWidget(type === "" ? null : next.widgets[index]?.id ?? null);
@@ -156,7 +155,8 @@ export function RemoteLayoutEditor({
           style={{ gridTemplateColumns: "repeat(12, 1fr)", gridTemplateRows: "repeat(12, 1fr)" }}
         >
           {slots.map((slot, index) => {
-            const widget = page.widgets[index];
+            const raw = page.widgets[index];
+            const widget = isEmptyDisplayWidget(raw) ? undefined : raw;
             const Icon = widget ? ICONS[widget.type] : Plus;
             const selected = !!widget && widget.id === selectedWidgetId;
             return (

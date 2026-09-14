@@ -3,6 +3,7 @@ export interface PhotoPickItem {
   albumId?: string;
   ownerId?: string;
   url?: string;
+  storagePath?: string;
   caption?: string;
 }
 
@@ -18,12 +19,17 @@ export interface DisplayPhotoPick {
   photoRefs?: PhotoPickRef[];
 }
 
+function ownedKey(ownerId: string | undefined, id: string): string {
+  if (!ownerId) return id;
+  return id.startsWith(`${ownerId}:`) ? id : `${ownerId}:${id}`;
+}
+
 export function photoLibraryKey(photo: Pick<PhotoPickItem, "id" | "ownerId" | "albumId">): string {
-  return photo.ownerId ? `${photo.ownerId}:${photo.id}` : photo.id;
+  return ownedKey(photo.ownerId, photo.id);
 }
 
 export function albumLibraryKey(album: { id: string; ownerId?: string }): string {
-  return album.ownerId ? `${album.ownerId}:${album.id}` : album.id;
+  return ownedKey(album.ownerId, album.id);
 }
 
 /**

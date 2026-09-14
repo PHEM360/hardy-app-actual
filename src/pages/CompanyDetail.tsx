@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
-  Key, Briefcase, Receipt, BarChart3, Info, Settings2, X, Shield,
+  Key, Briefcase, Receipt, BarChart3, Info, Settings2, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
   Megaphone, Repeat, Folder,
 } from "lucide-react";
@@ -38,9 +38,10 @@ import {
   useMultiCompanyFinance,
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
+import { useSharedCategorySettings } from "@/hooks/useSharedCategorySettings";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useVisitedTabs } from "@/hooks/useVisitedTabs";
-import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company, sortCategoriesOtherLast } from "@/types/app";
+import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company } from "@/types/app";
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ function ServicesTab({ companyId }: { companyId: string }) {
   const [edit, setEdit] = useState<CompanyService | null>(null);
   const [form, setForm] = useState<Omit<CompanyService, "id" | "price"> & { price: string }>({ name: "", description: "", price: "", unit: "per month", category: "" });
   const [saving, setSaving] = useState(false);
-  const { settings } = useCompanySettings(companyId);
+  const { settings } = useSharedCategorySettings();
 
   const openAdd = () => { setEdit(null); setForm({ name: "", description: "", price: "", unit: "per month", category: "" }); setOpen(true); };
   const openEdit = (s: CompanyService) => { setEdit(s); setForm({ name: s.name, description: s.description || "", price: String(s.price), unit: s.unit, category: s.category || "" }); setOpen(true); };
@@ -264,7 +265,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
     expenses, uploadingReceipt, addExpense, updateExpense, deleteExpense,
     uploadReceipt, removeReceipt, replaceReceipt, renameReceipt,
   } = useCompanyExpenses(companyId);
-  const { settings } = useCompanySettings(companyId);
+  const { settings } = useSharedCategorySettings();
   const { companies: allCompanies } = useCompanies();
   const otherCompanies = allCompanies.filter((c) => c.id && c.id !== companyId);
   const [open, setOpen] = useState(false);
@@ -1402,73 +1403,28 @@ function SettingsTab({ companyId }: { companyId: string }) {
   const { settings, loading, saveSettings } = useCompanySettings(companyId);
   const [local, setLocal] = useState(settings);
   const [saving, setSaving] = useState(false);
-  const [newIncome, setNewIncome] = useState("");
-  const [newExpense, setNewExpense] = useState("");
 
-  // Sync when settings load from Firestore
   useMemo(() => { setLocal(settings); }, [settings]);
-
-  const addItem = (field: "incomeCategories" | "expenseCategories", value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    setLocal((l) => ({
-      ...l,
-      [field]: sortCategoriesOtherLast([...l[field].filter((x) => x !== trimmed), trimmed]),
-    }));
-    if (field === "incomeCategories") setNewIncome(""); else setNewExpense("");
-  };
-
-  const removeItem = (field: "incomeCategories" | "expenseCategories", value: string) =>
-    setLocal((l) => ({ ...l, [field]: l[field].filter((x) => x !== value) }));
 
   const save = async () => {
     setSaving(true);
-    try { await saveSettings(local); } finally { setSaving(false); }
+    try { await saveSettings({ ...local, incomeCategories: settings.incomeCategories, expenseCategories: settings.expenseCategories }); } finally { setSaving(false); }
   };
 
   if (loading) return <p className="text-xs text-muted-foreground text-center py-8">Loading settings…</p>;
 
   return (
     <div className="space-y-6">
-      {/* Income categories */}
-      <div>
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Income / Service Categories</p>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {local.incomeCategories.map((cat) => (
-            <span key={cat} className="flex items-center gap-1 text-xs bg-green-50 text-green-800 border border-green-200 rounded-full px-2.5 py-1">
-              {cat}
-              <button onClick={() => removeItem("incomeCategories", cat)} className="hover:text-red-500 transition-colors"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Input value={newIncome} onChange={(e) => setNewIncome(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addItem("incomeCategories", newIncome); }}
-            placeholder="Add category…" className="h-8 rounded-xl text-xs" />
-          <Button onClick={() => addItem("incomeCategories", newIncome)} variant="outline" className="h-8 rounded-xl text-xs px-3">Add</Button>
-        </div>
+      <div
+        className="rounded-2xl border border-border/50 p-4 shadow-card"
+        style={{ background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))" }}
+      >
+        <p className="font-display text-sm font-semibold">Income & expense categories</p>
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">
+          These lists are shared for every company. Edit them on the Companies page or in Unallocated settings.
+        </p>
       </div>
 
-      {/* Expense categories */}
-      <div>
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Expense Categories</p>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {local.expenseCategories.map((cat) => (
-            <span key={cat} className="flex items-center gap-1 text-xs bg-red-50 text-red-800 border border-red-200 rounded-full px-2.5 py-1">
-              {cat}
-              <button onClick={() => removeItem("expenseCategories", cat)} className="hover:text-red-500 transition-colors"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Input value={newExpense} onChange={(e) => setNewExpense(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addItem("expenseCategories", newExpense); }}
-            placeholder="Add category…" className="h-8 rounded-xl text-xs" />
-          <Button onClick={() => addItem("expenseCategories", newExpense)} variant="outline" className="h-8 rounded-xl text-xs px-3">Add</Button>
-        </div>
-      </div>
-
-      {/* Corp tax rate */}
       <div>
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Default Corp Tax Rate</p>
         <div className="flex items-center gap-2">
@@ -1817,7 +1773,7 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
 }) {
   const children = allCompanies.filter((c) => c.parentCompanyId === companyId);
   const parent = company.parentCompanyId ? allCompanies.find((c) => c.id === company.parentCompanyId) : null;
-  const { settings } = useCompanySettings(companyId);
+  const { settings } = useSharedCategorySettings();
 
   const allIds = useMemo(() => [companyId, ...children.map((c) => c.id!).filter(Boolean)], [companyId, children.map((c) => c.id).join(",")]);
   const financeData = useMultiCompanyFinance(allIds);

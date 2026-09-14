@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverT
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { parseDisplayPhotoLinks, type DisplayPhotoSource } from "@/lib/displayPhotos";
+import { resolveStoredPhotoUrl } from "@/lib/photoUrl";
 
 export interface RemoteDisplayPhoto {
   id: string;
@@ -16,15 +17,7 @@ export interface RemoteDisplayPhoto {
 }
 
 async function resolvePhotoUrl(photo: Omit<RemoteDisplayPhoto, "url"> & { url?: string }): Promise<string> {
-  if (photo.source === "link" && photo.url) return photo.url;
-  if (photo.url?.startsWith("http")) return photo.url;
-  if (!photo.storagePath) return photo.url || "";
-  try {
-    return await getDownloadURL(ref(storage, photo.storagePath));
-  } catch (error) {
-    console.warn("Display photo could not be loaded", photo.storagePath, error);
-    return "";
-  }
+  return resolveStoredPhotoUrl(photo);
 }
 
 export function useRemoteDisplayPhotos(uid: string | null | undefined) {

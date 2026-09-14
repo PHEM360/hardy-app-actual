@@ -1,14 +1,50 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FileText, Inbox, Plus, Receipt, Trash2 } from "lucide-react";
+import { FileText, Inbox, Plus, Receipt, Settings2, Trash2 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
+import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
 import { Button } from "@/components/ui/button";
 import { useCaptureInbox } from "@/hooks/useCaptureInbox";
-import { captureItemThumb, capturePagesLabel, type CaptureItem } from "@/lib/captureInbox";
+import { capturePagesLabel, type CaptureItem } from "@/lib/captureInbox";
 import { toast } from "sonner";
 
-type Filter = "all" | "expense" | "document";
+type Filter = "all" | "expense" | "document" | "settings";
+
+function InboxPhoto({ item }: { item: CaptureItem }) {
+  const files = item.files || [];
+  if (!files.length) {
+    return (
+      <div className="flex h-28 items-center justify-center bg-muted/30">
+        {item.kind === "expense" ? <Receipt className="h-8 w-8 text-muted-foreground" /> : <FileText className="h-8 w-8 text-muted-foreground" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative space-y-1 bg-muted/30 p-2">
+      {files.map((file, index) =>
+        (file.mimeType || "").startsWith("image/") ? (
+          <img
+            key={`${file.storagePath}-${index}`}
+            src={file.url}
+            alt=""
+            className="mx-auto max-h-80 w-full object-contain"
+          />
+        ) : (
+          <div key={`${file.storagePath}-${index}`} className="flex h-24 items-center justify-center rounded-lg bg-card">
+            <FileText className="h-7 w-7 text-muted-foreground" />
+          </div>
+        ),
+      )}
+      {files.length > 1 && (
+        <span className="absolute bottom-3 right-3 rounded-lg bg-card/95 px-1.5 py-0.5 text-[10px] font-semibold shadow-sm">
+          {capturePagesLabel(files.length)}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function Unallocated() {
   const [params, setParams] = useSearchParams();
@@ -33,6 +69,7 @@ export default function Unallocated() {
     { id: "all", label: "All" },
     { id: "expense", label: "Expenses" },
     { id: "document", label: "Documents" },
+    { id: "settings", label: "Settings" },
   ];
 
   return (
@@ -62,6 +99,7 @@ export default function Unallocated() {
                       : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   }`}
                 >
+                  {item.id === "settings" && <Settings2 className="h-3.5 w-3.5 shrink-0" />}
                   {item.label}
                 </button>
               );
@@ -70,7 +108,7 @@ export default function Unallocated() {
         </aside>
 
         <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex gap-1.5 lg:hidden">
+          <div className="flex flex-wrap gap-1.5 lg:hidden">
             {filters.map((item) => {
               const on = filter === item.id;
               return (
@@ -88,7 +126,21 @@ export default function Unallocated() {
             })}
           </div>
 
-          {loading && !items.length ? (
+          {filter === "settings" ? (
+            <div
+              className="rounded-2xl border border-border/50 p-4 shadow-card"
+              style={{
+                background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))",
+                borderLeft: "4px solid hsl(var(--primary))",
+              }}
+            >
+              <p className="font-display text-base font-bold">Categories</p>
+              <p className="mb-4 mt-1 text-sm text-muted-foreground">
+                Income and expense lists are shared with Companies. Document categories are used when you add or allocate a file.
+              </p>
+              <SharedCategorySettingsPanel showDocuments />
+            </div>
+          ) : loading && !items.length ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : visible.length === 0 ? (
             <div
@@ -106,62 +158,47 @@ export default function Unallocated() {
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {visible.map((item) => {
-                const thumb = captureItemThumb(item);
-                return (
-                  <div
-                    key={item.id}
-                    className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
-                    style={{ borderLeftWidth: 3, borderLeftColor: "hsl(var(--primary))" }}
-                  >
-                    <button type="button" className="block w-full text-left" onClick={() => setAllocating(item)}>
-                      <div className="relative">
-                        {thumb ? (
-                          <img src={thumb} alt="" className="h-36 w-full object-cover" />
-                        ) : (
-                          <div className="flex h-28 items-center justify-center bg-muted/40">
-                            {item.kind === "expense" ? <Receipt className="h-8 w-8 text-muted-foreground" /> : <FileText className="h-8 w-8 text-muted-foreground" />}
-                          </div>
-                        )}
-                        {(item.files?.length || 0) > 1 && (
-                          <span className="absolute bottom-2 right-2 rounded-lg bg-card/95 px-1.5 py-0.5 text-[10px] font-semibold shadow-sm">
-                            {capturePagesLabel(item.files.length)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-3">
-                        <p className="truncate font-semibold">{item.name || "Untitled"}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {item.kind === "expense" ? "Expense" : "Document"}
-                          {` · ${capturePagesLabel(item.files?.length || 0)}`}
-                          {item.amount != null ? ` · £${item.amount}` : ""}
-                          {item.date ? ` · ${item.date}` : ""}
-                        </p>
-                      </div>
-                    </button>
-                    <div className="flex items-center justify-between border-t border-border/40 px-3 py-2">
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-primary"
-                        onClick={() => setAllocating(item)}
-                      >
-                        Allocate
-                      </button>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-destructive"
-                        aria-label="Delete"
-                        onClick={async () => {
-                          await removeItem(item);
-                          toast.success("Removed");
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+              {visible.map((item) => (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
+                  style={{ borderLeftWidth: 3, borderLeftColor: "hsl(var(--primary))" }}
+                >
+                  <button type="button" className="block w-full text-left" onClick={() => setAllocating(item)}>
+                    <InboxPhoto item={item} />
+                    <div className="p-3">
+                      <p className="truncate font-semibold">{item.name || "Untitled"}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.kind === "expense" ? "Expense" : "Document"}
+                        {item.category ? ` · ${item.category}` : ""}
+                        {` · ${capturePagesLabel(item.files?.length || 0)}`}
+                        {item.amount != null ? ` · £${item.amount}` : ""}
+                        {item.date ? ` · ${item.date}` : ""}
+                      </p>
                     </div>
+                  </button>
+                  <div className="flex items-center justify-between border-t border-border/40 px-3 py-2">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-primary"
+                      onClick={() => setAllocating(item)}
+                    >
+                      Allocate
+                    </button>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label="Delete"
+                      onClick={async () => {
+                        await removeItem(item);
+                        toast.success("Removed");
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>

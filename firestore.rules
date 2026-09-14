@@ -78,7 +78,7 @@ service cloud.firestore {
     }
 
     function defaultModuleRequirement(moduleId) {
-      return moduleId == "personal_finance" || moduleId == "passwords" || moduleId == "remote_displays" ? "passkey" : "none";
+      return moduleId == "personal_finance" || moduleId == "passwords" ? "passkey" : "none";
     }
 
     function moduleRequirement(moduleId) {
@@ -720,10 +720,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Company settings (income/expense categories, tax rate) - same sharing model as companies
+    // Company settings (per-company tax rate) plus shared family categories on "__family__"
     match /companySettings/{companyId} {
-      allow read: if isAuthenticated() && canAccessCompany(companyId);
-      allow write: if isAuthenticated() && canEditCompany(companyId);
+      allow read: if isAuthenticated() && (companyId == "__family__" || canAccessCompany(companyId));
+      allow write: if isAuthenticated() && (companyId == "__family__" || canEditCompany(companyId));
     }
 
     // Household items - shared by household membership, with owner-uid fallback for legacy data
@@ -787,7 +787,7 @@ service cloud.firestore {
     function canViewPhotoAlbum(userId, albumId) {
       return canViewPage(userId, "photos") ||
         isActiveDisplayFor(userId) ||
-        (isAuthenticated() &&
+        (isFirebaseAuthenticated() &&
           exists(/databases/$(database)/documents/photos/$(userId)/albums/$(albumId)) &&
           request.auth.uid in get(/databases/$(database)/documents/photos/$(userId)/albums/$(albumId)).data.get('sharedWith', []));
     }
@@ -866,11 +866,13 @@ service cloud.firestore {
     }
 
     match /photoGrants/{grantId} {
-      allow read: if isAuthenticated() && (
-        resource.data.targetUid == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        isAdmin()
-      );
+      allow read: if (
+        isAuthenticated() && (
+          resource.data.targetUid == request.auth.uid ||
+          resource.data.ownerId == request.auth.uid ||
+          isAdmin()
+        )
+      ) || isActiveDisplayFor(resource.data.targetUid);
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
       allow update, delete: if isAuthenticated() && (
         resource.data.ownerId == request.auth.uid || isAdmin()

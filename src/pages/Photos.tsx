@@ -5,6 +5,7 @@ import { FolderPlus, ImagePlus, Images, Link2, Lock, RefreshCw, Share2, Trash2, 
 import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { AlbumShareDialog } from "@/components/photos/AlbumShareDialog";
+import { PhotoThumb } from "@/components/photos/PhotoThumb";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -670,10 +671,10 @@ export default function Photos() {
                   className="group relative overflow-hidden rounded-2xl border border-border/40 bg-card shadow-card"
                 >
                   {!broken ? (
-                    <img
-                      src={photo.url}
+                    <PhotoThumb
+                      url={photo.url}
+                      storagePath={photo.storagePath}
                       alt={photo.caption || "Family photo"}
-                      loading="lazy"
                       className="aspect-square w-full bg-muted/40 object-cover"
                       onError={() => setBrokenPhotos((current) => ({ ...current, [key]: true }))}
                     />

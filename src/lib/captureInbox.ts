@@ -11,7 +11,7 @@ import { deleteObject, getBytes, getDownloadURL, ref as storageRef, uploadBytes 
 import { db, storage } from "@/lib/firebase";
 import { companyReceiptStoragePath } from "@/hooks/useCompanies";
 import { uploadNoteMedia } from "@/lib/noteMedia";
-import { DEFAULT_COMPANY_SETTINGS } from "@/types/app";
+import { DEFAULT_DOCUMENT_CATEGORIES, DEFAULT_SHARED_CATEGORY_SETTINGS } from "@/types/app";
 import { DEFAULT_FLAT_EXPENSE_CATEGORIES } from "@/types/flats";
 import type { NoteCanvasBlock } from "@/types/notes";
 
@@ -54,16 +54,7 @@ export type CaptureDraft = {
   category: string;
 };
 
-export const GENERIC_EXPENSE_CATEGORIES = [
-  "Groceries",
-  "Household",
-  "Travel",
-  "Utilities",
-  "Eating out",
-  "Kids",
-  "Health",
-  "Other",
-];
+export const GENERIC_EXPENSE_CATEGORIES = DEFAULT_SHARED_CATEGORY_SETTINGS.expenseCategories;
 
 export const CAPTURE_DEST_LABELS: Record<CaptureDestType, string> = {
   unallocated: "Unallocated",
@@ -78,12 +69,16 @@ export function captureExpenseAllowed(destType: CaptureDestType) {
   return destType === "unallocated" || destType === "company" || destType === "household" || destType === "flat";
 }
 
-export function categoriesForCapture(destType: CaptureDestType, companyCategories?: string[]) {
-  if (destType === "company") {
-    return companyCategories?.length ? companyCategories : DEFAULT_COMPANY_SETTINGS.expenseCategories;
+export function categoriesForCapture(
+  destType: CaptureDestType,
+  options?: { kind?: CaptureKind; expense?: string[]; document?: string[] },
+) {
+  const kind = options?.kind ?? "expense";
+  if (kind === "document") {
+    return options?.document?.length ? options.document : DEFAULT_DOCUMENT_CATEGORIES;
   }
   if (destType === "flat") return DEFAULT_FLAT_EXPENSE_CATEGORIES;
-  return GENERIC_EXPENSE_CATEGORIES;
+  return options?.expense?.length ? options.expense : GENERIC_EXPENSE_CATEGORIES;
 }
 
 export function todayIsoDate() {
@@ -245,6 +240,7 @@ async function saveCompanyDocuments(uid: string, destId: string, draft: CaptureD
   }
   await addDoc(collection(db, "companies", destId, "documents"), {
     name: (draft.name || files[0]?.name || "Document").trim(),
+    category: draft.category || "Other",
     fileUrl: uploaded[0]?.url ?? "",
     fileName: uploaded[0]?.name ?? "",
     fileType: uploaded[0]?.mimeType ?? "",
@@ -278,6 +274,7 @@ async function saveHouseholdDocument(uid: string, destId: string, draft: Capture
   await addDoc(collection(db, "household", destId, "documents"), {
     name: (draft.name || draft.description || files[0]?.name || "Document").trim(),
     category: asReceipt ? "receipt" : "other",
+    docCategory: draft.category || "",
     notes,
     fileUrl: uploaded[0]?.url ?? "",
     fileName: uploaded[0]?.name ?? "",
@@ -305,7 +302,7 @@ async function saveFlatFiles(destId: string, draft: CaptureDraft, files: File[],
       url: uploaded.url,
       storagePath: uploaded.storagePath,
       fileType,
-      category: asExpense ? draft.category || "Other" : "Other",
+      category: draft.category || "Other",
       year: null,
       notes: draft.description || "",
       createdAt: serverTimestamp(),

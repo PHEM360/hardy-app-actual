@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { storage } from "@/lib/firebase";
@@ -708,6 +709,19 @@ const Companies = () => {
         </div>
       }
     >
+      <div
+        className="mb-5 rounded-2xl border border-border/50 p-4 shadow-card"
+        style={{
+          background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))",
+          borderLeft: "4px solid hsl(var(--primary))",
+        }}
+      >
+        <p className="font-display text-base font-bold">Income & expense categories</p>
+        <p className="mb-4 mt-1 text-sm text-muted-foreground">
+          Shared across every company and Unallocated. Change them here or in Unallocated settings.
+        </p>
+        <SharedCategorySettingsPanel />
+      </div>
       {companies.length === 0 ? (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4 py-20">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-primary text-3xl shadow-elevated">🏢</div>

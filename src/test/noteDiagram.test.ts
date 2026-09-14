@@ -4,6 +4,7 @@ import {
   addDiagramNode,
   connectDiagramNodes,
   diagramNodeMetrics,
+  duplicateDiagramNode,
   emptyDiagram,
   noteHasDiagram,
   removeDiagramSelection,
@@ -37,5 +38,16 @@ describe("note diagrams", () => {
     expect(metrics.x).toBe(25);
     expect(noteHasDiagram({ diagram: { nodes: [{ id: "n", label: "A", x: 0, y: 0, shape: "box" }], edges: [] } })).toBe(true);
     expect(noteHasDiagram({ diagram: null, canvas: { blocks: [] } })).toBe(false);
+  });
+
+  it("duplicates a selected shape without keeping the same id", () => {
+    let diagram = emptyDiagram();
+    diagram = addDiagramNode(diagram, "box", { x: 80, y: 80 }, { label: "Router" });
+    const original = diagram.nodes[0];
+    diagram = duplicateDiagramNode(diagram, original.id);
+    expect(diagram.nodes).toHaveLength(2);
+    expect(diagram.nodes[1].label).toBe("Router");
+    expect(diagram.nodes[1].id).not.toBe(original.id);
+    expect(diagram.nodes[1].x).toBe(original.x + 28);
   });
 });

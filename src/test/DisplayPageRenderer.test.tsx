@@ -167,6 +167,24 @@ describe("DisplayPageRenderer", () => {
     expect(screen.getByText(/Checking the forecast|Choose a location/)).toBeInTheDocument();
   });
 
+  it("does not paint Today across empty sidebar slots", () => {
+    const todayPage: DisplayPage = {
+      id: "today",
+      name: "Today",
+      durationSeconds: 300,
+      background: "#09090b",
+      layout: "main-side",
+      widgets: [{ id: "today-main", type: "today", x: 0, y: 0, w: 12, h: 12 }],
+    };
+    render(
+      <DisplayPageRenderer page={todayPage} photos={[]} calendarEvents={events} tasks={tasks} />,
+    );
+    expect(screen.getAllByText("To do")).toHaveLength(1);
+    let panel = screen.getByText("What’s on").parentElement;
+    while (panel && !panel.style.width) panel = panel.parentElement;
+    expect(panel?.style.width).toBe(`${(8 / 12) * 100}%`);
+  });
+
   it("summarises the day on a Today page", () => {
     const todayPage: DisplayPage = {
       id: "today",

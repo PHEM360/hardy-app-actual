@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildVerdict,
+  councilTaxForEmptyMonth,
   defaultInvestmentInputs,
   netSaleProceeds,
   runFlatInvestmentModel,
@@ -148,6 +149,7 @@ describe("flatInvestmentModel", () => {
         voidMonthsPerYear: 3,
         councilTaxAnnualGbp: 1_200,
         costGrowthPctPa: 0,
+        alternativeReturnPctPa: 0,
         serviceChargeAnnualGbp: 0,
         maintenanceAnnualGbp: 0,
         insuranceAnnualGbp: 0,
@@ -164,6 +166,7 @@ describe("flatInvestmentModel", () => {
         voidMonthsPerYear: 3,
         councilTaxAnnualGbp: 0,
         costGrowthPctPa: 0,
+        alternativeReturnPctPa: 0,
         serviceChargeAnnualGbp: 0,
         maintenanceAnnualGbp: 0,
         insuranceAnnualGbp: 0,
@@ -173,11 +176,11 @@ describe("flatInvestmentModel", () => {
     );
     expect(noCouncilTax.annualOperatingCostsYear0Gbp).toBeCloseTo(0, 0);
 
-    // Held vacant all year, the landlord is liable for the whole bill.
     const vacantResult = runFlatInvestmentModel(
       defaultInvestmentInputs({
         councilTaxAnnualGbp: 1_200,
         costGrowthPctPa: 0,
+        alternativeReturnPctPa: 0,
         serviceChargeAnnualGbp: 0,
         maintenanceAnnualGbp: 0,
         insuranceAnnualGbp: 0,
@@ -189,6 +192,7 @@ describe("flatInvestmentModel", () => {
       defaultInvestmentInputs({
         councilTaxAnnualGbp: 0,
         costGrowthPctPa: 0,
+        alternativeReturnPctPa: 0,
         serviceChargeAnnualGbp: 0,
         maintenanceAnnualGbp: 0,
         insuranceAnnualGbp: 0,
@@ -196,5 +200,80 @@ describe("flatInvestmentModel", () => {
       }),
     );
     expect(vacantResult.wealthAtHorizon.hold_vacant).toBeCloseTo(noCostVacant.wealthAtHorizon.hold_vacant - 1_200, 0);
+  });
+
+  it("waits for a later sale and a later rental start before cash moves", () => {
+    const asOf = "2026-09";
+    const result = runFlatInvestmentModel(
+      defaultInvestmentInputs({
+        asOfMonth: asOf,
+        saleCompletionMonth: "2027-01",
+        rentalStartMonth: "2026-11",
+        rentalDurationMonths: 60,
+        voidMonthsTotal: 2,
+        offerPriceGbp: 80_000,
+        marketValueGbp: 90_000,
+        rentMonthlyGbp: 750,
+        alternativeReturnPctPa: 3.1,
+        capitalGrowthPctPa: 0,
+        costGrowthPctPa: 0,
+        rentGrowthPctPa: 0,
+        sellingCostsPct: 0,
+        sellingFixedGbp: 0,
+        serviceChargeAnnualGbp: 0,
+        maintenanceAnnualGbp: 0,
+        insuranceAnnualGbp: 0,
+        lettingFeesPctOfRent: 0,
+        incomeTaxRatePct: 0,
+        horizonYears: 5,
+        oneOffs: [
+          { id: "do-up", label: "Doing up", amountGbp: 2_500, year: 0, monthKey: "2026-11" },
+          { id: "works", label: "Maintenance", amountGbp: 5_000, year: 0, monthKey: "2026-11" },
+        ],
+      }),
+    );
+    expect(result.timing.saleMonthIndex).toBe(4);
+    expect(result.timing.rentStartIndex).toBe(2);
+    expect(result.timing.voidMonthsTotal).toBe(2);
+    expect(result.differencesAtHorizon.rentMinusOfferGbp).not.toBe(0);
+    expect(result.breakEvenSalePriceGbp).toBeGreaterThan(0);
+    expect(result.breakEvenMonthlyRentGbp).toBeGreaterThan(0);
+    expect(result.breakEvenAltReturnPctPa == null || result.breakEvenAltReturnPctPa >= 0).toBe(true);
+    expect(result.breakEvenSaleHint).toMatch(/Jan 2027/);
+    expect(result.breakEvenRentHint).toMatch(/Nov 2026/);
+  });
+
+  it("charges no council tax while occupied, then a higher empty-home rate after a date", () => {
+    const asOf = "2026-09";
+    const inputs = defaultInvestmentInputs({
+      asOfMonth: asOf,
+      rentalStartMonth: "2026-12",
+      rentalDurationMonths: 9,
+      voidMonthsTotal: 0,
+      voidMonthsPerYear: 0,
+      councilTaxAnnualGbp: 1_200,
+      councilTaxSecondHomeFromMonth: "2026-11",
+      councilTaxSecondHomeAnnualGbp: 2_400,
+      costGrowthPctPa: 0,
+      alternativeReturnPctPa: 0,
+      rentGrowthPctPa: 0,
+      capitalGrowthPctPa: 0,
+      serviceChargeAnnualGbp: 0,
+      maintenanceAnnualGbp: 0,
+      insuranceAnnualGbp: 0,
+      lettingFeesPctOfRent: 0,
+      incomeTaxRatePct: 0,
+      horizonYears: 1,
+      rentMonthlyGbp: 800,
+    });
+    expect(councilTaxForEmptyMonth(inputs, asOf, 0)).toBeCloseTo(100, 5); // Sep — standard
+    expect(councilTaxForEmptyMonth(inputs, asOf, 1)).toBeCloseTo(100, 5); // Oct — standard
+    expect(councilTaxForEmptyMonth(inputs, asOf, 2)).toBeCloseTo(200, 5); // Nov — second-home rate
+    expect(councilTaxForEmptyMonth(inputs, asOf, 3)).toBeCloseTo(200, 5); // Dec would be higher if empty
+
+    const result = runFlatInvestmentModel(inputs);
+    // Empty Sep–Nov, occupied Dec–Aug: 100 + 100 + 200 = 400. Occupied months pay nothing.
+    expect(result.annualOperatingCostsYear0Gbp).toBeCloseTo(400, 0);
+    expect(result.years[0].grossRentGbp).toBeCloseTo(800 * 9, 0);
   });
 });

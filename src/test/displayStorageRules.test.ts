@@ -28,13 +28,23 @@ describe("remote display Storage enforcement", () => {
         ownerId: "owner",
         sharedWith: ["editor"],
       });
+      await setDoc(doc(admin.firestore(), "photos", "other", "albums", "hols"), {
+        ownerId: "other",
+        sharedWith: ["owner"],
+      });
       await uploadBytes(ref(admin.storage(), "displayPhotos/owner/photo.jpg"), new Uint8Array([1, 2, 3]), { contentType: "image/jpeg" });
+      await uploadBytes(ref(admin.storage(), "photos/other/hols/pic.jpg"), new Uint8Array([1, 2, 3]), { contentType: "image/jpeg" });
       await uploadBytes(ref(admin.storage(), "documents/owner/private.pdf"), new Uint8Array([4, 5, 6]), { contentType: "application/pdf" });
       await uploadBytes(ref(admin.storage(), "companies/company/marketing/brand.jpg"), new Uint8Array([7, 8, 9]), { contentType: "image/jpeg" });
     });
   });
 
   afterAll(async () => environment.cleanup());
+
+  it("allows an active display to read albums shared with its owner", async () => {
+    const display = environment.authenticatedContext("owner", { deviceId: "kitchen" }).storage();
+    await assertSucceeds(getBytes(ref(display, "photos/other/hols/pic.jpg")));
+  });
 
   it("allows an active display to read only its photo-frame library", async () => {
     const display = environment.authenticatedContext("owner", { deviceId: "kitchen" }).storage();

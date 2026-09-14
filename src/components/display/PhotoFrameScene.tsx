@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import type { PhotoFrameSettings } from "@/hooks/useDeviceSettings";
 import { visibleDisplayPhotos } from "@/lib/displayPhotos";
+import { resolveStoredPhotoUrl } from "@/lib/photoUrl";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -28,6 +29,7 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
     [usable.map((p) => p.id).join(","), settings.shuffle]
   );
   const [index, setIndex] = useState(0);
+  const [revived, setRevived] = useState<Record<string, string>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -66,6 +68,16 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
   }
   const current = order[index];
   const markBroken = (id: string) => setBroken((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  const handleError = (photo: RemoteDisplayPhoto) => {
+    if (revived[photo.id] || !photo.storagePath) {
+      markBroken(photo.id);
+      return;
+    }
+    void resolveStoredPhotoUrl(photo).then((next) => {
+      if (next && next !== photo.url) setRevived((current) => ({ ...current, [photo.id]: next }));
+      else markBroken(photo.id);
+    });
+  };
 
   return (
     <div className="absolute inset-0 bg-black">
@@ -80,18 +92,18 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
               cropped/zoomed — it's letterboxed onto a soft version of itself
               instead of leaving hard black bars. */}
           <img
-            src={photo.url}
+            src={revived[photo.id] || photo.url}
             alt=""
             aria-hidden
             loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
           />
           <img
-            src={photo.url}
+            src={revived[photo.id] || photo.url}
             alt={photo.caption || ""}
             loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-contain"
-            onError={() => markBroken(photo.id)}
+            onError={() => handleError(photo)}
           />
         </div>
       ))}

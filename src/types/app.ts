@@ -659,6 +659,40 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   corporateTaxRate: 19,
 };
 
+export const DEFAULT_DOCUMENT_CATEGORIES = [
+  "Invoice",
+  "Receipt",
+  "Contract",
+  "Certificate",
+  "Statement",
+  "ID",
+  "Other",
+];
+
+export const SHARED_CATEGORY_SETTINGS_ID = "__family__";
+
+export interface SharedCategorySettings {
+  incomeCategories: string[];
+  expenseCategories: string[];
+  documentCategories: string[];
+}
+
+export const DEFAULT_SHARED_CATEGORY_SETTINGS: SharedCategorySettings = {
+  incomeCategories: DEFAULT_COMPANY_SETTINGS.incomeCategories,
+  expenseCategories: [
+    "Groceries",
+    "Household",
+    "Travel",
+    "Utilities",
+    "Eating out",
+    "Kids",
+    "Health",
+    ...DEFAULT_COMPANY_SETTINGS.expenseCategories.filter((item) => item !== "Travel" && item !== "Other"),
+    "Other",
+  ],
+  documentCategories: DEFAULT_DOCUMENT_CATEGORIES,
+};
+
 // Keeps category lists in the order the user set, but "Other" always sorts last.
 export function sortCategoriesOtherLast(categories: string[]): string[] {
   return [...categories].sort((a, b) => {

@@ -11,6 +11,10 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      "/api/drive-photo": { target: "https://hardyhub-7b30d.web.app", changeOrigin: true },
+      "/api/gphotos-photo": { target: "https://hardyhub-7b30d.web.app", changeOrigin: true },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

@@ -26,6 +26,7 @@ export {
   createDisplayWidget,
   displayTheme,
   durationLabel,
+  isEmptyDisplayWidget,
   isPageActiveAt,
   layoutIsResizable,
   layoutSlots,
@@ -505,7 +506,9 @@ export function useDeviceSettings(deviceId: string | null) {
       if (!deviceId) return;
       // Clearing an optional setting leaves undefined behind, which Firestore
       // rejects for the whole document, so drop those keys instead.
-      await updateDoc(doc(db, "devices", deviceId), { "settings.pages": stripUndefined(pages) });
+      await updateDoc(doc(db, "devices", deviceId), {
+        "settings.pages": stripUndefined(pages.map(applyPageLayout)),
+      });
     },
     [deviceId]
   );

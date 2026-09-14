@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { useCompanies } from "@/hooks/useCompanies";
-import { useCompanySettings } from "@/hooks/useCompanySettings";
+import { useSharedCategorySettings } from "@/hooks/useSharedCategorySettings";
 import { useMyHouseholds } from "@/hooks/useHouseholds";
 import { useFlatsList } from "@/hooks/useFlats";
 import { usePets } from "@/hooks/usePets";
@@ -32,7 +32,6 @@ import {
   appendPagesToBundle,
   captureBatchCounts,
   captureExpenseAllowed,
-  captureItemThumb,
   capturePagesLabel,
   captureProgressPercent,
   categoriesForCapture,
@@ -106,12 +105,7 @@ export function AddExpenseDocumentDialog({
   const [savedOk, setSavedOk] = useState(false);
   const [savedSummary, setSavedSummary] = useState("");
 
-  const { settings: companySettings } = useCompanySettings(draft.destType === "company" ? draft.destId : "");
-  const categories = categoriesForCapture(
-    draft.destType,
-    draft.destType === "company" ? companySettings.expenseCategories : undefined,
-  );
-
+  const { settings: sharedCats } = useSharedCategorySettings();
   const dest: DestChoice = {
     type: draft.destType,
     id: draft.destId,
@@ -150,10 +144,25 @@ export function AddExpenseDocumentDialog({
 
   const batch = captureBatchCounts(bundles);
   const kind: CaptureKind = draft.kind;
+  const expenseCategories = categoriesForCapture(draft.destType, {
+    kind: "expense",
+    expense: sharedCats.expenseCategories,
+  });
+  const documentCategories = categoriesForCapture(draft.destType, {
+    kind: "document",
+    document: sharedCats.documentCategories,
+  });
+  const categories = kind === "document" ? documentCategories : expenseCategories;
+  const categoryOptions = categories.includes(draft.category) || !draft.category
+    ? categories
+    : [...categories, draft.category];
   const expenseOk = captureExpenseAllowed(dest.type);
   const singleBundle = batch.items <= 1;
   const showDetails = dest.type !== "unallocated" && singleBundle;
   const showExpenseFields = kind === "expense" && expenseOk && singleBundle;
+  const showCategoryField =
+    (kind === "expense" && expenseOk && (singleBundle || dest.type === "unallocated"))
+    || (kind === "document" && (singleBundle || dest.type === "unallocated" || Boolean(allocateItem)));
   const showName = dest.type === "unallocated" ? singleBundle : showDetails || showExpenseFields;
   const canSave = allocateItem
     ? dest.type !== "unallocated" && (showExpenseFields ? Boolean(draft.description.trim() && (dest.type !== "company" || draft.amount.trim())) : Boolean(draft.name.trim()))
@@ -167,14 +176,21 @@ export function AddExpenseDocumentDialog({
     const nextKind = next.type !== "unallocated" && draft.kind === "expense" && !captureExpenseAllowed(next.type)
       ? "document"
       : draft.kind;
-    setDraft((current) => ({
-      ...current,
-      kind: nextKind,
-      destType: next.type,
-      destId: next.id,
-      destLabel: next.label,
-      category: categoriesForCapture(next.type)[0] || "Other",
-    }));
+    setDraft((current) => {
+      const nextCats = categoriesForCapture(next.type, {
+        kind: nextKind,
+        expense: sharedCats.expenseCategories,
+        document: sharedCats.documentCategories,
+      });
+      return {
+        ...current,
+        kind: nextKind,
+        destType: next.type,
+        destId: next.id,
+        destLabel: next.label,
+        category: nextCats.includes(current.category) ? current.category : (nextCats[0] || "Other"),
+      };
+    });
   };
 
   const setAttachTarget = (bundleId: string | null) => {
@@ -356,6 +372,11 @@ export function AddExpenseDocumentDialog({
                         setDraft((current) => ({
                           ...current,
                           kind: id,
+                          category: categoriesForCapture(current.destType, {
+                            kind: id,
+                            expense: sharedCats.expenseCategories,
+                            document: sharedCats.documentCategories,
+                          })[0] || "Other",
                           ...(id === "expense" && !captureExpenseAllowed(current.destType)
                             ? { destType: "unallocated" as const, destId: "", destLabel: "Unallocated" }
                             : {}),
@@ -573,32 +594,32 @@ export function AddExpenseDocumentDialog({
 
               {allocateItem && (
                 <div className="overflow-hidden rounded-xl border border-border/50">
-                  {allocateItem.files?.length > 1 ? (
-                    <div className="grid grid-cols-3 gap-px bg-border/40">
-                      {allocateItem.files.slice(0, 6).map((file, index) => (
-                        <div key={`${file.storagePath}-${index}`} className="relative bg-card">
-                          {(file.mimeType || "").startsWith("image/") ? (
-                            <img src={file.url} alt="" className="h-20 w-full object-cover" />
-                          ) : (
-                            <div className="flex h-20 items-center justify-center bg-muted/40">
-                              <FileText className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
+                  <div className="space-y-1 bg-muted/30 p-2">
+                    {(allocateItem.files?.length ? allocateItem.files : []).map((file, index) => (
+                      <div key={`${file.storagePath}-${index}`} className="relative">
+                        {(file.mimeType || "").startsWith("image/") ? (
+                          <img src={file.url} alt="" className="mx-auto max-h-72 w-full object-contain" />
+                        ) : (
+                          <div className="flex h-20 items-center justify-center rounded-lg bg-card">
+                            <FileText className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        {(allocateItem.files?.length || 0) > 1 && (
                           <span className="absolute bottom-1 left-1 rounded-md bg-card/90 px-1 text-[9px] font-semibold">
                             {index + 1}
                           </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : captureItemThumb(allocateItem) ? (
-                    <img src={captureItemThumb(allocateItem) || ""} alt="" className="h-36 w-full object-cover" />
-                  ) : (
-                    <div className="flex h-24 items-center justify-center bg-muted/40">
-                      <FileText className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    ))}
+                    {!allocateItem.files?.length && (
+                      <div className="flex h-24 items-center justify-center">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
                   <p className="truncate px-3 py-2 text-xs text-muted-foreground">
                     {capturePagesLabel(allocateItem.files?.length || 0)} waiting
+                    {allocateItem.category ? ` · ${allocateItem.category}` : ""}
                   </p>
                 </div>
               )}
@@ -626,40 +647,41 @@ export function AddExpenseDocumentDialog({
               )}
 
               {showExpenseFields && dest.type !== "unallocated" && (
-                <>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label>Amount (£){dest.type === "company" ? " *" : ""}</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={draft.amount}
-                        onChange={(e) => setDraft((current) => ({ ...current, amount: e.target.value }))}
-                        className="h-9 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Date</Label>
-                      <Input
-                        type="date"
-                        value={draft.date}
-                        onChange={(e) => setDraft((current) => ({ ...current, date: e.target.value }))}
-                        className="h-9 rounded-xl"
-                      />
-                    </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label>Amount (£){dest.type === "company" ? " *" : ""}</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={draft.amount}
+                      onChange={(e) => setDraft((current) => ({ ...current, amount: e.target.value }))}
+                      className="h-9 rounded-xl"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <Label>Category</Label>
-                    <Select value={draft.category} onValueChange={(value) => setDraft((current) => ({ ...current, category: value }))}>
-                      <SelectTrigger className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category} value={category}>{category}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Date</Label>
+                    <Input
+                      type="date"
+                      value={draft.date}
+                      onChange={(e) => setDraft((current) => ({ ...current, date: e.target.value }))}
+                      className="h-9 rounded-xl"
+                    />
                   </div>
-                </>
+                </div>
+              )}
+
+              {showCategoryField && (
+                <div className="space-y-1">
+                  <Label>Category</Label>
+                  <Select value={draft.category} onValueChange={(value) => setDraft((current) => ({ ...current, category: value }))}>
+                    <SelectTrigger className="h-9 rounded-xl"><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent>
+                      {categoryOptions.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
 
               <div className="flex gap-2 pt-1">

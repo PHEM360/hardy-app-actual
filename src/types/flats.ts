@@ -8,8 +8,10 @@ export interface FlatInvestmentOneOff {
   id: string;
   label: string;
   amountGbp: number;
-  /** Year index when the cost hits (0 = this year). */
+  /** Year index when the cost hits (0 = this year). Used if monthKey is missing. */
   year: number;
+  /** Calendar month the cost hits, e.g. "2026-11". Overrides year when set. */
+  monthKey?: string;
 }
 
 export interface FlatInvestmentInputs {
@@ -18,7 +20,19 @@ export interface FlatInvestmentInputs {
   mortgageBalanceGbp: number;
 
   rentMonthlyGbp: number;
+  /** Legacy: average void months in each year of a full-horizon let. */
   voidMonthsPerYear: number;
+  /** Total empty months inside the rental window (not counting the wait before rent starts). */
+  voidMonthsTotal?: number;
+
+  /** Comparison start month, YYYY-MM. Defaults to the current month. */
+  asOfMonth?: string;
+  /** Month the sale completes and proceeds start earning the alternative return. */
+  saleCompletionMonth?: string;
+  /** First month of the tenancy (flat is empty until then on the rent path). */
+  rentalStartMonth?: string;
+  /** How long the tenancy lasts from rental start, in months. */
+  rentalDurationMonths?: number;
 
   serviceChargeAnnualGbp: number;
   maintenanceAnnualGbp: number;
@@ -29,6 +43,10 @@ export interface FlatInvestmentInputs {
   mortgageInterestAnnualGbp: number;
   /** Landlord is typically liable only while the flat is unoccupied — see flatInvestmentModel.ts. */
   councilTaxAnnualGbp: number;
+  /** Empty months from this calendar month (YYYY-MM) use the second-home / empty-home rate. */
+  councilTaxSecondHomeFromMonth?: string;
+  /** Annual council tax while empty from that month (e.g. doubled second-home premium). */
+  councilTaxSecondHomeAnnualGbp?: number;
 
   oneOffs: FlatInvestmentOneOff[];
 

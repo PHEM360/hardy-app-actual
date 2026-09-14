@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator, Brain,
+  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator, Brain, Landmark,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -28,6 +28,7 @@ import BankSyncSettings from "@/components/finance/BankSyncSettings";
 import DisplayStatsSettings from "@/components/finance/DisplayStatsSettings";
 import FinanceSummary from "@/components/finance/FinanceSummary";
 import FinanceTaxPanel from "@/components/finance/FinanceTaxPanel";
+import PensionModellerPanel from "@/components/finance/PensionModellerPanel";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
@@ -195,7 +196,7 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "settings";
+type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "pension" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
@@ -203,6 +204,7 @@ const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] 
   { id: "summary", label: "Summary", Icon: BarChart3 },
   { id: "analysis", label: "Analysis", Icon: Brain },
   { id: "tax", label: "Tax", Icon: Calculator },
+  { id: "pension", label: "Pension", Icon: Landmark },
   { id: "settings", label: "Settings", Icon: Settings2 },
 ];
 
@@ -220,7 +222,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const { scopeUserId, permission: scopePermission, pageTitle, isOwnScope } = useSharedScope("finance");
   const canEdit = mockData ? false : scopePermission === "edit";
   const live = useFinance(scopeUserId ?? undefined);
-  const { accountTypes, displayStats, saveAccountTypes, saveDisplayStats, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
+  const { accountTypes, displayStats, pensionModel, saveAccountTypes, saveDisplayStats, savePensionModel, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
   const { loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries } = live;
@@ -1154,6 +1156,18 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       {viewMode === "tax" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <FinanceTaxPanel />
+        </motion.div>
+      )}
+
+      {viewMode === "pension" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <PensionModellerPanel
+            accounts={accounts}
+            entries={entries}
+            model={pensionModel}
+            canEdit={canEdit}
+            onSave={savePensionModel}
+          />
         </motion.div>
       )}
 

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 interface PaperNoteCanvasEditorProps {
   canvas: NoteCanvas;
   canEdit: boolean;
+  showTools?: boolean;
   ownerId: string;
   noteId: string;
   onChange: (canvas: NoteCanvas) => void;
@@ -48,10 +49,12 @@ const TOOL_STYLE = {
 export function PaperNoteCanvasEditor({
   canvas,
   canEdit,
+  showTools,
   ownerId,
   noteId,
   onChange,
 }: PaperNoteCanvasEditorProps) {
+  const toolsVisible = showTools ?? canEdit;
   const paperRef = useRef<HTMLDivElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -149,6 +152,7 @@ export function PaperNoteCanvasEditor({
       ...pos,
       width: availableBlockWidth(330),
       height: 210,
+      title: "Checklist",
       items: [{ id: blockId(), text: "", done: false }],
     });
   };
@@ -333,7 +337,7 @@ export function PaperNoteCanvasEditor({
 
   return (
     <div className="space-y-3">
-      {canEdit && (
+      {toolsVisible && (
         <div className="rounded-2xl border border-slate-200/80 bg-white/75 p-2.5 shadow-card backdrop-blur">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -464,8 +468,8 @@ export function PaperNoteCanvasEditor({
               bounds="parent"
               position={{ x: renderedX, y: block.y }}
               size={{ width: renderedWidth, height: block.height }}
-              disableDragging={!canEdit || tool !== "select"}
-              enableResizing={canEdit && tool === "select"}
+              disableDragging={!toolsVisible || tool !== "select"}
+              enableResizing={toolsVisible && tool === "select"}
               minWidth={block.type === "shape" ? 30 : 120}
               minHeight={block.type === "shape" ? 30 : 72}
               dragHandleClassName="note-block-drag"
@@ -480,7 +484,7 @@ export function PaperNoteCanvasEditor({
               className={`group z-20 ${selected ? "ring-2 ring-primary/60 ring-offset-2 ring-offset-[#fffdf8]" : ""}`}
             >
               <div className={`h-full overflow-hidden rounded-2xl ${transparent ? "border border-transparent bg-transparent" : "border border-slate-200/90 bg-white/90 shadow-card"}`}>
-                {canEdit && tool === "select" && (
+                {toolsVisible && tool === "select" && (
                   <div className={`note-block-drag absolute -top-2 left-3 right-3 z-30 flex h-5 cursor-grab items-center justify-between rounded-full bg-slate-800 px-2 text-[9px] font-bold uppercase tracking-wider text-white transition ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
                     Drag
                     <button type="button" className="rounded-full p-0.5 hover:bg-white/20" onClick={() => removeBlock(block.id)}><Trash2 className="h-3 w-3" /></button>
@@ -519,7 +523,20 @@ export function PaperNoteCanvasEditor({
 
                 {block.type === "checklist" && (
                   <div className="h-full overflow-y-auto p-3">
-                    <p className="mb-2 flex items-center gap-1.5 text-sm font-bold"><CheckSquare className="h-4 w-4 text-emerald-600" /> Checklist</p>
+                    <div className="mb-2 flex items-center gap-1.5">
+                      <CheckSquare className="h-4 w-4 shrink-0 text-emerald-600" />
+                      {canEdit ? (
+                        <Input
+                          value={block.title ?? "Checklist"}
+                          onChange={(event) => updateBlock(block.id, { title: event.target.value })}
+                          placeholder="Checklist title"
+                          aria-label="Checklist title"
+                          className="h-8 border-0 bg-transparent px-1 text-sm font-bold shadow-none"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold">{block.title?.trim() || "Checklist"}</p>
+                      )}
+                    </div>
                     <div className="space-y-1.5">
                       {block.items.map((item, index) => (
                         <div key={item.id} className="flex items-center gap-2">

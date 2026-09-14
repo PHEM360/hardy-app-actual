@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { CalendarEvent, Task } from "@/types/app";
 import type { DisplayPage, DisplayWidgetLayout, PhotoFrameSettings } from "@/hooks/useDeviceSettings";
-import { displayTheme } from "@/lib/displayPages";
+import { applyPageLayout, displayTheme, isEmptyDisplayWidget } from "@/lib/displayPages";
 import type { RemoteDisplayPhoto } from "@/hooks/useRemoteDisplayPhotos";
 import { visibleDisplayPhotos } from "@/lib/displayPhotos";
 import { resolveDisplayPhotos } from "@/lib/photoSelection";
@@ -654,7 +654,8 @@ export function DisplayPageRenderer({
   birthdays?: Birthday[];
   familyMessages?: FamilyMessage[];
 }) {
-  const theme = displayTheme(page);
+  const laidOut = useMemo(() => applyPageLayout(page), [page]);
+  const theme = displayTheme(laidOut);
 
   // Notch/home-indicator insets are rarely equal on opposite edges (e.g. a
   // taller top inset than bottom), so padding each side by its own raw inset
@@ -665,12 +666,12 @@ export function DisplayPageRenderer({
 
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: theme.background }}>
-      <DisplayBackdrop kind={page.backdrop} accent={theme.accent} />
+      <DisplayBackdrop kind={laidOut.backdrop} accent={theme.accent} />
       <div
         className="absolute overflow-hidden"
         style={{ top: insetY, bottom: insetY, left: insetX, right: insetX }}
       >
-      {page.widgets.map((widget) => {
+      {laidOut.widgets.filter((widget) => !isEmptyDisplayWidget(widget)).map((widget) => {
         const accent = widget.accentColor || theme.accent;
         const selectedPhotos = visibleDisplayPhotos(
           resolveDisplayPhotos(photos, {

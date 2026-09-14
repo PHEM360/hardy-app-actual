@@ -1,6 +1,6 @@
 import { isGooglePhotosShareUrl } from "@/lib/googlePhotosAlbum";
 
-export type DisplayPhotoSource = "upload" | "link" | "local";
+export type DisplayPhotoSource = "upload" | "link" | "local" | "drive" | "gphotos";
 
 const DRIVE_FILE = /\/file\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_ID = /[?&]id=([a-zA-Z0-9_-]+)/;

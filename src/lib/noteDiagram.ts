@@ -25,11 +25,15 @@ export const DIAGRAM_SHAPES: { id: NoteDiagramShape; label: string }[] = [
   { id: "diamond", label: "Decision" },
   { id: "oval", label: "Start / end" },
   { id: "circle", label: "Circle" },
+  { id: "stadium", label: "Pill" },
+  { id: "triangle", label: "Triangle" },
   { id: "parallelogram", label: "Input" },
   { id: "hexagon", label: "Prepare" },
+  { id: "chevron", label: "Chevron" },
   { id: "cylinder", label: "Database" },
   { id: "cloud", label: "Cloud" },
   { id: "document", label: "Document" },
+  { id: "note", label: "Sticky" },
 ];
 
 export const DIAGRAM_ICONS: { id: NoteDiagramIcon; label: string }[] = [
@@ -53,6 +57,16 @@ export const DIAGRAM_ICONS: { id: NoteDiagramIcon; label: string }[] = [
   { id: "users", label: "People" },
   { id: "harddrive", label: "Storage" },
   { id: "speaker", label: "Speaker" },
+  { id: "car", label: "Car" },
+  { id: "mail", label: "Mail" },
+  { id: "calendar", label: "Calendar" },
+  { id: "map", label: "Map" },
+  { id: "star", label: "Star" },
+  { id: "heart", label: "Heart" },
+  { id: "bolt", label: "Bolt" },
+  { id: "key", label: "Key" },
+  { id: "light", label: "Light" },
+  { id: "plug", label: "Plug" },
 ];
 
 export const DIAGRAM_FILLS = [
@@ -250,13 +264,13 @@ export type DiagramNodeMetrics = {
 };
 
 export function diagramNodeMetrics(node: NoteDiagramNode): DiagramNodeMetrics {
-  const tight = node.shape === "diamond" || node.shape === "circle" || node.shape === "hexagon";
+  const tight = node.shape === "diamond" || node.shape === "circle" || node.shape === "hexagon" || node.shape === "triangle";
   const lines = wrapDiagramLabel(node.label, tight ? 14 : 20);
   const textWidth = Math.max(...lines.map((line) => line.length), 1) * 6.6;
   const textHeight = Math.max(lines.length, 1) * 14 + (node.icon && node.icon !== "none" ? 18 : 0);
   let w = node.w ?? Math.max(node.shape === "circle" ? 72 : 128, textWidth + 32);
-  let h = node.h ?? Math.max(node.shape === "diamond" ? 78 : node.shape === "circle" ? 72 : node.shape === "oval" ? 48 : 48, textHeight + 22);
-  if (node.shape === "diamond") {
+  let h = node.h ?? Math.max(node.shape === "diamond" || node.shape === "triangle" ? 78 : node.shape === "circle" ? 72 : node.shape === "oval" || node.shape === "stadium" ? 48 : 48, textHeight + 22);
+  if (node.shape === "diamond" || node.shape === "triangle") {
     w = Math.max(w, textWidth + 70);
     h = Math.max(h, textHeight + 46);
   } else if (node.shape === "circle") {
@@ -270,9 +284,9 @@ export function diagramBoundaryPoint(node: NoteDiagramNode, metrics: DiagramNode
   const rx = metrics.w / 2;
   const ry = metrics.h / 2;
   let scale: number;
-  if (node.shape === "circle" || node.shape === "oval" || node.shape === "cloud") {
+  if (node.shape === "circle" || node.shape === "oval" || node.shape === "cloud" || node.shape === "stadium") {
     scale = 1 / Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
-  } else if (node.shape === "diamond" || node.shape === "hexagon") {
+  } else if (node.shape === "diamond" || node.shape === "hexagon" || node.shape === "triangle") {
     scale = 1 / (Math.abs(dx) / rx + Math.abs(dy) / ry);
   } else {
     scale = 1 / Math.max(Math.abs(dx) / rx, Math.abs(dy) / ry);
@@ -299,7 +313,7 @@ export function addDiagramNode(
         shape,
         fill: extras.fill ?? "#fffdf8",
         w: extras.w ?? (shape === "circle" ? 84 : 140),
-        h: extras.h ?? (shape === "circle" ? 84 : shape === "diamond" ? 86 : 54),
+        h: extras.h ?? (shape === "circle" ? 84 : shape === "diamond" || shape === "triangle" ? 86 : 54),
         icon: extras.icon ?? "none",
       },
     ],
@@ -310,6 +324,29 @@ export function connectDiagramNodes(diagram: NoteDiagram, from: string, to: stri
   if (!from || !to || from === to) return diagram;
   if (diagram.edges.some((edge) => edge.from === from && edge.to === to)) return diagram;
   return { ...diagram, edges: [...diagram.edges, e(from, to, label)] };
+}
+
+export function duplicateDiagramNode(diagram: NoteDiagram, id: string, offset = 28): NoteDiagram {
+  const node = diagram.nodes.find((item) => item.id === id);
+  if (!node) return diagram;
+  const copy: NoteDiagramNode = {
+    ...node,
+    id: diagramId("n"),
+    x: node.x + offset,
+    y: node.y + offset,
+  };
+  return { ...diagram, nodes: [...diagram.nodes, copy] };
+}
+
+export function diagramNodeAtPoint(diagram: NoteDiagram, x: number, y: number): string | null {
+  for (let index = diagram.nodes.length - 1; index >= 0; index -= 1) {
+    const node = diagram.nodes[index];
+    const metrics = diagramNodeMetrics(node);
+    if (x >= metrics.x && x <= metrics.x + metrics.w && y >= metrics.y && y <= metrics.y + metrics.h) {
+      return node.id;
+    }
+  }
+  return null;
 }
 
 export function removeDiagramSelection(diagram: NoteDiagram, kind: "node" | "edge", id: string): NoteDiagram {
