@@ -7,6 +7,7 @@ import { DEFAULT_DISPLAY_CONTROL_SETTINGS, DEFAULT_DISPLAY_PAGES, DEFAULT_LIGHT_
 const mocks = vi.hoisted(() => ({
   updatePages: vi.fn().mockResolvedValue(undefined),
   forgetDevice: vi.fn().mockResolvedValue(undefined),
+  copyLookFrom: vi.fn(),
 }));
 
 const device: DeviceDoc = {
@@ -41,6 +42,7 @@ vi.mock("@/hooks/useMyDevices", () => ({
   useMyDevices: () => ({
     devices: [
       { id: "kitchen", label: "Kitchen display", deviceType: "display", pairedVia: "qr", revoked: false, createdAt: null, lastSeenAt: null },
+      { id: "hallway", label: "Hallway display", deviceType: "display", pairedVia: "qr", revoked: false, createdAt: null, lastSeenAt: null },
       { id: "porch-light", label: "Porch light", deviceType: "light", pairedVia: "direct", revoked: false, createdAt: null, lastSeenAt: null },
     ],
     loading: false,
@@ -62,6 +64,7 @@ vi.mock("@/hooks/useDeviceSettings", async (importOriginal) => {
       addAlarm: vi.fn(),
       updateAlarm: vi.fn(),
       deleteAlarm: vi.fn(),
+      copyLookFrom: mocks.copyLookFrom,
     }),
   };
 });
@@ -102,6 +105,10 @@ vi.mock("@/hooks/useFamilyMessages", () => ({
   useFamilyMessages: () => ({ messages: [], loading: false, householdId: null, post: vi.fn(), remove: vi.fn(), uid: "owner" }),
 }));
 
+function openCustomise(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: label, exact: true }));
+}
+
 describe("RemoteDisplays", () => {
   beforeAll(() => {
     vi.stubGlobal("ResizeObserver", class {
@@ -122,6 +129,7 @@ describe("RemoteDisplays", () => {
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
     expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
+    openCustomise("Layout");
     fireEvent.click(screen.getByRole("button", { name: /Add page/ }));
     fireEvent.click(screen.getByText("Full month calendar"));
 
@@ -135,6 +143,7 @@ describe("RemoteDisplays", () => {
     vi.useFakeTimers();
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
+    openCustomise("Layout");
     fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
     await vi.advanceTimersByTimeAsync(400);
 
@@ -148,6 +157,7 @@ describe("RemoteDisplays", () => {
     vi.useFakeTimers();
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
+    openCustomise("Layout");
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "photos" } });
     await vi.advanceTimersByTimeAsync(400);
 
@@ -160,6 +170,7 @@ describe("RemoteDisplays", () => {
     vi.useFakeTimers();
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
+    openCustomise("Layout");
     fireEvent.click(screen.getByRole("button", { name: /Side by side/ }));
     fireEvent.change(screen.getByLabelText("Widget for area 2"), { target: { value: "tasks" } });
     await vi.advanceTimersByTimeAsync(400);
@@ -173,6 +184,7 @@ describe("RemoteDisplays", () => {
     vi.useFakeTimers();
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
+    openCustomise("Layout");
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
     fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "custom" } });
     fireEvent.change(screen.getByLabelText("Page hours"), { target: { value: "all" } });
@@ -194,6 +206,7 @@ describe("RemoteDisplays", () => {
     vi.useFakeTimers();
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
 
+    openCustomise("Layout");
     fireEvent.change(screen.getByLabelText("Widget for area 1"), { target: { value: "clock" } });
     fireEvent.click(screen.getByRole("button", { name: /Close widget settings/ }));
     expect(screen.queryByText("Clock settings")).not.toBeInTheDocument();
@@ -213,16 +226,22 @@ describe("RemoteDisplays", () => {
 
   it("explains how to fill the photo library without using Firebase storage", () => {
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Photos");
     expect(screen.getByRole("heading", { name: "Quick library" })).toBeTruthy();
     expect(screen.getByText(/For albums, sharing and Drive folders use the Photos page/)).toBeTruthy();
+  });
+
+  it("keeps night mode on the screen section", () => {
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Screen");
     expect(screen.getByRole("button", { name: "Night mode" })).toBeTruthy();
   });
 
   it("keeps sunrise lights out of the connected screens list but shows them in their own panel", () => {
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
-    // Only the display shows up as a selectable screen in the sidebar.
     expect(screen.getAllByText("Kitchen display").length).toBeGreaterThan(0);
-    // The light appears exactly once — in the Sunrise lights panel, not as a screen to build.
+    expect(screen.queryByRole("button", { name: /Porch light/ })).not.toBeInTheDocument();
+    openCustomise("Lights");
     expect(screen.getByText("Porch light")).toBeInTheDocument();
   });
 
@@ -244,9 +263,47 @@ describe("RemoteDisplays", () => {
 
   it("lets an alarm be linked to a sunrise light", () => {
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Screen");
     fireEvent.click(screen.getByRole("button", { name: /Add alarm/ }));
     expect(screen.getByText("Also wake")).toBeInTheDocument();
-    // Now rendered twice: once in the Sunrise lights panel, once as a pickable chip.
-    expect(screen.getAllByText("Porch light").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Porch light").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("duplicates the current page with a new id", async () => {
+    vi.useFakeTimers();
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Layout");
+    fireEvent.click(screen.getByRole("button", { name: /Duplicate page/ }));
+    await vi.advanceTimersByTimeAsync(400);
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { id: string; name: string }[];
+    expect(saved).toHaveLength(2);
+    expect(saved[1].name).toBe("Today copy");
+    expect(saved[1].id).not.toBe(saved[0].id);
+  });
+
+  it("applies a whole-screen template after confirmation", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Screen");
+    fireEvent.click(screen.getByRole("button", { name: /Morning briefing plus photos and jobs/ }));
+    await vi.advanceTimersByTimeAsync(400);
+    const saved = mocks.updatePages.mock.calls.at(-1)?.[0] as { name: string }[];
+    expect(saved.map((page) => page.name)).toEqual(["Morning", "Photos & jobs"]);
+  });
+
+  it("copies the look from another owned screen", async () => {
+    mocks.copyLookFrom.mockResolvedValue(DEFAULT_DISPLAY_PAGES);
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    openCustomise("Screen");
+    fireEvent.change(screen.getByLabelText("Copy look from another screen"), { target: { value: "hallway" } });
+    expect(mocks.copyLookFrom).toHaveBeenCalledWith("hallway");
+  });
+
+  it("hides long pairing how-to behind Link a screen", () => {
+    render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
+    expect(screen.queryByText("On the screen itself")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Link a screen/ }));
+    expect(screen.getByText("On the screen itself")).toBeInTheDocument();
   });
 });

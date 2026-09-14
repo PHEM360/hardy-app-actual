@@ -492,3 +492,70 @@ export const DEFAULT_DISPLAY_PAGES: DisplayPage[] = [
     widgets: [{ ...createDisplayWidget("today"), id: "today-main" }],
   }),
 ];
+
+export function cloneDisplayPage(page: DisplayPage): DisplayPage {
+  return applyPageLayout({
+    ...page,
+    id: newId("p"),
+    widgets: page.widgets.map((widget) => ({ ...widget, id: newId("w") })),
+  });
+}
+
+export function cloneDisplayPages(pages: DisplayPage[]): DisplayPage[] {
+  return pages.map(cloneDisplayPage);
+}
+
+export function applyLookToPages(
+  pages: DisplayPage[],
+  look: { theme?: string; background?: string; backdrop?: DisplayBackdropKind },
+): DisplayPage[] {
+  return pages.map((page) => applyPageLayout({
+    ...page,
+    ...(look.theme ? { theme: look.theme } : {}),
+    ...(look.background ? { background: look.background } : {}),
+    ...(look.backdrop ? { backdrop: look.backdrop } : {}),
+  }));
+}
+
+export interface DisplayScreenTemplate {
+  id: string;
+  name: string;
+  description: string;
+  build: () => DisplayPage[];
+}
+
+function presetById(id: string): DisplayPage {
+  const found = PAGE_PRESETS.find((item) => item.id === id);
+  if (!found) return cloneDisplayPage(DEFAULT_DISPLAY_PAGES[0]);
+  return found.build();
+}
+
+export const SCREEN_TEMPLATES: DisplayScreenTemplate[] = [
+  {
+    id: "family-room",
+    name: "Family room",
+    description: "Today, a photo frame, then the month calendar",
+    build: () => ["today", "photo-frame", "month-calendar"].map(presetById),
+  },
+  {
+    id: "kitchen",
+    name: "Kitchen",
+    description: "Morning briefing plus photos and jobs",
+    build: () => ["morning", "photos-tasks"].map(presetById),
+  },
+  {
+    id: "hallway",
+    name: "Hallway",
+    description: "Family notes beside the calendar, then birthdays",
+    build: () => [
+      preset("Family", "halves", ["familyBoard", "calendar"], 300, { theme: "harbour", backdrop: "none" }),
+      preset("Coming up", "stack", ["birthdays", "countdown"], 300, { theme: "plum", backdrop: "golden" }),
+    ],
+  },
+  {
+    id: "bedroom",
+    name: "Bedroom",
+    description: "Photos by day, night clock after 21:00",
+    build: () => ["photo-frame", "clock"].map(presetById),
+  },
+];

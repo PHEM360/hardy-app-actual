@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   BACKDROP_GROUPS,
   BACKDROP_LABELS,
+  DEFAULT_DISPLAY_PAGES,
   PAGE_PRESETS,
+  SCREEN_TEMPLATES,
   activeDisplayPages,
+  applyLookToPages,
   applyPageLayout,
+  cloneDisplayPage,
+  cloneDisplayPages,
   createDisplayWidget,
   durationLabel,
   isPageActiveAt,
@@ -163,5 +168,34 @@ describe("display backdrops", () => {
     expect(BACKDROP_LABELS.sailing).toMatch(/sail/i);
     expect(BACKDROP_LABELS.pasture).toMatch(/pasture/i);
     expect(BACKDROP_LABELS.harvest).toMatch(/harvest/i);
+  });
+});
+
+describe("cloneDisplayPage", () => {
+  it("gives the copy a new page and widget id", () => {
+    const original = DEFAULT_DISPLAY_PAGES[0];
+    const copy = cloneDisplayPage(original);
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.widgets[0].id).not.toBe(original.widgets[0].id);
+    expect(copy.widgets[0].type).toBe(original.widgets[0].type);
+  });
+});
+
+describe("applyLookToPages", () => {
+  it("paints every page with the same theme and backdrop", () => {
+    const next = applyLookToPages(cloneDisplayPages(DEFAULT_DISPLAY_PAGES), {
+      theme: "harbour",
+      background: "#0b1524",
+      backdrop: "sailing",
+    });
+    expect(next[0]).toMatchObject({ theme: "harbour", background: "#0b1524", backdrop: "sailing" });
+  });
+});
+
+describe("SCREEN_TEMPLATES", () => {
+  it("builds a kitchen screen from morning plus photos and jobs", () => {
+    const kitchen = SCREEN_TEMPLATES.find((item) => item.id === "kitchen");
+    expect(kitchen).toBeTruthy();
+    expect(kitchen!.build().map((page) => page.name)).toEqual(["Morning", "Photos & jobs"]);
   });
 });

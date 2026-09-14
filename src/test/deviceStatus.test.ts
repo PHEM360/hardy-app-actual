@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeLightStatus, lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
+import { describeDisplayStatus, describeLightStatus, lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
 
 function fakeTimestamp(msAgo: number) {
   const ms = Date.now() - msAgo;
@@ -48,5 +48,24 @@ describe("describeLightStatus", () => {
     expect(wentOffline.online).toBe(false);
     expect(wentOffline.tone).toBe("error");
     expect(wentOffline.label).toBe("Offline · Seen 5 minutes ago");
+  });
+});
+
+describe("describeDisplayStatus", () => {
+  it("treats a recent heartbeat as online", () => {
+    const status = describeDisplayStatus(fakeTimestamp(30_000));
+    expect(status).toMatchObject({ online: true, label: "Online now", tone: "ok" });
+  });
+
+  it("explains how to reconnect a screen that has gone quiet", () => {
+    const status = describeDisplayStatus(fakeTimestamp(40 * 60_000));
+    expect(status.online).toBe(false);
+    expect(status.tone).toBe("error");
+    expect(status.detail).toMatch(/reconnects on its own/i);
+  });
+
+  it("asks the user to finish linking when a screen has never checked in", () => {
+    const status = describeDisplayStatus(undefined);
+    expect(status).toMatchObject({ online: false, tone: "warn", label: "Waiting to connect" });
   });
 });

@@ -60,15 +60,22 @@ export default function DisplayPair() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-6" style={{ paddingTop: "max(1.5rem, env(safe-area-inset-top, 0px))", paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 0px))" }}>
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl border border-border/40 overflow-hidden">
-        <div className="bg-primary px-6 py-5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-            <MonitorSmartphone className="w-5 h-5 text-white" />
+    <div
+      className="flex min-h-[100dvh] items-center justify-center p-6"
+      style={{
+        paddingTop: "max(1.5rem, env(safe-area-inset-top, 0px))",
+        paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 0px))",
+        background: "color-mix(in srgb, hsl(198,60%,46%) 14%, hsl(var(--background)))",
+      }}
+    >
+      <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-border/50 bg-card shadow-card">
+        <div className="flex items-center gap-3 bg-gradient-primary px-6 py-5">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/20">
+            <MonitorSmartphone className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <p className="text-white font-semibold text-sm leading-tight">Link a Display</p>
-            <p className="text-white/70 text-[11px] leading-tight mt-0.5">Hardy Hub</p>
+            <p className="text-sm font-semibold leading-tight text-primary-foreground">Link a display</p>
+            <p className="mt-0.5 text-[11px] leading-tight text-primary-foreground/80">Only approve a screen you are setting up</p>
           </div>
         </div>
 
@@ -81,11 +88,11 @@ export default function DisplayPair() {
 
           {phase === "confirm" && (
             <div className="flex flex-col items-center gap-4 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <MonitorSmartphone className="w-7 h-7 text-primary" />
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
+                <MonitorSmartphone className="h-7 w-7" />
               </div>
               <div>
-                <p className="font-semibold text-sm">Link this display to your account?</p>
+                <p className="font-display text-base font-bold">Link this display to your account?</p>
                 <p className="text-[12px] text-muted-foreground mt-1">
                   This screen will be linked only to the account below. It will not change when you switch households on your phone.
                 </p>
@@ -103,7 +110,7 @@ export default function DisplayPair() {
                 Only approve a display you are setting up yourself. The code expires after five minutes and can be used once.
               </p>
               <div className="w-full flex flex-col gap-2 pt-1">
-                <Button className="w-full rounded-xl" onClick={handleApprove}>
+                <Button className="w-full rounded-xl bg-gradient-primary" onClick={handleApprove}>
                   Approve this display
                 </Button>
                 <Button variant="outline" className="w-full rounded-xl" onClick={handleDeny}>

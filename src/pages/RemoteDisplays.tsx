@@ -1,23 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Cast, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
-  Moon, Palette, Plus, RotateCcw, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X, Zap,
+import {
+  Cast, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, LayoutGrid, MonitorSmartphone,
+  Moon, Palette, Plus, RotateCcw, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/auth/AuthContext";
 import { useMyDevices } from "@/hooks/useMyDevices";
 import { useDeviceSettings } from "@/hooks/useDeviceSettings";
 import {
-  BACKDROP_GROUPS, BACKDROP_HINTS, BACKDROP_LABELS, BACKDROP_THUMBS, DEFAULT_DISPLAY_PAGES, DISPLAY_THEMES,
-  DURATION_CHOICES, PAGE_PRESETS, WIDGET_LABELS,
-  applyPageLayout, durationLabel, isEmptyDisplayWidget, isPageActiveAt, pageScheduleLabel,
-  type DisplayPage, type DisplayWidgetLayout,
+  DEFAULT_DISPLAY_PAGES, PAGE_PRESETS, SCREEN_TEMPLATES,
+  applyLookToPages, applyPageLayout, cloneDisplayPage, isEmptyDisplayWidget, isPageActiveAt,
+  pageScheduleLabel, type DisplayPage, type DisplayWidgetLayout,
 } from "@/lib/displayPages";
 import { useDisplayOwnerPhotos } from "@/hooks/useDisplayOwnerPhotos";
 import { useRemoteDisplayPhotos } from "@/hooks/useRemoteDisplayPhotos";
-import { DisplayAlbumPicker } from "@/components/display/DisplayAlbumPicker";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useBirthdays } from "@/hooks/useBirthdays";
@@ -28,62 +27,43 @@ import { AlarmsSettingsPanel } from "@/components/display/AlarmsSettingsPanel";
 import { NightModeSettingsPanel } from "@/components/display/NightModeSettingsPanel";
 import { SunriseLightsPanel } from "@/components/display/SunriseLightsPanel";
 import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
+import { DisplayWidgetSettings } from "@/components/display/DisplayWidgetSettings";
+import { DisplayAppearance } from "@/components/display/DisplayAppearance";
+import { DisplayPageMeta } from "@/components/display/DisplayPageMeta";
+import { DisplayEmptyState, DisplayPairingGuide, DISPLAY_RECEIVER_PATH } from "@/components/display/DisplayPairingGuide";
 import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
-import { lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
+import { describeDisplayStatus } from "@/lib/deviceStatus";
 import { toast } from "sonner";
 
-const FIELD = "h-10 w-full min-w-0 rounded-xl border border-white/15 bg-white/[0.09] px-3 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-primary focus:bg-white/[0.14]";
-const LABEL = "text-[11px] font-bold uppercase tracking-wider text-white/45";
-const CARD = "rounded-2xl border border-white/10 bg-white/[0.04] p-3";
+type StudioSection = "look" | "layout" | "screen" | "photos" | "lights";
+type PreviewShape = "tv" | "tablet" | "portrait";
 
-function PairingSteps() {
-  const steps = [
-    { title: "On the screen itself", body: "Open a browser on the tablet, TV or Pi and go to hardyapp.co.uk/display." },
-    { title: "Scan its QR code", body: "Use the phone you are signed in on." },
-    { title: "Approve it", body: "Tap approve on your phone. The screen starts showing your pages here." },
-  ];
-  return (
-    <div className="mb-4 overflow-hidden rounded-3xl border border-primary/25 shadow-card">
-      <div className="flex flex-wrap items-center gap-3 bg-gradient-primary px-4 py-3 text-primary-foreground">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/20">
-          <Wifi className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h2 className="font-display text-base font-bold leading-tight">Link a screen in three steps</h2>
-          <p className="text-xs text-primary-foreground/80">Any device with a browser can become an always-on display.</p>
-        </div>
-      </div>
-      <ol className="grid gap-2.5 bg-[color-mix(in_srgb,hsl(var(--primary))_9%,hsl(var(--card)))] p-3 sm:grid-cols-3">
-        {steps.map((step, index) => (
-          <li key={step.title} className="rounded-2xl border border-primary/15 bg-card p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-sm font-bold text-primary-foreground">
-                {index + 1}
-              </span>
-              <p className="text-sm font-bold">{step.title}</p>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {step.body.split("hardyapp.co.uk/display").map((part, partIndex, parts) => (
-                <span key={partIndex}>
-                  {part}
-                  {partIndex < parts.length - 1 && (
-                    <code className="rounded-md bg-primary/12 px-1.5 py-0.5 font-bold text-primary">hardyapp.co.uk/display</code>
-                  )}
-                </span>
-              ))}
-            </p>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+const ACCENT = "hsl(198,60%,46%)";
+const SECTIONS: { id: StudioSection; label: string; icon: typeof Palette }[] = [
+  { id: "look", label: "Look", icon: Palette },
+  { id: "layout", label: "Layout", icon: LayoutGrid },
+  { id: "screen", label: "Screen", icon: MonitorSmartphone },
+  { id: "photos", label: "Photos", icon: ImagePlus },
+  { id: "lights", label: "Lights", icon: Sunrise },
+];
+
+const PREVIEW_SHAPES: { id: PreviewShape; label: string; className: string }[] = [
+  { id: "tv", label: "TV", className: "aspect-video" },
+  { id: "tablet", label: "Tablet", className: "aspect-[4/3]" },
+  { id: "portrait", label: "Portrait", className: "aspect-[9/16] max-h-[28rem] mx-auto" },
+];
+
+function railButtonClass(active: boolean) {
+  return `flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold transition ${
+    active
+      ? "bg-gradient-primary text-primary-foreground shadow-sm"
+      : "hover:bg-[color-mix(in_srgb,hsl(198,60%,46%)_12%,transparent)]"
+  }`;
 }
 
 export default function RemoteDisplays() {
   const { dataUid } = useAuth();
   const { devices: allDevices, loading, renameDevice, forgetDevice } = useMyDevices();
-  // Sunrise lights are paired/managed as devices too, but they get their own
-  // "Sunrise lights" card below rather than showing up as a screen to build.
   const devices = useMemo(() => allDevices.filter((item) => item.deviceType !== "light"), [allDevices]);
   const lights = useMemo(() => allDevices.filter((item) => item.deviceType === "light"), [allDevices]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -93,20 +73,20 @@ export default function RemoteDisplays() {
   const [showPresets, setShowPresets] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
   const [editorPages, setEditorPages] = useState<DisplayPage[]>([]);
+  const [section, setSection] = useState<StudioSection>("look");
+  const [previewShape, setPreviewShape] = useState<PreviewShape>("tv");
+  const [pairOpen, setPairOpen] = useState(false);
   const loadedDeviceRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPagesRef = useRef<DisplayPage[] | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
-  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode, updateControl } = useDeviceSettings(selectedDeviceId);
+  const {
+    device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm,
+    updateNightMode, updateControl, copyLookFrom,
+  } = useDeviceSettings(selectedDeviceId);
   const photoOwnerId = device?.uid || dataUid;
-  // The exact same hook the physical screen runs at /display, so this preview
-  // and the picker below can never show something different from what
-  // actually ends up on the wall — see useDisplayOwnerPhotos.
   const { photos: previewPhotos, albums: previewAlbums, loading: photosLoading } = useDisplayOwnerPhotos(photoOwnerId);
-  // The "Quick library" box below only ever manages its own legacy
-  // displayPhotos items, never album photos — a separate, narrower hook so
-  // its delete button can never be pointed at the wrong Firestore path.
-  const { photos: quickPhotos, addPhotos, addLinkedPhotos, updateCaption, deletePhoto } = useRemoteDisplayPhotos(photoOwnerId);
+  const { photos: quickPhotos, addPhotos, addLinkedPhotos, deletePhoto } = useRemoteDisplayPhotos(photoOwnerId);
   const { tasks } = useTasks(dataUid || undefined);
   const { events: calendarEvents } = useCalendar(dataUid || undefined);
   const { birthdays } = useBirthdays(device?.householdId ?? null);
@@ -114,6 +94,10 @@ export default function RemoteDisplays() {
   const calendarCategories = useMemo(
     () => [...new Set(calendarEvents.map((event) => event.category).filter(Boolean))].sort(),
     [calendarEvents],
+  );
+  const otherDisplays = useMemo(
+    () => devices.filter((item) => item.id !== selectedDeviceId),
+    [devices, selectedDeviceId],
   );
 
   useEffect(() => {
@@ -129,6 +113,7 @@ export default function RemoteDisplays() {
     setEditorPages(device.settings.pages);
     setSelectedPageId(device.settings.pages[0]?.id || null);
     setSelectedWidgetId(null);
+    setSection("look");
   }, [device]);
 
   useEffect(() => {
@@ -167,10 +152,11 @@ export default function RemoteDisplays() {
     setDeviceName(device?.label || "");
   }, [device?.label]);
 
-  // The settings rail sits beside the builder on wide screens but below it on a
-  // laptop, where opening it off-screen looks like the button did nothing.
   useEffect(() => {
-    if (selectedWidgetId) settingsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    if (selectedWidgetId) {
+      setSection("layout");
+      settingsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    }
   }, [selectedWidgetId]);
 
   const pages = editorPages.length > 0 ? editorPages : device?.settings.pages || DEFAULT_DISPLAY_PAGES;
@@ -178,6 +164,8 @@ export default function RemoteDisplays() {
   const selectedWidget = selectedPage?.widgets.find((widget) =>
     widget.id === selectedWidgetId && !isEmptyDisplayWidget(widget),
   ) || null;
+  const linked = devices.find((item) => item.id === selectedDeviceId);
+  const status = describeDisplayStatus(linked?.lastSeenAt);
 
   const savePages = (next: DisplayPage[]) => {
     const prepared = next.map(applyPageLayout);
@@ -218,6 +206,29 @@ export default function RemoteDisplays() {
     toast.success(`${preset.name} added to this screen`);
   };
 
+  const applyTemplate = (templateId: string) => {
+    const template = SCREEN_TEMPLATES.find((item) => item.id === templateId);
+    if (!template) return;
+    if (pages.length > 0 && !window.confirm(`Replace the pages on this screen with the ${template.name} preset?`)) return;
+    const next = template.build();
+    savePages(next);
+    setSelectedPageId(next[0]?.id || null);
+    setSelectedWidgetId(null);
+    toast.success(`${template.name} look applied`);
+  };
+
+  const duplicatePage = () => {
+    if (!selectedPage) return;
+    const clone = cloneDisplayPage(selectedPage);
+    clone.name = `${selectedPage.name} copy`;
+    const index = pages.findIndex((page) => page.id === selectedPage.id);
+    const next = [...pages];
+    next.splice(index + 1, 0, clone);
+    savePages(next);
+    setSelectedPageId(clone.id);
+    toast.success("Page duplicated");
+  };
+
   const movePage = (direction: -1 | 1) => {
     if (!selectedPage) return;
     const index = pages.findIndex((page) => page.id === selectedPage.id);
@@ -250,8 +261,6 @@ export default function RemoteDisplays() {
     }
   };
 
-  const scheduled = !!selectedPage?.activeFrom && !!selectedPage?.activeTo && selectedPage.activeFrom !== selectedPage.activeTo;
-
   const selectDevice = (id: string) => {
     if (id === selectedDeviceId) return;
     if (saveTimerRef.current || pendingPagesRef.current) {
@@ -268,6 +277,21 @@ export default function RemoteDisplays() {
     setSelectedDeviceId(id);
   };
 
+  const copyFrom = async (sourceId: string) => {
+    if (!sourceId) return;
+    try {
+      const copied = await copyLookFrom(sourceId);
+      setEditorPages(copied);
+      setSelectedPageId(copied[0]?.id || null);
+      setSelectedWidgetId(null);
+      toast.success("Look copied onto this screen");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not copy that screen");
+    }
+  };
+
+  const previewClass = PREVIEW_SHAPES.find((item) => item.id === previewShape)?.className || "aspect-video";
+
   return (
     <FeaturePageShell
       title="Remote Displays"
@@ -275,155 +299,193 @@ export default function RemoteDisplays() {
       icon={<MonitorSmartphone className="h-5 w-5" />}
       action={
         <Button variant="outline" size="sm" className="rounded-xl" asChild>
-          <a href="/display" target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open receiver</a>
+          <a href={DISPLAY_RECEIVER_PATH} target="_blank" rel="noreferrer">
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open receiver
+          </a>
         </Button>
       }
     >
-      <PairingSteps />
-
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <aside className="h-fit space-y-2 rounded-2xl border border-border/60 bg-card p-3 shadow-card">
-          <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connected screens</p>
-          {loading ? (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground">Loading displays…</p>
-          ) : devices.length === 0 ? (
-            <div className="rounded-xl bg-muted/35 p-4 text-center">
-              <MonitorSmartphone className="mx-auto h-7 w-7 text-muted-foreground" />
-              <p className="mt-2 text-xs font-semibold">No screens linked</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Follow the three steps above to add one.</p>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="h-fit space-y-3">
+          <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-card">
+            <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connected screens</p>
+            <div className="mt-2 space-y-2">
+              {loading ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">Loading displays…</p>
+              ) : devices.length === 0 ? (
+                <div
+                  className="rounded-xl p-4 text-center"
+                  style={{ background: "color-mix(in srgb, hsl(198,60%,46%) 12%, hsl(var(--card)))" }}
+                >
+                  <MonitorSmartphone className="mx-auto h-7 w-7 text-primary" />
+                  <p className="mt-2 text-xs font-semibold">No screens linked</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Use the steps on the right to add one.</p>
+                </div>
+              ) : devices.map((item) => {
+                const itemStatus = describeDisplayStatus(item.lastSeenAt);
+                const active = selectedDeviceId === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectDevice(item.id)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                      active ? "border-primary shadow-sm" : "border-border/50 hover:border-primary/35"
+                    }`}
+                    style={{
+                      background: active
+                        ? `color-mix(in srgb, ${ACCENT} 16%, hsl(var(--card)))`
+                        : `color-mix(in srgb, ${ACCENT} 8%, hsl(var(--card)))`,
+                      borderLeftWidth: 4,
+                      borderLeftColor: itemStatus.online ? "hsl(152,55%,40%)" : ACCENT,
+                    }}
+                  >
+                    <span className="flex items-center gap-2">
+                      {itemStatus.online
+                        ? <Wifi className="h-4 w-4 text-emerald-600" />
+                        : <WifiOff className="h-4 w-4 text-muted-foreground" />}
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold">{item.label}</span>
+                    </span>
+                    <span className={`mt-1 block pl-6 text-[10px] font-medium ${
+                      itemStatus.tone === "ok" ? "text-emerald-700" : itemStatus.tone === "warn" ? "text-amber-700" : "text-muted-foreground"
+                    }`}>
+                      {itemStatus.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          ) : devices.map((linked) => {
-            const online = timestampMs(linked.lastSeenAt) > Date.now() - 10 * 60_000;
-            return (
-              <button
-                key={linked.id}
-                type="button"
-                onClick={() => selectDevice(linked.id)}
-                className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
-                  selectedDeviceId === linked.id ? "border-primary bg-primary/10 shadow-sm" : "border-border/50 hover:border-primary/35"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  {online ? <Wifi className="h-4 w-4 text-emerald-500" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
-                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{linked.label}</span>
-                </span>
-                <span className="mt-1 block pl-6 text-[10px] text-muted-foreground">{lastSeenLabel(linked.lastSeenAt)}</span>
-              </button>
-            );
-          })}
+            <button
+              type="button"
+              onClick={() => setPairOpen(true)}
+              className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-primary text-xs font-semibold text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Link a screen
+            </button>
+          </div>
+
+          {selectedDeviceId && (
+            <nav className="rounded-2xl border border-border/60 bg-card p-3 shadow-card" aria-label="Customise this screen">
+              <p className="px-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Customise</p>
+              {SECTIONS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSection(item.id)}
+                    className={railButtonClass(section === item.id)}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </aside>
 
         <section className="min-w-0 space-y-4">
           {!selectedDeviceId ? (
-            <div className="rounded-2xl border border-border/60 bg-card px-6 py-16 text-center shadow-card">
-              <MonitorSmartphone className="mx-auto h-10 w-10 text-primary" />
-              <p className="mt-3 font-display text-lg font-bold">Link your first screen</p>
-              <p className="mt-1 text-sm text-muted-foreground">The display will appear here immediately after you approve it.</p>
-            </div>
+            <DisplayEmptyState />
           ) : deviceLoading ? (
             <div className="rounded-2xl bg-card py-16 text-center text-sm text-muted-foreground shadow-card">Loading display settings…</div>
           ) : !device ? (
-            // Loading finished but nothing came back — e.g. it was disconnected
-            // from another tab a moment ago. A permanent "loading" spinner here
-            // would read as the page being stuck, not as this display being gone.
             <div className="rounded-2xl border border-border/60 bg-card px-6 py-16 text-center shadow-card">
               <WifiOff className="mx-auto h-10 w-10 text-muted-foreground" />
               <p className="mt-3 font-display text-lg font-bold">This screen isn't available</p>
-              <p className="mt-1 text-sm text-muted-foreground">It may have just been disconnected. Pick another screen, or re-pair it from the steps above.</p>
+              <p className="mt-1 text-sm text-muted-foreground">It may have just been disconnected. Pick another screen, or link it again.</p>
             </div>
           ) : !selectedPage ? (
             <div className="rounded-2xl bg-card py-16 text-center text-sm text-muted-foreground shadow-card">This screen has no pages yet — add one below.</div>
           ) : (
             <>
-              {/* Dark console: the builder reads as the screen it is designing. */}
-              <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-card">
-                <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-white/[0.03] p-3">
+              <div
+                className="overflow-hidden rounded-2xl border border-border/60 shadow-card"
+                style={{ background: `color-mix(in srgb, ${ACCENT} 12%, hsl(var(--card)))`, borderLeftWidth: 4, borderLeftColor: ACCENT }}
+              >
+                <div className="flex flex-wrap items-center gap-2 p-3">
                   <input
                     value={deviceName}
                     onChange={(event) => setDeviceName(event.target.value)}
                     onBlur={() => {
                       if (deviceName.trim() && deviceName.trim() !== device.label) void renameDevice(device.id, deviceName);
                     }}
-                    className={`${FIELD} max-w-xs flex-1 font-semibold`}
+                    className="h-10 max-w-xs flex-1 rounded-xl border border-border bg-card px-3 text-sm font-semibold outline-none focus:border-primary"
                     aria-label="Display name"
                   />
+                  <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-bold ${
+                    status.online
+                      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-800"
+                      : status.tone === "warn"
+                        ? "border-amber-500/30 bg-amber-500/15 text-amber-800"
+                        : "border-border bg-card text-muted-foreground"
+                  }`}>
+                    {status.online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+                    {status.label}
+                  </span>
                   <button
                     type="button"
                     onClick={() => { if (window.confirm(`Disconnect ${device.label}?`)) void forgetDevice(device.id); }}
-                    className="flex h-10 items-center gap-1.5 rounded-xl border border-red-400/30 bg-red-500/10 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
+                    className="ml-auto flex h-10 items-center gap-1.5 rounded-xl border border-red-300/60 bg-card px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Disconnect
                   </button>
                 </div>
+                <p className="px-3 pb-3 text-[11px] leading-relaxed text-muted-foreground">{status.detail}</p>
+              </div>
 
-                <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
-                  {pages.map((page) => {
-                    const active = selectedPage.id === page.id;
-                    return (
-                      <button
-                        key={page.id}
-                        type="button"
-                        onClick={() => { setSelectedPageId(page.id); setSelectedWidgetId(null); }}
-                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                          active
-                            ? "bg-gradient-primary text-primary-foreground shadow-lg"
-                            : "border border-white/12 bg-white/[0.07] text-white hover:bg-white/[0.13]"
-                        }`}
-                      >
-                        {page.name}
-                        <span className={`ml-1.5 text-[10px] font-medium ${active ? "text-primary-foreground/75" : "text-white/45"}`}>
-                          {pageScheduleLabel(page)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setShowPresets((value) => !value)}
-                    className="flex h-9 items-center gap-1 rounded-xl border border-dashed border-white/25 px-3 text-xs font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
-                  >
-                    {showPresets ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} Add page
-                  </button>
-                  <p className="ml-auto hidden text-[11px] text-white/40 sm:block">
-                    {pages.length === 1
-                      ? "One page, shown all the time"
-                      : `Rotates through ${pages.length} pages`}
-                  </p>
-                </div>
-
-                {showPresets && (
-                  <div className="border-b border-white/10 bg-white/[0.03] p-3">
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-white">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" /> Start from a ready-made page
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {PAGE_PRESETS.map((preset) => (
+              {section === "look" && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {pages.map((page) => {
+                      const active = selectedPage.id === page.id;
+                      return (
                         <button
-                          key={preset.id}
+                          key={page.id}
                           type="button"
-                          onClick={() => addPreset(preset.id)}
-                          className="rounded-xl border border-white/12 bg-white/[0.06] p-3 text-left transition hover:border-primary/60 hover:bg-white/[0.12]"
+                          onClick={() => { setSelectedPageId(page.id); setSelectedWidgetId(null); }}
+                          className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                            active
+                              ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                              : "border border-border bg-card hover:border-primary/40"
+                          }`}
                         >
-                          <p className="text-xs font-bold text-white">{preset.name}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-white/45">{preset.description}</p>
+                          {page.name}
+                          <span className={`ml-1.5 text-[10px] font-medium ${active ? "text-primary-foreground/75" : "text-muted-foreground"}`}>
+                            {pageScheduleLabel(page)}
+                          </span>
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                )}
-
-                <div className="grid gap-4 p-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
-                  <div className="min-w-0 space-y-4">
-                    <div className="overflow-hidden rounded-2xl border border-white/10">
-                      <div className="flex items-center justify-between gap-2 bg-white/[0.05] px-3 py-2">
-                        <p className={LABEL}>Live preview</p>
+                  <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-card">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Live preview</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {PREVIEW_SHAPES.map((shape) => (
+                          <button
+                            key={shape.id}
+                            type="button"
+                            onClick={() => setPreviewShape(shape.id)}
+                            className={`rounded-lg px-2 py-1 text-[10px] font-bold ${
+                              previewShape === shape.id
+                                ? "bg-gradient-primary text-primary-foreground"
+                                : "border border-border bg-background text-muted-foreground"
+                            }`}
+                          >
+                            {shape.label}
+                          </button>
+                        ))}
                         {isPageActiveAt(selectedPage, new Date()) ? (
-                          <span className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">On screen now</span>
+                          <span className="rounded-lg bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">On screen now</span>
                         ) : (
-                          <span className="rounded-lg bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60">Outside its hours</span>
+                          <span className="rounded-lg bg-background px-2 py-0.5 text-[10px] font-bold text-muted-foreground">Outside its hours</span>
                         )}
                       </div>
-                      <div className="relative aspect-video w-full">
+                    </div>
+                    <div className="bg-zinc-950 p-3">
+                      <div className={`relative mx-auto w-full overflow-hidden rounded-xl border border-white/10 ${previewClass}`}>
                         <DisplayPageRenderer
                           page={selectedPage}
                           photos={previewPhotos}
@@ -435,689 +497,337 @@ export default function RemoteDisplays() {
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-                      {device.settings.control.forcedPageId ? (
-                        <>
-                          <span className="flex items-center gap-1.5 rounded-lg bg-sky-500/20 px-2.5 py-1 text-[11px] font-bold text-sky-300">
-                            <Cast className="h-3.5 w-3.5" />
-                            {device.settings.pages.find((page) => page.id === device.settings.control.forcedPageId)?.name || "A page"} is pinned to the screen
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void updateControl({ forcedPageId: null, forcedUntil: null })}
-                            className="flex h-8 items-center gap-1.5 rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" /> Resume automatic rotation
-                          </button>
-                        </>
-                      ) : (
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-card px-3 py-2.5 shadow-card">
+                    {device.settings.control.forcedPageId ? (
+                      <>
+                        <span className="flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-2.5 py-1 text-[11px] font-bold text-sky-800">
+                          <Cast className="h-3.5 w-3.5" />
+                          {device.settings.pages.find((page) => page.id === device.settings.control.forcedPageId)?.name || "A page"} is pinned to the screen
+                        </span>
                         <button
                           type="button"
-                          onClick={() => void updateControl({
-                            forcedPageId: selectedPage.id,
-                            forcedUntil: Date.now() + 2 * 60 * 60 * 1000,
-                          })}
-                          className="flex h-8 items-center gap-1.5 rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                          onClick={() => void updateControl({ forcedPageId: null, forcedUntil: null })}
+                          className="flex h-8 items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold transition hover:border-primary/40"
                         >
-                          <Cast className="h-3.5 w-3.5" /> Show “{selectedPage.name}” on screen now
+                          <RotateCcw className="h-3.5 w-3.5" /> Resume automatic rotation
                         </button>
-                      )}
-                      <p className="text-[10px] text-white/40">
-                        Overrides rotation and schedule on the physical screen for up to 2 hours, or until you resume it here.
-                      </p>
-                    </div>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void updateControl({
+                          forcedPageId: selectedPage.id,
+                          forcedUntil: Date.now() + 2 * 60 * 60 * 1000,
+                        })}
+                        className="flex h-8 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground"
+                      >
+                        <Cast className="h-3.5 w-3.5" /> Show “{selectedPage.name}” on screen now
+                      </button>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Overrides rotation and schedule on the physical screen for up to 2 hours.
+                    </p>
+                  </div>
 
-                    <RemoteLayoutEditor
+                  <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                    <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">This page’s look</p>
+                    <DisplayAppearance
                       page={selectedPage}
-                      selectedWidgetId={selectedWidgetId}
-                      onSelectWidget={setSelectedWidgetId}
+                      pageCount={pages.length}
                       onChange={updatePage}
+                      onApplyLookToAll={() => {
+                        savePages(applyLookToPages(pages, {
+                          theme: selectedPage.theme,
+                          background: selectedPage.background,
+                          backdrop: selectedPage.backdrop || "none",
+                        }));
+                        toast.success("Look applied to every page");
+                      }}
                     />
-
-                    {pages.length > 1 && (
-                      <div className="flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-                        <button type="button" onClick={() => movePage(-1)} className="flex h-9 items-center rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10">
-                          <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Move earlier
-                        </button>
-                        <button type="button" onClick={() => movePage(1)} className="flex h-9 items-center rounded-xl border border-white/15 px-3 text-xs font-semibold text-white transition hover:bg-white/10">
-                          Move later <ChevronRight className="ml-1 h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = pages.filter((page) => page.id !== selectedPage.id);
-                            savePages(next);
-                            setSelectedPageId(next[0]?.id || null);
-                          }}
-                          className="ml-auto flex h-9 items-center rounded-xl px-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/15"
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete page
-                        </button>
-                      </div>
-                    )}
                   </div>
+                </div>
+              )}
 
-                  <div ref={settingsRef} className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start">
-                    <div className={CARD}>
-                      <p className={LABEL}>Page settings</p>
-                      <div className="mt-2 space-y-3">
-                        <div>
-                          <label htmlFor="page-name" className="text-xs font-semibold text-white/80">Page name</label>
-                          <input
-                            id="page-name"
-                            value={selectedPage.name}
-                            onChange={(event) => updatePage({ ...selectedPage, name: event.target.value })}
-                            className={`${FIELD} mt-1`}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="page-duration" className="text-xs font-semibold text-white/80">Show for</label>
-                          <select
-                            id="page-duration"
-                            value={DURATION_CHOICES.includes(selectedPage.durationSeconds) ? selectedPage.durationSeconds : 300}
-                            onChange={(event) => updatePage({ ...selectedPage, durationSeconds: Number(event.target.value) })}
-                            className={`${FIELD} mt-1`}
-                          >
-                            {DURATION_CHOICES.map((seconds) => (
-                              <option key={seconds} value={seconds}>{durationLabel(seconds)}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <p className="flex items-center gap-1.5 text-xs font-semibold text-white/80">
-                            <Clock className="h-3.5 w-3.5" /> When it may show
-                          </p>
-                          <select
-                            value={scheduled ? "custom" : "all"}
-                            onChange={(event) => {
-                              if (event.target.value === "all") {
-                                // Deleting the keys keeps the document free of undefined values.
-                                const { activeFrom: _from, activeTo: _to, ...rest } = selectedPage;
-                                updatePage(rest as DisplayPage);
-                              } else {
-                                updatePage({ ...selectedPage, activeFrom: "21:00", activeTo: "06:00" });
-                              }
-                            }}
-                            aria-label="Page hours"
-                            className={`${FIELD} mt-1`}
-                          >
-                            <option value="all">All day</option>
-                            <option value="custom">Only between set hours</option>
-                          </select>
-                          {scheduled && (
-                            <>
-                              <div className="mt-2 flex items-center gap-2">
-                                <input
-                                  type="time"
-                                  value={selectedPage.activeFrom}
-                                  onChange={(event) => updatePage({ ...selectedPage, activeFrom: event.target.value })}
-                                  aria-label="Show from"
-                                  className={FIELD}
-                                />
-                                <span className="text-xs text-white/50">to</span>
-                                <input
-                                  type="time"
-                                  value={selectedPage.activeTo}
-                                  onChange={(event) => updatePage({ ...selectedPage, activeTo: event.target.value })}
-                                  aria-label="Show until"
-                                  className={FIELD}
-                                />
-                              </div>
-                              <p className="mt-1 text-[10px] text-white/40">Overnight is fine — 21:00 to 06:00 runs through midnight.</p>
-                            </>
-                          )}
-                        </div>
-                        <div>
-                          <p className={`flex items-center gap-1.5 ${LABEL}`}><Palette className="h-3.5 w-3.5" /> Theme</p>
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {DISPLAY_THEMES.map((theme) => (
-                              <button
-                                key={theme.id}
-                                type="button"
-                                onClick={() => updatePage({ ...selectedPage, theme: theme.id, background: theme.background })}
-                                aria-label={`${theme.label} theme`}
-                                title={theme.label}
-                                className={`h-9 w-9 rounded-xl border-2 transition ${
-                                  selectedPage.theme === theme.id ? "scale-105 border-primary" : "border-white/15 hover:border-white/40"
-                                }`}
-                                style={{ background: `linear-gradient(140deg, ${theme.background} 45%, ${theme.accent} 160%)` }}
-                              />
-                            ))}
-                            <input
-                              type="color"
-                              value={selectedPage.background}
-                              onChange={(event) => updatePage({ ...selectedPage, theme: "custom", background: event.target.value })}
-                              aria-label="Custom background"
-                              className="h-9 w-12 cursor-pointer rounded-xl border border-white/15 bg-transparent p-1"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-white/80">Background animation</p>
-                          <p className="mt-0.5 text-[10px] text-white/40">
-                            {BACKDROP_HINTS[selectedPage.backdrop || "none"]}
-                          </p>
-                          <div className="mt-2 space-y-2.5">
-                            {BACKDROP_GROUPS.map((group) => (
-                              <div key={group.id}>
-                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-white/35">{group.label}</p>
-                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-                                  {group.options.map((kind) => {
-                                    const active = (selectedPage.backdrop || "none") === kind;
-                                    return (
-                                      <button
-                                        key={kind}
-                                        type="button"
-                                        onClick={() => updatePage({ ...selectedPage, backdrop: kind })}
-                                        aria-pressed={active}
-                                        className={`overflow-hidden rounded-xl border text-left transition ${
-                                          active
-                                            ? "border-primary ring-2 ring-primary/50"
-                                            : "border-white/12 hover:border-white/30"
-                                        }`}
-                                      >
-                                        <span
-                                          className="block h-9 w-full"
-                                          style={{ background: BACKDROP_THUMBS[kind] }}
-                                        />
-                                        <span className={`block truncate px-1.5 py-1 text-[10px] font-semibold ${active ? "text-white" : "text-white/70"}`}>
-                                          {BACKDROP_LABELS[kind]}
-                                        </span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {selectedPage.backdrop === "weather" && (
-                            <p className="mt-1.5 text-[10px] text-white/40">
-                              Uses this page’s weather place if you’ve set one, otherwise the screen’s own location.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {selectedWidget && (
-                      <div className="rounded-2xl border border-primary/30 bg-primary/[0.09] p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h2 className="font-display text-sm font-bold text-white">{WIDGET_LABELS[selectedWidget.type]} settings</h2>
+              {section === "layout" && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-card">
+                    <div className="flex flex-wrap gap-2">
+                      {pages.map((page) => {
+                        const active = selectedPage.id === page.id;
+                        return (
                           <button
+                            key={page.id}
                             type="button"
-                            onClick={() => setSelectedWidgetId(null)}
-                            aria-label="Close widget settings"
-                            className="rounded-lg p-1 text-white/60 transition hover:bg-white/10 hover:text-white"
+                            onClick={() => { setSelectedPageId(page.id); setSelectedWidgetId(null); }}
+                            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                              active
+                                ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                                : "border border-border bg-background hover:border-primary/40"
+                            }`}
                           >
-                            <X className="h-3.5 w-3.5" />
+                            {page.name}
+                            <span className={`ml-1.5 text-[10px] font-medium ${active ? "text-primary-foreground/75" : "text-muted-foreground"}`}>
+                              {pageScheduleLabel(page)}
+                            </span>
                           </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div>
-                            <label className="text-xs font-semibold text-white/80" htmlFor="widget-title">Heading on screen</label>
-                            <input
-                              id="widget-title"
-                              value={selectedWidget.title || ""}
-                              placeholder={WIDGET_LABELS[selectedWidget.type]}
-                              onChange={(event) => updateWidget({ title: event.target.value })}
-                              className={`${FIELD} mt-1`}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <label className="text-xs font-semibold text-white/80" htmlFor="widget-accent">Accent colour</label>
-                            <input
-                              id="widget-accent"
-                              type="color"
-                              value={selectedWidget.accentColor || "#5eead4"}
-                              onChange={(event) => updateWidget({ accentColor: event.target.value })}
-                              className="h-9 w-16 cursor-pointer rounded-xl border border-white/15 bg-transparent p-1"
-                            />
-                          </div>
-
-                          {selectedWidget.type === "clock" && (
-                            <label className="block text-xs font-semibold text-white/80">
-                              Clock face
-                              <select
-                                value={selectedWidget.clockStyle || "digital"}
-                                onChange={(event) => updateWidget({ clockStyle: event.target.value as "digital" | "analog" })}
-                                className={`${FIELD} mt-1`}
-                              >
-                                <option value="digital">Digital</option>
-                                <option value="analog">Analogue</option>
-                              </select>
-                            </label>
-                          )}
-
-                          {(selectedWidget.type === "clock" || selectedWidget.type === "today") && (
-                            <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.05] p-2.5">
-                              <label className="flex items-center justify-between gap-3 text-xs text-white">
-                                <span>24-hour time</span>
-                                <Switch checked={selectedWidget.format24h !== false} onCheckedChange={(value) => updateWidget({ format24h: value })} />
-                              </label>
-                              {selectedWidget.type === "clock" && (
-                                <>
-                                  <label className="flex items-center justify-between gap-3 text-xs text-white">
-                                    <span>Show seconds</span>
-                                    <Switch checked={selectedWidget.showSeconds === true} onCheckedChange={(value) => updateWidget({ showSeconds: value })} />
-                                  </label>
-                                  <label className="flex items-center justify-between gap-3 text-xs text-white">
-                                    <span>Show date</span>
-                                    <Switch checked={selectedWidget.showDate !== false} onCheckedChange={(value) => updateWidget({ showDate: value })} />
-                                  </label>
-                                </>
-                              )}
-                            </div>
-                          )}
-
-                          {selectedWidget.type === "photos" && (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-xs font-semibold text-white/80">Photos</p>
-                                <Link to="/photos" className="text-[11px] font-semibold text-primary-foreground/90 underline-offset-2 hover:underline">
-                                  Open Photos
-                                </Link>
-                              </div>
-                              <DisplayAlbumPicker
-                                albums={previewAlbums}
-                                photos={previewPhotos}
-                                widget={selectedWidget}
-                                onChange={updateWidget}
-                              />
-                              <label className="flex items-center gap-2 text-xs text-white">
-                                Change every
-                                <input
-                                  type="number"
-                                  min={5}
-                                  value={selectedWidget.photoIntervalSeconds || ""}
-                                  onChange={(event) => updateWidget({ photoIntervalSeconds: Math.max(5, Number(event.target.value) || 20) })}
-                                  className={`${FIELD} h-8 w-20`}
-                                />
-                                secs
-                              </label>
-                            </div>
-                          )}
-
-                          {(selectedWidget.type === "calendar" || selectedWidget.type === "today") && (
-                            <>
-                              {selectedWidget.type === "calendar" && (
-                                <>
-                                  <label className="block text-xs font-semibold text-white/80">
-                                    Calendar style
-                                    <select
-                                      value={selectedWidget.calendarView || "month"}
-                                      onChange={(event) => updateWidget({ calendarView: event.target.value as DisplayWidgetLayout["calendarView"] })}
-                                      className={`${FIELD} mt-1`}
-                                    >
-                                      <option value="month">Whole month grid</option>
-                                      <option value="week">This week</option>
-                                      <option value="agenda">List of what’s coming up</option>
-                                    </select>
-                                  </label>
-                                  {selectedWidget.calendarView === "agenda" ? (
-                                    <label className="flex items-center gap-2 text-xs text-white">
-                                      Show the next
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={90}
-                                        value={selectedWidget.calendarDaysAhead || ""}
-                                        onChange={(event) => updateWidget({ calendarDaysAhead: Math.max(1, Number(event.target.value) || 14) })}
-                                        className={`${FIELD} h-8 w-20`}
-                                      />
-                                      days
-                                    </label>
-                                  ) : (
-                                    <label className="block text-xs font-semibold text-white/80">
-                                      How events appear
-                                      <select
-                                        value={selectedWidget.calendarEventStyle || "titles"}
-                                        onChange={(event) => updateWidget({ calendarEventStyle: event.target.value as DisplayWidgetLayout["calendarEventStyle"] })}
-                                        className={`${FIELD} mt-1`}
-                                      >
-                                        <option value="titles">Event titles</option>
-                                        <option value="dots">Coloured dots only</option>
-                                        <option value="compact">A count per day</option>
-                                      </select>
-                                    </label>
-                                  )}
-                                </>
-                              )}
-                              <div className="flex items-center justify-between gap-2">
-                                <label className="text-xs font-semibold text-white/80" htmlFor="event-colour">Event colour</label>
-                                <input
-                                  id="event-colour"
-                                  type="color"
-                                  value={selectedWidget.eventColor || "#f87171"}
-                                  onChange={(event) => updateWidget({ eventColor: event.target.value })}
-                                  className="h-9 w-16 cursor-pointer rounded-xl border border-white/15 bg-transparent p-1"
-                                />
-                              </div>
-                              {calendarCategories.length > 0 && (
-                                <div>
-                                  <p className="text-xs font-semibold text-white/80">Categories</p>
-                                  <p className="text-[10px] text-white/40">None selected shows everything.</p>
-                                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                    {calendarCategories.map((category) => {
-                                      const selected = (selectedWidget.calendarCategories || []).includes(category);
-                                      return (
-                                        <button
-                                          key={category}
-                                          type="button"
-                                          onClick={() => {
-                                            const next = new Set(selectedWidget.calendarCategories || []);
-                                            if (selected) next.delete(category); else next.add(category);
-                                            updateWidget({ calendarCategories: [...next] });
-                                          }}
-                                          className={`rounded-xl border px-2.5 py-1 text-[11px] capitalize transition ${
-                                            selected ? "border-primary bg-primary/25 text-white" : "border-white/15 bg-white/[0.06] text-white/70"
-                                          }`}
-                                        >
-                                          {category}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )}
-
-                          {(selectedWidget.type === "tasks" || selectedWidget.type === "today") && (
-                            <>
-                              {selectedWidget.type === "tasks" && (
-                                <label className="block text-xs font-semibold text-white/80">
-                                  Tasks to show
-                                  <select
-                                    value={selectedWidget.taskFilter || "open"}
-                                    onChange={(event) => updateWidget({ taskFilter: event.target.value as DisplayWidgetLayout["taskFilter"] })}
-                                    className={`${FIELD} mt-1`}
-                                  >
-                                    <option value="today">Today only</option>
-                                    <option value="open">All open tasks</option>
-                                    <option value="all">Open and completed</option>
-                                  </select>
-                                </label>
-                              )}
-                              <label className="block text-xs font-semibold text-white/80">
-                                Subtasks
-                                <select
-                                  value={selectedWidget.subtaskMode || "open"}
-                                  onChange={(event) => updateWidget({ subtaskMode: event.target.value as DisplayWidgetLayout["subtaskMode"] })}
-                                  className={`${FIELD} mt-1`}
-                                >
-                                  <option value="open">Show the ones still to do</option>
-                                  <option value="all">Show all, ticked included</option>
-                                  <option value="hide">Hide, show progress only</option>
-                                </select>
-                              </label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <label className="text-xs font-semibold text-white/80">
-                                  Rows at a time
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={30}
-                                    value={selectedWidget.taskLimit || ""}
-                                    onChange={(event) => updateWidget({ taskLimit: Math.max(1, Number(event.target.value) || 8) })}
-                                    className={`${FIELD} mt-1`}
-                                  />
-                                </label>
-                                <label className="text-xs font-semibold text-white/80">
-                                  Scroll on after
-                                  <input
-                                    type="number"
-                                    min={5}
-                                    max={300}
-                                    value={selectedWidget.autoCycleSeconds || ""}
-                                    onChange={(event) => updateWidget({ autoCycleSeconds: Math.max(5, Number(event.target.value) || 20) })}
-                                    className={`${FIELD} mt-1`}
-                                  />
-                                </label>
-                              </div>
-                              <p className="text-[10px] text-white/40">
-                                Longer lists move on by themselves, so nothing stays hidden on a screen you cannot tap.
-                              </p>
-                              {selectedWidget.type === "tasks" && (
-                                <details className="rounded-xl border border-white/10 bg-white/[0.04] p-2">
-                                  <summary className="cursor-pointer text-[11px] font-semibold text-white/70">Choose individual tasks</summary>
-                                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
-                                    {tasks.map((task) => {
-                                      const taskId = task.id || "";
-                                      const selected = (selectedWidget.taskIds || []).includes(taskId);
-                                      return (
-                                        <button
-                                          key={taskId}
-                                          type="button"
-                                          onClick={() => {
-                                            const next = new Set(selectedWidget.taskIds || []);
-                                            if (selected) next.delete(taskId); else next.add(taskId);
-                                            updateWidget({ taskIds: [...next] });
-                                          }}
-                                          className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] ${
-                                            selected ? "border-primary bg-primary/20 text-white" : "border-white/10 bg-white/[0.05] text-white/75"
-                                          }`}
-                                        >
-                                          <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-white/30"}`}>
-                                            {selected && <Check className="h-2.5 w-2.5" />}
-                                          </span>
-                                          <span className="truncate">{task.title}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </details>
-                              )}
-                            </>
-                          )}
-
-                          {selectedWidget.type === "weather" && (
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-white/80" htmlFor="weather-place">Location</label>
-                              <div className="flex gap-1.5">
-                                <input
-                                  id="weather-place"
-                                  value={placeQuery}
-                                  onChange={(event) => setPlaceQuery(event.target.value)}
-                                  onKeyDown={(event) => { if (event.key === "Enter") void findPlace(); }}
-                                  placeholder="Town or city"
-                                  className={FIELD}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => void findPlace()}
-                                  aria-label="Find place"
-                                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground"
-                                >
-                                  <Search className="h-4 w-4" />
-                                </button>
-                              </div>
-                              <p className="flex items-center gap-1.5 text-[11px] text-white/50">
-                                <MapPin className="h-3 w-3" />
-                                {selectedWidget.weatherPlace
-                                  ? `Showing ${selectedWidget.weatherPlace}`
-                                  : "Using the screen’s own location, if it allows it."}
-                              </p>
-                            </div>
-                          )}
-
-                          {selectedWidget.type === "message" && (
-                            <label className="block text-xs font-semibold text-white/80">
-                              Message
-                              <textarea
-                                value={selectedWidget.message || ""}
-                                onChange={(event) => updateWidget({ message: event.target.value })}
-                                rows={4}
-                                placeholder="Back at 6 — dinner in the oven"
-                                className={`${FIELD} mt-1 h-auto py-2`}
-                              />
-                            </label>
-                          )}
-
-                          {selectedWidget.type === "countdown" && (
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-white/80">
-                                Counting down to
-                                <input
-                                  type="date"
-                                  value={selectedWidget.countdownTo || ""}
-                                  onChange={(event) => updateWidget({ countdownTo: event.target.value })}
-                                  className={`${FIELD} mt-1`}
-                                />
-                              </label>
-                              <label className="block text-xs font-semibold text-white/80">
-                                What for
-                                <input
-                                  value={selectedWidget.countdownLabel || ""}
-                                  onChange={(event) => updateWidget({ countdownLabel: event.target.value })}
-                                  placeholder="Holiday"
-                                  className={`${FIELD} mt-1`}
-                                />
-                              </label>
-                            </div>
-                          )}
-
-                          {selectedWidget.type === "birthdays" && (
-                            <label className="flex items-center gap-2 text-xs text-white">
-                              Show birthdays within
-                              <input
-                                type="number"
-                                min={1}
-                                max={365}
-                                value={selectedWidget.birthdaysDaysAhead || ""}
-                                onChange={(event) => updateWidget({ birthdaysDaysAhead: Math.max(1, Number(event.target.value) || 30) })}
-                                className={`${FIELD} h-8 w-20`}
-                              />
-                              days
-                            </label>
-                          )}
-
-                          {selectedWidget.type === "familyBoard" && (
-                            <div className="space-y-2">
-                              <label className="flex items-center gap-2 text-xs text-white">
-                                Show the latest
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={20}
-                                  value={selectedWidget.familyBoardLimit || ""}
-                                  onChange={(event) => updateWidget({ familyBoardLimit: Math.max(1, Number(event.target.value) || 6) })}
-                                  className={`${FIELD} h-8 w-20`}
-                                />
-                                notes
-                              </label>
-                              <p className="text-[10px] text-white/40">Anyone can post a note to the family board from their phone — it appears here automatically.</p>
-                            </div>
-                          )}
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setShowPresets((value) => !value)}
+                        className="flex h-9 items-center gap-1 rounded-xl border border-dashed border-primary/40 px-3 text-xs font-semibold text-primary"
+                      >
+                        {showPresets ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} Add page
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {pages.length === 1 ? "One page, shown all the time" : `Rotates through ${pages.length} pages`}
+                    </p>
+                    {showPresets && (
+                      <div className="mt-3 rounded-2xl border border-primary/20 p-3" style={{ background: `color-mix(in srgb, ${ACCENT} 10%, hsl(var(--card)))` }}>
+                        <p className="mb-2 flex items-center gap-1.5 text-xs font-bold">
+                          <Sparkles className="h-3.5 w-3.5 text-primary" /> Start from a ready-made page
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {PAGE_PRESETS.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => addPreset(preset.id)}
+                              className="rounded-xl border border-border bg-card p-3 text-left transition hover:border-primary/60"
+                            >
+                              <p className="text-xs font-bold">{preset.name}</p>
+                              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{preset.description}</p>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
-
-                    {!selectedWidget && (
-                      <p className="px-1 text-[11px] leading-relaxed text-white/40">
-                        Pick a widget’s <span className="font-semibold text-white/60">Settings</span> button to change what it shows.
-                      </p>
-                    )}
                   </div>
-                </div>
-              </div>
 
-              <DisplayPhotoLibrary
-                photos={quickPhotos}
-                loading={photosLoading}
-                hasPhotoPage={pages.some((page) => page.widgets.some((widget) => widget.type === "photos"))}
-                onUpload={addPhotos}
-                onAddLinks={addLinkedPhotos}
-                onDelete={deletePhoto}
-                onAddPhotoPage={() => addPreset("photo-frame")}
-              />
-
-              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-amber-500" />
-                    <div>
-                      <h2 className="font-display text-base font-bold">Keep the screen awake</h2>
-                      <p className="text-[11px] text-muted-foreground">
-                        {device.settings.control.keepAwake
-                          ? "This screen is stopped from sleeping or switching off, 24/7."
-                          : "This screen can sleep or switch off on its own, like a normal device."}
-                      </p>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="min-w-0 space-y-4">
+                      <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-card">
+                        <RemoteLayoutEditor
+                          page={selectedPage}
+                          selectedWidgetId={selectedWidgetId}
+                          onSelectWidget={setSelectedWidgetId}
+                          onChange={updatePage}
+                        />
+                      </div>
+                      {pages.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" onClick={() => movePage(-1)} className="flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-semibold hover:border-primary/40">
+                            <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Move earlier
+                          </button>
+                          <button type="button" onClick={() => movePage(1)} className="flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-semibold hover:border-primary/40">
+                            Move later <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                          </button>
+                          <button type="button" onClick={duplicatePage} className="flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-semibold hover:border-primary/40">
+                            <Copy className="mr-1 h-3.5 w-3.5" /> Duplicate page
+                          </button>
+                          {pages.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = pages.filter((page) => page.id !== selectedPage.id);
+                                savePages(next);
+                                setSelectedPageId(next[0]?.id || null);
+                              }}
+                              className="ml-auto flex h-9 items-center rounded-xl px-3 text-xs font-semibold text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete page
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div ref={settingsRef} className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start">
+                      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Page settings</p>
+                        <DisplayPageMeta page={selectedPage} onChange={updatePage} />
+                      </div>
+                      {selectedWidget ? (
+                        <DisplayWidgetSettings
+                          widget={selectedWidget}
+                          albums={previewAlbums}
+                          photos={previewPhotos}
+                          tasks={tasks}
+                          calendarCategories={calendarCategories}
+                          placeQuery={placeQuery}
+                          onPlaceQuery={setPlaceQuery}
+                          onFindPlace={() => void findPlace()}
+                          onChange={updateWidget}
+                          onClose={() => setSelectedWidgetId(null)}
+                        />
+                      ) : (
+                        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+                          Pick a widget’s <span className="font-semibold text-foreground">Settings</span> button to change what it shows.
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <Switch
-                    checked={device.settings.control.keepAwake}
-                    onCheckedChange={(value) => void updateControl({ keepAwake: value })}
-                    aria-label="Keep the screen awake"
-                  />
                 </div>
-              </div>
+              )}
 
-              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
-                <div className="mb-3 flex items-center gap-2">
-                  <Moon className="h-4 w-4 text-sky-400" />
-                  <div>
-                    <h2 className="font-display text-base font-bold">Night mode</h2>
-                    <p className="text-[11px] text-muted-foreground">Show a clock or a blank screen at bedtime, on a schedule or with one tap.</p>
+              {section === "screen" && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                    <h2 className="font-display text-base font-bold">Ready-made screen</h2>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">Replace every page with a sensible starting point. You can still edit afterwards.</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {SCREEN_TEMPLATES.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyTemplate(template.id)}
+                          className="rounded-2xl border border-border bg-background p-3 text-left transition hover:border-primary/50"
+                        >
+                          <p className="text-sm font-bold">{template.name}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{template.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                    {otherDisplays.length > 0 && (
+                      <label className="mt-3 block text-xs font-semibold">
+                        Copy look from another screen
+                        <select
+                          aria-label="Copy look from another screen"
+                          defaultValue=""
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            event.target.value = "";
+                            if (value) void copyFrom(value);
+                          }}
+                          className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                        >
+                          <option value="">Choose a screen…</option>
+                          {otherDisplays.map((item) => (
+                            <option key={item.id} value={item.id}>{item.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   </div>
-                </div>
-                <NightModeSettingsPanel
-                  nightMode={device.settings.nightMode}
-                  alarms={device.settings.alarms}
-                  onChange={(patch) => void updateNightMode(patch)}
-                  onActivate={() => void updateNightMode({
-                    override: "on",
-                    overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
-                  })}
-                  onClear={() => void updateNightMode({
-                    override: "off",
-                    overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
-                  })}
-                />
-              </div>
 
-              <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sunrise className="h-4 w-4 text-amber-500" />
-                  <div>
-                    <h2 className="font-display text-base font-bold">Alarm clock</h2>
-                    <p className="text-[11px] text-muted-foreground">Sunrise mode gradually warms and brightens the display before the alarm.</p>
+                  <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-amber-500" />
+                        <div>
+                          <h2 className="font-display text-base font-bold">Keep the screen awake</h2>
+                          <p className="text-[11px] text-muted-foreground">
+                            {device.settings.control.keepAwake
+                              ? "This screen is stopped from sleeping or switching off, 24/7."
+                              : "This screen can sleep or switch off on its own, like a normal device."}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={device.settings.control.keepAwake}
+                        onCheckedChange={(value) => void updateControl({ keepAwake: value })}
+                        aria-label="Keep the screen awake"
+                      />
+                    </div>
                   </div>
-                </div>
-                <AlarmsSettingsPanel
-                  alarms={device.settings.alarms}
-                  lights={lights}
-                  onAdd={(alarm) => {
-                    void addAlarm(alarm);
-                    if (device.settings.nightMode.withAlarms && alarm.enabled) {
-                      void updateNightMode({
+
+                  <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Moon className="h-4 w-4 text-sky-500" />
+                      <div>
+                        <h2 className="font-display text-base font-bold">Night mode</h2>
+                        <p className="text-[11px] text-muted-foreground">Show a clock or a blank screen at bedtime, on a schedule or with one tap.</p>
+                      </div>
+                    </div>
+                    <NightModeSettingsPanel
+                      nightMode={device.settings.nightMode}
+                      alarms={device.settings.alarms}
+                      onChange={(patch) => void updateNightMode(patch)}
+                      onActivate={() => void updateNightMode({
                         override: "on",
-                        overrideUntil: overrideUntilForAlarm(alarm.time, new Date()),
-                      });
-                    }
+                        overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
+                      })}
+                      onClear={() => void updateNightMode({
+                        override: "off",
+                        overrideUntil: nextNightEndIso(device.settings.nightMode, new Date()),
+                      })}
+                    />
+                  </div>
+
+                  <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Sunrise className="h-4 w-4 text-amber-500" />
+                      <div>
+                        <h2 className="font-display text-base font-bold">Alarm clock</h2>
+                        <p className="text-[11px] text-muted-foreground">Sunrise mode gradually warms and brightens the display before the alarm.</p>
+                      </div>
+                    </div>
+                    <AlarmsSettingsPanel
+                      alarms={device.settings.alarms}
+                      lights={lights}
+                      onAdd={(alarm) => {
+                        void addAlarm(alarm);
+                        if (device.settings.nightMode.withAlarms && alarm.enabled) {
+                          void updateNightMode({
+                            override: "on",
+                            overrideUntil: overrideUntilForAlarm(alarm.time, new Date()),
+                          });
+                        }
+                      }}
+                      onUpdate={(id, patch) => {
+                        void updateAlarm(id, patch);
+                        if (patch.enabled === true && device.settings.nightMode.withAlarms) {
+                          const time = patch.time || device.settings.alarms.find((item) => item.id === id)?.time;
+                          if (time) {
+                            void updateNightMode({
+                              override: "on",
+                              overrideUntil: overrideUntilForAlarm(time, new Date()),
+                            });
+                          }
+                        }
+                      }}
+                      onDelete={deleteAlarm}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {section === "photos" && (
+                <DisplayPhotoLibrary
+                  photos={quickPhotos}
+                  loading={photosLoading}
+                  hasPhotoPage={pages.some((page) => page.widgets.some((widget) => widget.type === "photos"))}
+                  onUpload={addPhotos}
+                  onAddLinks={addLinkedPhotos}
+                  onDelete={deletePhoto}
+                  onAddPhotoPage={() => {
+                    addPreset("photo-frame");
+                    setSection("layout");
                   }}
-                  onUpdate={(id, patch) => {
-                    void updateAlarm(id, patch);
-                    if (patch.enabled === true && device.settings.nightMode.withAlarms) {
-                      const time = patch.time || device.settings.alarms.find((item) => item.id === id)?.time;
-                      if (time) {
-                        void updateNightMode({
-                          override: "on",
-                          overrideUntil: overrideUntilForAlarm(time, new Date()),
-                        });
-                      }
-                    }
-                  }}
-                  onDelete={deleteAlarm}
                 />
-              </div>
+              )}
+
+              {section === "lights" && (
+                <SunriseLightsPanel lights={lights} onRename={renameDevice} onForget={forgetDevice} />
+              )}
             </>
           )}
-
-          <SunriseLightsPanel lights={lights} onRename={renameDevice} onForget={forgetDevice} />
         </section>
       </div>
+
+      <Dialog open={pairOpen} onOpenChange={setPairOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display">Link a screen</DialogTitle>
+            <DialogDescription>
+              Open the display website on the tablet or TV, then approve it from a phone that is already signed in.
+            </DialogDescription>
+          </DialogHeader>
+          <DisplayPairingGuide compact />
+        </DialogContent>
+      </Dialog>
     </FeaturePageShell>
   );
 }

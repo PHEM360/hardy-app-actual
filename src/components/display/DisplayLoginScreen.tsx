@@ -38,7 +38,7 @@ export function DisplayLoginScreen({
             Set up this screen
           </h1>
           <p className="max-w-[52ch] text-white/60" style={{ fontSize: "clamp(11px, 2vmin, 24px)" }}>
-            No password is ever typed on this screen. Link it to one Hardy Hub account from your phone.
+            No password is ever typed on this screen. Link it to one Hardy Hub account from a phone that is already signed in.
           </p>
         </div>
 

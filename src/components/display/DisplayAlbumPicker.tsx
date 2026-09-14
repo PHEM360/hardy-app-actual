@@ -42,20 +42,20 @@ export function DisplayAlbumPicker<T extends PhotoPickItem>({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-white/80">Albums</p>
+        <p className="text-xs font-semibold">Albums</p>
         {selectedCount > 0 ? (
-          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
             {selectedCount} photo{selectedCount === 1 ? "" : "s"} selected
           </span>
         ) : (
-          <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+          <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-800">
             <ImageOff className="h-2.5 w-2.5" /> Nothing selected yet
           </span>
         )}
       </div>
-      <p className="text-[10px] text-white/40">Pick one or more albums below, then optionally tap individual pictures to narrow it down further.</p>
+      <p className="text-[10px] text-muted-foreground">Pick one or more albums below, then optionally tap individual pictures to narrow it down further.</p>
       {albums.length === 0 ? (
-        <p className="text-xs text-white/50">Create albums on the Photos page first.</p>
+        <p className="text-xs text-muted-foreground">Create albums on the Photos page first.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {albums.map((album) => {
@@ -76,7 +76,7 @@ export function DisplayAlbumPicker<T extends PhotoPickItem>({
                   commit([...next], widget.photoIds || []);
                 }}
                 className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold ${
-                  active ? "bg-primary text-primary-foreground" : "bg-white/10 text-white"
+                  active ? "bg-gradient-primary text-primary-foreground" : "border border-border bg-background"
                 }`}
               >
                 {album.name}

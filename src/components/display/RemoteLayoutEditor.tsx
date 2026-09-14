@@ -94,7 +94,7 @@ export function RemoteLayoutEditor({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">1. Choose the layout</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">1. Choose the layout</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {PAGE_LAYOUTS.map((option) => {
             const active = layout === option.id;
@@ -107,13 +107,13 @@ export function RemoteLayoutEditor({
                 className={`flex min-w-0 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition ${
                   active
                     ? "border-primary bg-gradient-primary text-primary-foreground shadow-lg"
-                    : "border-white/12 bg-white/[0.06] text-white hover:border-white/30 hover:bg-white/10"
+                    : "border-border bg-card text-foreground hover:border-primary/40"
                 }`}
               >
                 <LayoutThumbnail layout={option.id} ratio={active ? page.splitRatio : undefined} />
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold">{option.label}</span>
-                  <span className={`block text-[10px] ${active ? "text-primary-foreground/75" : "text-white/45"}`}>
+                  <span className={`block text-[10px] ${active ? "text-primary-foreground/75" : "text-muted-foreground"}`}>
                     {option.hint}
                   </span>
                 </span>
@@ -124,12 +124,12 @@ export function RemoteLayoutEditor({
       </div>
 
       {resizable && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3">
+        <div className="rounded-2xl border border-border/60 bg-background/70 p-3">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="area-size" className="text-xs font-semibold text-white">
+            <label htmlFor="area-size" className="text-xs font-semibold">
               {layout === "stack" ? "Height of the top area" : "Width of the main area"}
             </label>
-            <span className="rounded-lg bg-white/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-white/80">
+            <span className="rounded-lg bg-card px-2 py-0.5 text-[11px] font-bold tabular-nums">
               {ratioPercent}%
             </span>
           </div>
@@ -141,15 +141,15 @@ export function RemoteLayoutEditor({
             step={5}
             value={ratioPercent}
             onChange={(event) => onChange(applyPageLayout({ ...page, splitRatio: Number(event.target.value) / 100 }))}
-            className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-primary"
+            className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
           />
-          <p className="mt-1.5 text-[10px] text-white/40">Drag to resize the areas. The preview updates as you go.</p>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">Drag to resize the areas. The preview updates as you go.</p>
         </div>
       )}
 
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">2. Fill each area</p>
-        <p className="mt-0.5 text-[11px] text-white/45">Pick what shows where, then open its settings to fine-tune it.</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">2. Fill each area</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">Pick what shows where, then open its settings to fine-tune it.</p>
         <div
           className="mt-2 grid aspect-[16/9] w-full gap-2 rounded-2xl border border-white/10 bg-black/40 p-2"
           style={{ gridTemplateColumns: "repeat(12, 1fr)", gridTemplateRows: "repeat(12, 1fr)" }}
