@@ -95,6 +95,7 @@ export {
 	trueLayerCallback,
 	syncAllTrueLayerBalances,
 } from "./truelayer";
+export { analyzeFinanceSpending } from "./financeAnalysis";
 
 // ── /display kiosk pairing ──
 export {
@@ -824,6 +825,8 @@ export const analyzeHealth = onCall(
 		return { answer };
 	},
 );
+
+export { syncCalendarFeed, publishMergedCalendar, mergedCalendarIcs } from "./calendarFeeds";
 
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});

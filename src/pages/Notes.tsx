@@ -8,7 +8,7 @@ import {
 import {
   StickyNote, Plus, Search, LayoutGrid, List, Columns2, CalendarDays, ListChecks,
   FolderPlus, Shield, Share2, Pin, Archive, CheckSquare, Settings2,
-  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Inbox, Folder, PenLine,
+  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Inbox, Folder, PenLine, GitBranch,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
@@ -31,12 +31,14 @@ import { NoteEditor } from "@/components/notes/NoteEditor";
 import { ShareNoteDialog } from "@/components/notes/ShareNoteDialog";
 import { VaultGate } from "@/components/notes/VaultGate";
 import { NoteCard } from "@/components/notes/NoteCard";
-import type { HubNote, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
+import { NoteStartDialog } from "@/components/notes/NoteStartDialog";
+import { noteHasDiagram } from "@/lib/noteDiagram";
+import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
 import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteCardStyle, noteSwatch } from "@/lib/noteStyle";
 import { toast } from "sonner";
 
-type FilterId = "all" | "pinned" | "tasks" | "drawings" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}`;
+type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}`;
 
 const FOLDER_ACCENT: Record<string, string> = {
   yellow: "hsl(42, 85%, 48%)",
@@ -66,6 +68,7 @@ function hasChecklist(note: HubNote) {
 function previewText(note: HubNote) {
   if (note.locked) return "Locked note";
   if (note.kind === "drawing") return `${note.canvas?.blocks.length || 0} canvas item${note.canvas?.blocks.length === 1 ? "" : "s"}`;
+  if (noteHasDiagram(note)) return "Diagram";
   if (note.checklist?.length) {
     const done = note.checklist.filter((i) => i.done).length;
     return `${done}/${note.checklist.length} checked`;
@@ -98,6 +101,8 @@ export default function Notes() {
   const [active, setActive] = useState<HubNote | null>(null);
   const [creatingKind, setCreatingKind] = useState<NoteKind>("note");
   const [creatingId, setCreatingId] = useState(() => crypto.randomUUID());
+  const [creatingDiagram, setCreatingDiagram] = useState<NoteDiagram | null>(null);
+  const [startOpen, setStartOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ type: "note" | "folder"; note?: HubNote; folder?: NoteFolder } | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -122,6 +127,7 @@ export default function Notes() {
   useEffect(() => {
     if (params.get("new") === "1" || params.get("new") === "note") {
       setCreatingKind("note");
+      setCreatingDiagram(null);
       setCreatingId(crypto.randomUUID());
       setActive(null);
       setEditorOpen(true);
@@ -131,9 +137,20 @@ export default function Notes() {
     }
     if (params.get("new") === "checklist") {
       setCreatingKind("checklist");
+      setCreatingDiagram(null);
       setCreatingId(crypto.randomUUID());
       setActive(null);
       setEditorOpen(true);
+      const next = new URLSearchParams(params);
+      next.delete("new");
+      setParams(next, { replace: true });
+    }
+    if (params.get("new") === "diagram") {
+      setCreatingKind("note");
+      setCreatingDiagram(null);
+      setCreatingId(crypto.randomUUID());
+      setActive(null);
+      setStartOpen(true);
       const next = new URLSearchParams(params);
       next.delete("new");
       setParams(next, { replace: true });
@@ -173,6 +190,7 @@ export default function Notes() {
       if (filter === "pinned") return n.pinned;
       if (filter === "tasks") return hasChecklist(n);
       if (filter === "drawings") return n.kind === "drawing";
+      if (filter === "diagrams") return noteHasDiagram(n);
       if (filter === "inbox") return !n.folderId;
       if (filter.startsWith("folder:")) return n.folderId === filter.slice(7);
       return true;
@@ -197,8 +215,9 @@ export default function Notes() {
     return [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (a.title || "").localeCompare(b.title || ""));
   }, [filter, notesApi.notes, notesApi.vaultNotes, notesApi.sharedNotes, vault.unlocked, query]);
 
-  const openNote = (note: HubNote | null, kind: NoteKind = "note") => {
+  const openNote = (note: HubNote | null, kind: NoteKind = "note", diagram: NoteDiagram | null = null) => {
     setCreatingKind(kind);
+    setCreatingDiagram(note ? null : diagram);
     if (!note) setCreatingId(crypto.randomUUID());
     setActive(note);
     setEditorOpen(true);
@@ -347,14 +366,14 @@ export default function Notes() {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle="Notes, checklists and sketches"
+      subtitle="Write, tick off, sketch or map it out"
       icon={<StickyNote className="w-5 h-5" />}
       sharePage="notes"
       action={
         <div className="flex items-center gap-1.5">
           {canEdit && (
-            <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => openNote(null)}>
-              <Plus className="mr-1 h-4 w-4" /> New note
+            <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => setStartOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New
             </Button>
           )}
           <Button size="icon" variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Notes settings">
@@ -369,6 +388,7 @@ export default function Notes() {
             {railItem("all", "All", StickyNote)}
             {railItem("pinned", "Pinned", Pin)}
             {railItem("tasks", "Checklists", CheckSquare)}
+            {railItem("diagrams", "Diagrams", GitBranch, FOLDER_ACCENT.teal)}
             {railItem("drawings", "Drawings", PenLine, FOLDER_ACCENT.purple)}
             {railItem("inbox", "Inbox", Inbox)}
             {notesApi.folders.map((f) =>
@@ -502,11 +522,17 @@ export default function Notes() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
               <StickyNote className="h-6 w-6" />
             </div>
-            <p className="font-display text-xl font-bold">Nothing here yet</p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Tap the button to add a note or a checklist.</p>
+            <p className="font-display text-xl font-bold">
+              {filter === "diagrams" ? "No diagrams yet" : filter === "tasks" ? "No checklists yet" : "Nothing here yet"}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+              {filter === "diagrams"
+                ? "Start from a home network, a flowchart, or a blank board."
+                : "Write a note, tick a list, sketch, or drop in a diagram."}
+            </p>
             {canEdit && (
-              <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={() => openNote(null, filter === "drawings" ? "drawing" : "note")}>
-                <Plus className="mr-1 h-4 w-4" /> New note
+              <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={() => setStartOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" /> New
               </Button>
             )}
           </div>
@@ -669,6 +695,7 @@ export default function Notes() {
         canEdit={canEdit}
         isOwn={isOwnScope}
         defaultKind={creatingKind}
+        initialDiagram={creatingDiagram}
         ownerId={active?.ownerId || notesApi.uid || ""}
         noteId={active?.id || creatingId}
         showOnDashboard={!!active && notesApi.prefs.dashboardNoteId === active.id}
@@ -701,6 +728,12 @@ export default function Notes() {
           if (active) await syncCalendar(active);
           else toast.message("Save the note first, then add it to the calendar");
         }}
+      />
+
+      <NoteStartDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        onPick={(choice) => openNote(null, choice.kind, choice.diagram ?? null)}
       />
 
       <ShareNoteDialog

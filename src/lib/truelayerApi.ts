@@ -18,11 +18,17 @@ export function bankRedirectUri() {
 }
 
 export async function getBankConnectStatus() {
-  const call = httpsCallable<Record<string, never>, { configured: boolean; sandbox: boolean }>(functions, "getTrueLayerStatus");
+  const call = httpsCallable<Record<string, never>, {
+    configured: boolean;
+    sandbox: boolean;
+    using?: "sandbox" | "live";
+    preferred?: "sandbox" | "live";
+    mismatch?: boolean;
+  }>(functions, "getTrueLayerStatus");
   try {
     return (await call({})).data;
   } catch {
-    return { configured: false, sandbox: true };
+    return { configured: false, sandbox: true, mismatch: false };
   }
 }
 
@@ -52,18 +58,20 @@ export async function linkBankAccount(input: {
   bankAccountId: string;
   financeAccountId?: string;
   createNew?: boolean;
+  scope?: "personal" | "household";
+  householdId?: string;
 }) {
   const call = httpsCallable<typeof input, { financeAccountId: string }>(functions, "linkTrueLayerAccount");
   const result = await call(input);
   return result.data;
 }
 
-export async function unlinkBankAccount(connectionId: string, bankAccountId: string) {
-  const call = httpsCallable<{ connectionId: string; bankAccountId: string }, { ok: boolean }>(
+export async function unlinkBankAccount(connectionId: string, bankAccountId: string, householdId?: string) {
+  const call = httpsCallable<{ connectionId: string; bankAccountId: string; householdId?: string }, { ok: boolean }>(
     functions,
     "unlinkTrueLayerAccount"
   );
-  await call({ connectionId, bankAccountId });
+  await call({ connectionId, bankAccountId, ...(householdId ? { householdId } : {}) });
 }
 
 export async function syncBankBalances(connectionId?: string, history = false) {

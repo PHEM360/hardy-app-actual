@@ -22,9 +22,9 @@ describe("header backdrop", () => {
   });
 
   it("picks a celebration scene from today’s events", () => {
-    expect(occasionFromTitle("Sam's birthday")?.scene).toBe("hearts");
+    expect(occasionFromTitle("Sam's birthday")?.scene).toBe("silk");
     expect(occasionFromTitle("New Year’s Eve")?.scene).toBe("fireworks");
-    expect(pickTodayOccasion([{ title: "School run" }])?.scene).toBe("confetti");
+    expect(pickTodayOccasion([{ title: "School run" }])?.scene).toBe("fireworks");
     expect(pickTodayOccasion([], ["Willow"])?.label).toMatch(/Willow/);
   });
 });

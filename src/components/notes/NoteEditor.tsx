@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { HubNote, NoteCanvas, NoteFolder, NoteKind, NoteCategory } from "@/types/notes";
+import type { HubNote, NoteCanvas, NoteDiagram, NoteFolder, NoteKind, NoteCategory } from "@/types/notes";
 import { NOTE_CATEGORIES, NOTE_COLORS } from "@/types/notes";
 import { googleCalendarUrl } from "@/lib/noteCalendar";
 import { encryptPayload, decryptPayload } from "@/lib/noteCrypto";
@@ -32,6 +32,7 @@ interface NoteEditorProps {
   onLeaveVault: () => Promise<void>;
   onAddToHubCalendar: () => Promise<void>;
   defaultKind?: NoteKind;
+  initialDiagram?: NoteDiagram | null;
   ownerId: string;
   noteId: string;
 }
@@ -65,6 +66,7 @@ export function NoteEditor({
   onLeaveVault,
   onAddToHubCalendar,
   defaultKind = "note",
+  initialDiagram = null,
   ownerId,
   noteId,
   showOnDashboard = false,
@@ -83,9 +85,10 @@ export function NoteEditor({
         ? [{ id: `c${Date.now()}`, text: "", done: false }]
         : []
     );
+    const starterDiagram = !note && initialDiagram !== undefined ? initialDiagram : null;
     const baseCanvas: NoteCanvas = note?.canvas ?? {
       version: 1,
-      height: 520,
+      height: starterDiagram ? 620 : 520,
       blocks: note?.body ? [{
         id: `legacy-body-${note.id}`,
         type: "text",
@@ -95,6 +98,14 @@ export function NoteEditor({
         height: 180,
         text: note.body,
         textStyle: "body",
+      }] : starterDiagram !== null && starterDiagram !== undefined ? [{
+        id: `start-diagram-${noteId}`,
+        type: "diagram",
+        x: 16,
+        y: 16,
+        width: 520,
+        height: 540,
+        diagram: starterDiagram,
       }] : [],
     };
     const migratedBlocks = [...baseCanvas.blocks];
@@ -145,7 +156,7 @@ export function NoteEditor({
     setPassphrase("");
     setUnlockedBody(!note?.locked);
     setOnDashboard(!!showOnDashboard);
-  }, [open, note, defaultKind, noteId, showOnDashboard]);
+  }, [open, note, defaultKind, noteId, showOnDashboard, initialDiagram]);
 
   const locked = !!draft.locked && !unlockedBody;
   const selectedColor = NOTE_COLORS.find((color) => color.id === draft.color) ?? NOTE_COLORS[1];
@@ -307,7 +318,7 @@ export function NoteEditor({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto border-l-border/50 sm:max-w-3xl" style={{ background: editorBackground }}>
+      <SheetContent side="right" className={`flex w-full flex-col overflow-y-auto border-l-border/50 ${canvasDiagram ? "sm:max-w-5xl" : "sm:max-w-3xl"}`} style={{ background: editorBackground }}>
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             {draft.kind === "drawing" ? (
@@ -317,7 +328,7 @@ export function NoteEditor({
             ) : (
               <StickyNote className="h-4 w-4" />
             )}
-            {note ? "Edit" : "New"} note
+            {note ? "Edit note" : canvasDiagram ? "New diagram" : "New note"}
           </SheetTitle>
           <SheetDescription className="sr-only">Write and arrange content on a flexible note canvas.</SheetDescription>
         </SheetHeader>
@@ -449,61 +460,71 @@ export function NoteEditor({
             {canEdit && (
               <div className="flex flex-col gap-2">
                 <Button onClick={save} disabled={busy || !draft.title?.trim()}>{busy ? "Saving…" : "Save"}</Button>
-                {draft.dueDate && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button type="button" variant="outline" onClick={onAddToHubCalendar}>
-                      <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Hub calendar
-                    </Button>
-                    <Button type="button" variant="outline" asChild>
-                      <a
-                        href={googleCalendarUrl(draft.title || "Note", draft.dueDate, draft.body)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Google
-                      </a>
-                    </Button>
-                  </div>
-                )}
-                {isOwn && note && !note.vault && (
-                  <Button type="button" variant="outline" onClick={onShare}>
-                    <Share2 className="mr-1 h-3.5 w-3.5" /> Share
-                  </Button>
-                )}
-                {isOwn && note && !note.vault && !note.locked && (
-                  <div className="space-y-2 rounded-xl border border-border p-3">
-                    <p className="text-sm font-medium flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password protect</p>
-                    <Input type="password" placeholder="Note password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
-                    <Button type="button" variant="secondary" className="w-full" onClick={lockNote}>Lock this note</Button>
-                  </div>
-                )}
-                {isOwn && note?.locked && (
-                  <Button type="button" variant="outline" onClick={() => onSave({
-                    locked: false,
-                    cipher: null,
-                    title: draft.title,
-                    body: draft.body,
-                    checklist: canvasChecklist?.type === "checklist" ? canvasChecklist.items : draft.checklist,
-                    diagram: canvasDiagram?.type === "diagram" ? canvasDiagram.diagram : draft.diagram,
-                    canvas: draft.canvas,
-                  }, { decrypt: true })}>
-                    <Unlock className="mr-1 h-3.5 w-3.5" /> Remove password
-                  </Button>
-                )}
-                {isOwn && note && !note.vault && (
-                  <Button type="button" variant="outline" onClick={onMoveVault}>
-                    <Shield className="mr-1 h-3.5 w-3.5" /> Move to Secure Notes
-                  </Button>
-                )}
-                {isOwn && note?.vault && (
-                  <Button type="button" variant="outline" onClick={onLeaveVault}>
-                    Move out of Secure Notes
-                  </Button>
-                )}
                 {isOwn && note && (
-                  <Button type="button" variant="destructive" onClick={onDelete}>
-                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
-                  </Button>
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <button type="button" className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-white/50 px-3 py-2 text-left text-sm font-medium">
+                        More
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-2">
+                      {draft.dueDate && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button type="button" variant="outline" onClick={onAddToHubCalendar}>
+                            <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Hub calendar
+                          </Button>
+                          <Button type="button" variant="outline" asChild>
+                            <a
+                              href={googleCalendarUrl(draft.title || "Note", draft.dueDate, draft.body)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <ExternalLink className="mr-1 h-3.5 w-3.5" /> Google
+                            </a>
+                          </Button>
+                        </div>
+                      )}
+                      {!note.vault && (
+                        <Button type="button" variant="outline" onClick={onShare}>
+                          <Share2 className="mr-1 h-3.5 w-3.5" /> Share
+                        </Button>
+                      )}
+                      {!note.vault && !note.locked && (
+                        <div className="space-y-2 rounded-xl border border-border p-3">
+                          <p className="text-sm font-medium flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password protect</p>
+                          <Input type="password" placeholder="Note password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+                          <Button type="button" variant="secondary" className="w-full" onClick={lockNote}>Lock this note</Button>
+                        </div>
+                      )}
+                      {note.locked && (
+                        <Button type="button" variant="outline" onClick={() => onSave({
+                          locked: false,
+                          cipher: null,
+                          title: draft.title,
+                          body: draft.body,
+                          checklist: canvasChecklist?.type === "checklist" ? canvasChecklist.items : draft.checklist,
+                          diagram: canvasDiagram?.type === "diagram" ? canvasDiagram.diagram : draft.diagram,
+                          canvas: draft.canvas,
+                        }, { decrypt: true })}>
+                          <Unlock className="mr-1 h-3.5 w-3.5" /> Remove password
+                        </Button>
+                      )}
+                      {!note.vault && (
+                        <Button type="button" variant="outline" onClick={onMoveVault}>
+                          <Shield className="mr-1 h-3.5 w-3.5" /> Move to Secure Notes
+                        </Button>
+                      )}
+                      {note.vault && (
+                        <Button type="button" variant="outline" onClick={onLeaveVault}>
+                          Move out of Secure Notes
+                        </Button>
+                      )}
+                      <Button type="button" variant="destructive" onClick={onDelete}>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                      </Button>
+                    </CollapsibleContent>
+                  </Collapsible>
                 )}
               </div>
             )}

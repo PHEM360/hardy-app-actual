@@ -15,9 +15,11 @@ export type AppearancePatch = {
   customPrimary?: string;
   customAccent?: string;
   loaderPreset?: string;
+  loaderPresetRotate?: boolean;
   loaderLeft?: string;
   loaderRight?: string;
   headerScene?: string;
+  headerSceneRotate?: boolean;
   headerColor?: string;
   headerPhotoUrl?: string;
   headerShowWeather?: boolean;
@@ -38,9 +40,11 @@ export function mergeAppearance(current: AppearancePatch, patch: AppearancePatch
     customPrimary: patch.customPrimary !== undefined ? patch.customPrimary : current.customPrimary,
     customAccent: patch.customAccent !== undefined ? patch.customAccent : current.customAccent,
     loaderPreset: patch.loaderPreset ?? current.loaderPreset,
+    loaderPresetRotate: patch.loaderPresetRotate !== undefined ? patch.loaderPresetRotate : current.loaderPresetRotate,
     loaderLeft: patch.loaderLeft !== undefined ? patch.loaderLeft : current.loaderLeft,
     loaderRight: patch.loaderRight !== undefined ? patch.loaderRight : current.loaderRight,
     headerScene: patch.headerScene !== undefined ? patch.headerScene : current.headerScene,
+    headerSceneRotate: patch.headerSceneRotate !== undefined ? patch.headerSceneRotate : current.headerSceneRotate,
     headerColor: patch.headerColor !== undefined ? patch.headerColor : current.headerColor,
     headerPhotoUrl: patch.headerPhotoUrl !== undefined ? patch.headerPhotoUrl : current.headerPhotoUrl,
     headerShowWeather: patch.headerShowWeather !== undefined ? patch.headerShowWeather : current.headerShowWeather,
@@ -61,9 +65,11 @@ export interface AppearanceState {
   customPrimary?: string;
   customAccent?: string;
   loaderPreset: string;
+  loaderPresetRotate: boolean;
   theme: AppTheme;
   loader: { id: string; label: string; left: string; right: string; motion?: LoaderMotion };
   headerScene: string;
+  headerSceneRotate: boolean;
   headerColor: string;
   headerPhotoUrl: string;
   headerShowWeather: boolean;
@@ -112,6 +118,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const customPrimary = appearance.customPrimary || undefined;
   const customAccent = appearance.customAccent || undefined;
   const loaderPreset = appearance.loaderPreset || "dogs";
+  const loaderPresetRotate = appearance.loaderPresetRotate === true;
   const theme = getTheme(themeId);
   const preset = getLoaderPreset(loaderPreset);
   const loader = {
@@ -120,6 +127,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     right: appearance.loaderRight || preset.right,
   };
   const headerScene = appearance.headerScene || "auto";
+  const headerSceneRotate = appearance.headerSceneRotate === true;
   const headerColor = appearance.headerColor || "";
   const headerPhotoUrl = appearance.headerPhotoUrl || "";
   const headerShowWeather = appearance.headerShowWeather === true;
@@ -146,9 +154,11 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       customPrimary,
       customAccent,
       loaderPreset,
+      loaderPresetRotate,
       loaderLeft: appearance.loaderLeft,
       loaderRight: appearance.loaderRight,
       headerScene,
+      headerSceneRotate,
       headerColor,
       headerPhotoUrl,
       headerShowWeather,
@@ -168,8 +178,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     }
   }, [
-    themeId, customPrimary, customAccent, loaderPreset, appearance.loaderLeft, appearance.loaderRight,
-    headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    themeId, customPrimary, customAccent, loaderPreset, loaderPresetRotate, appearance.loaderLeft, appearance.loaderRight,
+    headerScene, headerSceneRotate, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
     headerPictureMode, headerAlbumIds, headerCelebrateToday,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader, saveProfile, viewAs,
   ]);
@@ -214,9 +224,11 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     customPrimary,
     customAccent,
     loaderPreset,
+    loaderPresetRotate,
     theme,
     loader,
     headerScene,
+    headerSceneRotate,
     headerColor,
     headerPhotoUrl,
     headerShowWeather,
@@ -236,8 +248,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     setHeaderDisplay,
     setGreetingDisplay,
   }), [
-    themeId, customPrimary, customAccent, loaderPreset, theme, loader,
-    headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    themeId, customPrimary, customAccent, loaderPreset, loaderPresetRotate, theme, loader,
+    headerScene, headerSceneRotate, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
     headerPictureMode, headerAlbumIds, headerCelebrateToday,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader,
     setThemeId, setCustomColors, setLoaderPreset, setLoaderEmojis, setHeaderDisplay, setGreetingDisplay,
@@ -249,9 +261,11 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 const FALLBACK: AppearanceState = {
   themeId: "default",
   loaderPreset: "dogs",
+  loaderPresetRotate: false,
   theme: APP_THEMES[0],
   loader: getLoaderPreset("dogs"),
   headerScene: "auto",
+  headerSceneRotate: false,
   headerColor: "",
   headerPhotoUrl: "",
   headerShowWeather: false,

@@ -155,7 +155,7 @@ export function PaperNoteCanvasEditor({
 
   const addDiagram = () => {
     const pos = nextPosition(canvas);
-    addBlock({ id: blockId(), type: "diagram", ...pos, width: availableBlockWidth(440), height: 430, diagram: null });
+    addBlock({ id: blockId(), type: "diagram", ...pos, width: availableBlockWidth(560), height: 560, diagram: null });
   };
 
   const addUploadedMedia = async (file: File) => {

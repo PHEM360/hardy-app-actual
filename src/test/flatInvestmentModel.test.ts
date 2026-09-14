@@ -107,6 +107,23 @@ describe("flatInvestmentModel", () => {
     expect(result.recommendationDetail).toContain("10 years");
   });
 
+  it("year-1 table wealth is the same figure the verdict uses for year 1", () => {
+    const result = runFlatInvestmentModel(
+      defaultInvestmentInputs({
+        marketValueGbp: 90_000,
+        offerPriceGbp: 80_000,
+        rentMonthlyGbp: 750,
+        horizonYears: 10,
+      }),
+    );
+    const year1 = buildVerdict(result.years[0], 1, result.inputs);
+    expect(year1.wealthAtHorizon.sell_offer).toBeCloseTo(result.years[0].sellOfferWealthGbp, 5);
+    expect(year1.wealthAtHorizon.rent).toBeCloseTo(result.years[0].rentWealthGbp, 5);
+    expect(year1.wealthAtHorizon.hold_vacant).toBeCloseTo(result.years[0].holdVacantWealthGbp, 5);
+    expect(year1.wealthAtHorizon.sell_market).toBeCloseTo(result.years[0].sellMarketWealthGbp, 5);
+    expect(year1.differencesAtHorizon.rentMinusOfferGbp).toBeCloseTo(result.years[0].rentVsOfferGbp, 5);
+  });
+
   it("buildVerdict at an earlier year answers 'what if I only look N years out'", () => {
     const inputs = defaultInvestmentInputs({
       marketValueGbp: 100_000,

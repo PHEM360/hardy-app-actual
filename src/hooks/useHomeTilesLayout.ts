@@ -1,17 +1,23 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   DEFAULT_HOME_TILES_STATE,
   mergeHomeTilesState,
   moveHomeTile,
+  type HomeTilesPresetId,
   type HomeTilesState,
 } from "@/lib/homeLayout";
 
 export function useHomeTilesLayout() {
   const { profile, saveProfile } = useUserProfile();
-  const layout = useMemo(() => mergeHomeTilesState(profile?.homeTiles), [profile?.homeTiles]);
+  const [draft, setDraft] = useState<HomeTilesState | null>(null);
+  const layout = useMemo(
+    () => mergeHomeTilesState(draft ?? profile?.homeTiles),
+    [draft, profile?.homeTiles],
+  );
 
   const save = useCallback(async (next: HomeTilesState) => {
+    setDraft(next);
     await saveProfile({ homeTiles: next });
   }, [saveProfile]);
 
@@ -48,5 +54,9 @@ export function useHomeTilesLayout() {
     await save(DEFAULT_HOME_TILES_STATE);
   }, [save]);
 
-  return { layout, setRowSize, addRowSize, removeRowSize, moveTile, hideTile, showTile, resetLayout };
+  const setPreset = useCallback(async (preset: HomeTilesPresetId) => {
+    await save({ ...layout, preset });
+  }, [layout, save]);
+
+  return { layout, setRowSize, addRowSize, removeRowSize, moveTile, hideTile, showTile, resetLayout, setPreset };
 }

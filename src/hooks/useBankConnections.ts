@@ -12,6 +12,7 @@ export interface BankConnection {
   lastSyncedAt?: { toDate?: () => Date } | null;
   consentExpiresAt?: number;
   lastError?: string;
+  householdMappings?: Record<string, Record<string, string>>;
 }
 
 export function useBankConnections(scopeUserId?: string | null) {
@@ -39,6 +40,9 @@ export function useBankConnections(scopeUserId?: string | null) {
               lastSyncedAt: data.lastSyncedAt ?? null,
               consentExpiresAt: data.consentExpiresAt,
               lastError: data.lastError,
+              householdMappings: data.householdMappings && typeof data.householdMappings === "object"
+                ? data.householdMappings
+                : {},
             };
           })
         );

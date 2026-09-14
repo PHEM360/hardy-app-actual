@@ -1,9 +1,12 @@
 import { useState } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Palette, Check, PanelTop, Sun, Loader2, CalendarDays } from "lucide-react";
+import { Palette, Check, PanelTop, Sun, Loader2, CalendarDays, LayoutGrid } from "lucide-react";
 import { motion } from "framer-motion";
 import { APP_THEMES, LOADER_PRESETS, hexToHsl, hslToHex } from "@/lib/appThemes";
 import { HEADER_COLOR_PRESETS } from "@/lib/chromeScenes";
+import { HOME_TILE_PRESETS } from "@/lib/homeLayout";
+import { useHomeTilesLayout } from "@/hooks/useHomeTilesLayout";
+import { HomeTilesStylePreview } from "@/components/home/HomeTilesStylePreview";
 import { HEADER_PICTURE_MODES, normalizeHeaderPictureMode } from "@/lib/headerBackdrop";
 import { usePhotos } from "@/hooks/usePhotos";
 import { useAppearance } from "@/hooks/useAppearance";
@@ -14,13 +17,14 @@ import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { useHouseholdPhotos } from "@/hooks/useHouseholdPhotos";
 import { useNavigate } from "react-router-dom";
 
-type SectionId = "themes" | "header" | "greeting" | "loader" | "today";
+type SectionId = "themes" | "header" | "greeting" | "loader" | "home" | "today";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Palette }[] = [
   { id: "themes", label: "Themes", icon: Palette },
   { id: "header", label: "Header", icon: PanelTop },
   { id: "greeting", label: "Greeting", icon: Sun },
   { id: "loader", label: "Loading", icon: Loader2 },
+  { id: "home", label: "Home tiles", icon: LayoutGrid },
   { id: "today", label: "Today", icon: CalendarDays },
 ];
 
@@ -73,10 +77,12 @@ const Themes = () => {
   const {
     themeId, customPrimary, customAccent, loader,
     theme, setThemeId, setCustomColors, setLoaderPreset, setLoaderEmojis,
-    headerScene, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
+    headerScene, headerSceneRotate, headerColor, headerPhotoUrl, headerShowWeather, headerShowDate, headerShowTime,
     headerPictureMode, headerAlbumIds, headerCelebrateToday, setHeaderDisplay,
     greetingScene, greetingColor, greetingPhotoUrl, greetingMatchHeader, setGreetingDisplay,
+    loaderPresetRotate,
   } = useAppearance();
+  const { layout: homeTiles, setPreset: setHomePreset } = useHomeTilesLayout();
 
   const photos = usePhotos();
   const pictureMode = normalizeHeaderPictureMode(headerPictureMode, !!headerPhotoUrl);
@@ -220,11 +226,20 @@ const Themes = () => {
           {section === "header" && (
             <div className="space-y-6">
               <p className="text-xs text-muted-foreground">
-                Live weather follows what’s outside. Seasons follow the time of year. The rest are atmospheres — not extra weather types.
+                Live weather follows what’s outside. Seasons follow the time of year. Text scenes rotate a short line from a large bank — jokes, pep talks, sceptic notes, or quotes.
               </p>
               <div>
                 <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Animation</h2>
-                <ChromeScenePicker value={headerScene} includeAuto onChange={(id) => setHeaderDisplay({ headerScene: id })} />
+                <div className="mb-3 rounded-xl border border-border/50 bg-card p-4">
+                  <label className="flex items-center justify-between gap-3 text-sm font-medium">
+                    Rotate through the impressive scenes
+                    <Switch checked={headerSceneRotate} onCheckedChange={(v) => setHeaderDisplay({ headerSceneRotate: v })} />
+                  </label>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Cycles aurora, silk, nebula, ocean and a few others every few seconds.</p>
+                </div>
+                {!headerSceneRotate && (
+                  <ChromeScenePicker value={headerScene} includeAuto onChange={(id) => setHeaderDisplay({ headerScene: id })} />
+                )}
               </div>
               <div>
                 <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Colour</h2>
@@ -290,7 +305,7 @@ const Themes = () => {
                   Celebrate special days
                   <Switch checked={headerCelebrateToday} onCheckedChange={(v) => setHeaderDisplay({ headerCelebrateToday: v })} />
                 </label>
-                <p className="text-[10px] text-muted-foreground">Hearts, confetti or fireworks when the calendar says birthday, anniversary or a party.</p>
+                <p className="text-[10px] text-muted-foreground">Silk light or fireworks when the calendar says birthday, anniversary or a party.</p>
                 <label className="flex items-center justify-between gap-3 text-sm font-medium">
                   Show date
                   <Switch checked={headerShowDate} onCheckedChange={(v) => setHeaderDisplay({ headerShowDate: v })} />
@@ -344,9 +359,16 @@ const Themes = () => {
               <p className="text-xs text-muted-foreground mb-3">
                 Shown while pages load. Tap a pair, or type your own emojis.
               </p>
+              <div className="mb-3 rounded-xl border border-border/50 bg-card p-4">
+                <label className="flex items-center justify-between gap-3 text-sm font-medium">
+                  Rotate the cinematic loaders
+                  <Switch checked={loaderPresetRotate} onCheckedChange={(v) => setHeaderDisplay({ loaderPresetRotate: v })} />
+                </label>
+                <p className="mt-1 text-[11px] text-muted-foreground">Cycles orbit, bloom, constellation, ripple, silk and aurora.</p>
+              </div>
               <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-2 pb-4">
                 {LOADER_PRESETS.map((p) => {
-                  const selected = loader.id === p.id && loader.left === p.left && loader.right === p.right;
+                  const selected = !loaderPresetRotate && loader.id === p.id && loader.left === p.left && loader.right === p.right;
                   return (
                     <button
                       key={p.id}
@@ -356,7 +378,7 @@ const Themes = () => {
                         selected ? "border-primary bg-primary/10 shadow-card" : "border-border/50 bg-card hover:bg-muted"
                       }`}
                     >
-                      <p className="text-2xl leading-none mb-1.5 pointer-events-none">{p.left}{p.right}</p>
+                      <p className="text-2xl leading-none mb-1.5 pointer-events-none">{p.left || p.right ? `${p.left}${p.right}` : "✦"}</p>
                       <p className="text-[11px] font-semibold pointer-events-none">{p.label}</p>
                     </button>
                   );
@@ -381,6 +403,60 @@ const Themes = () => {
                 </div>
               </div>
             </>
+          )}
+
+          {section === "home" && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                This only changes the Tiles home — colour, icon treatment, motion and layout. Today is a separate page.
+              </p>
+              {(() => {
+                const active = HOME_TILE_PRESETS.find((item) => item.id === (homeTiles.preset ?? "classic")) ?? HOME_TILE_PRESETS[0];
+                return (
+                  <div className="rounded-2xl border border-primary/25 bg-primary/8 p-3 shadow-card">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">Now using {active.label}</p>
+                        <p className="text-[11px] text-muted-foreground">{active.hint}</p>
+                      </div>
+                      <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold">{active.feel}</span>
+                    </div>
+                    <HomeTilesStylePreview preset={active.id} large />
+                  </div>
+                );
+              })()}
+              <div className="space-y-3">
+                {HOME_TILE_PRESETS.map((option) => {
+                  const selected = (homeTiles.preset ?? "classic") === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => void setHomePreset(option.id)}
+                      className={`w-full rounded-2xl border p-3 text-left shadow-card transition-all ${
+                        selected ? "border-primary bg-primary/10" : "border-border/50 bg-card hover:bg-muted/30"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">{option.label}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{option.hint}</p>
+                        </div>
+                        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{option.feel}</span>
+                      </div>
+                      <HomeTilesStylePreview preset={option.id} />
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard?view=tiles")}
+                className="h-11 w-full rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-card"
+              >
+                Open Home tiles
+              </button>
+            </div>
           )}
 
           {section === "today" && (

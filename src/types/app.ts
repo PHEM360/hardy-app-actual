@@ -918,6 +918,7 @@ export interface CalendarEvent {
   createdBy?: string;          // user UID
   notifications?: CalendarNotificationPref[];
   source?: "local" | "google" | "import" | "birthday";
+  feedId?: string;
   googleEventId?: string;
   googleCalendarId?: string;
   /** Id of the birthdays/{id} doc this was synced from, when source is "birthday". */
@@ -935,11 +936,33 @@ export interface GoogleCalendarLink {
   lastError?: string | null;
 }
 
+export interface CalendarFeed {
+  id: string;
+  name: string;
+  url: string;
+  kind: "ics" | "icloud" | "exchange" | "google" | "other";
+  enabled: boolean;
+  color?: string;
+  lastSyncAt?: string | null;
+  lastError?: string | null;
+}
+
+export interface CalendarMergeRules {
+  hideSources?: Array<"local" | "google" | "import" | "birthday">;
+  hideFeedIds?: string[];
+  hideTitleContains?: string[];
+  hideDuplicates?: boolean;
+  hideAllDayHolidays?: boolean;
+}
+
 export interface CalendarSettings {
-  defaultView: "month" | "week";
+  defaultView: "month" | "week" | "agenda";
   canManage?: string[];        // user UIDs allowed to manage settings (empty = admins only)
   memberColors?: Record<string, string>; // HouseholdMember.id → hex; "all" → shared colour
   google?: GoogleCalendarLink;
+  feeds?: CalendarFeed[];
+  mergeRules?: CalendarMergeRules;
+  mergeShareToken?: string;
   autoImport?: {
     pets?: boolean;            // show pet flea/worming due dates
     petInsurance?: boolean;    // show pet insurance renewal dates

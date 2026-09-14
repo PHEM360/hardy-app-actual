@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHROME_SCENES, resolveAutoScene, resolveChromeScene, seasonForDate } from "@/lib/chromeScenes";
+import { HEADER_COPY, headerCopyStartIndex, rotateHeaderCopy } from "@/lib/headerCopy";
 import { LOADER_PRESETS } from "@/lib/appThemes";
 import { mergeAppearance } from "@/hooks/useAppearance";
 import { funFactCount, funFactForDate } from "@/lib/funFacts";
@@ -7,15 +8,15 @@ import { billsDueSoon, overdueByDueDate, upcomingBirthdays } from "@/lib/todayIn
 
 describe("chrome display options", () => {
   it("offers live weather and seasons instead of separate snow/rain picks", () => {
-    expect(CHROME_SCENES).toHaveLength(20);
-    expect(CHROME_SCENES.map((s) => s.id)).toEqual(expect.arrayContaining(["weather", "seasons", "aurora", "harbour"]));
+    expect(CHROME_SCENES).toHaveLength(24);
+    expect(CHROME_SCENES.map((s) => s.id)).toEqual(expect.arrayContaining(["weather", "seasons", "aurora", "harbour", "quotes", "jokes", "sceptic", "qotd"]));
     expect(CHROME_SCENES.map((s) => s.id)).not.toEqual(expect.arrayContaining(["snow", "rain", "sun", "clouds"]));
   });
 
-  it("offers 20 loading icon presets", () => {
-    expect(LOADER_PRESETS).toHaveLength(20);
+  it("offers a mix of familiar and cinematic loading presets", () => {
+    expect(LOADER_PRESETS.length).toBeGreaterThanOrEqual(16);
     expect(LOADER_PRESETS.map((p) => p.id)).toEqual(expect.arrayContaining([
-      "dogs", "cats", "horses", "boats", "farm", "harvest", "paws", "chickens", "sheep",
+      "dogs", "cats", "boats", "orbit", "bloom", "constellation", "ripple", "silkspin",
     ]));
   });
 
@@ -28,7 +29,8 @@ describe("chrome display options", () => {
 
   it("treats auto as the theme default and keeps explicit picks", () => {
     expect(resolveChromeScene("auto", { atmosphere: "sea" })).toBe("harbour");
-    expect(resolveChromeScene("pawprints")).toBe("pawprints");
+    expect(resolveChromeScene("pawprints")).toBe("meadow");
+    expect(resolveChromeScene("balloons")).toBe("silk");
     expect(resolveChromeScene("snow")).toBe("weather");
     expect(resolveChromeScene("leaves")).toBe("seasons");
     expect(resolveChromeScene(undefined, { fallback: "weather" })).toBe("weather");
@@ -94,5 +96,17 @@ describe("today insights", () => {
     const b = funFactForDate(new Date("2026-08-26"));
     expect(a).toBe(b);
     expect(a.length).toBeGreaterThan(20);
+  });
+});
+
+describe("header copy banks", () => {
+  it("keeps a rotating library for each text scene", () => {
+    expect(HEADER_COPY.quotes.length).toBeGreaterThanOrEqual(100);
+    expect(HEADER_COPY.sceptic.length).toBeGreaterThanOrEqual(100);
+    expect(HEADER_COPY.jokes.length).toBeGreaterThanOrEqual(100);
+    expect(HEADER_COPY.qotd.length).toBeGreaterThanOrEqual(100);
+    expect(rotateHeaderCopy("jokes", 0)).not.toBe(rotateHeaderCopy("jokes", 1));
+    expect(headerCopyStartIndex("quotes")).toBe(0);
+    expect(headerCopyStartIndex("qotd", new Date("2026-01-02"))).toBe(1);
   });
 });

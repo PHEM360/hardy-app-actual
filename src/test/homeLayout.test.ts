@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_HOME_TILES_STATE,
+  HOME_TILE_PRESETS,
   mergeHomeTilesState,
   moveHomeTile,
   packHomeTiles,
 } from "@/lib/homeLayout";
+import { tileSurface } from "@/lib/homeTileSkins";
 
 describe("home tile packing", () => {
   it("puts Quick Links on its own full-width row by default", () => {
@@ -35,5 +37,12 @@ describe("home tile packing", () => {
     const merged = mergeHomeTilesState({ order: ["pets", "finance"], hidden: [], rowSizes: [2] });
     expect(merged.order[0]).toBe("pets");
     expect(merged.order).toContain("quick_links");
+  });
+
+  it("gives each tile preset a different surface language", () => {
+    const accent = "hsl(25,62%,55%)";
+    const looks = HOME_TILE_PRESETS.map((preset) => tileSurface(preset.id, accent, true));
+    const backgrounds = new Set(looks.map((item) => item.background));
+    expect(backgrounds.size).toBe(HOME_TILE_PRESETS.length);
   });
 });

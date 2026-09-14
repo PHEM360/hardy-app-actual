@@ -1,125 +1,134 @@
-import { useId, useMemo, useState } from "react";
-import { GitBranch, Plus, Trash2 } from "lucide-react";
+import { useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  Camera, Cloud, Computer, Database, Globe, HardDrive, Hexagon, Home, Laptop,
+  MonitorSpeaker, Phone, Printer, Router, Server, Shield, Smartphone, Square, Trash2, Tv,
+  User, Users, Wifi, Workflow,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { NoteDiagram, NoteDiagramNode } from "@/types/notes";
+import type { NoteDiagram, NoteDiagramIcon, NoteDiagramNode, NoteDiagramShape } from "@/types/notes";
+import {
+  DIAGRAM_FILLS,
+  DIAGRAM_ICONS,
+  DIAGRAM_SHAPES,
+  DIAGRAM_TEMPLATES,
+  addDiagramNode,
+  connectDiagramNodes,
+  diagramBoundaryPoint,
+  diagramNodeMetrics,
+  emptyDiagram,
+  removeDiagramSelection,
+  type DiagramNodeMetrics,
+} from "@/lib/noteDiagram";
 
-function nid() {
-  return `d${Date.now()}${Math.random().toString(36).slice(2, 5)}`;
+const ICON: Record<Exclude<NoteDiagramIcon, "none">, LucideIcon> = {
+  router: Router,
+  wifi: Wifi,
+  switch: Workflow,
+  server: Server,
+  computer: Computer,
+  laptop: Laptop,
+  phone: Smartphone,
+  printer: Printer,
+  camera: Camera,
+  tv: Tv,
+  cloud: Cloud,
+  database: Database,
+  globe: Globe,
+  shield: Shield,
+  home: Home,
+  user: User,
+  users: Users,
+  harddrive: HardDrive,
+  speaker: MonitorSpeaker,
+};
+
+function nodePath(node: NoteDiagramNode, m: DiagramNodeMetrics) {
+  const { x, y, w, h } = m;
+  const cx = node.x;
+  const cy = node.y;
+  if (node.shape === "diamond") {
+    return { type: "polygon" as const, points: `${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}` };
+  }
+  if (node.shape === "parallelogram") {
+    const skew = Math.min(22, w * 0.18);
+    return { type: "polygon" as const, points: `${x + skew},${y} ${x + w},${y} ${x + w - skew},${y + h} ${x},${y + h}` };
+  }
+  if (node.shape === "hexagon") {
+    const inset = w * 0.22;
+    return {
+      type: "polygon" as const,
+      points: `${x + inset},${y} ${x + w - inset},${y} ${x + w},${cy} ${x + w - inset},${y + h} ${x + inset},${y + h} ${x},${cy}`,
+    };
+  }
+  if (node.shape === "cloud") {
+    return {
+      type: "path" as const,
+      d: `M${x + w * 0.22} ${y + h * 0.62} C${x} ${y + h * 0.62} ${x} ${y + h * 0.22} ${x + w * 0.28} ${y + h * 0.28} C${x + w * 0.3} ${y} ${x + w * 0.62} ${y} ${x + w * 0.68} ${y + h * 0.28} C${x + w} ${y + h * 0.18} ${x + w} ${y + h * 0.7} ${x + w * 0.78} ${y + h * 0.72} C${x + w * 0.72} ${y + h} ${x + w * 0.28} ${y + h} ${x + w * 0.22} ${y + h * 0.62} Z`,
+    };
+  }
+  if (node.shape === "document") {
+    return {
+      type: "path" as const,
+      d: `M${x} ${y} H${x + w - 16} L${x + w} ${y + 16} V${y + h} H${x} Z`,
+    };
+  }
+  if (node.shape === "circle" || node.shape === "oval") return { type: "ellipse" as const };
+  if (node.shape === "cylinder") return { type: "cylinder" as const };
+  return { type: "rect" as const, radius: node.shape === "rounded" ? 16 : 8 };
 }
 
-const TEMPLATES: { id: string; label: string; build: () => NoteDiagram }[] = [
-  {
-    id: "flow",
-    label: "Flowchart",
-    build: () => ({
-      nodes: [
-        { id: "a", label: "Start", x: 160, y: 24, shape: "oval" },
-        { id: "b", label: "Step", x: 160, y: 110, shape: "box" },
-        { id: "c", label: "Done", x: 160, y: 196, shape: "oval" },
-      ],
-      edges: [
-        { id: "e1", from: "a", to: "b" },
-        { id: "e2", from: "b", to: "c" },
-      ],
-    }),
-  },
-  {
-    id: "decision",
-    label: "Decision",
-    build: () => ({
-      nodes: [
-        { id: "a", label: "Start", x: 170, y: 16, shape: "oval" },
-        { id: "b", label: "Question?", x: 170, y: 100, shape: "diamond" },
-        { id: "c", label: "Yes", x: 70, y: 200, shape: "box" },
-        { id: "d", label: "No", x: 270, y: 200, shape: "box" },
-      ],
-      edges: [
-        { id: "e1", from: "a", to: "b" },
-        { id: "e2", from: "b", to: "c", label: "Yes" },
-        { id: "e3", from: "b", to: "d", label: "No" },
-      ],
-    }),
-  },
-  {
-    id: "process",
-    label: "Process",
-    build: () => ({
-      nodes: [
-        { id: "a", label: "1", x: 40, y: 90, shape: "circle" },
-        { id: "b", label: "2", x: 160, y: 90, shape: "circle" },
-        { id: "c", label: "3", x: 280, y: 90, shape: "circle" },
-      ],
-      edges: [
-        { id: "e1", from: "a", to: "b" },
-        { id: "e2", from: "b", to: "c" },
-      ],
-    }),
-  },
-];
-
-const NODE_LINE_HEIGHT = 14;
-
-function wrapLabel(label: string, maxCharacters: number) {
-  const words = label.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [""];
-
-  const pieces = words.flatMap((word) => {
-    if (word.length <= maxCharacters) return [word];
-    return Array.from({ length: Math.ceil(word.length / maxCharacters) }, (_, index) =>
-      word.slice(index * maxCharacters, (index + 1) * maxCharacters),
-    );
-  });
-  return pieces.reduce<string[]>((lines, word) => {
-    const last = lines.at(-1);
-    if (!last || last.length + word.length + 1 > maxCharacters) lines.push(word);
-    else lines[lines.length - 1] = `${last} ${word}`;
-    return lines;
-  }, []);
-}
-
-function shapePath(n: NoteDiagramNode) {
-  const lines = wrapLabel(n.label, n.shape === "diamond" || n.shape === "circle" ? 16 : 22);
-  const textWidth = Math.max(...lines.map((line) => line.length), 1) * 6.4;
-  const textHeight = Math.max(lines.length, 1) * NODE_LINE_HEIGHT;
-  let w = Math.max(n.shape === "diamond" ? 120 : n.shape === "circle" ? 72 : 128, textWidth + 28);
-  let h = Math.max(n.shape === "diamond" ? 72 : n.shape === "circle" ? 72 : n.shape === "oval" ? 48 : 44, textHeight + 20);
-  if (n.shape === "diamond") {
-    w = Math.max(w, textWidth + 64);
-    h = Math.max(h, textHeight + 42);
-  } else if (n.shape === "circle") {
-    w = h = Math.max(w, h);
-  }
-  const x = n.x - w / 2;
-  const y = n.y - h / 2;
-  if (n.shape === "diamond") {
-    return { type: "polygon" as const, points: `${n.x},${y} ${x + w},${n.y} ${n.x},${y + h} ${x},${n.y}`, x, y, w, h, lines };
-  }
-  return { type: n.shape === "circle" || n.shape === "oval" ? "ellipse" as const : "rect" as const, x, y, w, h, lines };
-}
-
-type NodeShape = ReturnType<typeof shapePath>;
-
-function boundaryPoint(node: NoteDiagramNode, shape: NodeShape, dx: number, dy: number) {
-  if (dx === 0 && dy === 0) return { x: node.x, y: node.y };
-  const rx = shape.w / 2;
-  const ry = shape.h / 2;
-  let scale: number;
-  if (shape.type === "ellipse") {
-    scale = 1 / Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
-  } else if (shape.type === "polygon") {
-    scale = 1 / (Math.abs(dx) / rx + Math.abs(dy) / ry);
-  } else {
-    scale = 1 / Math.max(Math.abs(dx) / rx, Math.abs(dy) / ry);
-  }
-  return { x: node.x + dx * scale, y: node.y + dy * scale };
+function NodeGlyph({ node, metrics, selected }: { node: NoteDiagramNode; metrics: DiagramNodeMetrics; selected?: boolean }) {
+  const path = nodePath(node, metrics);
+  const fill = node.fill || "hsl(var(--card))";
+  const stroke = selected ? "hsl(var(--primary))" : "rgba(15,23,42,0.55)";
+  const Icon = node.icon && node.icon !== "none" ? ICON[node.icon] : null;
+  const textOffset = Icon ? 10 : 0;
+  return (
+    <g>
+      {path.type === "polygon" && <polygon points={path.points} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />}
+      {path.type === "path" && <path d={path.d} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />}
+      {path.type === "ellipse" && (
+        <ellipse cx={node.x} cy={node.y} rx={metrics.w / 2} ry={metrics.h / 2} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />
+      )}
+      {path.type === "rect" && (
+        <rect x={metrics.x} y={metrics.y} width={metrics.w} height={metrics.h} rx={path.radius} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />
+      )}
+      {path.type === "cylinder" && (
+        <>
+          <rect x={metrics.x} y={metrics.y + 10} width={metrics.w} height={metrics.h - 20} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />
+          <ellipse cx={node.x} cy={metrics.y + 10} rx={metrics.w / 2} ry={10} fill={fill} stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />
+          <ellipse cx={node.x} cy={metrics.y + metrics.h - 10} rx={metrics.w / 2} ry={10} fill={fill} stroke="none" />
+          <path d={`M${metrics.x} ${metrics.y + metrics.h - 10} A${metrics.w / 2} 10 0 0 0 ${metrics.x + metrics.w} ${metrics.y + metrics.h - 10}`} fill="none" stroke={stroke} strokeWidth={selected ? 2.4 : 1.5} />
+        </>
+      )}
+      {Icon && (
+        <foreignObject x={node.x - 8} y={metrics.y + 7} width={16} height={16}>
+          <Icon className="h-4 w-4 text-slate-700" />
+        </foreignObject>
+      )}
+      <text textAnchor="middle" fontSize="11" fontWeight="650" fill="#1e293b">
+        {metrics.lines.map((line, index) => (
+          <tspan
+            key={`${index}-${line}`}
+            x={node.x}
+            y={node.y + textOffset + (index - (metrics.lines.length - 1) / 2) * 14}
+            dominantBaseline="central"
+          >
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
 }
 
 export function DiagramCanvas({ diagram, className }: { diagram: NoteDiagram; className?: string }) {
   const markerId = `note-diagram-arrow-${useId().replace(/:/g, "")}`;
-  const nodeMap = useMemo(() => Object.fromEntries(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
+  const nodeMap = useMemo(() => Object.fromEntries(diagram.nodes.map((node) => [node.id, node])), [diagram.nodes]);
   const shapes = useMemo(
-    () => Object.fromEntries(diagram.nodes.map((node) => [node.id, shapePath(node)])),
+    () => Object.fromEntries(diagram.nodes.map((node) => [node.id, diagramNodeMetrics(node)])),
     [diagram.nodes],
   );
   const edges = diagram.edges.flatMap((edge) => {
@@ -128,31 +137,27 @@ export function DiagramCanvas({ diagram, className }: { diagram: NoteDiagram; cl
     if (!from || !to) return [];
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    const start = boundaryPoint(from, shapes[from.id], dx, dy);
-    const end = boundaryPoint(to, shapes[to.id], -dx, -dy);
+    const start = diagramBoundaryPoint(from, shapes[from.id], dx, dy);
+    const end = diagramBoundaryPoint(to, shapes[to.id], -dx, -dy);
     const length = Math.hypot(end.x - start.x, end.y - start.y);
     const normalX = length ? -(end.y - start.y) / length : 0;
     const normalY = length ? (end.x - start.x) / length : 0;
     const labelWidth = edge.label ? Math.max(20, edge.label.length * 6.2 + 10) : 0;
-    const labelHeight = edge.label ? 18 : 0;
     const labelX = start.x + (end.x - start.x) * 0.46 + normalX * 11;
     const labelY = start.y + (end.y - start.y) * 0.46 + normalY * 11;
-    return [{ edge, start, end, labelX, labelY, labelWidth, labelHeight }];
+    return [{ edge, start, end, labelX, labelY, labelWidth }];
   });
   const bounds = [
     ...diagram.nodes.map((node) => {
       const shape = shapes[node.id];
       return { minX: shape.x, minY: shape.y, maxX: shape.x + shape.w, maxY: shape.y + shape.h };
     }),
-    ...edges.flatMap(({ start, end, labelX, labelY, labelWidth, labelHeight }) => [
-      { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) },
-      ...(labelWidth ? [{
-        minX: labelX - labelWidth / 2,
-        minY: labelY - labelHeight / 2,
-        maxX: labelX + labelWidth / 2,
-        maxY: labelY + labelHeight / 2,
-      }] : []),
-    ]),
+    ...edges.map(({ start, end }) => ({
+      minX: Math.min(start.x, end.x),
+      minY: Math.min(start.y, end.y),
+      maxX: Math.max(start.x, end.x),
+      maxY: Math.max(start.y, end.y),
+    })),
   ];
   const padding = 18;
   const minX = bounds.length ? Math.min(...bounds.map((bound) => bound.minX)) - padding : 0;
@@ -161,62 +166,83 @@ export function DiagramCanvas({ diagram, className }: { diagram: NoteDiagram; cl
   const maxY = bounds.length ? Math.max(...bounds.map((bound) => bound.maxY)) + padding : 220;
 
   return (
-    <svg viewBox={`${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`} className={className ?? "w-full h-auto"} role="img">
+    <svg viewBox={`${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`} className={className ?? "h-auto w-full"} role="img">
       <defs>
         <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
           <path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity="0.55" />
         </marker>
       </defs>
-      {edges.map(({ edge, start, end, labelX, labelY, labelWidth, labelHeight }) => {
-        return (
-          <g key={edge.id}>
-            <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="currentColor" strokeWidth="1.6" markerEnd={`url(#${markerId})`} opacity="0.55" />
-            {edge.label && (
-              <g>
-                <rect
-                  x={labelX - labelWidth / 2}
-                  y={labelY - labelHeight / 2}
-                  width={labelWidth}
-                  height={labelHeight}
-                  rx="5"
-                  fill="hsl(var(--card))"
-                  stroke="hsl(var(--border))"
-                  strokeWidth="0.75"
-                />
-                <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="600" fill="currentColor">
-                  {edge.label}
-                </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
-      {diagram.nodes.map((n) => {
-        const s = shapes[n.id];
-        return (
-          <g key={n.id}>
-            {s.type === "polygon" && (
-              <polygon points={s.points} fill="hsl(var(--card))" stroke="currentColor" strokeWidth="1.4" />
-            )}
-            {s.type === "ellipse" && (
-              <ellipse cx={n.x} cy={n.y} rx={s.w / 2} ry={s.h / 2} fill="hsl(var(--card))" stroke="currentColor" strokeWidth="1.4" />
-            )}
-            {s.type === "rect" && (
-              <rect x={s.x} y={s.y} width={s.w} height={s.h} rx="8" fill="hsl(var(--card))" stroke="currentColor" strokeWidth="1.4" />
-            )}
-            <text textAnchor="middle" fontSize="11" fontWeight="600" fill="currentColor">
-              {s.lines.map((line, index) => (
-                <tspan key={`${index}-${line}`} x={n.x} y={n.y + (index - (s.lines.length - 1) / 2) * NODE_LINE_HEIGHT} dominantBaseline="central">
-                  {line}
-                </tspan>
-              ))}
-            </text>
-          </g>
-        );
-      })}
+      {edges.map(({ edge, start, end, labelX, labelY, labelWidth }) => (
+        <g key={edge.id}>
+          <line
+            x1={start.x}
+            y1={start.y}
+            x2={end.x}
+            y2={end.y}
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeDasharray={edge.style === "dashed" ? "6 5" : undefined}
+            markerEnd={edge.arrow === "none" ? undefined : `url(#${markerId})`}
+            opacity="0.55"
+          />
+          {edge.label && (
+            <g>
+              <rect x={labelX - labelWidth / 2} y={labelY - 9} width={labelWidth} height={18} rx="5" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="0.75" />
+              <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="600" fill="currentColor">
+                {edge.label}
+              </text>
+            </g>
+          )}
+        </g>
+      ))}
+      {diagram.nodes.map((node) => (
+        <NodeGlyph key={node.id} node={node} metrics={shapes[node.id]} />
+      ))}
     </svg>
   );
 }
+
+function TemplateGallery({ onPick }: { onPick: (diagram: NoteDiagram) => void }) {
+  const groups = ["Flow", "Home", "Family"] as const;
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Workflow className="h-4 w-4" /> Diagram
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">Pick a template, or start blank and build it like a chart.</p>
+      </div>
+      {groups.map((group) => (
+        <div key={group} className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {DIAGRAM_TEMPLATES.filter((item) => item.group === group).map((template) => {
+              const preview = template.build();
+              return (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => onPick(template.build())}
+                  className="rounded-2xl border border-border/50 bg-card p-3 text-left shadow-card transition hover:border-primary/40"
+                >
+                  <div className="mb-2 h-24 overflow-hidden rounded-xl bg-background">
+                    {preview.nodes.length ? <DiagramCanvas diagram={preview} className="h-full w-full" /> : (
+                      <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">Empty board</div>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold">{template.label}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{template.hint}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type Selection = { kind: "node" | "edge"; id: string } | null;
 
 export function NoteDiagramEditor({
   diagram,
@@ -227,121 +253,251 @@ export function NoteDiagramEditor({
   onChange: (next: NoteDiagram | null) => void;
   canEdit: boolean;
 }) {
-  const [fromId, setFromId] = useState("");
-  const current = diagram ?? { nodes: [], edges: [] };
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [tool, setTool] = useState<"select" | "connect">("select");
+  const [selected, setSelected] = useState<Selection>(null);
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const current = diagram ?? emptyDiagram();
 
   if (!diagram) {
     return (
-      <div className="rounded-xl border border-dashed border-border p-3 space-y-2">
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <GitBranch className="h-4 w-4" /> Diagram or flowchart
-        </p>
-        <p className="text-[11px] text-muted-foreground">Optional. Add a simple flow, decision tree, or process map to this note.</p>
-        {canEdit && (
-          <div className="flex flex-wrap gap-1.5">
-            {TEMPLATES.map((t) => (
-              <Button key={t.id} type="button" size="sm" variant="outline" onClick={() => onChange(t.build())}>
-                {t.label}
-              </Button>
-            ))}
-            <Button type="button" size="sm" variant="ghost" onClick={() => onChange({ nodes: [{ id: nid(), label: "Idea", x: 180, y: 80, shape: "box" }], edges: [] })}>
-              Blank
-            </Button>
-          </div>
-        )}
+      <div className="rounded-2xl border border-border/50 bg-card p-3 shadow-card">
+        {canEdit ? <TemplateGallery onPick={onChange} /> : <p className="text-sm text-muted-foreground">No diagram on this note.</p>}
       </div>
     );
   }
 
+  const metrics = Object.fromEntries(current.nodes.map((node) => [node.id, diagramNodeMetrics(node)]));
+  const selectedNode = selected?.kind === "node" ? current.nodes.find((node) => node.id === selected.id) : undefined;
+  const selectedEdge = selected?.kind === "edge" ? current.edges.find((edge) => edge.id === selected.id) : undefined;
+  const width = Math.max(720, ...current.nodes.map((node) => metrics[node.id].x + metrics[node.id].w + 80), 720);
+  const height = Math.max(460, ...current.nodes.map((node) => metrics[node.id].y + metrics[node.id].h + 80), 460);
+
+  const pointOnBoard = (event: ReactPointerEvent) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * width,
+      y: ((event.clientY - rect.top) / rect.height) * height,
+    };
+  };
+
+  const patchNode = (id: string, patch: Partial<NoteDiagramNode>) => {
+    onChange({ ...current, nodes: current.nodes.map((node) => node.id === id ? { ...node, ...patch } : node) });
+  };
+  const patchEdge = (id: string, patch: Partial<NoteDiagram["edges"][number]>) => {
+    onChange({ ...current, edges: current.edges.map((edge) => edge.id === id ? { ...edge, ...patch } : edge) });
+  };
+
   return (
-    <div className="rounded-xl border border-border p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <GitBranch className="h-4 w-4" /> Diagram
+    <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Workflow className="h-4 w-4" /> Diagram
         </p>
         {canEdit && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
-            Remove
-          </Button>
-        )}
-      </div>
-      <div className="rounded-lg bg-muted/40 p-2">
-        <DiagramCanvas diagram={current} />
-      </div>
-      {canEdit && (
-        <div className="space-y-2">
-          {current.nodes.map((n) => (
-            <div key={n.id} className="flex items-center gap-1.5">
-              <Input
-                value={n.label}
-                onChange={(e) => onChange({
-                  ...current,
-                  nodes: current.nodes.map((x) => x.id === n.id ? { ...x, label: e.target.value } : x),
-                })}
-              />
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-xs"
-                value={n.shape}
-                onChange={(e) => onChange({
-                  ...current,
-                  nodes: current.nodes.map((x) => x.id === n.id ? { ...x, shape: e.target.value as NoteDiagramNode["shape"] } : x),
-                })}
-              >
-                <option value="box">Box</option>
-                <option value="diamond">Decision</option>
-                <option value="oval">Start / end</option>
-                <option value="circle">Circle</option>
-              </select>
-              <button
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button type="button" size="sm" variant={tool === "select" ? "default" : "outline"} className="h-8 rounded-lg" onClick={() => { setTool("select"); setConnectFrom(null); }}>
+              Move
+            </Button>
+            <Button type="button" size="sm" variant={tool === "connect" ? "default" : "outline"} className="h-8 rounded-lg" onClick={() => setTool("connect")}>
+              Connect
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => { setSelected(null); onChange(null); }}>
+              Templates
+            </Button>
+            {selected && (
+              <Button
                 type="button"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => onChange({
-                  nodes: current.nodes.filter((x) => x.id !== n.id),
-                  edges: current.edges.filter((e) => e.from !== n.id && e.to !== n.id),
-                })}
-                aria-label="Remove node"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onChange({
-              ...current,
-              nodes: [...current.nodes, { id: nid(), label: "New", x: 80 + (current.nodes.length % 3) * 110, y: 40 + current.nodes.length * 28, shape: "box" }],
-            })}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Box
-          </Button>
-          {current.nodes.length >= 2 && (
-            <div className="flex items-center gap-1.5">
-              <select className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs" value={fromId} onChange={(e) => setFromId(e.target.value)}>
-                <option value="">From…</option>
-                {current.nodes.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
-              </select>
-              <select
-                className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs"
-                defaultValue=""
-                onChange={(e) => {
-                  const to = e.target.value;
-                  if (!fromId || !to) return;
-                  onChange({
-                    ...current,
-                    edges: [...current.edges, { id: nid(), from: fromId, to }],
-                  });
-                  e.currentTarget.value = "";
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg text-destructive"
+                onClick={() => {
+                  onChange(removeDiagramSelection(current, selected.kind, selected.id));
+                  setSelected(null);
                 }}
               >
-                <option value="">To…</option>
-                {current.nodes.filter((n) => n.id !== fromId).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
-              </select>
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[7.5rem_minmax(0,1fr)]">
+        {canEdit && (
+          <aside className="flex gap-1 overflow-x-auto border-b border-border/40 p-2 lg:flex-col lg:overflow-x-hidden lg:border-b-0 lg:border-r">
+            {DIAGRAM_SHAPES.map((shape) => (
+              <button
+                key={shape.id}
+                type="button"
+                title={shape.label}
+                onClick={() => {
+                  const next = addDiagramNode(current, shape.id);
+                  onChange(next);
+                  setSelected({ kind: "node", id: next.nodes.at(-1)!.id });
+                  setTool("select");
+                }}
+                className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-border/50 bg-background text-[10px] font-semibold hover:border-primary/40"
+              >
+                {shape.id === "diamond" ? <Hexagon className="h-3.5 w-3.5 rotate-90" /> : <Square className="h-3.5 w-3.5" />}
+              </button>
+            ))}
+          </aside>
+        )}
+
+        <div className="min-w-0">
+          <div className="max-h-[420px] overflow-auto bg-[linear-gradient(rgba(15,23,42,.04)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,.04)_1px,transparent_1px)] bg-[size:24px_24px]">
+            <svg
+              ref={svgRef}
+              viewBox={`0 0 ${width} ${height}`}
+              className="h-[380px] w-full touch-none"
+              role="img"
+              aria-label="Diagram board"
+              onPointerMove={(event) => {
+                if (!canEdit || !drag.current) return;
+                const point = pointOnBoard(event);
+                patchNode(drag.current.id, { x: point.x - drag.current.ox, y: point.y - drag.current.oy });
+              }}
+              onPointerUp={() => { drag.current = null; }}
+              onPointerLeave={() => { drag.current = null; }}
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setSelected(null);
+                  setConnectFrom(null);
+                }
+              }}
+            >
+              <defs>
+                <marker id="diag-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                  <path d="M0,0 L8,4 L0,8 Z" fill="#334155" />
+                </marker>
+              </defs>
+              {current.edges.map((edge) => {
+                const from = current.nodes.find((node) => node.id === edge.from);
+                const to = current.nodes.find((node) => node.id === edge.to);
+                if (!from || !to) return null;
+                const start = diagramBoundaryPoint(from, metrics[from.id], to.x - from.x, to.y - from.y);
+                const end = diagramBoundaryPoint(to, metrics[to.id], from.x - to.x, from.y - to.y);
+                const on = selected?.kind === "edge" && selected.id === edge.id;
+                return (
+                  <g key={edge.id} onPointerDown={(event) => { event.stopPropagation(); setSelected({ kind: "edge", id: edge.id }); }}>
+                    <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
+                    <line
+                      x1={start.x}
+                      y1={start.y}
+                      x2={end.x}
+                      y2={end.y}
+                      stroke={on ? "hsl(var(--primary))" : "#334155"}
+                      strokeWidth={on ? 2.6 : 1.7}
+                      strokeDasharray={edge.style === "dashed" ? "7 5" : undefined}
+                      markerEnd={edge.arrow === "none" ? undefined : "url(#diag-arrow)"}
+                    />
+                    {edge.label && (
+                      <text x={(start.x + end.x) / 2} y={(start.y + end.y) / 2 - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill="#334155">
+                        {edge.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+              {current.nodes.map((node) => (
+                <g
+                  key={node.id}
+                  className={canEdit ? "cursor-grab" : undefined}
+                  onPointerDown={(event) => {
+                    if (!canEdit) return;
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    if (tool === "connect") {
+                      if (!connectFrom) {
+                        setConnectFrom(node.id);
+                        setSelected({ kind: "node", id: node.id });
+                        return;
+                      }
+                      onChange(connectDiagramNodes(current, connectFrom, node.id));
+                      setConnectFrom(null);
+                      setTool("select");
+                      return;
+                    }
+                    setSelected({ kind: "node", id: node.id });
+                    const point = pointOnBoard(event);
+                    drag.current = { id: node.id, ox: point.x - node.x, oy: point.y - node.y };
+                  }}
+                >
+                  <NodeGlyph node={node} metrics={metrics[node.id]} selected={selected?.kind === "node" && selected.id === node.id} />
+                </g>
+              ))}
+            </svg>
+          </div>
+
+          {canEdit && selectedNode && (
+            <div className="space-y-2 border-t border-border/40 p-3">
+              <Input value={selectedNode.label} onChange={(event) => patchNode(selectedNode.id, { label: event.target.value })} placeholder="Label" />
+              <div className="flex flex-wrap gap-1.5">
+                {DIAGRAM_SHAPES.map((shape) => (
+                  <button
+                    key={shape.id}
+                    type="button"
+                    onClick={() => patchNode(selectedNode.id, { shape: shape.id })}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${selectedNode.shape === shape.id ? "border-primary bg-primary/10" : "border-border/50"}`}
+                  >
+                    {shape.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {DIAGRAM_FILLS.map((fill) => (
+                  <button
+                    key={fill}
+                    type="button"
+                    aria-label={`Fill ${fill}`}
+                    onClick={() => patchNode(selectedNode.id, { fill })}
+                    className={`h-6 w-6 rounded-full border ${selectedNode.fill === fill ? "border-foreground" : "border-black/10"}`}
+                    style={{ background: fill }}
+                  />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {DIAGRAM_ICONS.map((icon) => (
+                  <button
+                    key={icon.id}
+                    type="button"
+                    onClick={() => patchNode(selectedNode.id, { icon: icon.id })}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${selectedNode.icon === icon.id || (!selectedNode.icon && icon.id === "none") ? "border-primary bg-primary/10" : "border-border/50"}`}
+                  >
+                    {icon.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
+
+          {canEdit && selectedEdge && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/40 p-3">
+              <Input
+                value={selectedEdge.label ?? ""}
+                onChange={(event) => patchEdge(selectedEdge.id, { label: event.target.value })}
+                placeholder="Line label (Yes, PoE…)"
+                className="max-w-xs"
+              />
+              <Button type="button" size="sm" variant="outline" onClick={() => patchEdge(selectedEdge.id, { style: selectedEdge.style === "dashed" ? "solid" : "dashed" })}>
+                {selectedEdge.style === "dashed" ? "Solid line" : "Dashed line"}
+              </Button>
+            </div>
+          )}
+
+          {canEdit && tool === "connect" && (
+            <p className="px-3 pb-3 text-[11px] text-muted-foreground">
+              {connectFrom ? "Now tap the shape it should point to." : "Tap a shape, then tap the next one to draw a line."}
+            </p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
+
+export { DIAGRAM_TEMPLATES };

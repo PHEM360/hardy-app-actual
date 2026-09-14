@@ -11,7 +11,9 @@ import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
 import { canAccessRoute } from "@/lib/features";
-import { HOME_TILE_BY_ID, packHomeTiles, type HomeTileDef } from "@/lib/homeLayout";
+import { HomeViewToggle } from "@/components/home/HomeViewToggle";
+import { HOME_TILE_BY_ID, HOME_TILE_PRESETS, packHomeTiles, visibleHomeTiles, type HomeLayoutMode, type HomeTileDef, type HomeTilesPresetId } from "@/lib/homeLayout";
+import { homeTileSkinClass, tileIconWrapClass, tileInkClass, tileMotionClass, tileSurface } from "@/lib/homeTileSkins";
 
 const COL_CLASS: Record<number, string> = {
   1: "grid-cols-1",
@@ -20,10 +22,64 @@ const COL_CLASS: Record<number, string> = {
   4: "grid-cols-4",
 };
 
+function renderHomeTile(
+  tile: HomeTileDef,
+  cols: number,
+  editMode: boolean,
+  navigate: (path: string) => void,
+  moveTile: (id: string, delta: number) => Promise<void> | void,
+  hideTile: (id: string) => Promise<void> | void,
+  className = "",
+  preset: HomeTilesPresetId = "classic",
+  featured = false,
+) {
+  if (tile.id === "quick_links") {
+    const surface = tileSurface(preset, tile.accent, featured);
+    return (
+      <div
+        key={tile.id}
+        className={`home-tile relative min-h-[220px] overflow-hidden border border-border/40 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
+        style={{ ["--tile-accent" as string]: tile.accent, background: surface.background }}
+      >
+        {editMode && (
+          <div className="absolute right-1.5 top-1.5 z-10 flex gap-0.5">
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, -1)} aria-label="Move Quick Links earlier">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, 1)} aria-label="Move Quick Links later">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void hideTile(tile.id)} aria-label="Hide Quick Links">
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <QuickLinksWidget />
+      </div>
+    );
+  }
+  return (
+    <div key={tile.id} className={className}>
+      <PageTile
+        tile={tile}
+        cols={cols}
+        editMode={editMode}
+        preset={preset}
+        featured={featured}
+        onOpen={() => tile.route && navigate(tile.route)}
+        onMove={(delta) => void moveTile(tile.id, delta)}
+        onHide={() => void hideTile(tile.id)}
+      />
+    </div>
+  );
+}
+
 function PageTile({
   tile,
   cols,
   editMode,
+  preset = "classic",
+  featured = false,
   onOpen,
   onMove,
   onHide,
@@ -31,18 +87,26 @@ function PageTile({
   tile: HomeTileDef;
   cols: number;
   editMode: boolean;
+  preset?: HomeTilesPresetId;
+  featured?: boolean;
   onOpen: () => void;
   onMove: (delta: number) => void;
   onHide: () => void;
 }) {
   const Icon = tile.icon;
-  const compact = cols >= 3;
+  const compact = cols >= 3 || preset === "compact";
+  const surface = tileSurface(preset, tile.accent, featured);
+  const ink = tileInkClass(preset, featured);
+  const stacked = featured && (preset === "magazine" || preset === "spotlight");
   return (
     <div
-      className="relative min-w-0 overflow-hidden rounded-2xl border border-border/40 shadow-card"
+      className={`home-tile relative h-full min-w-0 overflow-hidden border shadow-card ${surface.radius} ${
+        preset === "compact" ? "border-border/30" : preset === "orbit" ? "border-white/10" : "border-border/40"
+      } ${tileMotionClass(preset, featured)}`}
       style={{
-        background: `color-mix(in srgb, ${tile.accent} 16%, hsl(var(--card)))`,
-        borderLeftWidth: 4,
+        ["--tile-accent" as string]: tile.accent,
+        background: surface.background,
+        borderLeftWidth: surface.borderLeftWidth,
         borderLeftColor: tile.accent,
       }}
     >
@@ -63,15 +127,24 @@ function PageTile({
         type="button"
         onClick={onOpen}
         disabled={editMode}
-        className={`flex h-full w-full min-w-0 items-center gap-3 text-left ${compact ? "flex-col justify-center px-2 py-3" : "px-3 py-3.5"} ${editMode ? "pointer-events-none" : ""}`}
+        className={`flex h-full w-full min-w-0 text-left ${
+          stacked ? "flex-col justify-end gap-3 px-4 py-4" :
+          compact ? "flex-col items-center justify-center gap-2 px-2 py-3" :
+          "items-center gap-3 px-3 py-3.5"
+        } ${editMode ? "pointer-events-none" : ""}`}
       >
         <span
-          className={`flex shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${compact ? "h-9 w-9" : "h-11 w-11"}`}
+          className={`flex shrink-0 items-center justify-center text-white shadow-sm ${tileIconWrapClass(preset, featured, compact)}`}
           style={{ background: tile.gradient }}
         >
-          <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />
+          <Icon className={featured && (preset === "magazine" || preset === "spotlight") ? "h-6 w-6" : compact ? "h-4 w-4" : "h-5 w-5"} />
         </span>
-        <span className={`min-w-0 font-display font-bold leading-tight ${compact ? "text-center text-[11px]" : "text-sm"}`}>
+        <span className={`min-w-0 font-display font-bold leading-tight ${ink} ${
+          stacked ? "text-xl sm:text-2xl" :
+          compact ? "text-center text-[11px]" :
+          preset === "magazine" ? "text-sm tracking-tight" :
+          "text-sm"
+        }`}>
           {tile.label}
         </span>
       </button>
@@ -79,11 +152,16 @@ function PageTile({
   );
 }
 
-export default function HomeTiles() {
+export default function HomeTiles({
+  homeSwitch,
+}: {
+  homeSwitch?: { mode: HomeLayoutMode; onChange: (mode: HomeLayoutMode) => void };
+} = {}) {
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const { layout, setRowSize, addRowSize, removeRowSize, moveTile, hideTile, showTile, resetLayout } = useHomeTilesLayout();
+  const preset = layout.preset ?? "classic";
   const { prefs } = useNotes();
   const { role, loading: roleLoading } = useEffectiveRole();
   const { profile, loading: profileLoading } = useUserProfile();
@@ -103,6 +181,7 @@ export default function HomeTiles() {
   }, [loading, profile?.enabledFeatures, role, sharedPages]);
 
   const rows = useMemo(() => packHomeTiles(layout, accessibleIds), [accessibleIds, layout]);
+  const tiles = useMemo(() => visibleHomeTiles(layout, accessibleIds), [accessibleIds, layout]);
   const hiddenTiles = layout.hidden
     .map((id) => HOME_TILE_BY_ID[id])
     .filter((tile) => tile && accessibleIds.includes(tile.id));
@@ -110,7 +189,13 @@ export default function HomeTiles() {
   return (
     <div className="mx-auto w-full max-w-6xl overflow-x-hidden pb-6">
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/30 bg-background/95 px-3 py-3 backdrop-blur-sm">
-        <p className="text-sm font-semibold text-foreground">Home</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Home</p>
+            <p className="text-[10px] text-muted-foreground">{HOME_TILE_PRESETS.find((item) => item.id === preset)?.label}</p>
+          </div>
+          {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
+        </div>
         <div className="flex items-center gap-2">
           {editMode && hiddenTiles.length > 0 && (
             <button
@@ -144,7 +229,7 @@ export default function HomeTiles() {
         </div>
       </div>
 
-      <div className="space-y-3 px-3 pt-3 sm:px-4">
+      <div className={`space-y-3 px-3 pt-3 sm:px-4 ${homeTileSkinClass(preset)}`}>
         <div className="h-[100px] overflow-hidden rounded-2xl shadow-card">
           <GreetingWidget />
         </div>
@@ -190,7 +275,7 @@ export default function HomeTiles() {
           </div>
         )}
 
-        {rows.map((row, rowIndex) => (
+        {preset === "classic" && rows.map((row, rowIndex) => (
           <div key={`row-${rowIndex}`} className="space-y-1.5">
             {editMode && (
               <div className="flex items-center gap-1.5 px-0.5">
@@ -221,44 +306,103 @@ export default function HomeTiles() {
               </div>
             )}
             <div className={`grid gap-2.5 ${COL_CLASS[row.cols]}`}>
-              {row.tiles.map((tile) => {
-                if (tile.id === "quick_links") {
-                  return (
-                    <div key={tile.id} className="relative min-h-[220px] overflow-hidden rounded-2xl border border-border/40 bg-card shadow-card">
-                      {editMode && (
-                        <div className="absolute right-1.5 top-1.5 z-10 flex gap-0.5">
-                          <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, -1)} aria-label="Move Quick Links earlier">
-                            <ChevronLeft className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void moveTile(tile.id, 1)} aria-label="Move Quick Links later">
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" className="rounded-md bg-card/90 p-1 shadow-sm" onClick={() => void hideTile(tile.id)} aria-label="Hide Quick Links">
-                            <EyeOff className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      <QuickLinksWidget />
-                    </div>
-                  );
-                }
-                return (
-                  <PageTile
-                    key={tile.id}
-                    tile={tile}
-                    cols={row.cols}
-                    editMode={editMode}
-                    onOpen={() => tile.route && navigate(tile.route)}
-                    onMove={(delta) => void moveTile(tile.id, delta)}
-                    onHide={() => void hideTile(tile.id)}
-                  />
-                );
-              })}
+              {row.tiles.map((tile) => renderHomeTile(tile, row.cols, editMode, navigate, moveTile, hideTile, "", preset))}
             </div>
           </div>
         ))}
 
-        {editMode && (
+        {preset === "compact" && (
+          <div className="grid grid-cols-3 gap-2">{tiles.map((tile) => renderHomeTile(tile, 3, editMode, navigate, moveTile, hideTile, "", preset))}</div>
+        )}
+
+        {preset === "magazine" && tiles[0] && (
+          <div className="space-y-2.5">
+            {renderHomeTile(tiles[0], 1, editMode, navigate, moveTile, hideTile, "min-h-[140px]", preset, true)}
+            <div className="grid grid-cols-2 gap-2.5">
+              {tiles.slice(1).map((tile) => renderHomeTile(tile, 2, editMode, navigate, moveTile, hideTile, "", preset))}
+            </div>
+          </div>
+        )}
+
+        {preset === "bento" && (
+          <div className="grid grid-cols-4 auto-rows-[104px] gap-2.5">
+            {tiles.map((tile, index) => {
+              const span = index === 0 ? "col-span-2 row-span-2 min-h-[216px]" : index < 3 ? "col-span-2" : "";
+              return renderHomeTile(tile, index === 0 ? 1 : 2, editMode, navigate, moveTile, hideTile, span, preset, index === 0);
+            })}
+          </div>
+        )}
+
+        {preset === "river" && (
+          <div className="columns-2 gap-2.5 sm:columns-3">
+            {tiles.map((tile, index) => (
+              <div key={tile.id} className={`mb-2.5 break-inside-avoid ${index % 3 === 0 ? "min-h-[150px]" : "min-h-[110px]"}`}>
+                {renderHomeTile(tile, 2, editMode, navigate, moveTile, hideTile, "h-full", preset)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {preset === "spotlight" && tiles[0] && (
+          <div className="grid gap-2.5 md:grid-cols-[1.4fr_1fr]">
+            {renderHomeTile(tiles[0], 1, editMode, navigate, moveTile, hideTile, "min-h-[240px]", preset, true)}
+            <div className="grid grid-cols-2 gap-2.5 content-start">
+              {tiles.slice(1).map((tile) => renderHomeTile(tile, 2, editMode, navigate, moveTile, hideTile, "", preset))}
+            </div>
+          </div>
+        )}
+
+        {preset === "orbit" && (
+          <>
+            <div className="relative mx-auto min-h-[360px] max-w-lg">
+              <div className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-gradient-primary shadow-card">
+                <span className="font-display text-sm font-bold text-primary-foreground">Home</span>
+              </div>
+              {tiles.slice(0, 6).map((tile, index) => {
+                const angle = (index / 6) * Math.PI * 2 - Math.PI / 2;
+                const radius = 132;
+                return (
+                  <div
+                    key={tile.id}
+                    className="absolute w-[40%]"
+                    style={{
+                      left: `calc(50% + ${Math.cos(angle) * radius}px - 20%)`,
+                      top: `calc(50% + ${Math.sin(angle) * radius}px - 44px)`,
+                    }}
+                  >
+                    {renderHomeTile(tile, 2, editMode, navigate, moveTile, hideTile, "", preset)}
+                  </div>
+                );
+              })}
+            </div>
+            {tiles.length > 6 && (
+              <div className="grid grid-cols-2 gap-2.5">
+                {tiles.slice(6).map((tile) => renderHomeTile(tile, 2, editMode, navigate, moveTile, hideTile, "", preset))}
+              </div>
+            )}
+          </>
+        )}
+
+        {preset === "mosaic" && (
+          <div className="grid grid-cols-6 gap-2.5">
+            {tiles.map((tile, index) => {
+              const wide = index % 5 === 0 || index % 7 === 3;
+              return renderHomeTile(
+                tile,
+                wide ? 1 : 3,
+                editMode,
+                navigate,
+                moveTile,
+                hideTile,
+                wide ? "col-span-4 min-h-[132px]" : "col-span-2",
+                preset,
+                wide,
+              );
+            })}
+          </div>
+        )}
+
+        {editMode && preset === "classic" && (
           <button
             type="button"
             onClick={() => void addRowSize()}

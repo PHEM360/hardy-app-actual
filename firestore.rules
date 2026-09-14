@@ -848,6 +848,9 @@ service cloud.firestore {
     match /calendarSecrets/{secretId} {
       allow read, write: if false;
     }
+    match /calendarFeedTokens/{token} {
+      allow read, write: if false;
+    }
     match /googlePhotosOAuth/{stateId} {
       allow read, write: if false;
     }

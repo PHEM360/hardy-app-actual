@@ -53,6 +53,34 @@ describe("NoteEditor paper layout", () => {
     }), expect.objectContaining({ showOnDashboard: false })));
   });
 
+  it("opens a diagram board when a template is passed in", () => {
+    render(
+      <NoteEditor
+        open
+        onOpenChange={vi.fn()}
+        note={null}
+        folders={[]}
+        canEdit
+        isOwn
+        onSave={vi.fn().mockResolvedValue(undefined)}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onShare={vi.fn()}
+        onMoveVault={vi.fn().mockResolvedValue(undefined)}
+        onLeaveVault={vi.fn().mockResolvedValue(undefined)}
+        onAddToHubCalendar={vi.fn().mockResolvedValue(undefined)}
+        ownerId="owner"
+        noteId="new-diagram"
+        initialDiagram={{
+          nodes: [{ id: "a", label: "Router", x: 80, y: 60, shape: "box" }],
+          edges: [],
+        }}
+      />,
+    );
+    expect(screen.getByText("New diagram")).toBeInTheDocument();
+    expect(screen.getByLabelText("Diagram board")).toBeInTheDocument();
+    expect(screen.getByText("Router")).toBeInTheDocument();
+  });
+
   it("saves show-on-dashboard when the switch is on", async () => {
     const onSave = renderEditor();
     fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Milk" } });

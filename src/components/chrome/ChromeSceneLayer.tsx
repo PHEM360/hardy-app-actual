@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { useLocalWeather, type WeatherScene } from "@/hooks/useLocalWeather";
 import { seasonForDate, type ChromeSceneId, type ChromeSeason } from "@/lib/chromeScenes";
+import { isHeaderCopyBank } from "@/lib/headerCopy";
+import { CANVAS_SCENES, ChromeCanvasScene } from "@/components/chrome/ChromeCanvasScene";
+import { ChromeQuoteLayer } from "@/components/chrome/ChromeQuoteLayer";
 
 function seeded(count: number, salt: number) {
   return Array.from({ length: count }, (_, index) => {
@@ -20,14 +23,6 @@ function Snowflake({ size }: { size: number }) {
         <path d="M7.1 8.1l-2.2.2M7.1 8.1l.4-2.2M16.9 15.9l2.2-.2M16.9 15.9l-.4 2.2" />
         <path d="M7.1 15.9l-2.2-.2M7.1 15.9l.4 2.2M16.9 8.1l2.2.2M16.9 8.1l-.4-2.2" />
       </g>
-    </svg>
-  );
-}
-
-function HeartSvg({ size, color }: { size: number; color: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <path d="M12 21s-6.7-4.4-9.3-8.1C.4 9.7 2.1 5.5 6 5.1c2-.2 3.7.9 4.5 2.5C11.3 6 13 4.9 15 5.1c3.9.4 5.6 4.6 3.3 7.8C18.7 16.6 12 21 12 21z" />
     </svg>
   );
 }
@@ -399,96 +394,42 @@ function Galaxy() {
   );
 }
 
-function Fireflies({ compact }: { compact: boolean }) {
-  const bugs = useMemo(() => seeded(compact ? 7 : 12, 8.8), [compact]);
+function Blossom({ compact }: { compact: boolean }) {
+  const petals = useMemo(() => seeded(compact ? 14 : 22, 8.2), [compact]);
   return (
     <>
-      {bugs.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            left: `${10 + a * 80}%`,
-            top: `${15 + b * 65}%`,
-            width: 4 + c * 3,
-            height: 4 + c * 3,
-            background: "radial-gradient(circle, #fff6a0 0 35%, rgba(255,210,70,0.15) 70%, transparent)",
-            boxShadow: "0 0 10px 3px rgba(255,220,80,0.65)",
-            animation: `chrome-wander ${4.5 + c * 3}s ease-in-out ${a * 3}s infinite`,
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
-function Ocean() {
-  return (
-    <>
-      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(85,190,225,.12), rgba(5,85,130,.34))" }} />
-      <div className="absolute right-[15%] top-[-15%] h-16 w-16 rounded-full bg-amber-100/35 blur-md" />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(255,210,220,0.16), rgba(255,236,210,0.08) 46%, rgba(40,22,28,0.12))" }} />
       <div
-        className="absolute right-[8%] top-[8%] h-[85%] w-[25%] blur-sm"
-        style={{ background: "linear-gradient(105deg, transparent, rgba(255,240,180,.34), transparent)", animation: "chrome-water-glint 7s ease-in-out infinite" }}
+        className="absolute right-[8%] top-[-20%] h-[70%] w-[38%] rounded-full"
+        style={{ background: "radial-gradient(circle, rgba(255,190,150,0.28), transparent 68%)" }}
       />
-      <div className="absolute inset-x-0 bottom-0 h-[68%] overflow-hidden">
-        <svg className="absolute bottom-0 h-full w-[200%]" viewBox="0 0 1200 90" preserveAspectRatio="none" style={{ animation: "chrome-water-roll 12s linear infinite" }}>
-          <path d="M0 38C120 62 220 14 350 39C470 62 585 12 710 40C835 67 970 14 1100 40C1145 49 1180 45 1200 40V90H0Z" fill="rgba(20,160,195,0.28)" />
-          <path d="M0 38C120 62 220 14 350 39C470 62 585 12 710 40C835 67 970 14 1100 40" fill="none" stroke="rgba(230,255,255,.42)" strokeWidth="2.2" />
-        </svg>
-        <svg className="absolute bottom-0 h-[78%] w-[200%]" viewBox="0 0 1200 90" preserveAspectRatio="none" style={{ animation: "chrome-water-roll 18s linear infinite reverse" }}>
-          <path d="M0 50C150 18 290 72 430 46C590 16 720 70 875 44C1020 20 1120 58 1200 43V90H0Z" fill="rgba(10,95,155,0.4)" />
-          <path d="M0 50C150 18 290 72 430 46C590 16 720 70 875 44C1020 20 1120 58 1200 43" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="1.5" />
-        </svg>
-        <svg className="absolute bottom-0 h-[52%] w-[200%]" viewBox="0 0 1200 90" preserveAspectRatio="none" style={{ animation: "chrome-water-roll 8s linear infinite" }}>
-          <path d="M0 58C90 40 170 72 270 56C390 37 485 72 600 56C720 38 815 70 930 54C1040 40 1120 63 1200 52V90H0Z" fill="rgba(255,255,255,0.17)" />
-        </svg>
-      </div>
-      <svg className="absolute left-[-20px] top-[18%] h-4 w-12 opacity-0" viewBox="0 0 48 16" style={{ animation: "chrome-gull 12s linear 1s infinite" }}>
-        <path d="M2 12 Q10 3 20 10 Q29 1 46 9" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    </>
-  );
-}
-
-function Meadow() {
-  const blades = useMemo(() => seeded(22, 1.4), []);
-  const pollen = useMemo(() => seeded(8, 2.9), []);
-  return (
-    <>
-      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(255,220,120,.1), rgba(90,155,60,.23))" }} />
-      <svg className="absolute inset-x-0 bottom-0 h-[58%] w-full" viewBox="0 0 600 70" preserveAspectRatio="none">
-        <path d="M0 48 Q110 8 235 47 Q365 5 600 44 V70 H0Z" fill="rgba(50,100,55,.22)" />
-        <path d="M0 57 Q145 25 300 56 Q440 27 600 53 V70 H0Z" fill="rgba(30,82,48,.34)" />
-      </svg>
-      <div className="absolute inset-x-0 bottom-0 h-[42%] flex items-end justify-around px-1">
-        {blades.map(({ a, c }, i) => (
+      {petals.map(({ a, b, c }, i) => {
+        const hue = c > 0.55 ? "255,170,190" : c > 0.28 ? "255,214,220" : "255,236,210";
+        return (
           <span
             key={i}
-            className="origin-bottom rounded-full bg-white/35"
+            className="absolute"
             style={{
-              width: 2,
-              height: `${28 + c * 48}%`,
-              ["--lean" as string]: `${-8 + a * 10}deg`,
-              animation: `chrome-grass ${2.2 + a}s ease-in-out ${a * 1.4}s infinite`,
-              opacity: 0.35 + c * 0.4,
+              left: `${a * 100}%`,
+              top: "-16%",
+              ["--drift" as string]: `${(b - 0.45) * 70}px`,
+              animation: `chrome-tumble ${14 + b * 10}s linear ${a * 10}s infinite`,
+              opacity: 0.55 + c * 0.35,
             }}
-          />
-        ))}
-      </div>
-      {pollen.map(({ a, b, c }, i) => (
-        <span
-          key={`p-${i}`}
-          className="absolute rounded-full bg-amber-100/80"
-          style={{
-            left: `${a * 100}%`,
-            top: `${30 + b * 40}%`,
-            width: 3 + c * 3,
-            height: 3 + c * 3,
-            animation: `chrome-mote ${7 + b * 4}s linear ${a * 3}s infinite`,
-          }}
-        />
-      ))}
+          >
+            <span
+              className="block rounded-[70%_30%_70%_30%]"
+              style={{
+                width: 7 + c * 8,
+                height: 5 + c * 5,
+                background: `rgba(${hue},0.92)`,
+                boxShadow: "0 0 6px rgba(255,200,210,0.35)",
+                animation: `chrome-sway ${3.6 + c * 2}s ease-in-out ${b * 2}s infinite`,
+              }}
+            />
+          </span>
+        );
+      })}
     </>
   );
 }
@@ -496,15 +437,15 @@ function Meadow() {
 function Harbour() {
   return (
     <>
-      <Ocean />
-      <div className="absolute right-[5%] bottom-[30%] h-8 w-16 origin-right" style={{ background: "linear-gradient(90deg, rgba(255,235,170,.28), transparent)", clipPath: "polygon(100% 42%, 0 0, 0 100%)", animation: "chrome-lighthouse-beam 8s ease-in-out infinite" }} />
+      <ChromeCanvasScene scene="ocean" />
+      <div className="absolute right-[5%] bottom-[30%] h-8 w-16 origin-right" style={{ background: "linear-gradient(90deg, rgba(255,235,170,.28), transparent)", clipPath: "polygon(100% 42%, 0 0, 0 100%)", animation: "chrome-lighthouse-beam 18s ease-in-out infinite" }} />
       <svg className="absolute right-[4%] bottom-[18%] h-10 w-7" viewBox="0 0 28 40">
         <path d="M9 11h10l3 29H6z" fill="rgba(245,245,240,.82)" />
         <path d="M8 11h12l-2-6H10z" fill="rgba(230,90,70,.9)" />
         <rect x="11" y="6" width="6" height="4" rx="1" fill="#ffe49a" />
         <path d="M7 22h14" stroke="rgba(210,60,55,.75)" strokeWidth="3" />
       </svg>
-      <div className="absolute bottom-[16%] left-[12%] origin-bottom" style={{ animation: "chrome-boat 5s ease-in-out infinite" }}>
+      <div className="absolute bottom-[16%] left-[12%] origin-bottom" style={{ animation: "chrome-boat 14s ease-in-out infinite" }}>
         <svg width="42" height="28" viewBox="0 0 42 28" fill="none">
           <path d="M20 1V18" stroke="rgba(255,255,255,.8)" />
           <path d="M19 3 L19 16 L7 16 Z" fill="rgba(255,255,255,0.82)" />
@@ -516,260 +457,49 @@ function Harbour() {
   );
 }
 
-function Bokeh({ compact }: { compact: boolean }) {
-  const orbs = useMemo(() => seeded(compact ? 7 : 11, 14.2), [compact]);
-  const colors = ["rgba(255,180,200,0.35)", "rgba(180,210,255,0.32)", "rgba(255,220,150,0.3)", "rgba(190,255,210,0.28)"];
+
+function Silk() {
   return (
     <>
-      {orbs.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute rounded-full"
+      <div className="absolute inset-[-20%]" style={{ background: "radial-gradient(ellipse at 20% 30%, rgba(255,190,220,0.28), transparent 42%), radial-gradient(ellipse at 80% 70%, rgba(140,190,255,0.28), transparent 46%)" }} />
+      {["rgba(255,170,210,0.38)", "rgba(120,210,255,0.32)", "rgba(200,160,255,0.3)"].map((color, i) => (
+        <div
+          key={color}
+          className="absolute inset-[-30%] mix-blend-screen"
           style={{
-            left: `${a * 90}%`,
-            top: `${b * 80}%`,
-            width: 18 + c * 36,
-            height: 18 + c * 36,
-            background: `radial-gradient(circle at 34% 30%, rgba(255,255,255,.65), ${colors[i % colors.length]} 35%, transparent 70%)`,
-            border: "1px solid rgba(255,255,255,.12)",
-            boxShadow: `0 0 ${10 + c * 18}px ${colors[i % colors.length]}`,
-            animation: `chrome-bokeh-focus ${6 + b * 5}s ease-in-out ${a * 4}s infinite`,
+            background: `conic-gradient(from ${i * 80}deg at ${30 + i * 18}% ${40 + i * 10}%, transparent, ${color}, transparent 28%)`,
+            filter: "blur(18px)",
+            animation: `chrome-silk-flow ${16 + i * 4}s ease-in-out ${i * 1.4}s infinite`,
           }}
         />
       ))}
-    </>
-  );
-}
-
-function Embers({ compact }: { compact: boolean }) {
-  const bits = useMemo(() => seeded(compact ? 10 : 16, 6.7), [compact]);
-  return (
-    <>
-      <div className="absolute inset-x-0 bottom-0 h-1/2" style={{ background: "linear-gradient(180deg, transparent, rgba(255,80,20,0.18))" }} />
-      {bits.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute bottom-[8%] rounded-full"
-          style={{
-            left: `${8 + a * 84}%`,
-            width: 3 + c * 4,
-            height: 3 + c * 4,
-            background: c > 0.5 ? "#ffb020" : "#ff6a20",
-            boxShadow: "0 0 8px rgba(255,140,40,0.8)",
-            ["--drift" as string]: `${(b - 0.5) * 28}px`,
-            animation: `chrome-ember ${3.2 + b * 3}s ease-out ${a * 3}s infinite, chrome-flicker ${1 + c}s ease-in-out ${b}s infinite`,
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
-function Lanterns({ compact }: { compact: boolean }) {
-  const lamps = useMemo(() => seeded(compact ? 5 : 8, 12.4), [compact]);
-  return (
-    <>
-      {lamps.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute bottom-[-8%] flex flex-col items-center"
-          style={{
-            left: `${a * 92}%`,
-            animation: `chrome-lantern ${9 + b * 5}s linear ${a * 6}s infinite`,
-          }}
-        >
-          <span className="h-3 w-px bg-white/40" />
-          <span
-            className="rounded-md"
-            style={{
-              width: 10 + c * 6,
-              height: 14 + c * 6,
-              background: "linear-gradient(180deg, #ffd27a, #ff7a3a)",
-              boxShadow: "0 0 12px rgba(255,140,60,0.7)",
-            }}
-          />
-        </span>
-      ))}
-    </>
-  );
-}
-
-function Fireworks({ compact }: { compact: boolean }) {
-  const bursts = useMemo(() => [
-    { x: 28, y: 38, delay: 0, color: "#fbbf24" },
-    { x: 68, y: 28, delay: 1.4, color: "#f472b6" },
-    ...(!compact ? [{ x: 50, y: 52, delay: 2.6, color: "#60a5fa" }] : []),
-  ], [compact]);
-  return (
-    <>
-      {bursts.map((burst) => (
-        <span key={`${burst.x}-${burst.delay}`} className="absolute" style={{ left: `${burst.x}%`, top: `${burst.y}%` }}>
-          {Array.from({ length: 12 }, (_, i) => (
-            <span
-              key={i}
-              className="absolute left-0 top-0 h-1.5 w-1.5 rounded-full"
-              style={{
-                background: burst.color,
-                boxShadow: `0 0 6px ${burst.color}`,
-                ["--a" as string]: `${i * 30}deg`,
-                animation: `chrome-burst 1.8s ease-out ${burst.delay}s infinite`,
-              }}
-            />
-          ))}
-        </span>
-      ))}
-    </>
-  );
-}
-
-function Confetti({ compact }: { compact: boolean }) {
-  const bits = useMemo(() => seeded(compact ? 12 : 20, 6.2), [compact]);
-  const colors = ["#f472b6", "#fbbf24", "#34d399", "#60a5fa", "#c084fc", "#fb7185"];
-  return (
-    <>
-      {bits.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute"
-          style={{
-            left: `${a * 100}%`,
-            top: "-12%",
-            width: c > 0.6 ? 8 : 5,
-            height: c > 0.6 ? 5 : 10,
-            borderRadius: c > 0.8 ? 999 : 1,
-            background: colors[i % colors.length],
-            ["--drift" as string]: `${(b - 0.4) * 50}px`,
-            animation: `chrome-tumble ${4.5 + b * 3}s linear ${a * 4}s infinite`,
-            boxShadow: "0 0 4px rgba(0,0,0,0.12)",
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
-function Hearts({ compact }: { compact: boolean }) {
-  const bits = useMemo(() => seeded(compact ? 7 : 12, 1.9), [compact]);
-  const colors = ["#fb7185", "#f472b6", "#fda4af", "#fff"];
-  return (
-    <>
-      {bits.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute bottom-[-6%]"
-          style={{
-            left: `${a * 92}%`,
-            animation: `chrome-wobble-up ${5.5 + b * 3}s ease-in ${a * 4}s infinite`,
-            opacity: 0.75,
-          }}
-        >
-          <HeartSvg size={10 + c * 10} color={colors[i % colors.length]} />
-        </span>
-      ))}
-    </>
-  );
-}
-
-function Balloons({ compact }: { compact: boolean }) {
-  const bits = useMemo(() => seeded(compact ? 4 : 7, 11.3), [compact]);
-  const colors = ["#fb7185", "#60a5fa", "#fbbf24", "#c084fc", "#34d399"];
-  return (
-    <>
-      {bits.map(({ a, b, c }, i) => (
-        <span
-          key={i}
-          className="absolute bottom-[-10%] flex flex-col items-center"
-          style={{
-            left: `${8 + a * 80}%`,
-            animation: `chrome-lantern ${10 + b * 4}s linear ${a * 5}s infinite, chrome-bob ${2.4 + c}s ease-in-out ${b}s infinite`,
-          }}
-        >
-          <span
-            className="rounded-full"
-            style={{
-              width: 12 + c * 8,
-              height: 16 + c * 10,
-              background: colors[i % colors.length],
-              boxShadow: "inset -3px -4px 6px rgba(255,255,255,0.45)",
-            }}
-          />
-          <span className="h-5 w-px bg-white/50" />
-        </span>
-      ))}
-    </>
-  );
-}
-
-function PawTrail({ compact }: { compact: boolean }) {
-  const steps = useMemo(() => Array.from({ length: compact ? 5 : 7 }, (_, i) => i), [compact]);
-  return (
-    <>
-      {steps.map((i) => (
-        <span
-          key={i}
-          className="absolute text-lg opacity-0"
-          style={{
-            left: `${8 + i * 12}%`,
-            top: `${i % 2 === 0 ? 38 : 52}%`,
-            animation: `chrome-paw ${2.8}s ease-in-out ${i * 0.22}s infinite`,
-            filter: "drop-shadow(0 0 4px rgba(255,255,255,0.4))",
-          }}
-        >
-          🐾
-        </span>
-      ))}
-    </>
-  );
-}
-
-function Bubbles({ compact }: { compact: boolean }) {
-  const bits = useMemo(() => seeded(compact ? 8 : 14, 2.7), [compact]);
-  return (
-    <>
-      {bits.map(({ a, b, c }, i) => {
-        const size = 8 + c * 16;
-        return (
-          <span
-            key={i}
-            className="absolute bottom-[-8%] rounded-full"
-            style={{
-              left: `${a * 92}%`,
-              width: size,
-              height: size,
-              background: "radial-gradient(circle at 30% 28%, rgba(255,255,255,0.7), rgba(255,255,255,0.08) 42%, rgba(180,220,255,0.15))",
-              border: "1px solid rgba(255,255,255,0.35)",
-              animation: `chrome-wobble-up ${6 + b * 4}s linear ${a * 5}s infinite, chrome-pop ${6 + b * 4}s linear ${a * 5}s infinite`,
-            }}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-function StainedGlass() {
-  return (
-    <>
-      <svg className="absolute inset-0 h-full w-full opacity-55" viewBox="0 0 600 120" preserveAspectRatio="none">
-        <g stroke="rgba(10,12,28,.58)" strokeWidth="4">
-          <path d="M-20-10H150L102 62L-20 42Z" fill="rgba(74,190,205,.46)" />
-          <path d="M150-10H290L238 55L102 62Z" fill="rgba(155,90,220,.52)" />
-          <path d="M290-10H430L390 65L238 55Z" fill="rgba(245,175,70,.55)" />
-          <path d="M430-10H620V45L510 72L390 65Z" fill="rgba(220,75,130,.48)" />
-          <path d="M-20 42L102 62L160 130H-20Z" fill="rgba(245,105,75,.42)" />
-          <path d="M102 62L238 55L286 130H160Z" fill="rgba(75,135,230,.48)" />
-          <path d="M238 55L390 65L406 130H286Z" fill="rgba(80,200,145,.45)" />
-          <path d="M390 65L510 72L620 45V130H406Z" fill="rgba(180,95,220,.48)" />
-        </g>
-      </svg>
       <div
-        className="absolute inset-y-[-20%] left-[-20%] w-[38%] blur-lg"
+        className="absolute inset-y-[-30%] left-[-20%] w-[40%] mix-blend-screen"
         style={{
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,.5), rgba(255,230,160,.22), transparent)",
-          animation: "chrome-prism-slide 11s ease-in-out infinite",
+          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.45), rgba(255,230,190,0.2), transparent)",
+          animation: "chrome-silk-sheen 9s ease-in-out infinite",
         }}
       />
-      <div className="absolute inset-0 opacity-35 mix-blend-screen" style={{ background: "radial-gradient(circle at 45% 45%, rgba(255,255,255,.48), transparent 32%)" }} />
+    </>
+  );
+}
+
+function Caustics() {
+  return (
+    <>
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(40,160,190,0.16), rgba(8,70,110,0.28))" }} />
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="absolute inset-[-20%] mix-blend-screen"
+          style={{
+            background: `radial-gradient(ellipse at ${25 + i * 22}% ${40 + i * 12}%, rgba(255,255,220,0.42), transparent 28%), radial-gradient(ellipse at ${70 - i * 16}% ${30 + i * 18}%, rgba(160,255,240,0.3), transparent 26%)`,
+            filter: "blur(10px)",
+            animation: `chrome-caustic ${7 + i * 2.4}s ease-in-out ${i}s infinite`,
+          }}
+        />
+      ))}
+      <div className="absolute inset-x-0 bottom-0 h-1/2 opacity-40" style={{ background: "linear-gradient(180deg, transparent, rgba(0,40,70,0.35))" }} />
     </>
   );
 }
@@ -792,22 +522,16 @@ export function ChromeSceneLayer({
       {scene === "stars" && <Stars compact={compact} />}
       {scene === "aurora" && <Aurora />}
       {scene === "galaxy" && <Galaxy />}
-      {scene === "fireflies" && <Fireflies compact={compact} />}
-      {scene === "ocean" && <Ocean />}
-      {scene === "meadow" && <Meadow />}
+      {scene === "meadow" && <Blossom compact={compact} />}
       {scene === "harbour" && <Harbour />}
-      {scene === "bokeh" && <Bokeh compact={compact} />}
-      {scene === "embers" && <Embers compact={compact} />}
-      {scene === "lanterns" && <Lanterns compact={compact} />}
-      {scene === "fireworks" && <Fireworks compact={compact} />}
-      {scene === "confetti" && <Confetti compact={compact} />}
-      {scene === "hearts" && <Hearts compact={compact} />}
-      {scene === "balloons" && <Balloons compact={compact} />}
-      {scene === "pawprints" && <PawTrail compact={compact} />}
-      {scene === "bubbles" && <Bubbles compact={compact} />}
-      {scene === "glass" && <StainedGlass />}
+      {scene === "silk" && <Silk />}
+      {scene === "caustics" && <Caustics />}
+      {isHeaderCopyBank(scene) && <ChromeQuoteLayer bank={scene} compact={compact} />}
+      {CANVAS_SCENES.has(scene) && <ChromeCanvasScene scene={scene} compact={compact} />}
       <div className="absolute inset-0 bg-gradient-to-b from-white/[0.035] via-transparent to-black/[0.08]" />
-      <div className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" style={{ animation: "greeting-shimmer 14s ease-in-out infinite" }} />
+      {!isHeaderCopyBank(scene) && (
+        <div className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" style={{ animation: "greeting-shimmer 14s ease-in-out infinite" }} />
+      )}
     </div>
   );
 }

@@ -27,12 +27,53 @@ export interface NoteCipher {
   data: string;
 }
 
+export type NoteDiagramShape =
+  | "box"
+  | "rounded"
+  | "diamond"
+  | "circle"
+  | "oval"
+  | "parallelogram"
+  | "hexagon"
+  | "cylinder"
+  | "cloud"
+  | "document";
+
+export type NoteDiagramIcon =
+  | "none"
+  | "router"
+  | "wifi"
+  | "switch"
+  | "server"
+  | "computer"
+  | "laptop"
+  | "phone"
+  | "printer"
+  | "camera"
+  | "tv"
+  | "cloud"
+  | "database"
+  | "globe"
+  | "shield"
+  | "home"
+  | "user"
+  | "users"
+  | "harddrive"
+  | "speaker";
+
+export type NoteDiagramEdgeStyle = "solid" | "dashed";
+export type NoteDiagramArrow = "end" | "both" | "none";
+
 export interface NoteDiagramNode {
   id: string;
   label: string;
   x: number;
   y: number;
-  shape: "box" | "diamond" | "circle" | "oval";
+  shape: NoteDiagramShape;
+  w?: number;
+  h?: number;
+  fill?: string;
+  icon?: NoteDiagramIcon;
 }
 
 export interface NoteDiagramEdge {
@@ -40,6 +81,8 @@ export interface NoteDiagramEdge {
   from: string;
   to: string;
   label?: string;
+  style?: NoteDiagramEdgeStyle;
+  arrow?: NoteDiagramArrow;
 }
 
 export interface NoteDiagram {

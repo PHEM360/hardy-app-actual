@@ -4,6 +4,12 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import {
+  apiHost,
+  authHost,
+  resolveTrueLayerEnv,
+  type TrueLayerEnv,
+} from "./truelayerEnv";
 
 const truelayerClientId = defineSecret("TRUELAYER_CLIENT_ID");
 const truelayerClientSecret = defineSecret("TRUELAYER_CLIENT_SECRET");
@@ -88,16 +94,52 @@ function requireUid(auth?: { uid: string; token?: Record<string, unknown> }) {
   return auth.uid;
 }
 
-function isSandbox() {
-  return truelayerUseSandbox.value() !== "false";
+function preferredEnv(): TrueLayerEnv {
+  return truelayerUseSandbox.value() !== "false" ? "sandbox" : "live";
+}
+
+let resolvedEnvCache: { env: TrueLayerEnv; mismatch: boolean } | null = null;
+
+async function resolveEnv(redirectUri = `${APP_HOST}/api/truelayer/callback`) {
+  if (resolvedEnvCache) return resolvedEnvCache;
+  const { clientId, clientSecret } = credentials();
+  const resolved = await resolveTrueLayerEnv({
+    preferred: preferredEnv(),
+    clientId,
+    clientSecret,
+    redirectUri,
+  });
+  resolvedEnvCache = { env: resolved.env, mismatch: resolved.mismatch };
+  if (resolved.mismatch) {
+    logger.warn("TrueLayer client belongs to the other environment; switching", {
+      preferred: preferredEnv(),
+      using: resolved.env,
+    });
+  }
+  return resolvedEnvCache;
+}
+
+let requestEnv: TrueLayerEnv = "sandbox";
+
+function useEnv(env: TrueLayerEnv) {
+  requestEnv = env;
 }
 
 function authBase() {
-  return isSandbox() ? "https://auth.truelayer-sandbox.com" : "https://auth.truelayer.com";
+  return authHost(requestEnv);
 }
 
 function apiBase() {
-  return isSandbox() ? "https://api.truelayer-sandbox.com" : "https://api.truelayer.com";
+  return apiHost(requestEnv);
+}
+
+async function envForConnection(uid: string, connectionId: string): Promise<TrueLayerEnv> {
+  const snap = await connectionRef(uid, connectionId).get();
+  const stored = snap.data()?.authEnv;
+  if (stored === "live" || stored === "sandbox") return stored;
+  if (snap.data()?.sandbox === false) return "live";
+  if (snap.data()?.sandbox === true) return "sandbox";
+  return (await resolveEnv()).env;
 }
 
 function credentialsConfigured() {
@@ -258,6 +300,7 @@ function secretRef(uid: string, id: string) {
 }
 
 async function refreshAccess(uid: string, connectionId: string) {
+  useEnv(await envForConnection(uid, connectionId));
   const snap = await secretRef(uid, connectionId).get();
   const data = snap.data();
   if (!data?.refreshToken) {
@@ -343,6 +386,30 @@ async function writeBalances(
   }
 }
 
+async function writeHouseholdBalances(
+  householdId: string,
+  rows: { financeAccountId: string; amount: number; date: string }[]
+) {
+  for (let i = 0; i < rows.length; i += 400) {
+    const batch = db().batch();
+    for (const row of rows.slice(i, i + 400)) {
+      batch.set(
+        db().doc(`household/${householdId}/financeEntries/bank_${row.financeAccountId}_${row.date}`),
+        {
+          accountId: row.financeAccountId,
+          date: row.date,
+          balance: row.amount,
+          source: "truelayer",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    await batch.commit();
+  }
+}
+
 async function syncConnection(
   uid: string,
   connectionId: string,
@@ -353,21 +420,31 @@ async function syncConnection(
   const mappings = (conn.data()?.mappings || {}) as Record<string, string>;
   const today = isoDateUtc(new Date());
   const rows: { financeAccountId: string; amount: number; date: string }[] = [];
+  const amountByBank = new Map<string, number>();
   let updated = 0;
   let months = 0;
 
-  for (const account of accounts) {
-    const financeId = mappings[account.id];
-    if (!financeId) continue;
+  const readBalance = async (bankAccountId: string) => {
+    if (amountByBank.has(bankAccountId)) return amountByBank.get(bankAccountId);
     const balances = await tlGet<TlBalance[]>(
-      `/data/v1/accounts/${encodeURIComponent(account.id)}/balance`,
+      `/data/v1/accounts/${encodeURIComponent(bankAccountId)}/balance`,
       access,
       opts.extraHeaders
     );
     const row = Array.isArray(balances) ? balances[0] : undefined;
     const amount = Number(row?.current ?? row?.available);
-    if (!Number.isFinite(amount)) continue;
-    rows.push({ financeAccountId: financeId, amount: roundGbp(amount), date: today });
+    if (!Number.isFinite(amount)) return undefined;
+    const rounded = roundGbp(amount);
+    amountByBank.set(bankAccountId, rounded);
+    return rounded;
+  };
+
+  for (const account of accounts) {
+    const financeId = mappings[account.id];
+    if (!financeId) continue;
+    const amount = await readBalance(account.id);
+    if (amount == null) continue;
+    rows.push({ financeAccountId: financeId, amount, date: today });
     updated += 1;
 
     if (opts.history) {
@@ -398,6 +475,30 @@ async function syncConnection(
   }
 
   await writeBalances(uid, rows);
+
+  const householdMappings = (conn.data()?.householdMappings || {}) as HouseholdMappings;
+  for (const [householdId, map] of Object.entries(householdMappings)) {
+    const hhRows: { financeAccountId: string; amount: number; date: string }[] = [];
+    for (const account of accounts) {
+      const hhAccountId = map?.[account.id];
+      if (!hhAccountId) continue;
+      const amount = await readBalance(account.id);
+      if (amount == null) continue;
+      hhRows.push({ financeAccountId: hhAccountId, amount, date: today });
+      updated += 1;
+      await db().doc(`household/${householdId}/financeAccounts/${hhAccountId}`).set(
+        {
+          bankProvider: "truelayer",
+          bankConnectionId: connectionId,
+          bankAccountId: account.id,
+          bankLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    await writeHouseholdBalances(householdId, hhRows);
+  }
+
   await connectionRef(uid, connectionId).set(
     {
       status: "active",
@@ -412,7 +513,18 @@ async function syncConnection(
 
 export const getTrueLayerStatus = onCall(SECRET_OPTS, async (request) => {
   requireUid(request.auth);
-  return { configured: credentialsConfigured(), sandbox: isSandbox() };
+  if (!credentialsConfigured()) {
+    return { configured: false, sandbox: preferredEnv() === "sandbox", using: preferredEnv(), mismatch: false };
+  }
+  const resolved = await resolveEnv();
+  useEnv(resolved.env);
+  return {
+    configured: true,
+    sandbox: resolved.env === "sandbox",
+    using: resolved.env,
+    preferred: preferredEnv(),
+    mismatch: resolved.mismatch,
+  };
 });
 
 export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) => {
@@ -422,12 +534,15 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
   if (!isAllowedRedirect(redirectUri)) {
     throw new HttpsError("invalid-argument", "That redirect URI is not allowed.");
   }
+  const resolved = await resolveEnv(redirectUri);
+  useEnv(resolved.env);
   const returnPath = safeReturnPath(request.data?.returnPath, "/finance");
   const state = randomUUID();
   await db().doc(`trueLayerOAuth/${state}`).set({
     uid,
     redirectUri,
     returnPath,
+    authEnv: resolved.env,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: Date.now() + 15 * 60 * 1000,
   });
@@ -439,11 +554,13 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
     state,
     providers: "uk-ob-all uk-oauth-all",
   });
-  if (isSandbox()) params.set("enable_mock", "true");
-  return { authUrl: `${authBase()}/?${params.toString()}` };
+  if (resolved.env === "sandbox") params.set("enable_mock", "true");
+  return { authUrl: `${authBase()}/?${params.toString()}`, env: resolved.env, mismatch: resolved.mismatch };
 });
 
-async function finishConnect(uid: string, code: string, redirectUri: string) {
+async function finishConnect(uid: string, code: string, redirectUri: string, authEnv?: TrueLayerEnv) {
+  const resolved = authEnv ? { env: authEnv, mismatch: false } : await resolveEnv(redirectUri);
+  useEnv(resolved.env);
   const { clientId, clientSecret } = credentials();
   const token = await formPost(`${authBase()}/connect/token`, {
     grant_type: "authorization_code",
@@ -465,8 +582,10 @@ async function finishConnect(uid: string, code: string, redirectUri: string) {
     ownerId: uid,
     provider: "truelayer",
     status: "active",
-    sandbox: isSandbox(),
+    sandbox: resolved.env === "sandbox",
+    authEnv: resolved.env,
     mappings: {},
+    householdMappings: {},
     accounts: [],
     consentExpiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -490,7 +609,8 @@ export const completeTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request)
     throw new HttpsError("deadline-exceeded", "This bank link has expired. Try connecting again.");
   }
   await stateSnap.ref.delete();
-  return finishConnect(uid, code, String(stateData.redirectUri));
+  const storedEnv = stateData.authEnv === "live" || stateData.authEnv === "sandbox" ? stateData.authEnv : undefined;
+  return finishConnect(uid, code, String(stateData.redirectUri), storedEnv);
 });
 
 export const listTrueLayerAccounts = onCall(SECRET_CALL_OPTS, async (request) => {
@@ -508,14 +628,30 @@ function psuHeaders(request: { rawRequest?: { ip?: string; headers?: { [key: str
   return ip ? { "X-PSU-IP": ip } : undefined;
 }
 
+type HouseholdMappings = Record<string, Record<string, string>>;
+
+async function requireHouseholdMember(uid: string, householdId: string) {
+  const snap = await db().doc(`households/${householdId}`).get();
+  const members = (snap.data()?.memberIds || []) as string[];
+  if (!snap.exists || !members.includes(uid)) {
+    throw new HttpsError("permission-denied", "You are not a member of that household.");
+  }
+}
+
 export const linkTrueLayerAccount = onCall(SECRET_CALL_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const connectionId = String(request.data?.connectionId || "").trim();
   const bankAccountId = String(request.data?.bankAccountId || "").trim();
   const financeAccountId = String(request.data?.financeAccountId || "").trim();
   const createNew = request.data?.createNew === true;
+  const householdId = String(request.data?.householdId || "").trim();
+  const scope = request.data?.scope === "household" || householdId ? "household" : "personal";
   if (!connectionId || !bankAccountId) {
     throw new HttpsError("invalid-argument", "connectionId and bankAccountId are required.");
+  }
+  if (scope === "household") {
+    if (!householdId) throw new HttpsError("invalid-argument", "householdId is required.");
+    await requireHouseholdMember(uid, householdId);
   }
 
   const connSnap = await connectionRef(uid, connectionId).get();
@@ -524,9 +660,14 @@ export const linkTrueLayerAccount = onCall(SECRET_CALL_OPTS, async (request) => 
   const bank = accounts.find((a) => a.id === bankAccountId);
   if (!bank) throw new HttpsError("not-found", "That bank account is not on this connection.");
 
+  const collectionPath = scope === "household"
+    ? `household/${householdId}/financeAccounts`
+    : `finance/${uid}/accounts`;
+  const accountDoc = (id: string) => db().doc(`${collectionPath}/${id}`);
+
   let targetId = financeAccountId;
   if (createNew) {
-    const created = await db().collection(`finance/${uid}/accounts`).add({
+    const created = await db().collection(collectionPath).add({
       name: bank.name,
       type: bank.type,
       active: true,
@@ -541,10 +682,17 @@ export const linkTrueLayerAccount = onCall(SECRET_CALL_OPTS, async (request) => 
     throw new HttpsError("invalid-argument", "Pick an existing account or create a new one.");
   }
 
-  const mappings = { ...(connSnap.data()?.mappings || {}), [bankAccountId]: targetId };
-  const nextAccounts = accounts.map((a) => (a.id === bankAccountId ? { ...a, linkedAccountId: targetId } : a));
-  await connectionRef(uid, connectionId).set({ mappings, accounts: nextAccounts }, { merge: true });
-  await db().doc(`finance/${uid}/accounts/${targetId}`).set(
+  if (scope === "household") {
+    const householdMappings = { ...((connSnap.data()?.householdMappings || {}) as HouseholdMappings) };
+    householdMappings[householdId] = { ...(householdMappings[householdId] || {}), [bankAccountId]: targetId };
+    await connectionRef(uid, connectionId).set({ householdMappings }, { merge: true });
+  } else {
+    const mappings = { ...(connSnap.data()?.mappings || {}), [bankAccountId]: targetId };
+    const nextAccounts = accounts.map((a) => (a.id === bankAccountId ? { ...a, linkedAccountId: targetId } : a));
+    await connectionRef(uid, connectionId).set({ mappings, accounts: nextAccounts }, { merge: true });
+  }
+
+  await accountDoc(targetId).set(
     {
       bankProvider: "truelayer",
       bankConnectionId: connectionId,
@@ -568,9 +716,32 @@ export const unlinkTrueLayerAccount = onCall(async (request) => {
   const uid = requireUid(request.auth);
   const connectionId = String(request.data?.connectionId || "").trim();
   const bankAccountId = String(request.data?.bankAccountId || "").trim();
+  const householdId = String(request.data?.householdId || "").trim();
   if (!connectionId || !bankAccountId) throw new HttpsError("invalid-argument", "connectionId and bankAccountId are required.");
   const connSnap = await connectionRef(uid, connectionId).get();
   if (!connSnap.exists) return { ok: true };
+
+  if (householdId) {
+    await requireHouseholdMember(uid, householdId);
+    const householdMappings = { ...((connSnap.data()?.householdMappings || {}) as HouseholdMappings) };
+    const map = { ...(householdMappings[householdId] || {}) };
+    const financeId = map[bankAccountId];
+    delete map[bankAccountId];
+    householdMappings[householdId] = map;
+    await connectionRef(uid, connectionId).set({ householdMappings }, { merge: true });
+    if (financeId) {
+      await db().doc(`household/${householdId}/financeAccounts/${financeId}`).set(
+        {
+          bankProvider: admin.firestore.FieldValue.delete(),
+          bankConnectionId: admin.firestore.FieldValue.delete(),
+          bankAccountId: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+    }
+    return { ok: true };
+  }
+
   const mappings = { ...(connSnap.data()?.mappings || {}) } as Record<string, string>;
   const financeId = mappings[bankAccountId];
   delete mappings[bankAccountId];
@@ -666,7 +837,8 @@ export const trueLayerCallback = onRequest(
     if (!stateSnap.exists || !stateData) throw new Error("expired");
     if (Number(stateData.expiresAt || 0) < Date.now()) throw new Error("expired");
     await stateSnap.ref.delete();
-    await finishConnect(String(stateData.uid), code, String(stateData.redirectUri));
+    const storedEnv = stateData.authEnv === "live" || stateData.authEnv === "sandbox" ? stateData.authEnv : undefined;
+    await finishConnect(String(stateData.uid), code, String(stateData.redirectUri), storedEnv);
     const origin = originFromRedirectUri(String(stateData.redirectUri || ""));
     const returnPath = safeReturnPath(stateData.returnPath, "/finance");
     res.redirect(302, `${origin}${returnPath}?bank=connected`);
@@ -706,3 +878,108 @@ export const syncAllTrueLayerBalances = onSchedule(
     logger.info("TrueLayer scheduled sync finished", { ok, failed });
   }
 );
+
+export type SpendingTransaction = {
+  accountId: string;
+  accountName: string;
+  date: string;
+  amount: number;
+  description: string;
+};
+
+export async function collectAccountSpending(args: {
+  uid: string;
+  accountIds: string[];
+  days: number;
+  extraHeaders?: Record<string, string>;
+  householdId?: string;
+}): Promise<{
+  accounts: { id: string; name: string; type: string; linked: boolean }[];
+  transactions: SpendingTransaction[];
+  balances: { accountId: string; date: string; balance: number }[];
+}> {
+  const days = Math.max(30, Math.min(args.days || 90, 180));
+  const today = isoDateUtc(new Date());
+  const from = addUtcDays(today, -days);
+  const accountCol = args.householdId
+    ? `household/${args.householdId}/financeAccounts`
+    : `finance/${args.uid}/accounts`;
+  const entryCol = args.householdId
+    ? `household/${args.householdId}/financeEntries`
+    : `finance/${args.uid}/entries`;
+
+  const wanted = new Set(args.accountIds);
+  const accountSnaps = await db().collection(accountCol).get();
+  const accounts = accountSnaps.docs
+    .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as { name?: string; type?: string; bankConnectionId?: string; bankAccountId?: string }) }))
+    .filter((acc) => wanted.has(acc.id));
+
+  const entrySnaps = await db().collection(entryCol).get();
+  const balances = entrySnaps.docs
+    .map((docSnap) => docSnap.data() as { accountId?: string; date?: string; balance?: number })
+    .filter((row) => row.accountId && wanted.has(row.accountId) && String(row.date || "") >= from)
+    .map((row) => ({ accountId: String(row.accountId), date: String(row.date), balance: Number(row.balance || 0) }));
+
+  const connSnaps = await db().collection(`finance/${args.uid}/bankConnections`).where("status", "in", ["active", "needs_reauth"]).get();
+  const transactions: SpendingTransaction[] = [];
+
+  for (const acc of accounts) {
+    let bankConnectionId = acc.bankConnectionId;
+    let bankAccountId = acc.bankAccountId;
+    if (!bankConnectionId || !bankAccountId) {
+      for (const conn of connSnaps.docs) {
+        if (args.householdId) {
+          const map = ((conn.data()?.householdMappings || {}) as HouseholdMappings)[args.householdId] || {};
+          const found = Object.entries(map).find(([, id]) => id === acc.id);
+          if (found) {
+            bankConnectionId = conn.id;
+            bankAccountId = found[0];
+            break;
+          }
+        } else {
+          const mappings = (conn.data()?.mappings || {}) as Record<string, string>;
+          const found = Object.entries(mappings).find(([, id]) => id === acc.id);
+          if (found) {
+            bankConnectionId = conn.id;
+            bankAccountId = found[0];
+            break;
+          }
+        }
+      }
+    }
+    if (!bankConnectionId || !bankAccountId) continue;
+    try {
+      const access = await refreshAccess(args.uid, bankConnectionId);
+      const chunk = await tlGet<TlTx[]>(
+        `/data/v1/accounts/${encodeURIComponent(bankAccountId)}/transactions?from=${from}&to=${today}`,
+        access,
+        args.extraHeaders,
+      );
+      for (const tx of Array.isArray(chunk) ? chunk : []) {
+        transactions.push({
+          accountId: acc.id,
+          accountName: acc.name || "Account",
+          date: txDay(tx.timestamp),
+          amount: Number(tx.amount || 0),
+          description: String(tx.description || "Transaction"),
+        });
+      }
+    } catch (err) {
+      logger.warn("Spending fetch skipped an account", {
+        accountId: acc.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return {
+    accounts: accounts.map((acc) => ({
+      id: acc.id,
+      name: acc.name || "Account",
+      type: acc.type || "Other",
+      linked: Boolean(acc.bankConnectionId || acc.bankAccountId),
+    })),
+    transactions,
+    balances,
+  };
+}

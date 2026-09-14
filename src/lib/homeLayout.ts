@@ -36,10 +36,32 @@ export interface HomeTileDef {
   gradient: string;
 }
 
+export type HomeTilesPresetId =
+  | "classic"
+  | "compact"
+  | "magazine"
+  | "bento"
+  | "river"
+  | "spotlight"
+  | "orbit"
+  | "mosaic";
+
+export const HOME_TILE_PRESETS: { id: HomeTilesPresetId; label: string; hint: string; feel: string }[] = [
+  { id: "classic", label: "Quiet rows", hint: "Ink-bar cards on cream — the original Home.", feel: "Simple" },
+  { id: "compact", label: "Compact grid", hint: "Flat paper chips, no tint. Three across.", feel: "Simple" },
+  { id: "magazine", label: "Magazine", hint: "Warm paper, hero banner, editorial type.", feel: "Polished" },
+  { id: "bento", label: "Glass bento", hint: "Cool slate frost and round icons.", feel: "Polished" },
+  { id: "river", label: "River", hint: "Teal water wash, pill tiles that float.", feel: "Lively" },
+  { id: "spotlight", label: "Spotlight", hint: "Dark stage, one bright hero, dim chorus.", feel: "Lively" },
+  { id: "orbit", label: "Orbit", hint: "Night indigo, ringed circular tiles.", feel: "Playful" },
+  { id: "mosaic", label: "Mosaic", hint: "Terracotta collage, stamp icons, mixed cuts.", feel: "Playful" },
+];
+
 export interface HomeTilesState {
   order: string[];
   hidden: string[];
   rowSizes: number[];
+  preset?: HomeTilesPresetId;
 }
 
 export const HOME_TILES: HomeTileDef[] = [
@@ -102,6 +124,7 @@ export const DEFAULT_HOME_TILES_STATE: HomeTilesState = {
   order: DEFAULT_HOME_TILE_ORDER,
   hidden: [],
   rowSizes: DEFAULT_HOME_ROW_SIZES,
+  preset: "classic",
 };
 
 export function normalizeRowSize(value: number): 1 | 2 | 3 | 4 {
@@ -115,11 +138,21 @@ export function mergeHomeTilesState(saved?: Partial<HomeTilesState> | null): Hom
   const known = new Set(HOME_TILES.map((tile) => tile.id));
   const savedOrder = (saved?.order ?? []).filter((id) => known.has(id));
   const extras = DEFAULT_HOME_TILE_ORDER.filter((id) => !savedOrder.includes(id));
+  const preset = HOME_TILE_PRESETS.some((item) => item.id === saved?.preset) ? saved?.preset : "classic";
   return {
     order: [...savedOrder, ...extras],
     hidden: (saved?.hidden ?? []).filter((id) => known.has(id)),
     rowSizes: (saved?.rowSizes?.length ? saved.rowSizes : DEFAULT_HOME_ROW_SIZES).map(normalizeRowSize),
+    preset,
   };
+}
+
+export function visibleHomeTiles(state: HomeTilesState, accessibleIds: string[]): HomeTileDef[] {
+  const allowed = new Set(accessibleIds);
+  return state.order
+    .filter((id) => allowed.has(id) && !state.hidden.includes(id))
+    .map((id) => HOME_TILE_BY_ID[id])
+    .filter(Boolean);
 }
 
 export function packHomeTiles(

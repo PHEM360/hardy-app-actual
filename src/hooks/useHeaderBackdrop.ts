@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isSameDay, startOfDay } from "date-fns";
 import { useAppearance } from "@/hooks/useAppearance";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useDisplayWeather } from "@/hooks/useDisplayWeather";
 import { usePhotos } from "@/hooks/usePhotos";
-import { resolveChromeScene, type ChromeSceneId } from "@/lib/chromeScenes";
+import { resolveChromeScene, rotateChromeScene, type ChromeSceneId } from "@/lib/chromeScenes";
 import {
   normalizeHeaderPictureMode,
   pickTodayOccasion,
@@ -57,11 +57,20 @@ export function useHeaderBackdrop() {
     return appearance.headerPhotoUrl ? [appearance.headerPhotoUrl] : [];
   }, [mode, appearance.headerPhotoUrl, albumUrls, weatherUrl, occasion]);
 
-  const baseScene = resolveChromeScene(appearance.headerScene, {
-    atmosphere: appearance.theme.atmosphere,
-    isNight,
-    fallback: "none",
-  });
+  const [rotateTick, setRotateTick] = useState(0);
+  useEffect(() => {
+    if (!appearance.headerSceneRotate) return;
+    const id = window.setInterval(() => setRotateTick((n) => n + 1), 16_000);
+    return () => window.clearInterval(id);
+  }, [appearance.headerSceneRotate]);
+
+  const baseScene = appearance.headerSceneRotate
+    ? rotateChromeScene(rotateTick)
+    : resolveChromeScene(appearance.headerScene, {
+        atmosphere: appearance.theme.atmosphere,
+        isNight,
+        fallback: "none",
+      });
   const scene: ChromeSceneId = appearance.headerCelebrateToday && occasion ? occasion.scene : baseScene;
   const eventLabel = occasion && (mode === "today" || appearance.headerCelebrateToday) ? occasion.label : "";
 

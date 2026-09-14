@@ -28,14 +28,17 @@ export default function BankSyncSettings({
   scopeUserId,
   canEdit,
   accounts,
+  householdId,
 }: {
   scopeUserId?: string | null;
   canEdit: boolean;
-  accounts: Account[];
+  accounts: Pick<Account, "id" | "name">[];
+  householdId?: string;
 }) {
   const { connections, loading } = useBankConnections(scopeUserId);
-  const { configured } = useBankConnectStatus();
+  const { configured, using, mismatch } = useBankConnectStatus();
   const [busy, setBusy] = useState<string | null>(null);
+  const pageLabel = householdId ? "this household page" : "Personal Finance";
 
   const connect = async () => {
     if (configured === false) {
@@ -70,10 +73,16 @@ export default function BankSyncSettings({
     <div className="p-4 sm:p-5 rounded-3xl bg-card border-2 border-border shadow-card mb-5">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bank connections</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Connect your bank once. Hardy Hub then copies today’s balance, and can also fill in the last day of each past month — as far back as your bank will share. Most banks only keep a few months, not the full life of the account. You’ll be asked to reconnect about every 90 days.
+          <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Bank connections</h3>
+          <p className="text-xs text-foreground/75 mt-1">
+            Connect the bank once. Then attach each bank account to {pageLabel}. The same login can feed Personal Finance, Household Finance, and flats — pick a different account on each page.
           </p>
+          {configured && (
+            <p className="mt-1 text-[11px] text-foreground/65">
+              Using TrueLayer {using === "live" ? "live" : "sandbox"}
+              {mismatch ? " — the saved client belonged to the other environment, so Hardy Hub switched automatically." : "."}
+            </p>
+          )}
         </div>
         {canEdit && (
           <Button size="sm" className="h-8 rounded-lg text-xs gap-1.5 bg-gradient-primary flex-shrink-0" disabled={!!busy || configured === false} onClick={() => void connect()}>
@@ -157,7 +166,12 @@ export default function BankSyncSettings({
                   {conn.accounts.map((bank) => (
                     <BankAccountRow
                       key={bank.id}
-                      bank={bank}
+                      bank={{
+                        ...bank,
+                        linkedAccountId: householdId
+                          ? conn.householdMappings?.[householdId]?.[bank.id] || null
+                          : bank.linkedAccountId,
+                      }}
                       accounts={accounts}
                       canEdit={canEdit}
                       busy={busy}
@@ -168,12 +182,14 @@ export default function BankSyncSettings({
                             bankAccountId: bank.id,
                             financeAccountId,
                             createNew,
+                            scope: householdId ? "household" : "personal",
+                            householdId,
                           });
-                        }, "Account linked — today’s balance and past months imported")
+                        }, "Account linked — today’s balance imported")
                       }
                       onUnlink={() =>
                         run(`unlink-${bank.id}`, async () => {
-                          await unlinkBankAccount(conn.id, bank.id);
+                          await unlinkBankAccount(conn.id, bank.id, householdId);
                         }, "Account unlinked")
                       }
                     />

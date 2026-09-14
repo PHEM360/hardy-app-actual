@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Home, Upload, Plus, Sparkles, CalendarRange, Users, Share2, Settings2, Eye, EyeOff } from "lucide-react";
+import { Home, Plus, CalendarRange, Users, Share2, Settings2, Eye, EyeOff } from "lucide-react";
 import { useActiveHousehold } from "@/hooks/useActiveHousehold";
 import { useMyHouseholds } from "@/hooks/useHouseholds";
 import { useHouseholdFinance } from "@/hooks/useHouseholdFinance";
@@ -14,11 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ACCOUNT_TYPES, resolveAccountType } from "@/lib/financeAccounts";
 import { AccountTypeFields } from "@/components/finance/AccountTypeFields";
 import { useNavigate } from "react-router-dom";
 import { useVisitedTabs } from "@/hooks/useVisitedTabs";
+import { useAuth } from "@/auth/AuthContext";
+import BankSyncSettings from "@/components/finance/BankSyncSettings";
+import { FinanceAnalysisPanel } from "@/components/finance/FinanceAnalysisPanel";
 
 const COLORS = [
   "hsl(36, 85%, 54%)", "hsl(168, 55%, 36%)", "hsl(215, 75%, 50%)",
@@ -57,6 +59,7 @@ const HouseholdFinance = () => {
   const { activeHouseholdId, availableHouseholds, setActiveHouseholdId, hasExplicitHouseholds, loading: householdLoading } = useActiveHousehold();
   const { households } = useMyHouseholds();
   const appUsers = useAppUsers();
+  const { dataUid } = useAuth();
   const { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry } = useHouseholdFinance();
   const [householdsOpen, setHouseholdsOpen] = useState(false);
   const navigate = useNavigate();
@@ -80,9 +83,6 @@ const HouseholdFinance = () => {
   const [manageType, setManageType] = useState("Current");
   const [manageCustomType, setManageCustomType] = useState("");
   const [showHidden, setShowHidden] = useState(false);
-  const [csvText, setCsvText] = useState("");
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [analysing, setAnalysing] = useState(false);
   const [showTaxYears, setShowTaxYears] = useState(true);
 
   useEffect(() => {
@@ -157,33 +157,6 @@ const HouseholdFinance = () => {
     setNewAccountType("Current");
     setNewAccountCustomType("");
     setAddAccountOpen(false);
-  };
-
-  const handleAnalyse = () => {
-    if (!csvText.trim()) return;
-    setAnalysing(true);
-    // Simulate AI analysis — in production, this would call your chosen AI model
-    setTimeout(() => {
-      setAnalysisResult(
-        `## Statement Analysis\n\n` +
-        `**Total transactions:** 47\n` +
-        `**Period:** 01 Jan 2025 – 31 Jan 2025\n\n` +
-        `### Spending Breakdown\n` +
-        `- 🛒 **Groceries:** £482.30 (31%)\n` +
-        `- 🏠 **Bills & Utilities:** £310.00 (20%)\n` +
-        `- 🚗 **Transport:** £185.50 (12%)\n` +
-        `- 🍽️ **Dining Out:** £142.00 (9%)\n` +
-        `- 🎬 **Entertainment:** £98.00 (6%)\n` +
-        `- 📦 **Subscriptions:** £67.97 (4%)\n` +
-        `- 💰 **Other:** £268.23 (18%)\n\n` +
-        `### Key Insights\n` +
-        `- Groceries spending is **12% higher** than last month\n` +
-        `- Possible duplicate: Tesco £67.42 on 10th & 11th Jan\n` +
-        `- Electricity £92 is **35% above** 3-month average\n\n` +
-        `*Connect an AI model to get real analysis of your statements.*`
-      );
-      setAnalysing(false);
-    }, 2000);
   };
 
   if (householdLoading) {
@@ -512,64 +485,18 @@ const HouseholdFinance = () => {
               </ResponsiveContainer>
             </div>
           </div>
+          <BankSyncSettings
+            scopeUserId={dataUid}
+            canEdit
+            accounts={accounts}
+            householdId={activeHouseholdId || undefined}
+          />
         </div>
       )}
 
       {isTabVisited("analysis") && (
         <div hidden={tab !== "analysis"}>
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="p-5 rounded-2xl text-white bg-gradient-primary">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4" />
-                <p className="text-sm font-semibold font-display">AI Statement Analysis</p>
-              </div>
-              <p className="text-xs opacity-80">Upload a CSV or paste bank statement data, then click analyse to get an AI-powered breakdown.</p>
-            </div>
-
-            <div className="space-y-3">
-              <Textarea
-                placeholder="Paste CSV or bank statement data here..."
-                value={csvText}
-                onChange={(e) => setCsvText(e.target.value)}
-                className="rounded-xl min-h-[120px] text-xs"
-              />
-
-              <div className="flex gap-2">
-                <button className="flex-1 p-3 rounded-xl border-2 border-dashed border-border hover:border-primary/30 transition-colors flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground">
-                  <Upload className="w-4 h-4" />
-                  Upload CSV
-                </button>
-                <Button
-                  onClick={handleAnalyse}
-                  disabled={!csvText.trim() || analysing}
-                  className="flex-1 h-auto rounded-xl bg-gradient-accent gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {analysing ? "Analysing..." : "Analyse"}
-                </Button>
-              </div>
-            </div>
-
-            {analysisResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4 rounded-2xl bg-card border border-border/50 shadow-soft"
-              >
-                <div className="prose prose-sm max-w-none">
-                  {analysisResult.split("\n").map((line, i) => {
-                    if (line.startsWith("## ")) return <h2 key={i} className="text-sm font-bold font-display text-card-foreground mb-2">{line.replace("## ", "")}</h2>;
-                    if (line.startsWith("### ")) return <h3 key={i} className="text-xs font-semibold text-card-foreground mt-3 mb-1">{line.replace("### ", "")}</h3>;
-                    if (line.startsWith("- ")) return <p key={i} className="text-xs text-muted-foreground ml-2">{line}</p>;
-                    if (line.startsWith("**")) return <p key={i} className="text-xs font-medium text-card-foreground">{line.replace(/\*\*/g, "")}</p>;
-                    if (line.startsWith("*")) return <p key={i} className="text-[10px] text-muted-foreground italic mt-3">{line.replace(/\*/g, "")}</p>;
-                    if (line.trim()) return <p key={i} className="text-xs text-muted-foreground">{line}</p>;
-                    return null;
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </motion.div>
+          <FinanceAnalysisPanel accounts={accounts} householdId={activeHouseholdId || undefined} />
         </div>
       )}
 

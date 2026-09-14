@@ -5,7 +5,8 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
-  AlertTriangle, Palette,
+  AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw,
+  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -40,7 +41,10 @@ import {
   startGoogleCalendarConnect,
   syncGoogleCalendar,
 } from "@/lib/googleCalendarApi";
-import type { CalendarEvent, CalendarEventCategory, CalendarNotificationPref } from "@/types/app";
+import { applyCalendarMergeRules } from "@/lib/calendarMerge";
+import { downloadIcs, eventsToIcs } from "@/lib/calendarIcs";
+import { mergedCalendarSubscribeUrl, publishMergedCalendar, syncCalendarFeed } from "@/lib/calendarFeedsApi";
+import type { CalendarEvent, CalendarEventCategory, CalendarFeed, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,15 +56,62 @@ const MEMBER_COLOR_PRESETS = [
   "#14b8a6", "#a855f7", "#0ea5e9", "#84cc16",
 ];
 
-const CAT: Record<CalendarEventCategory, { color: string; bg: string; label: string }> = {
-  personal: { color: "#6366f1", bg: "bg-[#6366f1]", label: "Personal" },
-  family:   { color: "#f59e0b", bg: "bg-[#f59e0b]", label: "Family"   },
-  work:     { color: "#3b82f6", bg: "bg-[#3b82f6]", label: "Work"     },
-  health:   { color: "#10b981", bg: "bg-[#10b981]", label: "Health"   },
-  social:   { color: "#ec4899", bg: "bg-[#ec4899]", label: "Social"   },
-  other:    { color: "#8b5cf6", bg: "bg-[#8b5cf6]", label: "Other"    },
-  birthday: { color: "#f43f5e", bg: "bg-[#f43f5e]", label: "Birthday" },
+const CAT: Record<CalendarEventCategory, { color: string; bg: string; label: string; chip: string; Icon: typeof User }> = {
+  personal: { color: "#6366f1", bg: "bg-[#6366f1]", label: "Personal", chip: "cal-chip-personal", Icon: User },
+  family:   { color: "#f59e0b", bg: "bg-[#f59e0b]", label: "Family",   chip: "cal-chip-family",   Icon: Users },
+  work:     { color: "#3b82f6", bg: "bg-[#3b82f6]", label: "Work",     chip: "cal-chip-work",     Icon: Briefcase },
+  health:   { color: "#10b981", bg: "bg-[#10b981]", label: "Health",   chip: "cal-chip-health",   Icon: HeartPulse },
+  social:   { color: "#ec4899", bg: "bg-[#ec4899]", label: "Social",   chip: "cal-chip-social",   Icon: PartyPopper },
+  other:    { color: "#8b5cf6", bg: "bg-[#8b5cf6]", label: "Other",    chip: "cal-chip-other",    Icon: Sparkles },
+  birthday: { color: "#f43f5e", bg: "bg-[#f43f5e]", label: "Birthday", chip: "cal-chip-birthday", Icon: Cake },
 };
+
+function EventChip({
+  event,
+  color,
+  dense = false,
+}: {
+  event: CalendarEvent;
+  color: string;
+  dense?: boolean;
+}) {
+  const time = event.allDay ? "All day" : format(parseISO(event.startDate), "H:mm");
+  const meta = CAT[event.category] ?? CAT.other;
+  const Icon = meta.Icon;
+  return (
+    <div
+      className={`cal-chip flex min-w-0 items-stretch border border-black/5 shadow-sm ${meta.chip} ${
+        event.priority === "urgent" ? "ring-1 ring-red-400/70" : ""
+      } ${event.id?.startsWith("__") ? "italic" : ""}`}
+      style={{
+        ["--cal-chip" as string]: color,
+        background: event.category === "birthday"
+          ? `linear-gradient(135deg, color-mix(in srgb, ${color} 34%, #fff4e8), color-mix(in srgb, ${color} 10%, hsl(var(--card))))`
+          : event.category === "work"
+            ? `color-mix(in srgb, ${color} 14%, hsl(var(--card)))`
+            : `linear-gradient(135deg, color-mix(in srgb, ${color} 24%, hsl(var(--card))), color-mix(in srgb, ${color} 8%, hsl(var(--card))))`,
+        boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 28%, white)`,
+      }}
+    >
+      <span className={`relative z-[1] flex shrink-0 items-center justify-center ${dense ? "w-4" : "w-6"}`} style={{ color }}>
+        <Icon className={dense ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} />
+      </span>
+      <div className={`relative z-[1] min-w-0 ${dense ? "px-1 py-0.5 pr-2" : "px-1.5 py-1.5 pr-2.5"}`}>
+        <p className={`truncate font-display font-semibold leading-tight text-foreground ${dense ? "text-[9px]" : "text-[11px]"}`}>
+          {event.priority === "urgent" ? "! " : ""}{event.title}
+        </p>
+        <span
+          className={`mt-0.5 inline-flex font-semibold ${
+            event.category === "health" ? "rounded-full" : event.category === "work" ? "rounded-sm" : "rounded-md"
+          } ${dense ? "px-1 text-[7px]" : "px-1.5 text-[9px]"}`}
+          style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}
+        >
+          {time}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -153,7 +204,10 @@ const CalendarPage = () => {
 
   const isAdmin = role === "admin" || role === "superadmin";
 
-  const [view, setView] = useState<"month" | "week">(settings.defaultView ?? "month");
+  const [view, setView] = useState<"month" | "week" | "agenda">(settings.defaultView ?? "month");
+  const [hiddenSources, setHiddenSources] = useState<string[]>([]);
+  const [feedDraft, setFeedDraft] = useState({ name: "", url: "" });
+  const [feedBusy, setFeedBusy] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
@@ -481,13 +535,19 @@ const CalendarPage = () => {
     return vEvents;
   }, [pets, householdItems, tasks, companies, datedNotes, settings.autoImport]);
 
-  const allDisplayEvents = useMemo(
-    () => [
-      ...events.filter((e) => e.source !== "birthday" || settings.autoImport?.birthdays !== false),
-      ...virtualEvents,
-    ],
-    [events, virtualEvents, settings.autoImport?.birthdays]
-  );
+  const allDisplayEvents = useMemo(() => {
+    const merged = applyCalendarMergeRules(
+      [
+        ...events.filter((e) => e.source !== "birthday" || settings.autoImport?.birthdays !== false),
+        ...virtualEvents,
+      ],
+      settings.mergeRules,
+    );
+    return merged.filter((event) => {
+      const key = event.feedId ? `feed:${event.feedId}` : (event.source || "local");
+      return !hiddenSources.includes(key);
+    });
+  }, [events, virtualEvents, settings.autoImport?.birthdays, settings.mergeRules, hiddenSources]);
 
   // ─── Notification row helpers ────────────────────────────────────────────────
 
@@ -521,7 +581,20 @@ const CalendarPage = () => {
   const headerLabel =
     view === "month"
       ? format(currentDate, "MMMM yyyy")
-      : `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`;
+      : view === "week"
+        ? `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`
+        : "Coming up";
+
+  const sourceChips = [
+    { key: "local", label: "Hardy Hub" },
+    { key: "google", label: "Google" },
+    { key: "import", label: "Subscribed" },
+    { key: "birthday", label: "Birthdays" },
+    ...(settings.feeds || []).map((feed) => ({ key: `feed:${feed.id}`, label: feed.name })),
+  ];
+
+  const toggleSource = (key: string) =>
+    setHiddenSources((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
 
   // ─── JSX ─────────────────────────────────────────────────────────────────────
 
@@ -532,7 +605,54 @@ const CalendarPage = () => {
       sharePage="calendar"
     >
 
-      {/* ── Top navigation bar ── */}
+      <div className="flex min-w-0 gap-3">
+        <aside className="w-[3.4rem] shrink-0 sm:w-[11rem]">
+          <nav className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card">
+            {([
+              { id: "month" as const, label: "Month", icon: LayoutGrid },
+              { id: "week" as const, label: "Week", icon: CalendarDays },
+              { id: "agenda" as const, label: "Agenda", icon: List },
+            ]).map((item) => {
+              const Icon = item.icon;
+              const active = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setView(item.id)}
+                  className={`flex w-full items-center gap-2 rounded-xl border px-1.5 py-2 text-left transition sm:px-2 ${
+                    active ? "border-primary/45 bg-primary/10 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-gradient-primary text-primary-foreground" : "bg-muted"}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="hidden min-w-0 text-xs font-semibold sm:block">{item.label}</span>
+                </button>
+              );
+            })}
+            <div className="hidden space-y-1 border-t border-border/40 pt-2 sm:block">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Shown</p>
+              {sourceChips.map((chip) => {
+                const on = !hiddenSources.includes(chip.key);
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => toggleSource(chip.key)}
+                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold ${
+                      on ? "bg-primary/10 text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span className="truncate">{chip.label}</span>
+                    <span className={`h-2 w-2 rounded-full ${on ? "bg-primary" : "bg-border"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </aside>
+        <div className="min-w-0 flex-1 overflow-x-hidden">
       <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
         <div className="flex items-center gap-1">
           <button
@@ -556,24 +676,6 @@ const CalendarPage = () => {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Month / Week toggle */}
-          <div className="flex rounded-lg border border-border/50 overflow-hidden text-[11px] sm:text-xs font-semibold">
-            {(["month", "week"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-2.5 sm:px-3 py-1.5 capitalize transition-colors ${
-                  view === v
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted/50"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-
-          {/* Today shortcut */}
           <button
             onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
             className="text-[11px] sm:text-xs font-medium text-primary px-2 sm:px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/10 transition-colors"
@@ -603,92 +705,16 @@ const CalendarPage = () => {
         </div>
       </div>
 
-      {isOwnScope && canEdit && (
-        <div
-          className="mb-3 rounded-2xl border border-border/40 p-4 shadow-card"
-          style={{ background: "color-mix(in srgb, hsl(220,60%,55%) 10%, hsl(var(--card)))", borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)" }}
-        >
-          <p className="font-display text-base font-bold">Google Calendar</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {settings.google?.connected
-              ? `Linked as ${settings.google.email || "Google"}. Hardy Hub stays in sync with the calendars you pick.`
-              : "Connect your own Google Calendar in this app. Each person links their account — nothing is shared unless you share this page."}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {settings.google?.connected ? (
-              <>
-                <Button size="sm" disabled={gcalBusy} onClick={async () => {
-                  setGcalBusy(true);
-                  try {
-                    const result = await syncGoogleCalendar(scopeUserId || undefined);
-                    toast.success(result.upserted ? `Synced ${result.upserted} event${result.upserted === 1 ? "" : "s"}` : "Already up to date");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not sync");
-                  } finally {
-                    setGcalBusy(false);
-                  }
-                }}>Sync now</Button>
-                <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
-                  setGcalBusy(true);
-                  try {
-                    await disconnectGoogleCalendar();
-                    toast.success("Google Calendar disconnected");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not disconnect");
-                  } finally {
-                    setGcalBusy(false);
-                  }
-                }}>Disconnect</Button>
-              </>
-            ) : (
-              <Button size="sm" disabled={gcalBusy} onClick={async () => {
-                setGcalBusy(true);
-                try {
-                  window.location.href = await startGoogleCalendarConnect();
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
-                  setGcalBusy(false);
-                }
-              }}>Connect Google Calendar</Button>
-            )}
-          </div>
-          {settings.google?.connected && gcalList.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs font-semibold text-muted-foreground">Keep these in sync</p>
-              {gcalList.map((item) => {
-                const selected = (settings.google?.selectedCalendarIds || ["primary"]).includes(item.id) ||
-                  (item.primary && (settings.google?.selectedCalendarIds || []).includes("primary"));
-                return (
-                  <label key={item.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selected}
-                      onCheckedChange={async (checked) => {
-                        const current = settings.google?.selectedCalendarIds || ["primary"];
-                        const next = checked
-                          ? [...new Set([...current, item.id])]
-                          : current.filter((id) => id !== item.id && !(item.primary && id === "primary"));
-                        await saveGoogleCalendarSelection(next.length ? next : [item.id], item.primary ? item.id : settings.google?.calendarId, scopeUserId || undefined);
-                      }}
-                    />
-                    {item.name}{item.primary ? " (main)" : ""}
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          {settings.google?.lastSyncAt && (
-            <p className="mt-2 text-[11px] text-muted-foreground">Last synced {new Date(settings.google.lastSyncAt).toLocaleString("en-GB")}</p>
-          )}
-        </div>
-      )}
-
       {/* ── Month view ── */}
       {view === "month" && (
-        <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
+        <div
+          className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
+          style={{ borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)", background: "color-mix(in srgb, hsl(220,60%,55%) 8%, hsl(var(--card)))" }}
+        >
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-border/50 bg-muted/50">
+          <div className="grid grid-cols-7 border-b border-border/40 bg-card">
             {WEEK_DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] sm:text-[11px] font-bold text-foreground/60 py-2.5 sm:py-3 uppercase tracking-wide">
+              <div key={d} className="py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-foreground sm:py-3 sm:text-[11px]">
                 {d}
               </div>
             ))}
@@ -706,8 +732,8 @@ const CalendarPage = () => {
                 <button
                   key={day.toISOString()}
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`min-h-[72px] sm:min-h-[90px] md:min-h-[110px] lg:min-h-[130px] p-1 sm:p-1.5 text-left flex flex-col transition-colors border border-border/20 ${
-                    !inMonth ? "bg-muted/15" : selected ? "bg-primary/5" : today ? "bg-primary/3" : "bg-card hover:bg-muted/20"
+                  className={`flex min-h-[78px] flex-col border border-border/20 p-1 text-left transition-colors sm:min-h-[104px] sm:p-1.5 md:min-h-[122px] ${
+                    !inMonth ? "bg-background/40 text-muted-foreground" : selected ? "bg-primary/12" : today ? "bg-primary/8" : "bg-card hover:bg-primary/5"
                   }`}
                 >
                   <span
@@ -727,15 +753,10 @@ const CalendarPage = () => {
                   {dayEvts.slice(0, 3).map((e) => (
                     <div
                       key={e.id}
+                      className="mb-0.5"
                       onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
-                      className={`w-full text-[9px] sm:text-[10px] font-medium px-1 sm:px-1.5 py-0.5 rounded mb-0.5 truncate text-white leading-tight flex items-center gap-0.5 ${
-                        e.id?.startsWith("__") ? "opacity-80 italic" : ""
-                      }`}
-                      style={{ backgroundColor: getEventColor(e) }}
                     >
-                      {e.priority === "urgent" && <AlertTriangle className="w-2 h-2 flex-shrink-0" />}
-                      {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
-                      {e.title}
+                      <EventChip event={e} color={getEventColor(e)} dense />
                     </div>
                   ))}
                   {dayEvts.length > 3 && (
@@ -787,17 +808,8 @@ const CalendarPage = () => {
                   {/* Events */}
                   <div className="flex-1 p-1 sm:p-1.5 space-y-0.5 overflow-hidden">
                     {dayEvts.map((e) => (
-                      <button
-                        key={e.id}
-                        onClick={() => openEdit(e)}
-                        className={`w-full text-[9px] sm:text-[10px] font-medium px-1.5 py-1 rounded text-white text-left truncate block flex items-center gap-0.5 ${
-                          e.id?.startsWith("__") ? "opacity-80 italic" : ""
-                        }`}
-                        style={{ backgroundColor: getEventColor(e) }}
-                      >
-                        {e.priority === "urgent" && <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0 inline-block mr-0.5" />}
-                        {!e.allDay && format(parseISO(e.startDate), "H:mm") + " "}
-                        {e.title}
+                      <button key={e.id} type="button" onClick={() => openEdit(e)} className="block w-full text-left">
+                        <EventChip event={e} color={getEventColor(e)} />
                       </button>
                     ))}
                     <button
@@ -858,73 +870,111 @@ const CalendarPage = () => {
               </div>
             ) : (
               <div className="p-3 space-y-2">
-                {eventsForDay(selectedDay).map((e) => (
+                {eventsForDay(selectedDay).map((e) => {
+                  const color = getEventColor(e);
+                  return (
                   <button
                     key={e.id}
                     onClick={() => openEdit(e)}
-                    className={`w-full text-left flex items-stretch gap-3 p-3 rounded-xl transition-colors group ${
+                    className={`w-full text-left flex items-stretch gap-3 p-3 rounded-2xl border transition-colors group ${
                       e.priority === "urgent"
-                        ? "bg-red-500/10 hover:bg-red-500/20 border border-red-500/30"
-                        : "bg-muted/20 hover:bg-muted/40"
+                        ? "border-red-500/30"
+                        : "border-black/5"
                     } ${e.id?.startsWith("__") ? "cursor-default" : ""}`}
+                    style={{
+                      background: `linear-gradient(135deg, color-mix(in srgb, ${color} 20%, hsl(var(--card))), color-mix(in srgb, ${color} 7%, hsl(var(--card))))`,
+                      boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 24%, white)`,
+                    }}
                   >
-                    {/* Member/category colour bar */}
                     <div
-                      className="w-1 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: getEventColor(e) }}
+                      className="w-1.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         {e.priority === "urgent" && (
                           <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
                         )}
-                        <p className="text-sm font-semibold text-card-foreground">{e.title}</p>
+                        <p className="text-sm font-display font-semibold text-card-foreground">{e.title}</p>
                         {e.id?.startsWith("__") && (
                           <span className="text-[9px] text-muted-foreground border border-border/40 px-1 py-0.5 rounded">auto</span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         {e.allDay ? (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <span className="text-[10px] font-semibold flex items-center gap-1" style={{ color }}>
                             <Clock className="w-3 h-3" /> All day
                           </span>
                         ) : (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <span className="text-[10px] font-semibold flex items-center gap-1" style={{ color }}>
                             <Clock className="w-3 h-3" />
                             {format(parseISO(e.startDate), "H:mm")} – {format(parseISO(e.endDate), "H:mm")}
                           </span>
                         )}
                         {e.location && (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1 truncate">
+                          <span className="text-[10px] text-foreground/70 flex items-center gap-1 truncate">
                             <MapPin className="w-3 h-3 flex-shrink-0" />{e.location}
                           </span>
                         )}
                         {e.invitees && e.invitees.length > 0 && (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <span className="text-[10px] text-foreground/70 flex items-center gap-1">
                             <Users className="w-3 h-3" /> {e.invitees.join(", ")}
                           </span>
                         )}
                       </div>
                       {e.description && (
-                        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{e.description}</p>
+                        <p className="text-[11px] text-foreground/70 mt-1 line-clamp-2">{e.description}</p>
                       )}
                     </div>
-                    {/* Member colour badge */}
                     <span
                       className="text-[9px] font-bold px-2 py-1 rounded-full text-white self-start flex-shrink-0"
-                      style={{ backgroundColor: getEventColor(e) }}
+                      style={{ backgroundColor: color }}
                     >
                       {e.memberId && e.memberId !== "all"
                         ? hSettings.members.find((m) => m.id === e.memberId)?.name ?? e.memberId
                         : CAT[e.category]?.label ?? "Event"}
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {view === "agenda" && (
+        <div className="space-y-2">
+          {Array.from({ length: 21 }, (_, index) => addDays(startOfDay(currentDate), index)).map((day) => {
+            const dayEvts = eventsForDay(day);
+            if (!dayEvts.length && !isToday(day)) return null;
+            return (
+              <div
+                key={day.toISOString()}
+                className="rounded-2xl border border-border/50 bg-card p-3 shadow-card"
+                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(220,60%,55%)" : "transparent" }}
+              >
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {isToday(day) ? "Today · " : ""}{format(day, "EEEE d MMMM")}
+                </p>
+                {dayEvts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing planned</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {dayEvts.map((e) => (
+                      <button key={e.id} type="button" onClick={() => openEdit(e)} className="block w-full text-left">
+                        <EventChip event={e} color={getEventColor(e)} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+        </div>
+      </div>
 
       {/* ── Add / Edit event dialog ── */}
       <Dialog open={addOpen} onOpenChange={closeForm}>
@@ -1244,7 +1294,7 @@ const CalendarPage = () => {
 
       {/* ── Settings dialog ── */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-4 h-4" /> Calendar Settings
@@ -1257,7 +1307,7 @@ const CalendarPage = () => {
             <div className="space-y-1.5">
               <Label>Default view</Label>
               <div className="flex gap-2">
-                {(["month", "week"] as const).map((v) => (
+                {(["month", "week", "agenda"] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => saveSettings({ ...settings, defaultView: v })}
@@ -1369,6 +1419,180 @@ const CalendarPage = () => {
                 </p>
               )}
             </div>
+
+            {isOwnScope && canEdit && (
+              <div className="space-y-3 rounded-2xl border border-border/50 bg-card p-3">
+                <p className="text-sm font-semibold">Bring calendars in</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Google, plus any calendar that can publish an ICS / webcal link — iCloud, Outlook, Exchange, school calendars.
+                </p>
+                {settings.google?.connected ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">Linked as {settings.google.email || "Google"}.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                        setGcalBusy(true);
+                        try {
+                          const result = await syncGoogleCalendar(scopeUserId || undefined);
+                          toast.success(result.upserted ? `Synced ${result.upserted} event${result.upserted === 1 ? "" : "s"}` : "Already up to date");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Could not sync");
+                        } finally {
+                          setGcalBusy(false);
+                        }
+                      }}>Sync Google</Button>
+                      <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
+                        setGcalBusy(true);
+                        try {
+                          await disconnectGoogleCalendar();
+                          toast.success("Google Calendar disconnected");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Could not disconnect");
+                        } finally {
+                          setGcalBusy(false);
+                        }
+                      }}>Disconnect</Button>
+                    </div>
+                    {gcalList.map((item) => {
+                      const selected = (settings.google?.selectedCalendarIds || ["primary"]).includes(item.id) ||
+                        (item.primary && (settings.google?.selectedCalendarIds || []).includes("primary"));
+                      return (
+                        <label key={item.id} className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={async (checked) => {
+                              const current = settings.google?.selectedCalendarIds || ["primary"];
+                              const next = checked
+                                ? [...new Set([...current, item.id])]
+                                : current.filter((id) => id !== item.id && !(item.primary && id === "primary"));
+                              await saveGoogleCalendarSelection(next.length ? next : [item.id], item.primary ? item.id : settings.google?.calendarId, scopeUserId || undefined);
+                            }}
+                          />
+                          {item.name}{item.primary ? " (main)" : ""}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Button size="sm" disabled={gcalBusy} onClick={async () => {
+                    setGcalBusy(true);
+                    try {
+                      window.location.href = await startGoogleCalendarConnect();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
+                      setGcalBusy(false);
+                    }
+                  }}>Connect Google Calendar</Button>
+                )}
+
+                <div className="space-y-2 border-t border-border/40 pt-3">
+                  <p className="text-xs font-semibold">ICS / iCloud / Outlook link</p>
+                  <Input placeholder="Name (e.g. iCloud)" value={feedDraft.name} onChange={(e) => setFeedDraft((d) => ({ ...d, name: e.target.value }))} className="h-9 rounded-xl" />
+                  <Input placeholder="https:// or webcal:// calendar link" value={feedDraft.url} onChange={(e) => setFeedDraft((d) => ({ ...d, url: e.target.value }))} className="h-9 rounded-xl" />
+                  <Button size="sm" disabled={feedBusy || !feedDraft.url} onClick={async () => {
+                    const feed: CalendarFeed = {
+                      id: `feed_${Date.now()}`,
+                      name: feedDraft.name.trim() || "Calendar",
+                      url: feedDraft.url.trim(),
+                      kind: /icloud/i.test(feedDraft.url) ? "icloud" : /outlook|office|exchange/i.test(feedDraft.url) ? "exchange" : "ics",
+                      enabled: true,
+                    };
+                    setFeedBusy(true);
+                    try {
+                      await saveSettings({ feeds: [...(settings.feeds || []), feed] });
+                      const result = await syncCalendarFeed(feed);
+                      toast.success(`Added ${result.upserted} events`);
+                      setFeedDraft({ name: "", url: "" });
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not add that calendar");
+                    } finally {
+                      setFeedBusy(false);
+                    }
+                  }}>
+                    <Link2 className="mr-1 h-3.5 w-3.5" /> Add calendar
+                  </Button>
+                  {(settings.feeds || []).map((feed) => (
+                    <div key={feed.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/40 px-2.5 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{feed.name}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">{feed.lastSyncAt ? `Synced ${new Date(feed.lastSyncAt).toLocaleString("en-GB")}` : feed.url}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button type="button" className="rounded-lg p-1.5 hover:bg-muted" onClick={async () => {
+                          setFeedBusy(true);
+                          try {
+                            await syncCalendarFeed(feed);
+                            toast.success("Calendar updated");
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "Could not sync");
+                          } finally {
+                            setFeedBusy(false);
+                          }
+                        }}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" className="rounded-lg p-1.5 hover:bg-muted" onClick={() => saveSettings({ feeds: (settings.feeds || []).filter((item) => item.id !== feed.id) })}>
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Merge rules</Label>
+              <p className="text-[11px] text-muted-foreground">Decide what makes it into the one calendar you actually use.</p>
+              <label className="flex items-center justify-between rounded-xl border border-border/40 px-3 py-2 text-sm">
+                Hide duplicate titles on the same day
+                <Switch checked={settings.mergeRules?.hideDuplicates !== false} onCheckedChange={(v) => saveSettings({ mergeRules: { ...settings.mergeRules, hideDuplicates: v } })} />
+              </label>
+              <label className="flex items-center justify-between rounded-xl border border-border/40 px-3 py-2 text-sm">
+                Hide public-holiday all-day events
+                <Switch checked={settings.mergeRules?.hideAllDayHolidays === true} onCheckedChange={(v) => saveSettings({ mergeRules: { ...settings.mergeRules, hideAllDayHolidays: v } })} />
+              </label>
+              <Input
+                placeholder="Hide titles containing… (comma separated)"
+                defaultValue={(settings.mergeRules?.hideTitleContains || []).join(", ")}
+                onBlur={(e) => saveSettings({
+                  mergeRules: {
+                    ...settings.mergeRules,
+                    hideTitleContains: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                  },
+                })}
+                className="h-9 rounded-xl"
+              />
+            </div>
+
+            {isOwnScope && (
+              <div className="space-y-2 rounded-2xl border border-border/50 bg-card p-3">
+                <p className="text-sm font-semibold">One calendar to share</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Download or subscribe to the merged calendar on your phone so you can hide the five others.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => downloadIcs("hardy-hub.ics", eventsToIcs(allDisplayEvents))}>
+                    <Download className="mr-1 h-3.5 w-3.5" /> Download ICS
+                  </Button>
+                  <Button size="sm" onClick={async () => {
+                    try {
+                      const published = await publishMergedCalendar();
+                      await saveSettings({ mergeShareToken: published.token });
+                      await navigator.clipboard.writeText(published.url);
+                      toast.success("Subscribe link copied");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not publish");
+                    }
+                  }}>
+                    Copy subscribe link
+                  </Button>
+                </div>
+                {settings.mergeShareToken && (
+                  <p className="break-all text-[10px] text-muted-foreground">{mergedCalendarSubscribeUrl(settings.mergeShareToken)}</p>
+                )}
+              </div>
+            )}
 
             {/* Auto-import */}
             <div className="space-y-2">

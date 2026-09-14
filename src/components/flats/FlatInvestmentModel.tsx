@@ -305,29 +305,22 @@ export default function FlatInvestmentModelPanel({
   );
   const result = useMemo(() => runFlatInvestmentModel(effectiveInputs), [effectiveInputs]);
 
-  // "What do you want to see" for the verdict box: the full horizon (default,
-  // unchanged), a specific year (answers "in 2 years what's the difference"),
-  // or a nudge down to the year-by-year table which already has every year.
-  type VerdictView = "horizon" | "year" | "table";
-  const [verdictView, setVerdictView] = useState<VerdictView>("horizon");
-  const [verdictYear, setVerdictYear] = useState(1);
+  // One selected year drives both the verdict and the highlighted table row,
+  // so year 1 in the box always matches year 1 in the table.
+  const [compareYear, setCompareYear] = useState(result.inputs.horizonYears);
   const yearByYearRef = useRef<HTMLDivElement | null>(null);
 
-  const clampedVerdictYear = Math.min(result.years.length, Math.max(1, Math.round(verdictYear) || 1));
-  const verdict: FlatInvestmentVerdict = useMemo(() => {
-    if (verdictView !== "year") {
-      return {
-        recommendation: result.recommendation,
-        recommendationLabel: result.recommendationLabel,
-        recommendationDetail: result.recommendationDetail,
-        wealthAtHorizon: result.wealthAtHorizon,
-        differencesAtHorizon: result.differencesAtHorizon,
-      };
-    }
-    const row = result.years[clampedVerdictYear - 1] || result.years[result.years.length - 1];
-    return buildVerdict(row, clampedVerdictYear, result.inputs);
-  }, [verdictView, clampedVerdictYear, result]);
-  const verdictYearsLabel = verdictView === "year" ? clampedVerdictYear : result.inputs.horizonYears;
+  useEffect(() => {
+    setCompareYear((prev) => Math.min(result.inputs.horizonYears, Math.max(1, prev || result.inputs.horizonYears)));
+  }, [result.inputs.horizonYears]);
+
+  const clampedYear = Math.min(result.years.length, Math.max(1, Math.round(compareYear) || 1));
+  const selectedRow = result.years[clampedYear - 1] || result.years[result.years.length - 1];
+  const verdict: FlatInvestmentVerdict = useMemo(
+    () => buildVerdict(selectedRow, clampedYear, result.inputs),
+    [selectedRow, clampedYear, result.inputs],
+  );
+  const verdictYearsLabel = clampedYear;
 
   const chartData = useMemo(
     () =>
@@ -445,31 +438,35 @@ export default function FlatInvestmentModelPanel({
           >
             <Section title="Verdict" icon={<Scale className="h-4 w-4" />}>
               <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Show</span>
-                <button type="button" className={pill(verdictView === "horizon")} onClick={() => setVerdictView("horizon")}>
-                  Full horizon ({result.inputs.horizonYears} yrs)
+                <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Compare after</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={result.years.length}
+                  value={clampedYear}
+                  onChange={(e) => setCompareYear(Number(e.target.value) || 1)}
+                  className="h-8 w-32 accent-primary"
+                  aria-label="Compare year"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={result.years.length}
+                  value={clampedYear}
+                  onChange={(e) => setCompareYear(Number(e.target.value) || 1)}
+                  className="h-8 w-16 rounded-lg border border-input bg-background px-2 text-xs"
+                  aria-label="Compare year"
+                />
+                <span className="text-xs font-semibold text-foreground">
+                  year{clampedYear === 1 ? "" : "s"}
+                </span>
+                <button type="button" className={pill(clampedYear === result.inputs.horizonYears)} onClick={() => setCompareYear(result.inputs.horizonYears)}>
+                  Full horizon ({result.inputs.horizonYears})
                 </button>
-                <button type="button" className={pill(verdictView === "year")} onClick={() => setVerdictView("year")}>
-                  At a chosen year
-                </button>
-                {verdictView === "year" && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={result.years.length}
-                    value={verdictYear}
-                    onChange={(e) => setVerdictYear(Number(e.target.value) || 1)}
-                    className="h-8 w-16 rounded-lg border border-input bg-background px-2 text-xs"
-                    aria-label="Verdict year"
-                  />
-                )}
                 <button
                   type="button"
                   className={pill(false)}
-                  onClick={() => {
-                    setVerdictView("table");
-                    yearByYearRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
+                  onClick={() => yearByYearRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                 >
                   Year-by-year ↓
                 </button>
@@ -488,6 +485,15 @@ export default function FlatInvestmentModelPanel({
                   Best actionable path at {verdictYearsLabel} years: {verdict.recommendationLabel}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">{verdict.recommendationDetail}</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  These four figures are total wealth after {verdictYearsLabel} year{verdictYearsLabel === 1 ? "" : "s"}
+                  {verdictYearsLabel === 1
+                    ? " — sell paths are the cash in your pocket after costs, then grown for one year; rent is the flat’s sale equity plus this year’s leftover rent."
+                    : " — sell paths grow the cash from a sale today; rent is the grown flat plus leftover rent invested along the way. Year-by-year rent cash is not the same as rent-path wealth."}
+                  {clampedYear === 1 && (
+                    <> This year’s leftover rent is {fmtGbp(selectedRow.netRentCashGbp)}.</>
+                  )}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 {(Object.keys(STRATEGY_LABELS) as FlatInvestmentStrategy[]).map((s) => (
@@ -811,38 +817,50 @@ export default function FlatInvestmentModelPanel({
 
           <div ref={yearByYearRef} />
           <Section title="Year-by-year" icon={<Calculator className="h-4 w-4" />}>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Tap a year to show that same year in the verdict. “Net rent” is leftover cash that year. The four wealth columns are the same totals as the verdict cards.
+            </p>
             <div className="min-w-0 overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-left text-xs">
+              <table className="w-full min-w-[48rem] text-left text-xs">
                 <thead>
                   <tr className="border-b border-border/50 text-[10px] uppercase tracking-wide text-muted-foreground">
                     <th className="py-2 pr-2 font-semibold">Yr</th>
                     <th className="py-2 pr-2 font-semibold">Value</th>
                     <th className="py-2 pr-2 font-semibold">Net rent</th>
-                    <th className="py-2 pr-2 font-semibold">Tax</th>
                     <th className="py-2 pr-2 font-semibold">Sell offer</th>
+                    <th className="py-2 pr-2 font-semibold">Sell market</th>
+                    <th className="py-2 pr-2 font-semibold">Vacant</th>
                     <th className="py-2 pr-2 font-semibold">Rent path</th>
                     <th className="py-2 font-semibold">vs offer</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {result.years.map((y) => (
-                    <tr key={y.year} className="border-b border-border/30">
-                      <td className="py-2 pr-2 font-semibold text-foreground">{y.year}</td>
-                      <td className="py-2 pr-2 text-foreground">{fmtGbp(y.propertyValueGbp)}</td>
-                      <td className="py-2 pr-2 text-foreground">{fmtGbp(y.netRentCashGbp)}</td>
-                      <td className="py-2 pr-2 text-foreground">{fmtGbp(y.taxGbp)}</td>
-                      <td className="py-2 pr-2 text-foreground">{fmtGbp(y.sellOfferWealthGbp)}</td>
-                      <td className="py-2 pr-2 font-semibold text-foreground">{fmtGbp(y.rentWealthGbp)}</td>
-                      <td
-                        className={`py-2 font-semibold ${
-                          y.rentVsOfferGbp >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
-                        }`}
+                  {result.years.map((y) => {
+                    const active = y.year === clampedYear;
+                    return (
+                      <tr
+                        key={y.year}
+                        className={`cursor-pointer border-b border-border/30 ${active ? "bg-primary/10" : "hover:bg-muted/40"}`}
+                        onClick={() => setCompareYear(y.year)}
                       >
-                        {y.rentVsOfferGbp >= 0 ? "+" : ""}
-                        {fmtGbp(y.rentVsOfferGbp)}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-2 pr-2 font-semibold text-foreground">{y.year}</td>
+                        <td className="py-2 pr-2 text-foreground">{fmtGbp(y.propertyValueGbp)}</td>
+                        <td className="py-2 pr-2 text-foreground">{fmtGbp(y.netRentCashGbp)}</td>
+                        <td className="py-2 pr-2 text-foreground">{fmtGbp(y.sellOfferWealthGbp)}</td>
+                        <td className="py-2 pr-2 text-foreground">{fmtGbp(y.sellMarketWealthGbp)}</td>
+                        <td className="py-2 pr-2 text-foreground">{fmtGbp(y.holdVacantWealthGbp)}</td>
+                        <td className="py-2 pr-2 font-semibold text-foreground">{fmtGbp(y.rentWealthGbp)}</td>
+                        <td
+                          className={`py-2 font-semibold ${
+                            y.rentVsOfferGbp >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
+                          }`}
+                        >
+                          {y.rentVsOfferGbp >= 0 ? "+" : ""}
+                          {fmtGbp(y.rentVsOfferGbp)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

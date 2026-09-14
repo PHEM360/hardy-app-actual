@@ -166,7 +166,7 @@ export const APP_THEMES: AppTheme[] = [
     kind: "lifestyle",
     atmosphere: "farm",
     decorations: ["🌾", "🚜", "🐄"],
-    defaultLoader: "farm",
+    defaultLoader: "orbit",
     light: palette({
       primary: "95 38% 28%", primaryFg: "42 50% 97%",
       gold: "38 62% 44%", goldFg: "28 40% 12%",
@@ -328,30 +328,28 @@ export const APP_THEMES: AppTheme[] = [
   },
 ];
 
-export type LoaderMotion = "pair" | "trail";
+export type LoaderMotion = "pair" | "trail" | "orbit" | "bloom" | "constellation" | "ripple" | "silkspin" | "aurora";
 
 export const LOADER_PRESETS: { id: string; label: string; left: string; right: string; motion?: LoaderMotion }[] = [
   { id: "dogs", label: "Dogs", left: "🐕", right: "🐶" },
   { id: "cats", label: "Cats", left: "🐈", right: "🐱" },
-  { id: "horses", label: "Horses", left: "🐴", right: "🐎" },
   { id: "boats", label: "Boats", left: "⛵", right: "🛥️" },
-  { id: "farm", label: "Farm animals", left: "🐄", right: "🐷" },
-  { id: "sheep", label: "Sheep", left: "🐑", right: "🐏" },
-  { id: "chickens", label: "Chickens", left: "🐔", right: "🐓" },
-  { id: "harvest", label: "Farm life", left: "🚜", right: "🌾" },
-  { id: "paws", label: "Paw prints", left: "🐾", right: "🐾", motion: "trail" },
-  { id: "birds", label: "Birds", left: "🐦", right: "🦜" },
-  { id: "rabbits", label: "Rabbits", left: "🐰", right: "🐇" },
-  { id: "wildlife", label: "Wildlife", left: "🦊", right: "🦉" },
   { id: "sea", label: "Sea", left: "🐟", right: "🐙" },
-  { id: "ducks", label: "Ducks", left: "🦆", right: "🪿" },
-  { id: "bees", label: "Bees", left: "🐝", right: "🌻" },
-  { id: "penguins", label: "Penguins", left: "🐧", right: "❄️" },
-  { id: "dinos", label: "Dinosaurs", left: "🦕", right: "🦖" },
   { id: "space", label: "Space", left: "🚀", right: "🪐" },
-  { id: "butterflies", label: "Butterflies", left: "🦋", right: "🌸" },
-  { id: "trains", label: "Trains", left: "🚂", right: "🚃" },
+  { id: "wildlife", label: "Wildlife", left: "🦊", right: "🦉" },
+  { id: "birds", label: "Birds", left: "🐦", right: "🦜" },
+  { id: "penguins", label: "Penguins", left: "🐧", right: "❄️" },
+  { id: "orbit", label: "Orbit", left: "", right: "", motion: "orbit" },
+  { id: "bloom", label: "Bloom", left: "", right: "", motion: "bloom" },
+  { id: "constellation", label: "Constellation", left: "", right: "", motion: "constellation" },
+  { id: "ripple", label: "Ripple", left: "", right: "", motion: "ripple" },
+  { id: "silkspin", label: "Silk", left: "", right: "", motion: "silkspin" },
+  { id: "aurora", label: "Aurora", left: "", right: "", motion: "aurora" },
+  { id: "paws", label: "Paw prints", left: "🐾", right: "🐾", motion: "trail" },
+  { id: "bees", label: "Bees", left: "🐝", right: "🌻" },
 ];
+
+export const ROTATE_LOADER_PRESETS = ["orbit", "bloom", "constellation", "ripple", "silkspin", "aurora"];
 
 export function getTheme(id: string | undefined): AppTheme {
   return APP_THEMES.find((t) => t.id === id) ?? APP_THEMES[0];

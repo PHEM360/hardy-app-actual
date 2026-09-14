@@ -57,13 +57,13 @@ const OCCASION_IMAGE = {
 export function occasionFromTitle(title: string): HeaderOccasion | null {
   const text = title.trim();
   if (!text) return null;
-  if (/birthday|bday/i.test(text)) return { label: text, scene: "hearts", image: OCCASION_IMAGE.birthday };
-  if (/anniversary|valentine/i.test(text)) return { label: text, scene: "hearts", image: OCCASION_IMAGE.hearts };
+  if (/birthday|bday/i.test(text)) return { label: text, scene: "silk", image: OCCASION_IMAGE.birthday };
+  if (/anniversary|valentine/i.test(text)) return { label: text, scene: "silk", image: OCCASION_IMAGE.hearts };
   if (/new\s*year|nye|firework/i.test(text)) return { label: text, scene: "fireworks", image: OCCASION_IMAGE.fireworks };
-  if (/christmas|xmas|boxing day/i.test(text)) return { label: text, scene: "lanterns", image: OCCASION_IMAGE.party };
-  if (/wedding|engagement/i.test(text)) return { label: text, scene: "hearts", image: OCCASION_IMAGE.hearts };
+  if (/christmas|xmas|boxing day/i.test(text)) return { label: text, scene: "embers", image: OCCASION_IMAGE.party };
+  if (/wedding|engagement/i.test(text)) return { label: text, scene: "silk", image: OCCASION_IMAGE.hearts };
   if (/party|celebration|graduation|babyshower|baby shower/i.test(text)) {
-    return { label: text, scene: "confetti", image: OCCASION_IMAGE.party };
+    return { label: text, scene: "fireworks", image: OCCASION_IMAGE.party };
   }
   return null;
 }
@@ -73,14 +73,14 @@ export function pickTodayOccasion(
   birthdayNames: string[] = [],
 ): HeaderOccasion | null {
   for (const name of birthdayNames) {
-    if (name.trim()) return { label: name.includes("birthday") ? name : `${name}'s birthday`, scene: "hearts", image: OCCASION_IMAGE.birthday };
+    if (name.trim()) return { label: name.includes("birthday") ? name : `${name}'s birthday`, scene: "silk", image: OCCASION_IMAGE.birthday };
   }
   for (const event of events) {
     const occasion = occasionFromTitle(event.title);
     if (occasion) return occasion;
   }
   if (events[0]?.title.trim()) {
-    return { label: events[0].title.trim(), scene: "confetti", image: OCCASION_IMAGE.party };
+    return { label: events[0].title.trim(), scene: "fireworks", image: OCCASION_IMAGE.party };
   }
   return null;
 }

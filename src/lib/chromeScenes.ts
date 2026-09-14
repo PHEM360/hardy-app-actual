@@ -12,14 +12,18 @@ export type ChromeSceneId =
   | "harbour"
   | "bokeh"
   | "embers"
-  | "lanterns"
   | "fireworks"
-  | "confetti"
-  | "hearts"
-  | "balloons"
-  | "pawprints"
-  | "bubbles"
-  | "glass";
+  | "glass"
+  | "silk"
+  | "nebula"
+  | "rainglass"
+  | "caustics"
+  | "meteor"
+  | "blizzard"
+  | "quotes"
+  | "sceptic"
+  | "jokes"
+  | "qotd";
 
 export type ChromeSeason = "spring" | "summer" | "autumn" | "winter";
 
@@ -28,25 +32,41 @@ export const CHROME_SCENES: { id: ChromeSceneId; label: string; emoji: string; h
   { id: "weather", label: "Live weather", emoji: "🌦️", hint: "Follows rain, snow, sun, fog" },
   { id: "seasons", label: "Seasons", emoji: "🍃", hint: "Spring blossom to winter frost" },
   { id: "stars", label: "Night sky", emoji: "✨" },
-  { id: "aurora", label: "Aurora", emoji: "🌌" },
+  { id: "aurora", label: "Aurora", emoji: "🌌", hint: "Slow northern lights" },
   { id: "galaxy", label: "Galaxy", emoji: "🪐" },
-  { id: "fireflies", label: "Fireflies", emoji: "🕯️" },
-  { id: "ocean", label: "Ocean", emoji: "🌊" },
-  { id: "meadow", label: "Meadow", emoji: "🌾" },
-  { id: "harbour", label: "Harbour", emoji: "⛵" },
-  { id: "bokeh", label: "Soft lights", emoji: "🔮" },
-  { id: "embers", label: "Embers", emoji: "🔥" },
-  { id: "lanterns", label: "Lanterns", emoji: "🏮" },
-  { id: "fireworks", label: "Fireworks", emoji: "🎆" },
-  { id: "confetti", label: "Confetti", emoji: "🎉" },
-  { id: "hearts", label: "Hearts", emoji: "💗" },
-  { id: "balloons", label: "Balloons", emoji: "🎈" },
-  { id: "pawprints", label: "Paw prints", emoji: "🐾" },
-  { id: "bubbles", label: "Bubbles", emoji: "🫧" },
-  { id: "glass", label: "Stained glass", emoji: "🪟" },
+  { id: "silk", label: "Silk light", emoji: "🎀", hint: "Iridescent cloth" },
+  { id: "nebula", label: "Nebula", emoji: "🔭", hint: "Deep-space dust" },
+  { id: "rainglass", label: "Golden hour", emoji: "🌅", hint: "Warm light and dust" },
+  { id: "caustics", label: "Sunlit water", emoji: "💎", hint: "Underwater light" },
+  { id: "meteor", label: "Meteors", emoji: "☄️", hint: "Ion trails" },
+  { id: "blizzard", label: "Blizzard", emoji: "❄️", hint: "Slow, deep snow" },
+  { id: "fireflies", label: "Candlelight", emoji: "🕯️", hint: "Quiet room, live flame" },
+  { id: "ocean", label: "Ocean", emoji: "🌊", hint: "Slow sunset swell" },
+  { id: "meadow", label: "Blossom", emoji: "🌸", hint: "Falling petals" },
+  { id: "harbour", label: "Harbour", emoji: "⛵", hint: "Slow evening tide" },
+  { id: "bokeh", label: "Soft lights", emoji: "🔮", hint: "Lens glow" },
+  { id: "embers", label: "Embers", emoji: "🔥", hint: "Slow rising heat" },
+  { id: "fireworks", label: "Spotlights", emoji: "🎭", hint: "Stage light sweep" },
+  { id: "glass", label: "Ink wash", emoji: "🖋️", hint: "Dark ink in water" },
+  { id: "quotes", label: "Motivational", emoji: "💪", hint: "Rotating pep talks" },
+  { id: "sceptic", label: "Sceptic", emoji: "🧠", hint: "Why gods are unlikely" },
+  { id: "jokes", label: "Jokes", emoji: "😄", hint: "A rotating joke book" },
+  { id: "qotd", label: "Quote of the day", emoji: "📜", hint: "Short lines, one after another" },
 ];
 
-/** Older weather-as-options ids now fold into live weather / seasons / ocean. */
+export const ROTATE_HEADER_SCENES: ChromeSceneId[] = [
+  "aurora",
+  "silk",
+  "nebula",
+  "caustics",
+  "meteor",
+  "galaxy",
+  "ocean",
+  "stars",
+  "quotes",
+];
+
+/** Older weather-as-options ids and retired cartoon scenes. */
 const LEGACY_CHROME_SCENES: Record<string, ChromeSceneId> = {
   sun: "weather",
   clouds: "weather",
@@ -58,6 +78,12 @@ const LEGACY_CHROME_SCENES: Record<string, ChromeSceneId> = {
   leaves: "seasons",
   waves: "ocean",
   sparkles: "galaxy",
+  lanterns: "embers",
+  balloons: "silk",
+  pawprints: "meadow",
+  hearts: "silk",
+  confetti: "fireworks",
+  bubbles: "ocean",
 };
 
 export const HEADER_COLOR_PRESETS: { id: string; label: string; value: string }[] = [
@@ -117,4 +143,8 @@ export function resolveChromeScene(
 ): ChromeSceneId {
   if (chosen === "auto") return resolveAutoScene(opts.atmosphere ?? "none", opts.isNight ?? false);
   return normalizeChromeScene(chosen) ?? opts.fallback ?? "none";
+}
+
+export function rotateChromeScene(index: number): ChromeSceneId {
+  return ROTATE_HEADER_SCENES[Math.abs(index) % ROTATE_HEADER_SCENES.length];
 }

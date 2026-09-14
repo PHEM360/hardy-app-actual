@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sun, Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
+import { HomeViewToggle } from "@/components/home/HomeViewToggle";
+import type { HomeLayoutMode } from "@/lib/homeLayout";
 import { format } from "date-fns";
 import { Rnd } from "react-rnd";
 
@@ -41,6 +43,7 @@ import { TdPetsCareWidget }    from "@/components/widgets/today/TdPetsCareWidget
 import { TdWeekWidget }        from "@/components/widgets/today/TdWeekWidget";
 import { TdQuickLinksWidget }  from "@/components/widgets/today/TdQuickLinksWidget";
 import { TdClockWidget }       from "@/components/widgets/today/TdClockWidget";
+import { TdLightsWidget }      from "@/components/widgets/today/TdLightsWidget";
 import { FamilyMessageBoardWidget } from "@/components/widgets/FamilyMessageBoardWidget";
 
 // ─── Widget content ────────────────────────────────────────────────────────────
@@ -78,6 +81,7 @@ function WidgetContent({
     case "week":       return <TdWeekWidget />;
     case "quicklinks": return <TdQuickLinksWidget config={item.config} onConfigChange={(config: Record<string, unknown>) => onUpdate({ config })} />;
     case "clock":      return <TdClockWidget config={item.config} onConfigChange={(config: Record<string, unknown>) => onUpdate({ config })} />;
+    case "lights":     return <TdLightsWidget />;
     default:           return null;
   }
 }
@@ -87,14 +91,13 @@ function WidgetContent({
 // another widget is rejected and the tile springs back to its last valid spot.
 
 const MIN_H      = 100;
-const MIN_W_FRAC = 0.28;
+const MIN_W_FRAC = 0.18;
 const GAP        = 18;
 const PADDING    = 16;
 
 interface Rect { x: number; y: number; w: number; h: number }
 
-/** A small overlap tolerance so tiles sharing an edge don't count as colliding. */
-function rectsOverlap(a: Rect, b: Rect, epsilon = 2): boolean {
+function rectsOverlap(a: Rect, b: Rect, epsilon = 0): boolean {
   return (
     a.x < b.x + b.w - epsilon &&
     a.x + a.w > b.x + epsilon &&
@@ -103,8 +106,32 @@ function rectsOverlap(a: Rect, b: Rect, epsilon = 2): boolean {
   );
 }
 
-function overlapsAny(rect: Rect, others: Rect[]): boolean {
-  return others.some((o) => rectsOverlap(rect, o));
+/** Keep a visual gap without snapping to a grid — nudge the moved tile just enough. */
+function nudgeClear(rect: Rect, others: Rect[], gap: number, maxX: number): Rect {
+  let next = { ...rect };
+  for (let pass = 0; pass < 10; pass++) {
+    let hit = false;
+    for (const other of others) {
+      const padded: Rect = { x: other.x - gap, y: other.y - gap, w: other.w + gap * 2, h: other.h + gap * 2 };
+      if (!rectsOverlap(next, padded)) continue;
+      hit = true;
+      const right = padded.x + padded.w - next.x;
+      const left = next.x + next.w - padded.x;
+      const down = padded.y + padded.h - next.y;
+      const up = next.y + next.h - padded.y;
+      const min = Math.min(right, left, down, up);
+      if (min === right) next = { ...next, x: next.x + right };
+      else if (min === left) next = { ...next, x: next.x - left };
+      else if (min === down) next = { ...next, y: next.y + down };
+      else next = { ...next, y: next.y - up };
+    }
+    if (!hit) break;
+  }
+  return {
+    ...next,
+    x: Math.max(0, Math.min(Math.max(0, maxX - next.w), next.x)),
+    y: Math.max(0, next.y),
+  };
 }
 
 function TodayWidgetShell({
@@ -127,47 +154,42 @@ function TodayWidgetShell({
   const x = item.xFrac * containerWidth;
   const w = item.wFrac * containerWidth;
   const [showPalette, setShowPalette] = useState(false);
-  // react-rnd mutates the tile's DOM size/position directly during a live drag or
-  // resize. If we reject the result (would overlap) without ever changing props,
-  // there's nothing to make it re-derive from position/size — so it visually stays
-  // wherever the gesture left it. Bumping this key forces a clean remount, which
-  // re-renders the tile from item's real (rejected) position/size, snapping it back.
-  const [resetNonce, setResetNonce] = useState(0);
 
   return (
     <Rnd
-      key={resetNonce}
       position={{ x, y: item.y }}
       size={{ width: w, height: item.h }}
       dragHandleClassName="td-drag-handle"
       disableDragging={!editMode}
       enableResizing={editMode ? { bottom: true, bottomRight: true, right: true, bottomLeft: true, left: false, top: false, topRight: false, topLeft: false } : false}
       bounds="parent"
+      dragGrid={[1, 1]}
+      resizeGrid={[1, 1]}
       minWidth={Math.max(120, containerWidth * MIN_W_FRAC)}
       minHeight={MIN_H}
       onDragStop={(_e, d) => {
-        const nextX = Math.max(0, Math.min(containerWidth - w, d.x));
-        const nextY = Math.max(0, d.y);
-        if (overlapsAny({ x: nextX, y: nextY, w, h: item.h }, otherRects)) {
-          setResetNonce((n) => n + 1);
-          return;
-        }
-        onUpdate(item.id, { xFrac: nextX / containerWidth, y: nextY });
+        const cleared = nudgeClear(
+          { x: d.x, y: d.y, w, h: item.h },
+          otherRects,
+          GAP,
+          containerWidth,
+        );
+        onUpdate(item.id, { xFrac: cleared.x / containerWidth, y: cleared.y });
       }}
       onResizeStop={(_e, _dir, ref, _delta, pos) => {
         const newW = parseFloat(ref.style.width);
         const newH = Math.max(MIN_H, parseFloat(ref.style.height));
-        const nextX = Math.max(0, pos.x);
-        const nextY = Math.max(0, pos.y);
-        if (overlapsAny({ x: nextX, y: nextY, w: newW, h: newH }, otherRects)) {
-          setResetNonce((n) => n + 1);
-          return;
-        }
+        const cleared = nudgeClear(
+          { x: pos.x, y: pos.y, w: newW, h: newH },
+          otherRects,
+          GAP,
+          containerWidth,
+        );
         onUpdate(item.id, {
-          xFrac: Math.max(0, Math.min(1, nextX / containerWidth)),
-          y: nextY,
-          wFrac: Math.max(MIN_W_FRAC, Math.min(1, newW / containerWidth)),
-          h: newH,
+          xFrac: Math.max(0, Math.min(1, cleared.x / containerWidth)),
+          y: cleared.y,
+          wFrac: Math.max(MIN_W_FRAC, Math.min(1, cleared.w / containerWidth)),
+          h: cleared.h,
         });
       }}
       style={{ zIndex: editMode ? 10 : 1 }}
@@ -248,6 +270,7 @@ const WIDGET_CATALOG: TodayWidgetType[] = [
   "quicklinks", "clock", "tasks", "calendar", "birthdays", "weather", "note", "checklist",
   "reminders", "bills", "messages", "photos", "ai", "focus", "intentions", "habits",
   "water", "mood", "reflection", "tomorrow", "overdue", "quick_add", "fun_fact", "pets_care", "week",
+  "lights",
 ];
 
 function AddWidgetDialog({
@@ -296,7 +319,11 @@ function AddWidgetDialog({
 
 // ─── Today page ───────────────────────────────────────────────────────────────
 
-const Today = () => {
+const Today = ({
+  homeSwitch,
+}: {
+  homeSwitch?: { mode: HomeLayoutMode; onChange: (mode: HomeLayoutMode) => void };
+} = {}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -341,12 +368,15 @@ const Today = () => {
           </p>
         </div>
         <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center gap-2">
+            {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
           <button
             onClick={() => setAddOpen(true)}
             className="flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Add widget
           </button>
+          </div>
           <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
@@ -430,7 +460,7 @@ const Today = () => {
             exit={{ opacity: 0, height: 0 }}
             className="mx-3 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
           >
-            🖐️ Drag widgets anywhere · resize from the corner · colour · trash to remove.
+            Drag anywhere — they stay where you drop them, with a little space so they never touch.
           </motion.div>
         )}
       </AnimatePresence>

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator,
+  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator, Brain,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -34,6 +34,7 @@ import {
 import { accountFeeTotals, buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
 import type { FinanceStatId } from "@/lib/financeDisplay";
 import ImportBalancesDialog from "@/components/finance/ImportBalancesDialog";
+import { FinanceAnalysisPanel } from "@/components/finance/FinanceAnalysisPanel";
 import {
   type ScenarioId, SCENARIO_LABELS, resolveGrowthPct, defaultMonthlyContribution, projectAccountBalance,
 } from "@/lib/financeProjection";
@@ -74,6 +75,12 @@ function useIsDarkMode() {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const rows = payload.filter((p: any) => {
+      if (p.value == null || Number.isNaN(Number(p.value))) return false;
+      const key = String(p.dataKey ?? "");
+      return !key.endsWith("_note");
+    });
+    if (rows.length === 0) return null;
     const notes = payload
       .map((p: any) => {
         const note = p.payload?.[`${p.dataKey}_note`];
@@ -81,18 +88,26 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         return { name: p.name, color: p.color ?? p.stroke, note };
       })
       .filter(Boolean) as { name: string; color: string; note: string }[];
+    const projected = Boolean(payload[0]?.payload?.isProjection);
     return (
-      <div className="rounded-lg bg-card border-2 border-border shadow-elevated p-3 max-w-[260px]">
-        <p className="text-xs text-muted-foreground font-medium mb-1.5">{label}</p>
-        {payload.filter((p: any) => !String(p.dataKey).endsWith("_note")).map((p: any) => (
+      <div className="min-w-[180px] max-w-[280px] rounded-2xl border-2 border-border bg-card p-3 shadow-elevated">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-foreground">{label}</p>
+          {projected && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+              Estimate
+            </span>
+          )}
+        </div>
+        {rows.map((p: any) => (
           <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-card" style={{ backgroundColor: p.color ?? p.stroke }} />
+            <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full ring-2 ring-card" style={{ backgroundColor: p.color ?? p.stroke }} />
             <span className="text-xs font-semibold" style={{ color: p.color ?? p.stroke }}>{p.name}</span>
-            <span className="text-xs font-bold text-card-foreground ml-auto">{formatGBP(p.value ?? 0)}</span>
+            <span className="ml-auto font-display text-xs font-bold text-card-foreground">{formatGBP(p.value ?? 0)}</span>
           </div>
         ))}
         {notes.map((n) => (
-          <p key={n.name} className="text-[11px] text-foreground mt-2 pt-2 border-t border-border leading-snug">
+          <p key={n.name} className="mt-2 border-t border-border pt-2 text-[11px] leading-snug text-foreground">
             <span className="font-semibold" style={{ color: n.color }}>{n.name}: </span>
             {n.note}
           </p>
@@ -180,12 +195,13 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "tax" | "settings";
+type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
   { id: "table", label: "Table", Icon: Table2 },
   { id: "summary", label: "Summary", Icon: BarChart3 },
+  { id: "analysis", label: "Analysis", Icon: Brain },
   { id: "tax", label: "Tax", Icon: Calculator },
   { id: "settings", label: "Settings", Icon: Settings2 },
 ];
@@ -373,6 +389,26 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       return { ...acc, latestBalance: accEntries[0]?.balance ?? 0, latestDate: accEntries[0]?.date ?? "" };
     });
   }, [accounts, entries]);
+
+  const chartHeadline = useMemo(() => {
+    const historical = combinedChartData.filter((row) => !row.isProjection) as Record<string, unknown>[];
+    const startByAccount = new Map<string, number>();
+    for (const row of historical) {
+      for (const acc of accountsForChart) {
+        const value = row[acc.id];
+        if (!startByAccount.has(acc.id) && typeof value === "number") startByAccount.set(acc.id, value);
+      }
+    }
+    const startTotal = [...startByAccount.values()].reduce((sum, value) => sum + value, 0);
+    const latest = latestBalances
+      .filter((acc) => selectedAccounts.includes(acc.id) && acc.active && !acc.hidden)
+      .reduce((sum, acc) => sum + acc.latestBalance, 0);
+    const change = startByAccount.size > 0 ? latest - startTotal : null;
+    const pct = startTotal !== 0 && change != null ? (change / startTotal) * 100 : null;
+    const first = historical[0] as { date?: string } | undefined;
+    const last = historical[historical.length - 1] as { date?: string } | undefined;
+    return { latest, change, pct, from: first?.date, to: last?.date };
+  }, [accountsForChart, combinedChartData, latestBalances, selectedAccounts]);
 
   const totalBalance = latestBalances.filter((a) => a.active && !a.hidden).reduce((s, a) => s + a.latestBalance, 0);
   const insights = useMemo(
@@ -692,20 +728,23 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       </div>
 
       {/* Controls Row */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex items-center gap-1 p-1 bg-card border-2 border-border rounded-2xl relative shadow-soft">
+      <div
+        className="mb-5 flex flex-wrap items-center gap-2 rounded-3xl border-2 border-primary/25 p-2.5 shadow-card"
+        style={{ background: "color-mix(in srgb, hsl(var(--primary)) 14%, hsl(var(--card)))" }}
+      >
+        <div className="relative flex flex-wrap items-center gap-1 rounded-2xl border-2 border-border bg-card p-1 shadow-soft">
           {VIEW_MODES.map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setViewMode(id)}
-              className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors z-10 ${
-                viewMode === id ? "text-primary-foreground" : "text-foreground/80 hover:text-foreground"
+              className={`relative z-10 flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors ${
+                viewMode === id ? "text-primary-foreground" : "text-foreground hover:text-foreground"
               }`}
             >
               {viewMode === id && (
                 <motion.span
                   layoutId="finance-view-tab"
-                  className="absolute inset-0 bg-gradient-primary rounded-xl shadow-sm -z-10"
+                  className="absolute inset-0 -z-10 rounded-xl bg-gradient-primary shadow-sm"
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
@@ -741,6 +780,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               Projection
             </button>
           </>
+        )}
+        {viewMode !== "analysis" && (
+          <button onClick={() => setViewMode("analysis")} className={pillClass(false)}>
+            <Brain className="w-3.5 h-3.5" />
+            Analysis
+          </button>
         )}
 
         <div className="flex-1" />
@@ -805,18 +850,34 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
       {/* Chart View */}
       {viewMode === "chart" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-5 rounded-3xl bg-card border-2 border-border shadow-card mb-5">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-              <span className="w-1 h-4 rounded-full bg-gradient-primary inline-block" />
-              Balance Over Time
-            </h3>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-card">
+          <div
+            className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5"
+            style={{ background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))" }}
+          >
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                <span className="inline-block h-4 w-1 rounded-full bg-gradient-primary" />
+                Balance over time
+              </h3>
+              <p className="mt-1 font-display text-2xl font-bold leading-tight text-foreground">{formatGBP(chartHeadline.latest)}</p>
+              <p className="mt-0.5 text-[11px] text-foreground/70">
+                {chartHeadline.from && chartHeadline.to ? `${chartHeadline.from} – ${chartHeadline.to}` : "Selected accounts"}
+                {chartHeadline.change != null && (
+                  <span className={`ml-2 font-semibold ${chartHeadline.change >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
+                    {formatSignedGBP(chartHeadline.change)}
+                    {formatPct(chartHeadline.pct) ? ` · ${formatPct(chartHeadline.pct)}` : ""}
+                  </span>
+                )}
+              </p>
+            </div>
             {showTaxYears && (
-              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground/80 font-medium">
+              <span className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/70">
                 <CalendarRange className="w-3 h-3" /> Tax years shaded
               </span>
             )}
           </div>
+          <div className="p-4 sm:p-5">
 
           {showProjection && (
             <div className="flex items-center gap-2 mb-4 flex-wrap p-2.5 rounded-2xl bg-muted/30 border border-border/30">
@@ -848,16 +909,17 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
           {accountsForChart.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-16">Tap an account name below to show it on the chart.</p>
           ) : (
-          <div className="h-64 sm:h-80">
+          <div className="h-80 rounded-2xl border border-border/50 px-1 pt-3 sm:h-[26rem]" style={{ background: "color-mix(in srgb, hsl(var(--card)) 88%, hsl(var(--background)))" }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={combinedChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <ComposedChart data={combinedChartData} margin={{ top: 8, right: 10, left: 0, bottom: 4 }}>
                 <defs>
                   {accountsForChart.map((acc) => {
                     const color = colorFor(acc);
                     return (
                       <linearGradient key={acc.id} id={`fin-grad-${acc.id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-                        <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={color} stopOpacity={0.38} />
+                        <stop offset="62%" stopColor={color} stopOpacity={0.08} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0} />
                       </linearGradient>
                     );
                   })}
@@ -896,7 +958,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                       dataKey={acc.id}
                       name={acc.name}
                       stroke={color}
-                      strokeWidth={2.75}
+                      strokeWidth={2.5}
                       fill={`url(#fin-grad-${acc.id})`}
                       dot={(props) => <NoteDot {...props} dataKey={acc.id} stroke={color} />}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: isDark ? "#1a1a19" : "#fcfcfb", fill: color }}
@@ -911,7 +973,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     dataKey="total"
                     name="Total"
                     stroke={isDark ? "#ffffff" : "#0b0b0b"}
-                    strokeWidth={2}
+                    strokeWidth={2.25}
                     strokeDasharray="6 3"
                     dot={false}
                     connectNulls
@@ -977,6 +1039,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 </span>
               )}
             </div>
+          </div>
         </motion.div>
       )}
 
@@ -1079,6 +1142,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             colorFor={colorFor}
             show={showStat}
           />
+        </motion.div>
+      )}
+
+      {viewMode === "analysis" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
+          <FinanceAnalysisPanel accounts={visibleAccounts} />
         </motion.div>
       )}
 

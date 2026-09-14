@@ -232,6 +232,229 @@
   0%, 100% { transform: translateX(-15%) skewX(-12deg); opacity: 0.15; }
   50% { transform: translateX(45%) skewX(-12deg); opacity: 0.48; }
 }
+@keyframes chrome-silk-flow {
+  0% { transform: translate3d(-8%, -6%, 0) rotate(-8deg) scale(1.08); }
+  50% { transform: translate3d(10%, 8%, 0) rotate(6deg) scale(1.16); }
+  100% { transform: translate3d(-8%, -6%, 0) rotate(-8deg) scale(1.08); }
+}
+@keyframes chrome-silk-sheen {
+  0%, 100% { transform: translateX(-30%) rotate(12deg); opacity: 0.18; }
+  50% { transform: translateX(40%) rotate(-8deg); opacity: 0.55; }
+}
+@keyframes chrome-caustic {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.28; }
+  40% { transform: translate3d(6%, -4%, 0) scale(1.12); opacity: 0.55; }
+  70% { transform: translate3d(-5%, 5%, 0) scale(0.94); opacity: 0.34; }
+}
+@keyframes chrome-meteor {
+  0% { transform: translate3d(-10%, -20%, 0) rotate(-28deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate3d(140%, 110%, 0) rotate(-28deg); opacity: 0; }
+}
+@keyframes chrome-droplet {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.55; }
+  50% { transform: translateY(10%) scale(0.94); opacity: 0.9; }
+}
+@keyframes chrome-blizzard {
+  0% { transform: translate3d(0, -12%, 0); }
+  100% { transform: translate3d(var(--drift, 20px), 118%, 0); }
+}
+@keyframes tile-sheen {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  100% { transform: translateX(230%) skewX(-18deg); }
+}
+@keyframes tile-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes tile-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tile-accent) 0%, transparent); }
+  50% { box-shadow: 0 16px 36px -10px color-mix(in srgb, var(--tile-accent) 55%, transparent); }
+}
+@keyframes tile-orbit-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+@keyframes tile-spark {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.55; }
+}
+
+.home-tile {
+  --tile-accent: hsl(178 55% 36%);
+  position: relative;
+  overflow: hidden;
+}
+.home-tile-sheen::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: -20% auto -20% -40%;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.42), transparent);
+  animation: tile-sheen 4.8s ease-in-out infinite;
+}
+.home-tile-glass {
+  backdrop-filter: blur(16px);
+  border-color: color-mix(in srgb, var(--tile-accent) 42%, hsl(var(--border))) !important;
+  background: color-mix(in srgb, var(--tile-accent) 26%, hsl(var(--card) / 0.68)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.42), 0 12px 28px -16px color-mix(in srgb, var(--tile-accent) 55%, transparent);
+}
+.home-tile-glass::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0 auto auto 0;
+  height: 42%;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent);
+}
+.home-tile-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.home-tile-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -16px color-mix(in srgb, var(--tile-accent) 60%, transparent);
+}
+.home-tile-float {
+  animation: tile-float 4.2s ease-in-out infinite;
+}
+.home-tile-spotlight {
+  animation: tile-breathe 3.2s ease-in-out infinite;
+  box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--tile-accent) 65%, transparent);
+}
+.home-tile-orbit {
+  animation: tile-orbit-pulse 3.6s ease-in-out infinite;
+}
+.home-tile-mosaic {
+  transition: transform 0.3s ease;
+}
+.home-tile-mosaic:hover {
+  transform: rotate(-2deg) scale(1.03);
+}
+.home-tile-mosaic::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  height: 7px;
+  width: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tile-accent) 80%, white);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tile-accent) 70%, transparent);
+  animation: tile-spark 2.4s ease-in-out infinite;
+}
+.home-tile-dim {
+  opacity: 0.72;
+  filter: saturate(0.78);
+}
+.home-tile-pill {
+  border-radius: 2rem !important;
+}
+.home-tile-round {
+  border-radius: 1.8rem !important;
+}
+.home-tile-icon-ring {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tile-accent) 55%, white), 0 0 16px color-mix(in srgb, var(--tile-accent) 40%, transparent);
+}
+.home-tile-icon-stamp {
+  transform: rotate(-6deg);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--tile-accent) 35%, #3a2418);
+}
+
+.home-tiles-skin {
+  border-radius: 1.25rem;
+}
+.home-tiles-skin-classic {
+  background: transparent;
+}
+.home-tiles-skin-compact {
+  background: color-mix(in srgb, hsl(210 12% 46%) 8%, hsl(var(--background)));
+  padding: 0.65rem;
+  border-radius: 1rem;
+}
+.home-tiles-skin-magazine {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ead8b8 42%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+.home-tiles-skin-bento {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, hsl(210 28% 28%) 14%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+.home-tiles-skin-river {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, hsl(188 42% 42%) 16%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+.home-tiles-skin-spotlight {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #1c1814 28%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+.home-tiles-skin-orbit {
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in srgb, hsl(258 42% 42%) 22%, transparent), transparent 46%),
+    linear-gradient(180deg, color-mix(in srgb, #161225 22%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+.home-tiles-skin-mosaic {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #e4c29a 28%, hsl(var(--background))), hsl(var(--background)));
+  padding: 0.75rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-tile-sheen::after,
+  .home-tile-float,
+  .home-tile-spotlight,
+  .home-tile-orbit,
+  .home-tile-mosaic::before {
+    animation: none !important;
+  }
+}
+
+.cal-chip {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-chip-personal {
+  border-radius: 0.7rem 1.1rem 0.7rem 1.1rem;
+}
+.cal-chip-family {
+  border-radius: 0.85rem 0.35rem 0.85rem 0.35rem;
+}
+.cal-chip-work {
+  border-radius: 0.35rem;
+}
+.cal-chip-work::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: repeating-linear-gradient(
+    -18deg,
+    transparent,
+    transparent 7px,
+    color-mix(in srgb, var(--cal-chip) 10%, transparent) 7px,
+    color-mix(in srgb, var(--cal-chip) 10%, transparent) 8px
+  );
+  pointer-events: none;
+}
+.cal-chip-health {
+  border-radius: 999px;
+}
+.cal-chip-social {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
+}
+.cal-chip-other {
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
+}
+.cal-chip-birthday {
+  border-radius: 0.9rem 0.9rem 1.3rem 1.3rem;
+}
 @media (prefers-reduced-motion: reduce) {
   .greeting-weather * {
     animation: none !important;
