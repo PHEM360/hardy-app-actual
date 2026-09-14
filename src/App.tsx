@@ -89,6 +89,7 @@ const App = () => (
               <Route path="/dev/flats-investment-preview" element={<FlatsInvestmentPreview />} />
               <Route path="/dev/household-notes-preview" element={<HouseholdNotesPreview />} />
               <Route path="/dev/social-mobile-preview" element={<SocialMobilePreview />} />
+              <Route path="/dev/remote-displays-preview" element={<RemoteDisplays />} />
             </>
           )}
           <Route

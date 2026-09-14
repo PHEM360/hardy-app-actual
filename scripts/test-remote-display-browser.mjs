@@ -31,8 +31,8 @@ try {
     });
 
     await page.goto(`${origin}/display`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Set up this display" }).waitFor();
-    await page.getByText("Scan the QR code").waitFor();
+    await page.getByRole("heading", { name: "Set up this screen" }).waitFor();
+    await page.getByText("Scan this code with your phone").waitFor();
     await page.locator("svg").first().waitFor();
 
     assert.equal(await page.getByLabel("Email").count(), 0, "display must never ask for an account email");
