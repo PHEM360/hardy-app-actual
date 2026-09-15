@@ -233,13 +233,15 @@ service cloud.firestore {
         canViewPage(p.ownerId, "pets");
     }
 
+    // NOTE: deliberately does NOT trust users/{uid}.householdId / householdIds —
+    // those are client-writable denormalizations (see useHouseholds.ts) and must
+    // never be treated as proof of membership. The household doc's own
+    // memberIds (only mutated by an existing member, per the households rules
+    // below) is the sole source of truth.
     function canAccessHousehold(householdId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       return isAuthenticated() && (
         isAdmin() ||
         request.auth.uid == householdId ||
-        userDoc.householdId == householdId ||
-        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
         (exists(/databases/$(database)/documents/households/$(householdId)) &&
           request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds)
       );
@@ -249,7 +251,17 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated() || (isFirebaseOwner(userId) && !hasDisplayClaim());
       allow create: if isAuthenticated();
-      allow update, delete: if isOwner(userId) || isAdmin();
+      // A user may update their own profile, but never their own role/admin
+      // flags — those must only change via an admin's write (Admin.tsx) or a
+      // trusted Cloud Function, never a self-write. Without this, any signed-in
+      // user could set isAdmin/isSuperAdmin on themselves directly.
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.get('role', '') == resource.data.get('role', '') &&
+        request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) &&
+        request.resource.data.get('isSuperAdmin', false) == resource.data.get('isSuperAdmin', false)
+      );
+      allow delete: if isOwner(userId) || isAdmin();
       // Don't allow direct client writes to other users' docs unless they're admin.
       // Superadmin/admin actions should prefer Cloud Functions.
 
@@ -471,6 +483,11 @@ service cloud.firestore {
     }
 
     match /finance/{userId}/entries/{entryId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
+    match /finance/{userId}/assets/{assetId} {
       allow read: if canViewPage(userId, "finance");
       allow write: if canEditPage(userId, "finance");
     }
