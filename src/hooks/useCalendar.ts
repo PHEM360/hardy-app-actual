@@ -8,6 +8,7 @@ import {
   deleteDoc,
   setDoc,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
@@ -88,6 +89,21 @@ export function useCalendar(scopeUserId?: string) {
     await deleteDoc(doc(db, "calendar", uid, "events", id));
   }, [uid]);
 
+  /** Bulk-remove previously-synced events matching a predicate — used when a
+   *  user disconnects Google or unsubscribes an ICS feed and chooses "delete"
+   *  rather than "keep" for the events that source already brought in. */
+  const deleteSyncedEvents = useCallback(async (matcher: (event: CalendarEvent) => boolean) => {
+    if (!uid) return;
+    const toRemove = events.filter(matcher);
+    for (let i = 0; i < toRemove.length; i += 400) {
+      const batch = writeBatch(db);
+      for (const event of toRemove.slice(i, i + 400)) {
+        if (event.id) batch.delete(doc(db, "calendar", uid, "events", event.id));
+      }
+      await batch.commit();
+    }
+  }, [events, uid]);
+
   const saveSettings = useCallback(async (data: Partial<CalendarSettings>) => {
     if (!uid) return;
     const merged = { ...settings, ...data, updatedAt: serverTimestamp() };
@@ -99,5 +115,5 @@ export function useCalendar(scopeUserId?: string) {
     setSettings((s) => ({ ...s, ...data }));
   }, [settings, uid]);
 
-  return { events, settings, loading, addEvent, updateEvent, deleteEvent, saveSettings };
+  return { events, settings, loading, addEvent, updateEvent, deleteEvent, deleteSyncedEvents, saveSettings };
 }

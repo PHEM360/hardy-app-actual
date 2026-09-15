@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReceiptLightbox, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
@@ -117,13 +118,16 @@ export function AddExpenseDocumentDialog({
   useEffect(() => {
     if (!open) return;
     if (allocateItem) {
+      const resolvedKind: CaptureKind = allocateItem.kind === "expense" ? "expense" : "document";
       setDraft({
-        kind: allocateItem.kind === "expense" ? "expense" : "document",
+        kind: resolvedKind,
         destType: "unallocated",
         destId: "",
         destLabel: "Unallocated",
         name: allocateItem.name || "",
-        description: allocateItem.description || allocateItem.name || "",
+        // Expenses default their description to the item's name when blank; a document's
+        // notes shouldn't start out as a copy of its own title.
+        description: resolvedKind === "expense" ? allocateItem.description || allocateItem.name || "" : allocateItem.description || "",
         amount: allocateItem.amount != null ? String(allocateItem.amount) : "",
         date: allocateItem.date || todayIsoDate(),
         category: allocateItem.category || "Other",
@@ -652,6 +656,18 @@ export function AddExpenseDocumentDialog({
                     }}
                     placeholder={dest.type === "unallocated" ? "Optional — you can name these later" : kind === "document" ? "e.g. Boiler certificate" : "e.g. Office supplies"}
                     className="h-9 rounded-xl"
+                  />
+                </div>
+              )}
+
+              {kind === "document" && showName && (
+                <div className="space-y-1">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={draft.description}
+                    onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))}
+                    placeholder="Optional — anything worth remembering about this document"
+                    className="min-h-[70px] rounded-xl"
                   />
                 </div>
               )}

@@ -198,6 +198,29 @@ export const onHouseholdItemWrite = onDocumentWritten(
   },
 );
 
+// A member leaving/being removed from a household should immediately stop
+// every reminder scheduled for that household's items on their behalf —
+// onHouseholdItemWrite only re-evaluates recipients when an ITEM is written,
+// so without this, a removed member's already-scheduled renewal reminders
+// were never cancelled. cancelBySourceKey matches by prefix, so one call per
+// removed member covers every item in the household in a single query.
+export const onHouseholdMembershipChange = onDocumentWritten(
+  {
+    document: "households/{householdId}",
+  },
+  async (event) => {
+    const householdId = event.params.householdId;
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    const beforeIds: string[] = Array.isArray(before?.memberIds) ? before!.memberIds : [];
+    const afterIds: string[] = Array.isArray(after?.memberIds) ? after!.memberIds : [];
+    const removed = beforeIds.filter((uid) => !afterIds.includes(uid));
+    for (const uid of removed) {
+      await cancelBySourceKey(uid, `household:${householdId}:`);
+    }
+  },
+);
+
 // ── Pet flea / worm treatments ────────────────────────────────────────────────
 
 export const onPetWrite = onDocumentWritten(

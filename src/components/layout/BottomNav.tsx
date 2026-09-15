@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { cleanupFcmTokenOnSignOut } from "@/lib/fcmDeviceSettings";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { canAccessRoute, DEFAULT_BOTTOM_NAV, MAX_BOTTOM_NAV_ITEMS } from "@/lib/features";
@@ -163,6 +164,7 @@ const BottomNav = () => {
 
         <button
           onClick={async () => {
+            await cleanupFcmTokenOnSignOut(auth.currentUser?.uid);
             await signOut(auth);
             navigate("/", { replace: true });
           }}

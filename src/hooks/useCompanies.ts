@@ -17,6 +17,7 @@ import {
   ref,
   uploadBytes,
   getDownloadURL,
+  deleteObject,
 } from "firebase/storage";
 import { alignedReceiptNames } from "@/lib/receipts";
 import { cleanCompanyPayload } from "@/lib/companyPayload";
@@ -32,11 +33,17 @@ import {
   CompanyInsurance,
   CompanyIncome,
   CompanyTaxReturn,
+  CompanyDocument,
 } from "@/types/app";
 
 export function companyReceiptStoragePath(companyId: string, fileName: string) {
   const safe = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "receipt";
   return `companies/${companyId}/receipts/${Date.now()}_${safe}`;
+}
+
+export function companyDocumentStoragePath(companyId: string, fileName: string) {
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "document";
+  return `companies/${companyId}/documents/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
 }
 
 export function expenseSaveMessage(err: unknown) {
@@ -375,6 +382,105 @@ export function useCompanyExpenses(companyId: string | undefined) {
     replaceReceipt,
     renameReceipt,
   };
+}
+
+// ─── Documents ───────────────────────────────────────────────────────────────
+
+type CompanyDocFormData = { name: string; category: string; notes?: string };
+
+export function useCompanyDocuments(companyId: string | undefined) {
+  const [documents, setDocuments] = useState<CompanyDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!companyId) {
+      setDocuments([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const q = query(collection(db, "companies", companyId, "documents"), orderBy("createdAt", "desc"));
+    return onSnapshot(
+      q,
+      (snap) => {
+        setDocuments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompanyDocument)));
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+  }, [companyId]);
+
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (!companyId) return [];
+    return Promise.all(
+      files.map(async (file) => {
+        const fileRef = ref(storage, companyDocumentStoragePath(companyId, file.name));
+        await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+        const url = await getDownloadURL(fileRef);
+        return { url, name: file.name, type: file.type || "application/octet-stream", size: file.size };
+      }),
+    );
+  }, [companyId]);
+
+  // `keptPages` is the full set of existing pages the user chose to keep (in order);
+  // anything from the current doc that's missing from it is treated as removed and its
+  // storage object is cleaned up. `newFiles` are uploaded and appended after those. This
+  // makes edits atomic — nothing is written until Save, so Cancel truly discards changes.
+  const updateDocument = useCallback(async (
+    id: string,
+    data: CompanyDocFormData,
+    keptPages: { url: string; name: string; type: string }[],
+    newFiles: File[] = [],
+  ) => {
+    if (!companyId) return;
+    const current = documents.find((d) => d.id === id);
+    const uploaded = newFiles.length ? await uploadFiles(newFiles) : [];
+    const fileUrls = [...keptPages.map((p) => p.url), ...uploaded.map((f) => f.url)];
+    const fileNames = [...keptPages.map((p) => p.name), ...uploaded.map((f) => f.name)];
+    const fileTypes = [...keptPages.map((p) => p.type), ...uploaded.map((f) => f.type)];
+    await updateDoc(doc(db, "companies", companyId, "documents", id), {
+      name: data.name.trim(),
+      category: data.category || "Other",
+      notes: (data.notes ?? "").trim(),
+      fileUrl: fileUrls[0] ?? "",
+      fileName: fileNames[0] ?? "",
+      fileType: fileTypes[0] ?? "",
+      fileUrls,
+      fileNames,
+      fileTypes,
+      updatedAt: serverTimestamp(),
+    });
+    const previousUrls = current?.fileUrls?.length ? current.fileUrls : current?.fileUrl ? [current.fileUrl] : [];
+    const keptUrls = new Set(fileUrls);
+    await Promise.all(
+      previousUrls
+        .filter((url) => !keptUrls.has(url))
+        .map(async (url) => {
+          try {
+            await deleteObject(ref(storage, url));
+          } catch {
+            /* already gone */
+          }
+        }),
+    );
+  }, [companyId, documents, uploadFiles]);
+
+  const deleteDocument = useCallback(async (target: CompanyDocument) => {
+    if (!companyId || !target.id) return;
+    await deleteDoc(doc(db, "companies", companyId, "documents", target.id));
+    const urls = target.fileUrls?.length ? target.fileUrls : target.fileUrl ? [target.fileUrl] : [];
+    await Promise.all(
+      urls.map(async (url) => {
+        try {
+          await deleteObject(ref(storage, url));
+        } catch {
+          /* already gone, or not a storage URL — safe to ignore */
+        }
+      }),
+    );
+  }, [companyId]);
+
+  return { documents, loading, updateDocument, deleteDocument };
 }
 
 // ─── Insurance ─────────────────────────────────────────────────────────────────

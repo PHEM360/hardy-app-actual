@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { EmailAuthProvider, reauthenticateWithCredential, signOut } from "firebase/auth";
 import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
 import { auth } from "@/lib/firebase";
+import { cleanupFcmTokenOnSignOut } from "@/lib/fcmDeviceSettings";
 import { useAuth } from "@/auth/AuthContext";
 import { useSecuritySettings } from "@/hooks/useSecuritySettings";
 import {
@@ -323,7 +324,7 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
         <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
           Passkeys are phishing-resistant. Your face and fingerprint never leave your device.
         </p>
-        <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" onClick={() => void signOut(auth)}>
+        <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" onClick={() => void cleanupFcmTokenOnSignOut(auth.currentUser?.uid).then(() => signOut(auth))}>
           <LogOut className="mr-2 h-4 w-4" /> Sign out
         </Button>
       </SecurityFrame>

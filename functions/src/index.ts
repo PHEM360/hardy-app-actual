@@ -76,6 +76,7 @@ export { processScheduledNotifications, scheduleDailyDigests } from "./notificat
 export {
 	onCalendarEventWrite,
 	onHouseholdItemWrite,
+	onHouseholdMembershipChange,
 	onPetWrite,
 	onMedicationWrite,
 	scheduleMedicationTopUp,

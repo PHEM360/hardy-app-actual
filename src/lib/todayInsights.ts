@@ -1,4 +1,5 @@
-import { addDays, isSameDay, startOfDay } from "date-fns";
+import { addDays, endOfDay, format, isSameDay, startOfDay } from "date-fns";
+import { allDayEventCoversDate } from "@/lib/londonCalendarDate";
 
 export function daysUntilDate(iso: string, from = new Date()): number {
   const today = startOfDay(from);
@@ -69,8 +70,13 @@ export function upcomingBirthdays(opts: {
   return items.sort((a, b) => a.days - b.days);
 }
 
-export function eventsOnDay<T extends { startDate: string }>(events: T[], day: Date): T[] {
-  return events.filter((event) => isSameDay(new Date(event.startDate), day));
+export function eventsOnDay<T extends { startDate: string; endDate?: string; allDay?: boolean }>(events: T[], day: Date): T[] {
+  const dayStr = format(day, "yyyy-MM-dd");
+  return events.filter((event) => {
+    if (event.allDay) return allDayEventCoversDate({ startDate: event.startDate, endDate: event.endDate || event.startDate }, dayStr);
+    if (event.endDate) return new Date(event.startDate) <= endOfDay(day) && new Date(event.endDate) >= startOfDay(day);
+    return isSameDay(new Date(event.startDate), day);
+  });
 }
 
 export function eventsInRange<T extends { startDate: string }>(events: T[], from: Date, daysAhead: number): T[] {

@@ -1,4 +1,5 @@
 import type { CalendarEvent, CalendarMergeRules } from "@/types/app";
+import { londonDateFromIso } from "@/lib/londonCalendarDate";
 
 const HOLIDAY_HINT = /\b(holiday|bank holiday|bank hol|public holiday|uk holidays?|us holidays?)\b/i;
 
@@ -6,13 +7,16 @@ export function normalizeEventTitle(title: string): string {
   return title.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/** Which UK calendar day an event falls on, for duplicate-matching — bucketing
+ *  by the raw UTC date instead would misclassify events either side of UK
+ *  local midnight during BST as different/same days. */
 export function eventDayKey(event: CalendarEvent): string {
   const raw = event.startDate || "";
-  if (raw.length >= 10) return raw.slice(0, 10);
+  if (!raw) return raw;
   try {
-    return new Date(raw).toISOString().slice(0, 10);
+    return londonDateFromIso(raw);
   } catch {
-    return raw;
+    return raw.slice(0, 10);
   }
 }
 

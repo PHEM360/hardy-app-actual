@@ -2,10 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { CalendarDays, ChevronRight } from "lucide-react";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameDay, isToday, isSameMonth,
+  eachDayOfInterval, startOfDay, endOfDay, isToday, isSameMonth,
 } from "date-fns";
 import { useCalendar } from "@/hooks/useCalendar";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
+import { allDayEventCoversDate } from "@/lib/londonCalendarDate";
 
 const CAT_COLORS: Record<string, string> = {
   personal: "#6366f1",
@@ -28,8 +29,14 @@ export function CalendarMiniWidget() {
   const calEnd      = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const days        = eachDayOfInterval({ start: calStart, end: calEnd });
 
-  const eventsForDay = (day: Date) =>
-    events.filter((e) => isSameDay(new Date(e.startDate), day));
+  const eventsForDay = (day: Date) => {
+    const dayStr = format(day, "yyyy-MM-dd");
+    return events.filter((e) =>
+      e.allDay
+        ? allDayEventCoversDate(e, dayStr)
+        : new Date(e.startDate) <= endOfDay(day) && new Date(e.endDate) >= startOfDay(day),
+    );
+  };
 
   return (
     <button

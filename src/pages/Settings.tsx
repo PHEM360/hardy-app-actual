@@ -10,6 +10,7 @@ import { type AvatarType } from "@/types/app";
 import { useAuth } from "@/auth/AuthContext";
 import { signOut, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { cleanupFcmTokenOnSignOut } from "@/lib/fcmDeviceSettings";
 import { useNavigate } from "react-router-dom";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
@@ -1105,7 +1106,7 @@ const Settings = () => {
             </div>
           )}
           <Button variant="outline" className="w-full h-10 rounded-xl text-sm justify-start gap-2 text-destructive hover:text-destructive"
-            onClick={async () => { await signOut(auth); navigate("/", { replace: true }); }}>
+            onClick={async () => { await cleanupFcmTokenOnSignOut(auth.currentUser?.uid); await signOut(auth); navigate("/", { replace: true }); }}>
             <LogOut className="w-4 h-4" /> Sign Out
           </Button>
         </div>

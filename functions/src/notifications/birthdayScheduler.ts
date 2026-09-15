@@ -7,7 +7,7 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
-import { calculateReminderTime, londonTodayString } from "./calculations";
+import { calculateReminderTime, londonLocalToUtc, londonTodayString } from "./calculations";
 import { activeChannels, cancelBySourceKey, enqueueNotification, loadPrefs, sanitizeNotifTitle } from "./helpers";
 import type { ReminderConfig } from "./types";
 
@@ -24,6 +24,8 @@ interface BirthdayDoc {
   createdBy?: string;
   sharedWith?: BirthdaySharing;
   reminders?: ReminderConfig[];
+  /** Recipients as of the last successful schedule run — see scheduleBirthdayReminders. */
+  lastSyncedRecipients?: string[];
 }
 
 const MAX_REMINDERS = 3;
@@ -63,7 +65,13 @@ async function scheduleBirthdayReminders(birthdayId: string, after: BirthdayDoc,
   const recipients = await resolveRecipients(after.sharedWith, after.householdId, String(after.createdBy || ""));
 
   // Cancel schedules + drop calendar events for anyone no longer a recipient.
-  const removed = prevRecipients.filter((uid) => !recipients.includes(uid));
+  // Union the caller's before/after diff (fast path, from onBirthdayWrite) with
+  // the last-synced snapshot stored on the doc itself: the nightly self-heal
+  // has no "before" of its own to diff against (it only sees current state),
+  // so without this stored snapshot it can never detect someone who dropped
+  // out — e.g. left the household — since the birthday doc was last edited.
+  const storedPrev = Array.isArray(after.lastSyncedRecipients) ? after.lastSyncedRecipients : [];
+  const removed = [...new Set([...prevRecipients, ...storedPrev])].filter((uid) => !recipients.includes(uid));
   for (const uid of removed) {
     await cancelBySourceKey(uid, `birthday:${birthdayId}:`);
     await db.doc(`calendar/${uid}/events/birthday_${birthdayId}`).delete().catch(() => undefined);
@@ -71,6 +79,7 @@ async function scheduleBirthdayReminders(birthdayId: string, after: BirthdayDoc,
 
   const todayStr = londonTodayString();
   const occurrence = nextOccurrenceDateStr(month, day, todayStr);
+  const [occYear, occMonth, occDay] = occurrence.split("-").map(Number);
   const name = sanitizeNotifTitle(String(after.name || "Birthday"), 80);
   const reminders = (after.reminders || []).slice(0, MAX_REMINDERS);
 
@@ -84,8 +93,11 @@ async function scheduleBirthdayReminders(birthdayId: string, after: BirthdayDoc,
         category: "birthday",
         source: "birthday",
         birthdayId,
-        startDate: `${occurrence}T00:00:00.000Z`,
-        endDate: `${occurrence}T23:59:59.000Z`,
+        // A bare `${occurrence}T23:59:59.000Z` is actually 00:59:59 the *next*
+        // UK day during BST — londonLocalToUtc converts the real UK wall-clock
+        // boundary so the event never looks like it spills into the next day.
+        startDate: londonLocalToUtc(occYear, occMonth, occDay, 0, 0).toISOString(),
+        endDate: londonLocalToUtc(occYear, occMonth, occDay, 23, 59).toISOString(),
         allDay: true,
         createdBy: String(after.createdBy || uid),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -119,6 +131,19 @@ async function scheduleBirthdayReminders(birthdayId: string, after: BirthdayDoc,
         logger.error("Failed to schedule birthday notification", { uid, birthdayId, err });
       }
     }
+  }
+
+  // Persist this run's recipient list so the next run (write or nightly
+  // self-heal) has an accurate "previous" snapshot to diff against. Guarded
+  // by an actual-change check since this function runs inside an
+  // onDocumentWritten trigger for this same document — writing unconditionally
+  // would retrigger itself every single time (harmlessly, since a second pass
+  // would see recipients unchanged and stop, but still worth avoiding).
+  const recipientsSet = [...recipients].sort();
+  const storedSet = [...storedPrev].sort();
+  const changed = recipientsSet.length !== storedSet.length || recipientsSet.some((uid, i) => uid !== storedSet[i]);
+  if (changed) {
+    await db.doc(`birthdays/${birthdayId}`).set({ lastSyncedRecipients: recipients }, { merge: true }).catch(() => undefined);
   }
 }
 

@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { deleteObject, getBytes, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
-import { companyReceiptStoragePath } from "@/hooks/useCompanies";
+import { companyDocumentStoragePath, companyReceiptStoragePath } from "@/hooks/useCompanies";
 import { uploadNoteMedia } from "@/lib/noteMedia";
 import { DEFAULT_DOCUMENT_CATEGORIES, DEFAULT_SHARED_CATEGORY_SETTINGS } from "@/types/app";
 import { DEFAULT_FLAT_EXPENSE_CATEGORIES } from "@/types/flats";
@@ -235,12 +235,12 @@ async function saveCompanyExpense(uid: string, destId: string, draft: CaptureDra
 async function saveCompanyDocuments(uid: string, destId: string, draft: CaptureDraft, files: File[]) {
   const uploaded: CaptureFileMeta[] = [];
   for (const file of files) {
-    const path = `companies/${destId}/documents/${Date.now()}_${safeName(file.name)}`;
-    uploaded.push(await uploadOne(path, file));
+    uploaded.push(await uploadOne(companyDocumentStoragePath(destId, file.name), file));
   }
   await addDoc(collection(db, "companies", destId, "documents"), {
     name: (draft.name || files[0]?.name || "Document").trim(),
     category: draft.category || "Other",
+    notes: (draft.description || "").trim(),
     fileUrl: uploaded[0]?.url ?? "",
     fileName: uploaded[0]?.name ?? "",
     fileType: uploaded[0]?.mimeType ?? "",
@@ -249,6 +249,7 @@ async function saveCompanyDocuments(uid: string, destId: string, draft: CaptureD
     fileNames: uploaded.map((f) => f.name),
     fileTypes: uploaded.map((f) => f.mimeType),
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
     createdBy: uid,
   });
 }
@@ -336,6 +337,7 @@ async function savePetDocuments(uid: string, destId: string, draft: CaptureDraft
     const uploaded = await uploadOne(path, file);
     await addDoc(collection(db, "petDocuments", uid, "docs"), {
       title: (draft.name || file.name).trim(),
+      notes: (draft.description || "").trim(),
       url: uploaded.url,
       storagePath: uploaded.storagePath,
       petIds,

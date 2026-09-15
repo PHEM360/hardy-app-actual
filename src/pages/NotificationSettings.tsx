@@ -225,7 +225,8 @@ export default function NotificationSettings() {
   const [saved, setSaved] = useState(false);
 
   // Register this device's FCM token whenever push is enabled (syncs across devices via Firestore)
-  const { registerToken } = useFcmToken(prefs.push.enabled);
+  const { registerToken, hasToken, keepAfterLogout, setKeepAfterLogout, stopThisDevice } = useFcmToken(prefs.push.enabled);
+  const [stopping, setStopping] = useState(false);
 
   // Use local draft while editing; fall back to server prefs
   const draft = local ?? prefs;
@@ -364,6 +365,39 @@ export default function NotificationSettings() {
                       Push is already on, so flipping the switch won't retry registration — tap this instead,
                       especially on iPhone/iPad, where it must be triggered by a tap.
                     </p>
+                    {hasToken && (
+                      <div className="mt-2 rounded-xl border border-border/60 bg-muted/30 p-2.5 space-y-2">
+                        <p className="text-[11px] font-semibold text-foreground">This device</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          The security lock screen doesn't sign you out, so notifications keep arriving through it as normal.
+                          This only matters if you actually tap Sign out.
+                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-xs font-medium">Keep notifications here after I sign out</Label>
+                          <Switch checked={keepAfterLogout} onCheckedChange={(v) => void setKeepAfterLogout(v)} />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          disabled={stopping}
+                          onClick={async () => {
+                            setStopping(true);
+                            try {
+                              await stopThisDevice();
+                            } finally {
+                              setStopping(false);
+                            }
+                          }}
+                        >
+                          {stopping ? "Stopping…" : "Stop notifications on this device"}
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Use this before uninstalling, or if you no longer want alerts on this phone/browser at all.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

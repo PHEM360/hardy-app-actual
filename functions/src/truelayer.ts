@@ -109,6 +109,11 @@ async function resolveEnv(redirectUri = `${APP_HOST}/api/truelayer/callback`) {
     clientSecret,
     redirectUri,
   });
+  // Only cache a definitive result. If both probes errored (e.g. a transient
+  // network blip), `probed` is false and falling back to `preferred` is a
+  // guess — caching that guess would wrongly stick for the rest of this warm
+  // instance's life instead of re-checking on the next call.
+  if (!resolved.probed) return { env: resolved.env, mismatch: resolved.mismatch };
   resolvedEnvCache = { env: resolved.env, mismatch: resolved.mismatch };
   if (resolved.mismatch) {
     logger.warn("TrueLayer client belongs to the other environment; switching", {
@@ -119,18 +124,18 @@ async function resolveEnv(redirectUri = `${APP_HOST}/api/truelayer/callback`) {
   return resolvedEnvCache;
 }
 
-let requestEnv: TrueLayerEnv = "sandbox";
-
-function useEnv(env: TrueLayerEnv) {
-  requestEnv = env;
+// `env` is passed explicitly end-to-end (never a shared module-level variable):
+// Cloud Functions v2 serves many concurrent requests per warm instance
+// (maxInstanceRequestConcurrency), and two connections can legitimately be on
+// different environments (e.g. mid-migration from sandbox to live), so a
+// global "current env" would let one in-flight request's env leak into
+// another's API calls.
+function authBase(env: TrueLayerEnv) {
+  return authHost(env);
 }
 
-function authBase() {
-  return authHost(requestEnv);
-}
-
-function apiBase() {
-  return apiHost(requestEnv);
+function apiBase(env: TrueLayerEnv) {
+  return apiHost(env);
 }
 
 async function envForConnection(uid: string, connectionId: string): Promise<TrueLayerEnv> {
@@ -191,8 +196,8 @@ async function formPost(url: string, body: Record<string, string>) {
   };
 }
 
-async function tlGet<T>(path: string, accessToken: string, extraHeaders?: Record<string, string>): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, {
+async function tlGet<T>(path: string, accessToken: string, env: TrueLayerEnv, extraHeaders?: Record<string, string>): Promise<T> {
+  const res = await fetch(`${apiBase(env)}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}`, ...extraHeaders },
   });
   const json = (await res.json()) as { results?: T; error?: string; error_description?: string };
@@ -256,7 +261,7 @@ function monthEndBalance(eom: string, current: number, txs: TlTx[]) {
   return roundGbp(current - after);
 }
 
-async function fetchTransactions(accountId: string, access: string, today: string, extraHeaders?: Record<string, string>) {
+async function fetchTransactions(accountId: string, access: string, today: string, env: TrueLayerEnv, extraHeaders?: Record<string, string>) {
   const byId = new Map<string, TlTx>();
   let to = today;
   for (let i = 0; i < 40; i += 1) {
@@ -265,6 +270,7 @@ async function fetchTransactions(accountId: string, access: string, today: strin
       const chunk = await tlGet<TlTx[]>(
         `/data/v1/accounts/${encodeURIComponent(accountId)}/transactions?from=${from}&to=${to}`,
         access,
+        env,
         extraHeaders
       );
       const list = Array.isArray(chunk) ? chunk : [];
@@ -299,8 +305,8 @@ function secretRef(uid: string, id: string) {
   return db().doc(`finance/${uid}/bankSecrets/${id}`);
 }
 
-async function refreshAccess(uid: string, connectionId: string) {
-  useEnv(await envForConnection(uid, connectionId));
+async function refreshAccess(uid: string, connectionId: string): Promise<{ access: string; env: TrueLayerEnv }> {
+  const env = await envForConnection(uid, connectionId);
   const snap = await secretRef(uid, connectionId).get();
   const data = snap.data();
   if (!data?.refreshToken) {
@@ -309,10 +315,10 @@ async function refreshAccess(uid: string, connectionId: string) {
   const { clientId, clientSecret } = credentials();
   const expiresAt = Number(data.accessExpiresAt || 0);
   if (data.accessToken && expiresAt > Date.now() + 60_000) {
-    return String(data.accessToken);
+    return { access: String(data.accessToken), env };
   }
   try {
-    const token = await formPost(`${authBase()}/connect/token`, {
+    const token = await formPost(`${authBase(env)}/connect/token`, {
       grant_type: "refresh_token",
       client_id: clientId,
       client_secret: clientSecret,
@@ -327,7 +333,7 @@ async function refreshAccess(uid: string, connectionId: string) {
       },
       { merge: true }
     );
-    return token.access_token;
+    return { access: token.access_token, env };
   } catch (err) {
     await connectionRef(uid, connectionId).set(
       { status: "needs_reauth", lastError: err instanceof Error ? err.message : "Token refresh failed" },
@@ -349,8 +355,8 @@ function snapshotAccounts(accounts: TlAccount[], mappings: Record<string, string
 }
 
 async function loadRemoteAccounts(uid: string, connectionId: string) {
-  const access = await refreshAccess(uid, connectionId);
-  const accounts = await tlGet<TlAccount[]>("/data/v1/accounts", access);
+  const { access, env } = await refreshAccess(uid, connectionId);
+  const accounts = await tlGet<TlAccount[]>("/data/v1/accounts", access, env);
   const list = Array.isArray(accounts) ? accounts : [];
   const conn = await connectionRef(uid, connectionId).get();
   const mappings = (conn.data()?.mappings || {}) as Record<string, string>;
@@ -359,7 +365,7 @@ async function loadRemoteAccounts(uid: string, connectionId: string) {
     { accounts: snapshots, lastError: admin.firestore.FieldValue.delete() },
     { merge: true }
   );
-  return { access, accounts: snapshots };
+  return { access, env, accounts: snapshots };
 }
 
 async function writeBalances(
@@ -415,7 +421,7 @@ async function syncConnection(
   connectionId: string,
   opts: { history?: boolean; extraHeaders?: Record<string, string> } = {}
 ) {
-  const { access, accounts } = await loadRemoteAccounts(uid, connectionId);
+  const { access, env, accounts } = await loadRemoteAccounts(uid, connectionId);
   const conn = await connectionRef(uid, connectionId).get();
   const mappings = (conn.data()?.mappings || {}) as Record<string, string>;
   const today = isoDateUtc(new Date());
@@ -429,6 +435,7 @@ async function syncConnection(
     const balances = await tlGet<TlBalance[]>(
       `/data/v1/accounts/${encodeURIComponent(bankAccountId)}/balance`,
       access,
+      env,
       opts.extraHeaders
     );
     const row = Array.isArray(balances) ? balances[0] : undefined;
@@ -448,7 +455,7 @@ async function syncConnection(
     updated += 1;
 
     if (opts.history) {
-      const txs = await fetchTransactions(account.id, access, today, opts.extraHeaders);
+      const txs = await fetchTransactions(account.id, access, today, env, opts.extraHeaders);
       const firstDay = txs.map((tx) => txDay(tx.timestamp)).filter(Boolean).sort()[0];
       if (firstDay) {
         for (const eom of monthEndDates(firstDay, today)) {
@@ -517,7 +524,6 @@ export const getTrueLayerStatus = onCall(SECRET_OPTS, async (request) => {
     return { configured: false, sandbox: preferredEnv() === "sandbox", using: preferredEnv(), mismatch: false };
   }
   const resolved = await resolveEnv();
-  useEnv(resolved.env);
   return {
     configured: true,
     sandbox: resolved.env === "sandbox",
@@ -535,7 +541,6 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
     throw new HttpsError("invalid-argument", "That redirect URI is not allowed.");
   }
   const resolved = await resolveEnv(redirectUri);
-  useEnv(resolved.env);
   const returnPath = safeReturnPath(request.data?.returnPath, "/finance");
   const state = randomUUID();
   await db().doc(`trueLayerOAuth/${state}`).set({
@@ -555,14 +560,13 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
     providers: "uk-ob-all uk-oauth-all",
   });
   if (resolved.env === "sandbox") params.set("enable_mock", "true");
-  return { authUrl: `${authBase()}/?${params.toString()}`, env: resolved.env, mismatch: resolved.mismatch };
+  return { authUrl: `${authBase(resolved.env)}/?${params.toString()}`, env: resolved.env, mismatch: resolved.mismatch };
 });
 
 async function finishConnect(uid: string, code: string, redirectUri: string, authEnv?: TrueLayerEnv) {
   const resolved = authEnv ? { env: authEnv, mismatch: false } : await resolveEnv(redirectUri);
-  useEnv(resolved.env);
   const { clientId, clientSecret } = credentials();
-  const token = await formPost(`${authBase()}/connect/token`, {
+  const token = await formPost(`${authBase(resolved.env)}/connect/token`, {
     grant_type: "authorization_code",
     client_id: clientId,
     client_secret: clientSecret,
@@ -949,10 +953,11 @@ export async function collectAccountSpending(args: {
     }
     if (!bankConnectionId || !bankAccountId) continue;
     try {
-      const access = await refreshAccess(args.uid, bankConnectionId);
+      const { access, env } = await refreshAccess(args.uid, bankConnectionId);
       const chunk = await tlGet<TlTx[]>(
         `/data/v1/accounts/${encodeURIComponent(bankAccountId)}/transactions?from=${from}&to=${today}`,
         access,
+        env,
         args.extraHeaders,
       );
       for (const tx of Array.isArray(chunk) ? chunk : []) {

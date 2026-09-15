@@ -16,6 +16,16 @@ import {
   addDays,
 } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +52,7 @@ import {
   syncGoogleCalendar,
 } from "@/lib/googleCalendarApi";
 import { applyCalendarMergeRules } from "@/lib/calendarMerge";
+import { allDayEventCoversDate, londonDateFromIso, londonDayEndIso, londonDayStartIso } from "@/lib/londonCalendarDate";
 import { downloadIcs, eventsToIcs } from "@/lib/calendarIcs";
 import { mergedCalendarSubscribeUrl, publishMergedCalendar, syncCalendarFeed } from "@/lib/calendarFeedsApi";
 import type { CalendarEvent, CalendarEventCategory, CalendarFeed, CalendarNotificationPref } from "@/types/app";
@@ -119,7 +130,12 @@ function toISO(date: string, time: string) {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
-function splitISO(iso: string): { date: string; time: string } {
+function splitISO(iso: string, allDay = false): { date: string; time: string } {
+  // All-day events are anchored to the UK calendar date they were created for
+  // (see londonCalendarDate.ts) — reading them back with the *viewer's* local
+  // day instead can silently shift the date by one and, on save, make that
+  // shift permanent.
+  if (allDay) return { date: londonDateFromIso(iso), time: "00:00" };
   const d = new Date(iso);
   const date = format(d, "yyyy-MM-dd");
   const time = format(d, "HH:mm");
@@ -174,7 +190,7 @@ function defaultForm(prefillDate?: Date): EventForm {
 const CalendarPage = () => {
   const { scopeUserId, permission: sharePermission, pageTitle, isOwnScope } = useSharedScope("calendar");
   const canEdit = sharePermission === "edit";
-  const { events, settings, addEvent, updateEvent, deleteEvent, saveSettings } = useCalendar(scopeUserId ?? undefined);
+  const { events, settings, addEvent, updateEvent, deleteEvent, deleteSyncedEvents, saveSettings } = useCalendar(scopeUserId ?? undefined);
   const [params, setParams] = useSearchParams();
   const [gcalBusy, setGcalBusy] = useState(false);
   const [savingEvent, setSavingEvent] = useState(false);
@@ -265,6 +281,12 @@ const CalendarPage = () => {
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Prompt shown when disconnecting a synced source, to ask whether its
+  // already-imported events should stay or go — rather than silently
+  // orphaning them forever (Google) or leaving no way to clean them up (ICS).
+  const [disconnectPrompt, setDisconnectPrompt] = useState<
+    { kind: "google" } | { kind: "feed"; feedId: string; feedName: string } | null
+  >(null);
 
   // Form state
   const [form, setForm] = useState<EventForm>(defaultForm());
@@ -303,22 +325,6 @@ const CalendarPage = () => {
   useEffect(() => {
     setView(settings.defaultView ?? "month");
   }, [settings.defaultView]);
-
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  const eventsForDay = (day: Date) =>
-    allDisplayEvents
-      .filter((e) => {
-        const start = startOfDay(parseISO(e.startDate));
-        const end = endOfDay(parseISO(e.endDate));
-        return !isAfter(start, endOfDay(day)) && !isBefore(end, startOfDay(day));
-      })
-      .sort((a, b) => {
-        // Urgent events first
-        if (a.priority === "urgent" && b.priority !== "urgent") return -1;
-        if (b.priority === "urgent" && a.priority !== "urgent") return 1;
-        return a.startDate.localeCompare(b.startDate);
-      });
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
@@ -361,8 +367,8 @@ const CalendarPage = () => {
     // widget are read-only here — manage birthdays from that widget instead,
     // or turn them off entirely via Settings → Birthdays.
     if (event.id?.startsWith("__") || event.source === "birthday") return;
-    const { date: sd, time: st } = splitISO(event.startDate);
-    const { date: ed, time: et } = splitISO(event.endDate);
+    const { date: sd, time: st } = splitISO(event.startDate, event.allDay);
+    const { date: ed, time: et } = splitISO(event.endDate, event.allDay);
     setForm({
       title: event.title,
       description: event.description ?? "",
@@ -397,10 +403,10 @@ const CalendarPage = () => {
       return;
     }
     const startISO = form.allDay
-      ? `${form.startDate}T00:00:00.000Z`
+      ? londonDayStartIso(form.startDate)
       : toISO(form.startDate, form.startTime);
     const endISO = form.allDay
-      ? `${form.endDate}T23:59:59.000Z`
+      ? londonDayEndIso(form.endDate)
       : toISO(form.endDate, form.endTime);
 
     const payload: Omit<CalendarEvent, "id"> = {
@@ -630,6 +636,25 @@ const CalendarPage = () => {
     });
   }, [events, virtualEvents, settings.autoImport?.birthdays, settings.mergeRules, hiddenSources]);
 
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  const eventsForDay = (day: Date) => {
+    const dayStr = format(day, "yyyy-MM-dd");
+    return allDisplayEvents
+      .filter((e) => {
+        if (e.allDay) return allDayEventCoversDate(e, dayStr);
+        const start = startOfDay(parseISO(e.startDate));
+        const end = endOfDay(parseISO(e.endDate));
+        return !isAfter(start, endOfDay(day)) && !isBefore(end, startOfDay(day));
+      })
+      .sort((a, b) => {
+        // Urgent events first
+        if (a.priority === "urgent" && b.priority !== "urgent") return -1;
+        if (b.priority === "urgent" && a.priority !== "urgent") return 1;
+        return a.startDate.localeCompare(b.startDate);
+      });
+  };
+
   // ─── Notification row helpers ────────────────────────────────────────────────
 
   const addNotifRow = () =>
@@ -676,6 +701,37 @@ const CalendarPage = () => {
 
   const toggleSource = (key: string) =>
     setHiddenSources((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
+
+  // ─── Disconnect a synced source, with a choice over its already-imported events ──
+
+  const confirmDisconnect = async (deleteEvents: boolean) => {
+    const prompt = disconnectPrompt;
+    if (!prompt) return;
+    setDisconnectPrompt(null);
+    if (prompt.kind === "google") {
+      setGcalBusy(true);
+      try {
+        if (deleteEvents) await deleteSyncedEvents((e) => e.source === "google");
+        await disconnectGoogleCalendar();
+        toast.success(deleteEvents ? "Google Calendar disconnected and its events removed" : "Google Calendar disconnected");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not disconnect");
+      } finally {
+        setGcalBusy(false);
+      }
+      return;
+    }
+    setFeedBusy(true);
+    try {
+      if (deleteEvents) await deleteSyncedEvents((e) => e.feedId === prompt.feedId);
+      await saveSettings({ feeds: (settings.feeds || []).filter((item) => item.id !== prompt.feedId) });
+      toast.success(deleteEvents ? "Feed removed and its events deleted" : "Feed removed — its events were kept");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove that feed");
+    } finally {
+      setFeedBusy(false);
+    }
+  };
 
   // ─── JSX ─────────────────────────────────────────────────────────────────────
 
@@ -1573,17 +1629,9 @@ const CalendarPage = () => {
                           setGcalBusy(false);
                         }
                       }}>{gcalBusy ? "Syncing…" : "Sync Google"}</Button>
-                      <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={async () => {
-                        setGcalBusy(true);
-                        try {
-                          await disconnectGoogleCalendar();
-                          toast.success("Google Calendar disconnected");
-                        } catch (err) {
-                          toast.error(err instanceof Error ? err.message : "Could not disconnect");
-                        } finally {
-                          setGcalBusy(false);
-                        }
-                      }}>Disconnect</Button>
+                      <Button size="sm" variant="ghost" disabled={gcalBusy} onClick={() => setDisconnectPrompt({ kind: "google" })}>
+                        Disconnect
+                      </Button>
                     </div>
                     {gcalList.map((item) => {
                       const selected = (settings.google?.selectedCalendarIds || ["primary"]).includes(item.id) ||
@@ -1679,7 +1727,7 @@ const CalendarPage = () => {
                         }}>
                           <RefreshCw className="h-3.5 w-3.5" />
                         </button>
-                        <button type="button" className="rounded-lg p-1.5 hover:bg-muted" onClick={() => saveSettings({ feeds: (settings.feeds || []).filter((item) => item.id !== feed.id) })}>
+                        <button type="button" className="rounded-lg p-1.5 hover:bg-muted" onClick={() => setDisconnectPrompt({ kind: "feed", feedId: feed.id, feedName: feed.name })}>
                           <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </button>
                       </div>
@@ -1854,6 +1902,28 @@ const CalendarPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!disconnectPrompt} onOpenChange={(open) => !open && setDisconnectPrompt(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {disconnectPrompt?.kind === "google" ? "Disconnect Google Calendar?" : `Unsubscribe from ${disconnectPrompt?.kind === "feed" ? disconnectPrompt.feedName : "this feed"}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Keep the events already brought in, or delete them along with the connection?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
+            <AlertDialogCancel className="mt-0 w-full">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/80" onClick={() => void confirmDisconnect(false)}>
+              Keep events
+            </AlertDialogAction>
+            <AlertDialogAction className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => void confirmDisconnect(true)}>
+              Delete events
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </FeaturePageShell>
   );

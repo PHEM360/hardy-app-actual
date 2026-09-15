@@ -721,6 +721,23 @@ export interface Company {
   updatedAt?: any;
 }
 
+export interface CompanyDocument {
+  id?: string;
+  name: string;
+  category: string;    // free-form — see SharedCategorySettings.documentCategories
+  notes?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;   // MIME type e.g. "image/jpeg", "application/pdf"
+  fileSize?: number;   // bytes
+  fileUrls?: string[]; // all uploaded file URLs, in page order (including fileUrl as first)
+  fileNames?: string[];
+  fileTypes?: string[];
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+}
+
 // ─── Household ────────────────────────────────────────────────────────────────
 
 export interface HouseholdMember {

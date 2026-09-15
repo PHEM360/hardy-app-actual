@@ -66,7 +66,12 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
       </div>
     );
   }
-  const current = order[index];
+  // `index` is only re-clamped to the new `order.length` by the effect above,
+  // which runs after this render — if the photo set just shrank (an album
+  // pick changed, items got removed) this render can still see a stale,
+  // out-of-range index. Clamp here too so that render never reads `undefined`.
+  const safeIndex = index < order.length ? index : 0;
+  const current = order[safeIndex];
   const markBroken = (id: string) => setBroken((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   const handleError = (photo: RemoteDisplayPhoto) => {
     if (revived[photo.id] || !photo.storagePath) {
@@ -85,7 +90,7 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
         <div
           key={photo.id}
           className="absolute inset-0 transition-opacity duration-1000 ease-in-out"
-          style={{ opacity: i === index ? 1 : 0 }}
+          style={{ opacity: i === safeIndex ? 1 : 0 }}
         >
           {/* Blurred, scaled-up copy fills the frame behind the real photo so a
               portrait shot on a landscape screen (or vice versa) never gets
@@ -96,14 +101,14 @@ export function PhotoFrameScene({ photos, settings }: { photos: RemoteDisplayPho
             alt=""
             aria-hidden
             referrerPolicy="no-referrer"
-            loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
+            loading={Math.abs(i - safeIndex) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60"
           />
           <img
             src={revived[photo.id] || photo.url}
             alt={photo.caption || ""}
             referrerPolicy="no-referrer"
-            loading={Math.abs(i - index) <= 1 ? "eager" : "lazy"}
+            loading={Math.abs(i - safeIndex) <= 1 ? "eager" : "lazy"}
             className="absolute inset-0 w-full h-full object-contain"
             onError={() => handleError(photo)}
           />

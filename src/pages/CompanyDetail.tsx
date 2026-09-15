@@ -1778,6 +1778,7 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
   const children = allCompanies.filter((c) => c.parentCompanyId === companyId);
   const parent = company.parentCompanyId ? allCompanies.find((c) => c.id === company.parentCompanyId) : null;
   const { settings } = useSharedCategorySettings();
+  const { settings: companySettings } = useCompanySettings(companyId);
 
   const allIds = useMemo(() => [companyId, ...children.map((c) => c.id!).filter(Boolean)], [companyId, children.map((c) => c.id).join(",")]);
   const financeData = useMultiCompanyFinance(allIds);
@@ -1856,7 +1857,7 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
     setEditTaxYear(false);
   };
 
-  const taxRate = settings.corporateTaxRate ?? 19;
+  const taxRate = companySettings.corporateTaxRate ?? 19;
   const estTax = Math.max(0, (isParent ? consolidated : own).net * (taxRate / 100));
 
   // Expense breakdown by category

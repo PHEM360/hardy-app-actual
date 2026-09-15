@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, FileText, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { receiptKind, receiptLabel, type ReceiptSource } from "@/lib/receipts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -106,26 +106,63 @@ export function ReceiptThumb({
 
 export function ReceiptLightbox({
   source,
+  sources,
+  index = 0,
+  onIndexChange,
   open,
   onClose,
 }: {
+  /** Single-page mode (unchanged behaviour). Ignored when `sources` has entries. */
   source: ReceiptSource | null;
+  /** Multi-page mode: pass every page of the document to enable prev/next paging. */
+  sources?: ReceiptSource[];
+  index?: number;
+  onIndexChange?: (index: number) => void;
   open: boolean;
   onClose: () => void;
 }) {
-  const src = usePreviewSrc(source ?? {});
-  const kind = source ? receiptKind(source) : "other";
-  const label = source ? receiptLabel(source) : "Receipt";
+  const pages = sources && sources.length > 0 ? sources : source ? [source] : [];
+  const pageCount = pages.length;
+  const safeIndex = pageCount > 0 ? Math.min(Math.max(index, 0), pageCount - 1) : 0;
+  const current = pages[safeIndex] ?? null;
+  const hasMultiple = pageCount > 1;
+
+  const src = usePreviewSrc(current ?? {});
+  const kind = current ? receiptKind(current) : "other";
+  const label = current ? receiptLabel(current) : "Receipt";
+
+  const goTo = (next: number) => {
+    if (!hasMultiple) return;
+    onIndexChange?.((next + pageCount) % pageCount);
+  };
+
+  useEffect(() => {
+    if (!open || !hasMultiple) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goTo(safeIndex + 1);
+      else if (e.key === "ArrowLeft") goTo(safeIndex - 1);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, hasMultiple, safeIndex, pageCount]);
 
   return (
-    <Dialog open={open && !!source} onOpenChange={(next) => { if (!next) onClose(); }}>
+    <Dialog open={open && pageCount > 0} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent aria-describedby={undefined} className="max-w-2xl p-0 overflow-hidden">
         <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0 border-b border-border/50 px-4 py-3 pr-12">
-          <DialogTitle className="min-w-0 truncate font-display text-sm">{label}</DialogTitle>
+          <div className="flex min-w-0 items-center gap-2">
+            <DialogTitle className="min-w-0 truncate font-display text-sm">{label}</DialogTitle>
+            {hasMultiple && (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                {safeIndex + 1} / {pageCount}
+              </span>
+            )}
+          </div>
           <div className="flex shrink-0 items-center gap-1">
-            {source?.url && (
+            {current?.url && (
               <a
-                href={source.url}
+                href={current.url}
                 target="_blank"
                 rel="noreferrer"
                 className="flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted"
@@ -146,7 +183,7 @@ export function ReceiptLightbox({
             </button>
           </div>
         </DialogHeader>
-        <div className="min-h-0 bg-muted/30">
+        <div className="relative min-h-0 bg-muted/30">
           {kind === "image" && src ? (
             <img src={src} alt={label} className="mx-auto max-h-[80vh] w-full object-contain" />
           ) : src ? (
@@ -154,11 +191,42 @@ export function ReceiptLightbox({
           ) : (
             <p className="p-6 text-sm text-muted-foreground">No preview available.</p>
           )}
+          {hasMultiple && (
+            <>
+              <button
+                type="button"
+                onClick={() => goTo(safeIndex - 1)}
+                aria-label="Previous page"
+                className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 text-foreground shadow-card hover:bg-card"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo(safeIndex + 1)}
+                aria-label="Next page"
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/90 text-foreground shadow-card hover:bg-card"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
+                {pages.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to page ${i + 1}`}
+                    onClick={() => goTo(i)}
+                    className={`h-1.5 rounded-full transition-all ${i === safeIndex ? "w-4 bg-primary" : "w-1.5 bg-card/80"}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
           {kind === "pdf" && src && (
             <div className="flex items-center justify-between gap-2 border-t border-border/50 px-4 py-2">
               <p className="text-[11px] text-muted-foreground">Preview not showing?</p>
               <a
-                href={source?.url || src}
+                href={current?.url || src}
                 target="_blank"
                 rel="noreferrer"
                 download={kind === "pdf" ? label : undefined}
