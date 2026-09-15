@@ -7,8 +7,18 @@ service firebase.storage {
     // family app: any signed-in user may attach a receipt to a company they
     // can already write expenses for in Firestore.
 
+    // Mirrors isOwnerAccount() in firestore.rules — that hardcoded-email bypass
+    // grants the app owner superadmin there without ever needing a role/isAdmin
+    // field on their own profile doc. Without an equivalent here, an owner
+    // account with no such field set would pass every Firestore admin check
+    // but still be denied by isHouseholdAdmin below on the Storage side.
+    function isOwnerAccountStorage() {
+      return request.auth.token.email == "chris.hardy.07@googlemail.com";
+    }
+
     function isHouseholdAdmin(userDoc) {
-      return userDoc.role == "admin" || userDoc.role == "Admin" ||
+      return isOwnerAccountStorage() ||
+        userDoc.role == "admin" || userDoc.role == "Admin" ||
         userDoc.role == "superadmin" || userDoc.role == "Superadmin" ||
         userDoc.role == "super-admin" || userDoc.role == "super_admin" ||
         userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
@@ -26,13 +36,16 @@ service firebase.storage {
         firestore.get(/databases/(default)/documents/devices/$(request.auth.token.deviceId)).data.revoked != true;
     }
 
+    // NOTE: deliberately does NOT trust users/{uid}.householdId / householdIds —
+    // those are client-writable denormalizations (see useHouseholds.ts) and must
+    // never be treated as proof of membership. The household doc's own
+    // memberIds is the sole source of truth — mirrors canAccessHousehold in
+    // firestore.rules, which must stay in sync with this copy.
     function canAccessHousehold(householdId) {
       let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
       return isInteractiveUser() && (
         request.auth.uid == householdId ||
         isHouseholdAdmin(userDoc) ||
-        userDoc.householdId == householdId ||
-        ('householdIds' in userDoc && householdId in userDoc.householdIds) ||
         (firestore.exists(/databases/(default)/documents/households/$(householdId)) &&
           request.auth.uid in firestore.get(/databases/(default)/documents/households/$(householdId)).data.memberIds)
       );
@@ -53,9 +66,15 @@ service firebase.storage {
       );
     }
 
+    // Mirrors canAccessCompany/canEditCompany in firestore.rules — those start
+    // with an isAdmin() bypass that this copy was missing, so an app admin who
+    // isn't the company's owner and isn't in sharedWith could edit a company's
+    // Firestore records but then have a receipt/document upload rejected here.
     function canViewCompanyStorage(companyId) {
+      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
       let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
       return isInteractiveUser() && (
+        isHouseholdAdmin(userDoc) ||
         !('ownerId' in company) ||
         company.ownerId == "" ||
         request.auth.uid == company.ownerId ||
@@ -65,8 +84,10 @@ service firebase.storage {
     }
 
     function canEditCompanyStorage(companyId) {
+      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
       let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
       return isInteractiveUser() && (
+        isHouseholdAdmin(userDoc) ||
         !('ownerId' in company) ||
         company.ownerId == "" ||
         request.auth.uid == company.ownerId ||
