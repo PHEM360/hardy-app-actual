@@ -43,6 +43,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useBankConnections } from "@/hooks/useBankConnections";
 import { useBankConnectStatus } from "@/hooks/useBankConnectStatus";
 import { setFlatDocumentCategories, useFlat } from "@/hooks/useFlats";
+import { ReceiptLightbox, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { computeFlatReturns, estimateFlatTax, fmtGbp, fmtPct } from "@/lib/flatFinance";
 import { importFlatBankTransactions, startBankConnect } from "@/lib/truelayerApi";
 import {
@@ -166,6 +167,7 @@ export default function FlatDashboard({
     updateDocument,
     deleteDocument,
     addNote,
+    updateNote,
     toggleNote,
     deleteNote,
   } = useFlat(flatId);
@@ -225,6 +227,12 @@ export default function FlatDashboard({
   const [savingDocEdit, setSavingDocEdit] = useState(false);
   const [deleteDocTarget, setDeleteDocTarget] = useState<FlatDocumentMeta | null>(null);
   const [deletingDoc, setDeletingDoc] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<FlatDocumentMeta | null>(null);
+
+  const [editNoteId, setEditNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState("");
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false);
+  const [deleteNoteTarget, setDeleteNoteTarget] = useState<string | null>(null);
 
   const otherFlats = flats.filter((f) => f.id !== flatId);
 
@@ -511,6 +519,41 @@ export default function FlatDashboard({
       toast.error(err instanceof Error ? err.message : "Could not delete document");
     } finally {
       setDeletingDoc(false);
+    }
+  };
+
+  const startEditNote = (n: { id: string; text: string }) => {
+    setEditNoteId(n.id);
+    setEditNoteText(n.text);
+  };
+
+  const saveEditNote = async () => {
+    if (!editNoteId) return;
+    if (!editNoteText.trim()) {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    setSavingNoteEdit(true);
+    try {
+      await updateNote(editNoteId, editNoteText.trim());
+      toast.success("Note updated");
+      setEditNoteId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update note");
+    } finally {
+      setSavingNoteEdit(false);
+    }
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!deleteNoteTarget) return;
+    try {
+      await deleteNote(deleteNoteTarget);
+      toast.success("Note deleted");
+      setDeleteNoteTarget(null);
+      setEditNoteId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete note");
     }
   };
 
@@ -1122,34 +1165,71 @@ export default function FlatDashboard({
             {notes.length === 0 ? (
               <li className="py-4 text-center text-sm text-muted-foreground">No notes yet.</li>
             ) : (
-              notes.map((n) => (
-                <li
-                  key={n.id}
-                  className="flex items-start gap-2 rounded-xl border border-border/40 px-3 py-2"
-                  style={{ background: tint(8) }}
-                >
-                  <button
-                    type="button"
-                    disabled={!canEdit}
-                    className="mt-0.5 text-xs font-semibold text-muted-foreground"
-                    onClick={() => void toggleNote(n.id, !n.done)}
+              notes.map((n) =>
+                editNoteId === n.id ? (
+                  <li
+                    key={n.id}
+                    className="space-y-2 rounded-xl border border-primary/40 px-3 py-2.5"
+                    style={{ background: tint(14) }}
                   >
-                    {n.done ? "✓" : "○"}
-                  </button>
-                  <p className={`min-w-0 flex-1 text-sm ${n.done ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                    {n.text}
-                  </p>
-                  {canEdit && (
+                    <AutoGrowTextarea
+                      autoFocus
+                      value={editNoteText}
+                      onChange={(e) => setEditNoteText(e.target.value)}
+                      className="min-h-[44px] rounded-lg text-sm"
+                      placeholder="Note…"
+                    />
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                        onClick={() => setDeleteNoteTarget(n.id)}
+                        aria-label="Delete note"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={() => setEditNoteId(null)}>
+                          <X className="mr-1 h-3.5 w-3.5" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 rounded-lg bg-gradient-primary text-xs"
+                          disabled={savingNoteEdit}
+                          onClick={() => void saveEditNote()}
+                        >
+                          {savingNoteEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                ) : (
+                  <li
+                    key={n.id}
+                    className="flex items-start gap-2 rounded-xl border border-border/40 px-3 py-2"
+                    style={{ background: tint(8) }}
+                  >
                     <button
                       type="button"
-                      className="rounded-lg p-1 text-muted-foreground hover:text-destructive"
-                      onClick={() => void deleteNote(n.id)}
+                      disabled={!canEdit}
+                      className="mt-0.5 text-xs font-semibold text-muted-foreground"
+                      onClick={() => void toggleNote(n.id, !n.done)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {n.done ? "✓" : "○"}
                     </button>
-                  )}
-                </li>
-              ))
+                    <button
+                      type="button"
+                      disabled={!canEdit}
+                      className="min-w-0 flex-1 text-left text-sm disabled:cursor-default"
+                      onClick={() => startEditNote(n)}
+                    >
+                      <span className={n.done ? "text-muted-foreground line-through" : "text-foreground"}>{n.text}</span>
+                    </button>
+                  </li>
+                ),
+              )
             )}
           </ul>
         </SectionCard>
@@ -1229,6 +1309,11 @@ export default function FlatDashboard({
                     className="space-y-2 rounded-xl border border-primary/40 px-3 py-2.5"
                     style={{ background: tint(14) }}
                   >
+                    <ReceiptThumb
+                      source={{ url: d.url, name: d.name }}
+                      onClick={() => setPreviewDoc(d)}
+                      className="h-32 w-full rounded-lg"
+                    />
                     <Input
                       value={editDocDraft.name}
                       onChange={(e) => setEditDocDraft((p) => ({ ...p, name: e.target.value }))}
@@ -1274,62 +1359,56 @@ export default function FlatDashboard({
                       className="min-h-[44px] rounded-lg text-sm"
                       placeholder="Notes…"
                     />
-                    <div className="flex justify-end gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-lg text-xs"
-                        onClick={() => setEditDocId(null)}
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                        onClick={() => setDeleteDocTarget(d)}
+                        aria-label="Delete document"
                       >
-                        <X className="mr-1 h-3.5 w-3.5" />
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-8 rounded-lg bg-gradient-primary text-xs"
-                        disabled={savingDocEdit}
-                        onClick={() => void saveEditDoc()}
-                      >
-                        {savingDocEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                        Save
-                      </Button>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="flex gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-lg text-xs"
+                          onClick={() => setEditDocId(null)}
+                        >
+                          <X className="mr-1 h-3.5 w-3.5" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 rounded-lg bg-gradient-primary text-xs"
+                          disabled={savingDocEdit}
+                          onClick={() => void saveEditDoc()}
+                        >
+                          {savingDocEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+                          Save
+                        </Button>
+                      </div>
                     </div>
                   </li>
                 ) : (
-                  <li
-                    key={d.id}
-                    className="flex min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2"
-                    style={{ background: tint(8) }}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <a href={d.url} target="_blank" rel="noreferrer" className="truncate text-sm font-medium text-primary hover:underline">
-                        {d.name}
-                      </a>
-                      <p className="text-[11px] text-muted-foreground">
-                        {d.category || "Other"}
-                        {d.year ? ` · ${d.year}` : ""} · {fmtDateShort(d.date)}
-                      </p>
-                      {d.notes && <p className="truncate text-[11px] text-muted-foreground">{d.notes}</p>}
-                    </div>
-                    {canEdit && (
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                          onClick={() => startEditDoc(d)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                          onClick={() => setDeleteDocTarget(d)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => startEditDoc(d)}
+                      className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-border/40 px-3 py-2 text-left disabled:cursor-default"
+                      style={{ background: tint(8) }}
+                    >
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{d.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {d.category || "Other"}
+                          {d.year ? ` · ${d.year}` : ""} · {fmtDateShort(d.date)}
+                        </p>
+                        {d.notes && <p className="truncate text-[11px] text-muted-foreground">{d.notes}</p>}
                       </div>
-                    )}
+                    </button>
                   </li>
                 ),
               )
@@ -1670,6 +1749,33 @@ export default function FlatDashboard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!deleteNoteTarget} onOpenChange={(o) => !o && setDeleteNoteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete note?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDeleteNote();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ReceiptLightbox
+        source={previewDoc ? { url: previewDoc.url, name: previewDoc.name } : null}
+        open={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+      />
     </div>
   );
 }
