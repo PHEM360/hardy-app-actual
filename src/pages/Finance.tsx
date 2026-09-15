@@ -27,11 +27,13 @@ import AccountTypesSettings from "@/components/finance/AccountTypesSettings";
 import BankSyncSettings from "@/components/finance/BankSyncSettings";
 import DisplayStatsSettings from "@/components/finance/DisplayStatsSettings";
 import FinanceSummary from "@/components/finance/FinanceSummary";
+import { FinanceAssetsPanel } from "@/components/finance/FinanceAssetsPanel";
 import FinanceTaxPanel from "@/components/finance/FinanceTaxPanel";
 import PensionModellerPanel from "@/components/finance/PensionModellerPanel";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
+import { totalPropertyValue, type FinanceAsset } from "@/lib/financeAssets";
 import { accountFeeTotals, buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
 import type { FinanceStatId } from "@/lib/financeDisplay";
 import ImportBalancesDialog from "@/components/finance/ImportBalancesDialog";
@@ -210,7 +212,7 @@ const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] 
 
 interface FinanceProps {
   /** Dev-only preview hook (see FinancePreview.tsx) — bypasses Firestore/auth entirely. */
-  mockData?: { accounts: Account[]; entries: BalanceEntry[] };
+  mockData?: { accounts: Account[]; entries: BalanceEntry[]; assets?: FinanceAsset[] };
 }
 
 const Finance = ({ mockData }: FinanceProps = {}) => {
@@ -225,7 +227,8 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const { accountTypes, displayStats, pensionModel, saveAccountTypes, saveDisplayStats, savePensionModel, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
-  const { loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries } = live;
+  const assets = mockData?.assets ?? live.assets;
+  const { loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries, addAsset, updateAsset, deleteAsset } = live;
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   // Keep selectedAccounts in sync when accounts load
   useMemo(() => {
@@ -413,6 +416,8 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   }, [accountsForChart, combinedChartData, latestBalances, selectedAccounts]);
 
   const totalBalance = latestBalances.filter((a) => a.active && !a.hidden).reduce((s, a) => s + a.latestBalance, 0);
+  const propertyTotal = totalPropertyValue(assets);
+  const netWorth = totalBalance + propertyTotal;
   const insights = useMemo(
     () => buildFinanceInsights(accounts.filter((a) => a.active && !a.hidden), entries),
     [accounts, entries]
@@ -529,7 +534,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const managingAccount = manageAccountId ? accounts.find(a => a.id === manageAccountId) : null;
   const managingEntries = manageAccountId ? entries.filter(e => e.accountId === manageAccountId).sort((a, b) => b.date.localeCompare(a.date)) : [];
 
-  if (loading) {
+  if (loading && !mockData) {
     return (
       <FeaturePageShell title={pageTitle} subtitle="Account balances over time" icon={<Wallet className="w-5 h-5" />} sharePage="finance">
         <div className="flex items-center justify-center py-20">
@@ -559,12 +564,20 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       )}
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-5 rounded-2xl shadow-card mb-3 sm:mb-5 bg-gradient-primary">
-        <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Total balance</p>
-        <p className="text-2xl font-bold font-display text-white mt-1">
-          {formatGBP(totalBalance)}
-        </p>
+        <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Net worth</p>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className="text-2xl font-bold font-display text-white">
+            {formatGBP(netWorth)}
+          </p>
+          {propertyTotal > 0 && (
+            <p className="text-xs text-white/80">
+              of which {formatGBP(propertyTotal)} is property
+            </p>
+          )}
+        </div>
         <p className="text-xs text-white/70 mt-1">
-          Across {latestBalances.filter((a) => a.active && !a.hidden).length} active accounts
+          {latestBalances.filter((a) => a.active && !a.hidden).length} accounts
+          {assets.length > 0 ? ` · ${assets.length} propert${assets.length === 1 ? "y" : "ies"}` : ""}
         </p>
         {(showStat("heroMonth") || showStat("heroTaxYear") || showStat("heroOpened")) && (
           <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-3 sm:mt-4">
@@ -728,6 +741,14 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
           );
         })}
       </div>
+
+      <FinanceAssetsPanel
+        assets={assets}
+        canEdit={canEdit}
+        onAdd={addAsset}
+        onUpdate={updateAsset}
+        onDelete={deleteAsset}
+      />
 
       {/* Controls Row */}
       <div

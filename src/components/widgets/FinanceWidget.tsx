@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { PiggyBank, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { useFinance } from "@/hooks/useFinance";
+import { totalPropertyValue } from "@/lib/financeAssets";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 function fmt(n: number) {
@@ -9,7 +10,7 @@ function fmt(n: number) {
 
 export function FinanceWidget() {
   const navigate = useNavigate();
-  const { accounts, entries, loading } = useFinance();
+  const { accounts, entries, assets, loading } = useFinance();
   const accent = WIDGET_ACCENT.finance;
 
   const activeAccounts = accounts.filter((a) => a.active && !a.hidden);
@@ -21,7 +22,9 @@ export function FinanceWidget() {
     return acctEntries[0]?.balance ?? 0;
   };
 
-  const total = activeAccounts.reduce((sum, a) => sum + latestBalance(a.id), 0);
+  const cashTotal = activeAccounts.reduce((sum, a) => sum + latestBalance(a.id), 0);
+  const propertyTotal = totalPropertyValue(assets);
+  const total = cashTotal + propertyTotal;
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -30,7 +33,7 @@ export function FinanceWidget() {
       .filter((e) => e.accountId === a.id && new Date(e.date) <= thirtyDaysAgo)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
     return sum + (old?.balance ?? latestBalance(a.id));
-  }, 0);
+  }, 0) + propertyTotal;
   const diff = total - oldTotal;
 
   return (
@@ -56,7 +59,9 @@ export function FinanceWidget() {
           <div className="flex-shrink-0 mb-2.5">
             <p className="text-2xl font-bold font-display text-foreground leading-none">{fmt(total)}</p>
             <p className="text-sm text-muted-foreground mt-0.5">
-              across {activeAccounts.length} account{activeAccounts.length === 1 ? "" : "s"}
+              {propertyTotal > 0
+                ? `of which ${fmt(propertyTotal)} is property`
+                : `across ${activeAccounts.length} account${activeAccounts.length === 1 ? "" : "s"}`}
             </p>
             <div className={`flex items-center gap-0.5 mt-1 ${diff >= 0 ? "text-success" : "text-destructive"}`}>
               {diff >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}

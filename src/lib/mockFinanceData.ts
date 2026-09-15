@@ -1,11 +1,11 @@
-import type { Account, BalanceEntry } from "@/hooks/useFinance";
+import type { Account, BalanceEntry, FinanceAsset } from "@/hooks/useFinance";
 
 /**
  * Dev-only synthetic data for previewing the Finance page UI without Firestore
  * or auth. Only ever imported by FinancePreview.tsx, which is only routed to
  * behind `import.meta.env.DEV`.
  */
-export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceEntry[] } {
+export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceEntry[]; assets: FinanceAsset[] } {
   const accounts: Account[] = [
     { id: "acc-current", name: "Joint Current Account", type: "Current", active: true, hidden: false, openedOn: "2021-03-12" },
     { id: "acc-isa", name: "Stocks & Shares ISA", type: "ISA", active: true, hidden: false, openedOn: "2020-05-18", growthAssumptionPct: 6, feePct: 0.25, ocfPct: 0.2, adviceFeeKind: "percent", adviceFeeAmount: 0.5, allocations: [
@@ -27,6 +27,29 @@ export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceE
       { id: "pen-cash", name: "Cash", pct: 10, assetClass: "cash" },
     ] },
     { id: "acc-old-isa", name: "Cash ISA (closed)", type: "ISA", active: false, hidden: false, openedOn: "2016-04-06" },
+  ];
+
+  const assets = [
+    {
+      id: "asset-home",
+      kind: "property" as const,
+      name: "Harbour Road",
+      value: 425000,
+      rentMonthly: 0,
+      expensesMonthly: 0,
+      primaryResidence: true,
+      growthAssumptionPct: 3,
+    },
+    {
+      id: "asset-flat",
+      kind: "property" as const,
+      name: "Let flat",
+      value: 180000,
+      rentMonthly: 950,
+      expensesMonthly: 180,
+      primaryResidence: false,
+      growthAssumptionPct: 2.5,
+    },
   ];
 
   // Monthly entries from 2023-06 to 2026-06 — spans tax years 23/24, 24/25, 25/26.
@@ -64,5 +87,5 @@ export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceE
     }
   }
 
-  return { accounts, entries };
+  return { accounts, entries, assets };
 }

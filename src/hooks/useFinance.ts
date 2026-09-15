@@ -14,6 +14,13 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
+import {
+  financeAssetFromDoc,
+  financeAssetWriteData,
+  type FinanceAsset,
+} from "@/lib/financeAssets";
+
+export type { FinanceAsset } from "@/lib/financeAssets";
 
 export type AssetClass = "equity" | "bond" | "cash" | "property" | "other";
 
@@ -76,24 +83,28 @@ export function useFinance(scopeUserId?: string) {
   const uid = scopeUserId ?? dataUid;
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<BalanceEntry[]>([]);
+  const [assets, setAssets] = useState<FinanceAsset[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!uid) {
       setAccounts([]);
       setEntries([]);
+      setAssets([]);
       setLoading(false);
       return;
     }
 
     const accountsRef = collection(db, "finance", uid, "accounts");
     const entriesRef = collection(db, "finance", uid, "entries");
+    const assetsRef = collection(db, "finance", uid, "assets");
 
     let accountsLoaded = false;
     let entriesLoaded = false;
+    let assetsLoaded = false;
 
     const checkDone = () => {
-      if (accountsLoaded && entriesLoaded) setLoading(false);
+      if (accountsLoaded && entriesLoaded && assetsLoaded) setLoading(false);
     };
 
     const unsubAccounts = onSnapshot(
@@ -126,9 +137,24 @@ export function useFinance(scopeUserId?: string) {
       }
     );
 
+    const unsubAssets = onSnapshot(
+      query(assetsRef, orderBy("name")),
+      (snap) => {
+        setAssets(snap.docs.map((item) => financeAssetFromDoc(item.id, item.data() as Record<string, unknown>)));
+        assetsLoaded = true;
+        checkDone();
+      },
+      () => {
+        setAssets([]);
+        assetsLoaded = true;
+        checkDone();
+      }
+    );
+
     return () => {
       unsubAccounts();
       unsubEntries();
+      unsubAssets();
     };
   }, [uid]);
 
@@ -225,5 +251,39 @@ export function useFinance(scopeUserId?: string) {
     [uid]
   );
 
-  return { accounts, entries, loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries };
+  const addAsset = useCallback(
+    async (input: Omit<FinanceAsset, "id">) => {
+      if (!uid) return;
+      await addDoc(collection(db, "finance", uid, "assets"), {
+        ...financeAssetWriteData(input),
+        createdAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const updateAsset = useCallback(
+    async (assetId: string, input: Omit<FinanceAsset, "id">) => {
+      if (!uid) return;
+      await updateDoc(doc(db, "finance", uid, "assets", assetId), {
+        ...financeAssetWriteData(input),
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const deleteAsset = useCallback(
+    async (assetId: string) => {
+      if (!uid) return;
+      await deleteDoc(doc(db, "finance", uid, "assets", assetId));
+    },
+    [uid]
+  );
+
+  return {
+    accounts, entries, assets, loading,
+    addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries,
+    addAsset, updateAsset, deleteAsset,
+  };
 }
