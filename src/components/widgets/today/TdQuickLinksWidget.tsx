@@ -1,12 +1,33 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings2, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { FileUp, Receipt, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HOME_TILES } from "@/lib/homeLayout";
+import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
+import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { TdHead } from "./TdHead";
 
-const PICKABLE = HOME_TILES.filter((t) => t.id !== "quick_links" && t.route);
+type PickableTile = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  gradient: string;
+  route?: string;
+  action?: "expense" | "upload";
+};
+
+// HOME_TILES only covers navigable pages — "Add expense or document" and
+// "Upload" are dialog actions (see QuickLinksWidget.ALL_LINKS), so without
+// these they could never appear as pickable quick links here even though
+// they're already available as buttons in that other quick-links widget.
+const ACTION_TILES: PickableTile[] = [
+  { id: "expense", label: "Add expense or document", icon: Receipt, gradient: "linear-gradient(135deg,hsl(350,70%,55%),hsl(340,60%,46%))", action: "expense" },
+  { id: "upload", label: "Upload document", icon: FileUp, gradient: "linear-gradient(135deg,hsl(200,70%,55%),hsl(210,60%,46%))", action: "upload" },
+];
+
+const PICKABLE: PickableTile[] = [...HOME_TILES.filter((t) => t.id !== "quick_links" && t.route), ...ACTION_TILES];
 const MAX_LINKS = 8;
 
 interface QuickLinksConfig {
@@ -24,12 +45,20 @@ export function TdQuickLinksWidget({
   const tileIds = cfg.tileIds ?? [];
   const navigate = useNavigate();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
-  const selected = tileIds.map((id) => PICKABLE.find((t) => t.id === id)).filter(Boolean) as typeof PICKABLE;
+  const selected = tileIds.map((id) => PICKABLE.find((t) => t.id === id)).filter(Boolean) as PickableTile[];
 
   const toggleTile = (id: string) => {
     const next = tileIds.includes(id) ? tileIds.filter((t) => t !== id) : [...tileIds, id].slice(0, MAX_LINKS);
     onConfigChange({ ...cfg, tileIds: next });
+  };
+
+  const runTile = (tile: PickableTile) => {
+    if (tile.action === "expense") setExpenseOpen(true);
+    else if (tile.action === "upload") setUploadOpen(true);
+    else if (tile.route) navigate(tile.route);
   };
 
   return (
@@ -65,7 +94,7 @@ export function TdQuickLinksWidget({
                 <button
                   key={tile.id}
                   type="button"
-                  onClick={() => tile.route && navigate(tile.route)}
+                  onClick={() => runTile(tile)}
                   className="flex flex-col items-center gap-1.5 rounded-xl border border-border/50 bg-background/60 px-2 py-2.5 text-center hover:border-primary/40 hover:bg-primary/5"
                 >
                   <span
@@ -119,6 +148,9 @@ export function TdQuickLinksWidget({
           </Button>
         </DialogContent>
       </Dialog>
+
+      <AddExpenseDocumentDialog open={expenseOpen} onOpenChange={setExpenseOpen} />
+      <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );
 }

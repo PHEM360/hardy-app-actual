@@ -5,7 +5,7 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
-  AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw,
+  AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw, Filter,
   User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -742,122 +743,131 @@ const CalendarPage = () => {
       sharePage="calendar"
     >
 
-      <div className="flex min-w-0 gap-3">
-        <aside className="w-[3.4rem] shrink-0 sm:w-[11rem]">
-          <nav className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card">
-            {([
-              { id: "month" as const, label: "Month", icon: LayoutGrid },
-              { id: "week" as const, label: "Week", icon: CalendarDays },
-              { id: "agenda" as const, label: "Agenda", icon: List },
-            ]).map((item) => {
-              const Icon = item.icon;
-              const active = view === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setView(item.id)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-1.5 py-2 text-left transition sm:px-2 ${
-                    active ? "border-primary/45 bg-primary/10 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-gradient-primary text-primary-foreground" : "bg-muted"}`}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="hidden min-w-0 text-xs font-semibold sm:block">{item.label}</span>
-                </button>
-              );
-            })}
-            <div className="hidden space-y-1 border-t border-border/40 pt-2 sm:block">
-              <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Shown</p>
-              {sourceChips.map((chip) => {
-                const on = !hiddenSources.includes(chip.key);
-                return (
+      <div className="min-w-0">
+        {/* ── Toolbar ── */}
+        <div className="mb-3 rounded-2xl border border-border/50 bg-card p-2.5 shadow-card sm:mb-4 sm:p-3">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={prev}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <ChevronLeft className="h-4.5 w-4.5" />
+              </button>
+              <button
+                onClick={() => setCurrentDate(new Date())}
+                className="min-w-0 truncate px-1 font-display text-base font-bold text-card-foreground transition-colors hover:text-primary sm:text-lg"
+              >
+                {headerLabel}
+              </button>
+              <button
+                onClick={next}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <ChevronRight className="h-4.5 w-4.5" />
+              </button>
+              <button
+                onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
+                className="ml-1 shrink-0 rounded-xl border-2 border-primary/30 px-2.5 py-1.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary/10 sm:text-xs"
+              >
+                Today
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <div className="flex gap-0.5 rounded-xl bg-muted p-1">
+                {([
+                  { id: "month" as const, label: "Month" },
+                  { id: "week" as const, label: "Week" },
+                  { id: "agenda" as const, label: "Agenda" },
+                ]).map((item) => (
                   <button
-                    key={chip.key}
+                    key={item.id}
                     type="button"
-                    onClick={() => toggleSource(chip.key)}
-                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold ${
-                      on ? "bg-primary/10 text-foreground" : "text-muted-foreground"
+                    onClick={() => setView(item.id)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors sm:px-3 sm:text-xs ${
+                      view === item.id ? "bg-card text-card-foreground shadow-sm" : "text-muted-foreground hover:text-card-foreground"
                     }`}
                   >
-                    <span className="truncate">{chip.label}</span>
-                    <span className={`h-2 w-2 rounded-full ${on ? "bg-primary" : "bg-border"}`} />
+                    {item.label}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted"
+                      title="Filter what's shown"
+                    >
+                      <Filter className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 rounded-2xl p-2">
+                    <p className="mb-1 px-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Shown</p>
+                    {sourceChips.map((chip) => {
+                      const on = !hiddenSources.includes(chip.key);
+                      return (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          onClick={() => toggleSource(chip.key)}
+                          className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold ${
+                            on ? "bg-primary/10 text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          <span className="truncate">{chip.label}</span>
+                          <span className={`h-2 w-2 rounded-full ${on ? "bg-primary" : "bg-border"}`} />
+                        </button>
+                      );
+                    })}
+                  </PopoverContent>
+                </Popover>
+
+                {(isAdmin || isOwnScope) && (
+                  <button
+                    onClick={() => setSettingsOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                )}
+
+                {canEdit && (
+                  <button
+                    onClick={() => openAdd()}
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-3 py-2 text-[11px] font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 sm:text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Add event</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </nav>
-        </aside>
-        <div className="min-w-0 flex-1 overflow-x-hidden">
-      <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={prev}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="text-sm sm:text-base font-semibold text-card-foreground min-w-[130px] sm:min-w-[180px] text-center hover:text-primary transition-colors"
-          >
-            {headerLabel}
-          </button>
-          <button
-            onClick={next}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+          </div>
         </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => { setCurrentDate(new Date()); setSelectedDay(new Date()); }}
-            className="text-[11px] sm:text-xs font-medium text-primary px-2 sm:px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/10 transition-colors"
-          >
-            Today
-          </button>
-
-          {(isAdmin || isOwnScope) && (
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
-            >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          )}
-
-          {/* Add event */}
-          {canEdit && (
-            <button
-              onClick={() => openAdd()}
-              className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary-foreground bg-primary px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* ── Month view ── */}
       {view === "month" && (
-        <div
-          className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card"
-          style={{ borderLeftWidth: 4, borderLeftColor: "hsl(220,60%,55%)", background: "color-mix(in srgb, hsl(220,60%,55%) 8%, hsl(var(--card)))" }}
-        >
+        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-border/40 bg-card">
-            {WEEK_DAYS.map((d) => (
-              <div key={d} className="py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-foreground sm:py-3 sm:text-[11px]">
+          <div className="grid grid-cols-7 border-b border-border/40 bg-muted/40">
+            {WEEK_DAYS.map((d, i) => (
+              <div
+                key={d}
+                className={`py-2 text-center text-[10px] font-extrabold uppercase tracking-wider sm:py-2.5 sm:text-[11px] ${
+                  i >= 5 ? "text-primary/70" : "text-muted-foreground"
+                }`}
+              >
                 {d}
               </div>
             ))}
           </div>
 
-          {/* Day cells */}
+          {/* Day cells — tap a day to see/manage its events below; tap an
+              event chip directly to edit it. */}
           <div className="grid grid-cols-7">
             {monthDays.map((day) => {
               const dayEvts = eventsForDay(day);
@@ -869,57 +879,42 @@ const CalendarPage = () => {
                 <button
                   key={day.toISOString()}
                   type="button"
-                  onClick={() => openAdd(day)}
-                  className={`group relative flex min-h-[78px] flex-col border border-border/20 p-1 text-left transition-colors sm:min-h-[104px] sm:p-1.5 md:min-h-[122px] ${
-                    !inMonth ? "bg-background/40 text-muted-foreground" : selected ? "bg-primary/12" : today ? "bg-primary/8" : "bg-card hover:bg-primary/5"
+                  onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
+                  className={`group relative flex min-h-[64px] flex-col items-start border-b border-r border-border/25 p-1.5 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
+                    !inMonth ? "bg-muted/10" : selected ? "bg-primary/10" : "bg-card hover:bg-primary/5"
                   }`}
+                  style={today && inMonth ? { background: "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))" } : undefined}
                 >
                   <span
-                    className={`mb-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold sm:h-7 sm:w-7 sm:text-xs ${
+                    className={`mb-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] sm:h-7 sm:w-7 sm:text-xs ${
                       today
-                        ? "bg-primary text-primary-foreground"
-                        : selected
-                        ? "ring-2 ring-primary text-primary"
+                        ? "bg-gradient-primary font-extrabold text-primary-foreground shadow-sm"
                         : inMonth
-                        ? "text-card-foreground"
-                        : "text-muted-foreground/50"
+                        ? "font-bold text-card-foreground"
+                        : "text-muted-foreground/40"
                     }`}
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day));
-                    }}
-                    onKeyDown={(ev) => {
-                      if (ev.key !== "Enter" && ev.key !== " ") return;
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day));
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    title="Show this day's events"
                   >
                     {format(day, "d")}
                   </span>
 
-                  {dayEvts.slice(0, 3).map((e) => (
-                    <div
-                      key={e.id}
-                      className="mb-0.5"
-                      onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
-                    >
-                      <EventChip event={e} color={getEventColor(e)} dense />
-                    </div>
-                  ))}
-                  {dayEvts.length > 3 && (
-                    <span className="px-1 text-[8px] text-muted-foreground sm:text-[9px]">
-                      +{dayEvts.length - 3} more
-                    </span>
-                  )}
-                  {canEdit && (
-                    <span className="pointer-events-none mt-auto hidden items-center justify-center rounded-md py-0.5 text-muted-foreground/40 group-hover:flex">
-                      <Plus className="h-3 w-3" />
-                    </span>
-                  )}
+                  {/* Desktop/tablet: readable text chips */}
+                  <div className="hidden w-full min-w-0 flex-col gap-1 sm:flex">
+                    {dayEvts.slice(0, 3).map((e) => (
+                      <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}>
+                        <EventChip event={e} color={getEventColor(e)} dense />
+                      </div>
+                    ))}
+                    {dayEvts.length > 3 && (
+                      <span className="pl-1 text-[9px] font-bold text-muted-foreground">+{dayEvts.length - 3} more</span>
+                    )}
+                  </div>
+
+                  {/* Mobile: compact dots — full detail is one tap away below */}
+                  <div className="flex flex-wrap gap-0.5 sm:hidden">
+                    {dayEvts.slice(0, 4).map((e) => (
+                      <span key={e.id} className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: getEventColor(e) }} />
+                    ))}
+                  </div>
                 </button>
               );
             })}
@@ -927,31 +922,34 @@ const CalendarPage = () => {
         </div>
       )}
 
-      {/* ── Week view ── */}
+      {/* ── Week view ──
+          Seven real columns only from sm: up — squeezing them onto a phone
+          screen leaves each one too narrow for legible event text, so mobile
+          gets a stacked, day-per-row layout instead. */}
       {view === "week" && (
-        <div className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
-          <div className="grid grid-cols-7 divide-x divide-border/30">
+        <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-soft">
+          <div className="divide-y divide-border/30 sm:grid sm:grid-cols-7 sm:divide-x sm:divide-y-0">
             {weekDays.map((day) => {
               const dayEvts = eventsForDay(day);
               const today = isToday(day);
               const selected = selectedDay && isSameDay(day, selectedDay);
 
               return (
-                <div key={day.toISOString()} className="min-h-[200px] sm:min-h-[280px] md:min-h-[380px] flex flex-col">
+                <div key={day.toISOString()} className="flex flex-row sm:min-h-[280px] sm:flex-col md:min-h-[420px]">
                   {/* Day header */}
                   <button
                     onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                    className={`w-full py-2 sm:py-3 flex flex-col items-center border-b border-border/30 transition-colors ${
+                    className={`flex shrink-0 items-center gap-2 border-r border-border/30 px-3 py-2.5 transition-colors sm:w-full sm:flex-col sm:justify-center sm:gap-0.5 sm:border-r-0 sm:border-b sm:py-3 ${
                       today ? "bg-primary/10" : selected ? "bg-primary/5" : "hover:bg-muted/30"
                     }`}
                   >
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:text-[10px]">
                       {format(day, "EEE")}
                     </span>
                     <span
-                      className={`text-sm sm:text-base font-bold w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold sm:h-8 sm:w-8 sm:text-base ${
                         today
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-gradient-primary text-primary-foreground shadow-sm"
                           : selected
                           ? "ring-2 ring-primary text-primary"
                           : "text-card-foreground"
@@ -963,7 +961,7 @@ const CalendarPage = () => {
 
                   {/* Events */}
                   <div
-                    className="flex-1 space-y-0.5 overflow-hidden p-1 sm:p-1.5"
+                    className="min-w-0 flex-1 space-y-1 overflow-hidden p-2 sm:p-1.5"
                     onClick={() => openAdd(day)}
                     role="button"
                     tabIndex={0}
@@ -971,14 +969,14 @@ const CalendarPage = () => {
                       if (ev.key === "Enter" || ev.key === " ") openAdd(day);
                     }}
                   >
+                    {dayEvts.length === 0 && (
+                      <span className="hidden text-[10px] text-muted-foreground/50 sm:block">Tap to add</span>
+                    )}
                     {dayEvts.map((e) => (
                       <button key={e.id} type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="block w-full text-left">
                         <EventChip event={e} color={getEventColor(e)} />
                       </button>
                     ))}
-                    <span className="flex w-full items-center justify-center rounded py-0.5 text-[9px] text-muted-foreground/50 transition-colors hover:bg-muted/30 hover:text-muted-foreground sm:text-[10px]">
-                      <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    </span>
                   </div>
                 </div>
               );
@@ -1011,7 +1009,7 @@ const CalendarPage = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => openAdd(selectedDay)}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-primary-foreground bg-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+                  className="flex items-center gap-1 rounded-xl bg-gradient-primary px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
@@ -1113,10 +1111,10 @@ const CalendarPage = () => {
               <div
                 key={day.toISOString()}
                 className="rounded-2xl border border-border/50 bg-card p-3 shadow-card"
-                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(220,60%,55%)" : "transparent" }}
+                style={{ borderLeftWidth: 4, borderLeftColor: isToday(day) ? "hsl(var(--primary))" : "transparent" }}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className={`text-xs font-bold uppercase tracking-wide ${isToday(day) ? "text-primary" : "text-muted-foreground"}`}>
                     {isToday(day) ? "Today · " : ""}{format(day, "EEEE d MMMM")}
                   </p>
                   {canEdit && (
@@ -1151,7 +1149,6 @@ const CalendarPage = () => {
           })}
         </div>
       )}
-        </div>
       </div>
 
       {/* ── Add / Edit event dialog ── */}
