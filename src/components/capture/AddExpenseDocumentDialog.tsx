@@ -187,6 +187,7 @@ export function AddExpenseDocumentDialog({
     (kind === "expense" && expenseOk && (singleBundle || dest.type === "unallocated"))
     || (kind === "document" && (singleBundle || dest.type === "unallocated" || Boolean(allocateItem)));
   const showName = dest.type === "unallocated" ? singleBundle : showDetails || showExpenseFields;
+  const nameFieldIsName = kind === "document" || dest.type === "unallocated";
   const canSave = allocateItem
     ? dest.type !== "unallocated" && (showExpenseFields ? Boolean(draft.description.trim() && (dest.type !== "company" || draft.amount.trim())) : Boolean(draft.name.trim()))
     : dest.type === "unallocated"
@@ -677,15 +678,15 @@ export function AddExpenseDocumentDialog({
               {showName && (
                 <div className="space-y-1">
                   <Label>
-                    {kind === "document" || dest.type === "unallocated" ? "Name" : "Description"}
+                    {nameFieldIsName ? "Name" : "Description"}
                     {dest.type !== "unallocated" && (kind === "document" || showExpenseFields) ? " *" : ""}
                   </Label>
                   <Input
-                    value={kind === "document" || dest.type === "unallocated" ? draft.name : draft.description}
+                    value={nameFieldIsName ? draft.name : draft.description}
                     onChange={(e) => {
                       const value = e.target.value;
                       setDraft((current) =>
-                        kind === "document" || dest.type === "unallocated"
+                        nameFieldIsName
                           ? { ...current, name: value }
                           : { ...current, description: value, name: current.name || value },
                       );
@@ -693,34 +694,38 @@ export function AddExpenseDocumentDialog({
                     placeholder={dest.type === "unallocated" ? "Optional — you can name these later" : kind === "document" ? "e.g. Boiler certificate" : "e.g. Office supplies"}
                     className="h-9 rounded-xl"
                   />
-                  {(kind === "document" || dest.type === "unallocated") && (
-                    <div className="flex flex-wrap gap-1.5 pt-1.5">
-                      {[
-                        { label: "Receipt", icon: Receipt },
-                        { label: "Invoice", icon: FileText },
-                        { label: "Letter", icon: Mail },
-                        { label: "Certificate", icon: Award },
-                        { label: "Statement", icon: FileSpreadsheet },
-                      ].map(({ label, icon: Icon }) => {
-                        const active = draft.name === label;
-                        return (
-                          <button
-                            key={label}
-                            type="button"
-                            onClick={() => setDraft((current) => ({ ...current, name: label }))}
-                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all ${
-                              active
-                                ? "border-primary bg-gradient-primary text-primary-foreground shadow-md"
-                                : "border-border bg-card text-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-md"
-                            }`}
-                          >
-                            <Icon className="h-3 w-3" />
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-1.5 pt-1.5">
+                    {[
+                      { label: "Receipt", icon: Receipt },
+                      { label: "Invoice", icon: FileText },
+                      { label: "Letter", icon: Mail },
+                      { label: "Certificate", icon: Award },
+                      { label: "Statement", icon: FileSpreadsheet },
+                    ].map(({ label, icon: Icon }) => {
+                      const active = (nameFieldIsName ? draft.name : draft.description) === label;
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() =>
+                            setDraft((current) =>
+                              nameFieldIsName
+                                ? { ...current, name: label }
+                                : { ...current, description: label, name: current.name || label },
+                            )
+                          }
+                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all ${
+                            active
+                              ? "border-primary bg-gradient-primary text-primary-foreground shadow-md"
+                              : "border-border bg-card text-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-md"
+                          }`}
+                        >
+                          <Icon className="h-3 w-3" />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
