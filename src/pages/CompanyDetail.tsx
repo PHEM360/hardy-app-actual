@@ -39,6 +39,7 @@ import {
 } from "@/hooks/useCompanies";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { useSharedCategorySettings } from "@/hooks/useSharedCategorySettings";
+import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useVisitedTabs } from "@/hooks/useVisitedTabs";
 import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, CompanyIncome, CompanyTaxReturn, Company } from "@/types/app";
@@ -1419,14 +1420,12 @@ function SettingsTab({ companyId }: { companyId: string }) {
 
   return (
     <div className="space-y-6">
-      <div
-        className="rounded-2xl border border-border/50 p-4 shadow-card"
-        style={{ background: "color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)))" }}
-      >
+      <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
         <p className="font-display text-sm font-semibold">Income & expense categories</p>
-        <p className="mt-1 text-xs leading-snug text-muted-foreground">
-          These lists are shared for every company. Edit them in Companies → Settings, or in Unallocated settings.
+        <p className="mt-1 mb-3 text-xs leading-snug text-muted-foreground">
+          Shared across every company — edit them here, or in Unallocated settings; either place updates the same list.
         </p>
+        <SharedCategorySettingsPanel />
       </div>
 
       <div>

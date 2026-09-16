@@ -669,7 +669,11 @@ export const DEFAULT_DOCUMENT_CATEGORIES = [
   "Other",
 ];
 
-export const SHARED_CATEGORY_SETTINGS_ID = "__family__";
+// Not "__family__" — Firestore rejects any document ID matching /^__.*__$/ as
+// reserved, which silently broke every read/write here (writes threw an
+// "is invalid because it is reserved" error, reads swallowed it and fell
+// back to defaults, making edits look like they were never saved).
+export const SHARED_CATEGORY_SETTINGS_ID = "shared_family";
 
 export interface SharedCategorySettings {
   incomeCategories: string[];

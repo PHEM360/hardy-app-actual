@@ -657,6 +657,20 @@ export function AddExpenseDocumentDialog({
                     placeholder={dest.type === "unallocated" ? "Optional — you can name these later" : kind === "document" ? "e.g. Boiler certificate" : "e.g. Office supplies"}
                     className="h-9 rounded-xl"
                   />
+                  {kind === "document" && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {["Receipt", "Invoice", "Letter", "Certificate", "Statement"].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setDraft((current) => ({ ...current, name: preset }))}
+                          className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -3,8 +3,11 @@ import { normalizeSharedCategories } from "@/lib/sharedCategories";
 import { SHARED_CATEGORY_SETTINGS_ID, sortCategoriesOtherLast } from "@/types/app";
 
 describe("shared category settings", () => {
-  it("uses a dedicated family document id that is not a real company", () => {
-    expect(SHARED_CATEGORY_SETTINGS_ID).toBe("__family__");
+  it("uses a dedicated family document id that is not a real company, and isn't a Firestore-reserved id", () => {
+    expect(SHARED_CATEGORY_SETTINGS_ID).toBe("shared_family");
+    // Firestore rejects any document id matching /^__.*__$/ as reserved —
+    // "__family__" silently broke every read/write to this document.
+    expect(SHARED_CATEGORY_SETTINGS_ID).not.toMatch(/^__.*__$/);
   });
 
   it("keeps Other last when editing lists", () => {

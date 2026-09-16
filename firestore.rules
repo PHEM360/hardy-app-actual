@@ -737,12 +737,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Company settings (per-company tax rate) plus shared family categories on "__family__".
-    // Keep the family doc on its own allow lines — OR-ing with canEditCompany("__family__")
-    // would call get(companies/__family__), which errors and denies the whole expression.
+    // Company settings (per-company tax rate) plus shared family categories on
+    // "shared_family" — not "__family__": Firestore rejects any document id
+    // matching /^__.*__$/ as reserved, which silently broke every read/write
+    // to that doc (see SHARED_CATEGORY_SETTINGS_ID in types/app.ts).
+    // Keep the family doc on its own allow lines — OR-ing with
+    // canEditCompany("shared_family") would call get(companies/shared_family),
+    // which errors and denies the whole expression.
     match /companySettings/{companyId} {
-      allow read: if isAuthenticated() && companyId == "__family__";
-      allow write: if isAuthenticated() && companyId == "__family__";
+      allow read: if isAuthenticated() && companyId == "shared_family";
+      allow write: if isAuthenticated() && companyId == "shared_family";
       allow read: if isAuthenticated() && canAccessCompany(companyId);
       allow write: if isAuthenticated() && canEditCompany(companyId);
     }
