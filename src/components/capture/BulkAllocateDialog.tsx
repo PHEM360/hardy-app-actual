@@ -75,7 +75,7 @@ export function BulkAllocateDialog({
   const [roster, setRoster] = useState<CaptureItem[]>(items);
   const [index, setIndex] = useState(0);
   const [staged, setStaged] = useState<Record<string, CaptureDraft>>({});
-  const [draft, setDraft] = useState<CaptureDraft>(() => draftFor(items[0]));
+  const [draft, setDraft] = useState<CaptureDraft>(() => draftFor(items[0] ?? ({} as CaptureItem)));
   const [phase, setPhase] = useState<"step" | "review" | "done">("step");
   const [committing, setCommitting] = useState(false);
   const [commitProgress, setCommitProgress] = useState<{ done: number; total: number } | null>(null);
