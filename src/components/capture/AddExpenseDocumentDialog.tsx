@@ -657,7 +657,7 @@ export function AddExpenseDocumentDialog({
                     placeholder={dest.type === "unallocated" ? "Optional — you can name these later" : kind === "document" ? "e.g. Boiler certificate" : "e.g. Office supplies"}
                     className="h-9 rounded-xl"
                   />
-                  {kind === "document" && (
+                  {(kind === "document" || dest.type === "unallocated") && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {["Receipt", "Invoice", "Letter", "Certificate", "Statement"].map((preset) => (
                         <button

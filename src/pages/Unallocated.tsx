@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { FileText, Inbox, Plus, Receipt, Settings2, Trash2 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
+import { BulkAllocateDialog } from "@/components/capture/BulkAllocateDialog";
 import { ReceiptLightbox } from "@/components/receipts/ReceiptPreview";
 import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export default function Unallocated() {
   const { items, loading, removeItem } = useCaptureInbox();
   const [filter, setFilter] = useState<Filter>("all");
   const [addOpen, setAddOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [allocating, setAllocating] = useState<CaptureItem | null>(null);
   const [viewer, setViewer] = useState<ReceiptSource | null>(null);
 
@@ -108,9 +110,16 @@ export default function Unallocated() {
       subtitle="Receipts and files waiting to be filed."
       icon={<Inbox className="h-5 w-5" />}
       action={
-        <Button className="h-9 rounded-xl bg-gradient-primary" onClick={() => setAddOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" /> Add
-        </Button>
+        <div className="flex items-center gap-2">
+          {visible.length > 0 && (
+            <Button variant="outline" className="h-9 rounded-xl" onClick={() => setBulkOpen(true)}>
+              Allocate {visible.length}
+            </Button>
+          )}
+          <Button className="h-9 rounded-xl bg-gradient-primary" onClick={() => setAddOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add
+          </Button>
+        </div>
       }
     >
       <div className="flex min-w-0 gap-3">
@@ -250,6 +259,7 @@ export default function Unallocated() {
         }}
       />
       <ReceiptLightbox source={viewer} open={!!viewer} onClose={() => setViewer(null)} />
+      <BulkAllocateDialog open={bulkOpen} onOpenChange={setBulkOpen} items={visible} />
     </FeaturePageShell>
   );
 }
