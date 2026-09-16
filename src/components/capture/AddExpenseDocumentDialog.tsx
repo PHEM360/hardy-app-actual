@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Award,
   Building2,
   Camera,
   CheckCircle2,
+  FileSpreadsheet,
   FileText,
   Heart,
   Home,
   Inbox,
   Link2,
+  Mail,
   Paperclip,
   Receipt,
   StickyNote,
@@ -81,14 +84,28 @@ function PageThumb({ file, page, onRemove }: { file: File; page: number; onRemov
   );
 }
 
+export type BulkStepInfo = {
+  index: number;
+  total: number;
+  stagedCount: number;
+  onStage: (draft: CaptureDraft) => void;
+  onSkip: () => void;
+  onFinish: () => void;
+};
+
 export function AddExpenseDocumentDialog({
   open,
   onOpenChange,
   allocateItem,
+  bulk,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   allocateItem?: CaptureItem | null;
+  /** Click-through allocation mode: staging a page here never uploads
+   *  anything itself — the parent (BulkAllocateDialog) collects each
+   *  onStage call and only commits the batch when the user finishes. */
+  bulk?: BulkStepInfo;
 }) {
   const navigate = useNavigate();
   const { companies } = useCompanies();
@@ -227,6 +244,12 @@ export function AddExpenseDocumentDialog({
   };
 
   const save = async () => {
+    if (bulk) {
+      // Nothing uploads here — record the choice and let the parent move on
+      // to the next item (or straight to review, if this was the last one).
+      bulk.onStage(draft);
+      return;
+    }
     setSaving(true);
     setProgress({
       doneItems: 0,
@@ -365,8 +388,21 @@ export function AddExpenseDocumentDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-display">Add expense or document</DialogTitle>
+              <DialogTitle className="flex items-center justify-between font-display">
+                <span>{bulk ? "Allocate" : "Add expense or document"}</span>
+                {bulk && <span className="text-xs font-semibold text-muted-foreground">{bulk.index + 1} of {bulk.total}</span>}
+              </DialogTitle>
             </DialogHeader>
+            {bulk && (
+              <button
+                type="button"
+                onClick={bulk.onFinish}
+                disabled={bulk.stagedCount === 0}
+                className="-mt-1 text-left text-[11px] font-semibold text-primary disabled:opacity-30"
+              >
+                Finish now — file {bulk.stagedCount} staged
+              </button>
+            )}
             <div className="space-y-3 pt-1">
               <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-border/50 bg-card p-1">
                 {(["expense", "document"] as CaptureKind[]).map((id) => {
@@ -658,17 +694,31 @@ export function AddExpenseDocumentDialog({
                     className="h-9 rounded-xl"
                   />
                   {(kind === "document" || dest.type === "unallocated") && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {["Receipt", "Invoice", "Letter", "Certificate", "Statement"].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setDraft((current) => ({ ...current, name: preset }))}
-                          className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
-                        >
-                          {preset}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                      {[
+                        { label: "Receipt", icon: Receipt },
+                        { label: "Invoice", icon: FileText },
+                        { label: "Letter", icon: Mail },
+                        { label: "Certificate", icon: Award },
+                        { label: "Statement", icon: FileSpreadsheet },
+                      ].map(({ label, icon: Icon }) => {
+                        const active = draft.name === label;
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => setDraft((current) => ({ ...current, name: label }))}
+                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all ${
+                              active
+                                ? "border-primary bg-gradient-primary text-primary-foreground shadow-md"
+                                : "border-border bg-card text-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-md"
+                            }`}
+                          >
+                            <Icon className="h-3 w-3" />
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -725,21 +775,25 @@ export function AddExpenseDocumentDialog({
               )}
 
               <div className="flex gap-2 pt-1">
-                <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9 flex-1 rounded-xl">Cancel</Button>
+                <Button variant="outline" onClick={() => (bulk ? bulk.onSkip() : onOpenChange(false))} className="h-9 flex-1 rounded-xl">
+                  {bulk ? "Skip" : "Cancel"}
+                </Button>
                 <Button onClick={save} disabled={!canSave || saving} className="h-9 flex-1 rounded-xl bg-gradient-primary">
                   {saving
                     ? "Saving…"
-                    : allocateItem
-                      ? "Allocate"
-                      : dest.type === "unallocated"
-                        ? batch.items > 1
-                          ? `Save ${batch.items} ${kind === "expense" ? "receipts" : "documents"}`
-                          : "Save to Unallocated"
-                        : "Save"}
+                    : bulk
+                      ? bulk.index + 1 >= bulk.total ? "Stage & review" : "Stage & next"
+                      : allocateItem
+                        ? "Allocate"
+                        : dest.type === "unallocated"
+                          ? batch.items > 1
+                            ? `Save ${batch.items} ${kind === "expense" ? "receipts" : "documents"}`
+                            : "Save to Unallocated"
+                          : "Save"}
                 </Button>
               </div>
 
-              {!allocateItem && (
+              {!allocateItem && !bulk && (
                 <button
                   type="button"
                   onClick={() => { onOpenChange(false); navigate("/unallocated"); }}
