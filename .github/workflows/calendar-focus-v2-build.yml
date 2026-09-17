@@ -1,0 +1,28 @@
+name: Calendar Focus v2 build check
+
+on:
+  push:
+    branches:
+      - feature/calendar-focus-v2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install web dependencies
+        run: npm ci
+      - name: Build web app
+        run: npm run build
+      - name: Install function dependencies
+        working-directory: functions
+        run: npm ci
+      - name: Build functions
+        working-directory: functions
+        run: npm run build
