@@ -22,13 +22,14 @@ export function londonToday(): string {
 }
 
 /**
- * Whether an all-day event's UK date range covers `dateStr` (a YYYY-MM-DD
- * calendar date, e.g. a grid cell being rendered). Only meaningful for
+ * Whether an all-day event's UK date range covers `date` (a YYYY-MM-DD
+ * calendar date or Date object, e.g. a grid cell being rendered). Only meaningful for
  * allDay events — timed events should compare by instant/local time instead.
  */
-export function allDayEventCoversDate(event: { startDate: string; endDate: string }, dateStr: string): boolean {
+export function allDayEventCoversDate(event: { startDate: string; endDate: string }, date: string | Date): boolean {
   const start = londonDateFromIso(event.startDate);
   const end = londonDateFromIso(event.endDate);
+  const dateStr = typeof date === "string" ? date : LONDON_DATE_FORMATTER.format(date);
   return dateStr >= start && dateStr <= end;
 }
 
