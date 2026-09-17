@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import PageShareBar from "@/components/sharing/PageShareBar";
 
 interface FeaturePageShellProps {
@@ -17,6 +17,16 @@ interface FeaturePageShellProps {
 
 const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess }: FeaturePageShellProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const comparePage = sharePage === "calendar" || sharePage === "notes" ? sharePage : null;
+  const focusPath = comparePage ? `/${comparePage}-focus` : "";
+  const currentPath = comparePage ? `/${comparePage}` : "";
+  const focusSelected = !!comparePage && location.pathname === focusPath;
+
+  const switchDesign = (focus: boolean) => {
+    if (!comparePage) return;
+    navigate({ pathname: focus ? focusPath : currentPath, search: location.search });
+  };
 
   return (
     <div
@@ -53,6 +63,24 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
               <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
             )}
           </div>
+          {comparePage && (
+            <div className="flex shrink-0 items-center rounded-xl border border-border/60 bg-muted/55 p-1" aria-label={`${comparePage} design`}>
+              <button
+                type="button"
+                onClick={() => switchDesign(false)}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${!focusSelected ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Current
+              </button>
+              <button
+                type="button"
+                onClick={() => switchDesign(true)}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${focusSelected ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Focus
+              </button>
+            </div>
+          )}
           {(sharePage || action) && (
             <div className="flex-shrink-0">
               {sharePage ? <PageShareBar page={sharePage} extra={action} access={shareAccess} /> : action}
