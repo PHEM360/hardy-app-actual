@@ -97,6 +97,7 @@ export {
 	syncAllTrueLayerBalances,
 } from "./truelayer";
 export { analyzeFinanceSpending } from "./financeAnalysis";
+export { analyzeBusinessSetup } from "./businessSetupAi";
 
 // ── /display kiosk pairing ──
 export {

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
-  ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2,
+  ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2, Rocket,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
@@ -807,6 +807,25 @@ const Companies = () => {
               <p className="font-display text-base font-bold">Social & Ads</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 One dashboard for every company: calendar, 90-day plans, brand voice, media and connected accounts.
+              </p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/companies/business-modeller")}
+            className="flex w-full gap-3 rounded-2xl border border-border/50 p-4 text-left shadow-card"
+            style={{
+              background: "color-mix(in srgb, hsl(270,55%,55%) 12%, hsl(var(--card)))",
+              borderLeft: "4px solid hsl(270,55%,55%)",
+            }}
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+              <Rocket className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-base font-bold">Business Setup Modeller</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Plan a new venture: start-up and ongoing costs, income growth, a 10-year projection and an AI critique.
               </p>
             </div>
           </button>
