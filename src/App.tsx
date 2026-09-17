@@ -38,10 +38,12 @@ import TagScan from "@/pages/TagScan";
 import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
+import CalendarFocus from "@/pages/CalendarFocus";
 import Softphone from "@/pages/Softphone";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
+import NotesFocus from "@/pages/NotesFocus";
 import Unallocated from "@/pages/Unallocated";
 import Photos from "@/pages/Photos";
 import Email from "@/pages/Email";
@@ -260,6 +262,14 @@ const App = () => (
               }
             />
             <Route
+              path="/calendar-focus"
+              element={
+                <RequireFeature featureKey="calendar">
+                  <CalendarFocus />
+                </RequireFeature>
+              }
+            />
+            <Route
               path="/softphone"
               element={
                 <RequireFeature featureKey="softphone">
@@ -288,6 +298,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="notes">
                   <Notes />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/notes-focus"
+              element={
+                <RequireFeature featureKey="notes">
+                  <NotesFocus />
                 </RequireFeature>
               }
             />
