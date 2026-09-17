@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import "./calendar-focus-fixes.css";
 import { AuthProvider } from "@/auth/AuthContext";
 import { ActiveHouseholdProvider } from "@/hooks/useActiveHousehold";
 import { SharedScopeProvider } from "@/hooks/useSharedScope";
