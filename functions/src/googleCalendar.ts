@@ -302,18 +302,105 @@ export const syncGoogleCalendar = onCall({ ...GOOGLE_SECRET_OPTS, timeoutSeconds
   }
 });
 
+function sharedMirrorId(owner: string, eventId: string) {
+  const safeOwner = owner.replace(/[^A-Za-z0-9_-]/g, "_");
+  const safeEvent = eventId.replace(/[^A-Za-z0-9_-]/g, "_");
+  return `shared_${safeOwner}_${safeEvent}`;
+}
+
+async function validShareRecipients(owner: string, raw: unknown): Promise<string[]> {
+  const uids = Array.isArray(raw)
+    ? [...new Set(raw.map((item) => String(item || "").trim()).filter((item) => item && item !== owner))]
+    : [];
+  const valid: string[] = [];
+  for (const targetUid of uids.slice(0, 30)) {
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(targetUid)) continue;
+    const snap = await db().doc(`users/${targetUid}`).get();
+    if (snap.exists && snap.data()?.suspended !== true) valid.push(targetUid);
+  }
+  return valid;
+}
+
+async function syncSharedMirrors(owner: string, eventId: string, event: Record<string, any>, deleting = false) {
+  if (event.sharedMirror) return;
+  const wanted = deleting ? [] : await validShareRecipients(owner, event.sharedWithUids);
+  const previous = Array.isArray(event.mirroredToUids)
+    ? event.mirroredToUids.map((item: unknown) => String(item)).filter(Boolean)
+    : [];
+  const remove = previous.filter((targetUid: string) => !wanted.includes(targetUid));
+  const mirrorId = sharedMirrorId(owner, eventId);
+
+  for (const targetUid of remove) {
+    await db().doc(`calendar/${targetUid}/events/${mirrorId}`).delete().catch(() => undefined);
+  }
+
+  if (!deleting) {
+    const copyFields = [
+      "title", "description", "location", "category", "startDate", "endDate", "allDay",
+      "notifications", "itemType", "placeId", "locationLat", "locationLng",
+      "travelMinutes", "travelDistanceMeters",
+    ];
+    const mirror: Record<string, unknown> = {};
+    for (const key of copyFields) {
+      if (event[key] !== undefined) mirror[key] = event[key];
+    }
+    for (const targetUid of wanted) {
+      await db().doc(`calendar/${targetUid}/events/${mirrorId}`).set({
+        ...mirror,
+        calendarId: "personal",
+        source: "import",
+        createdBy: owner,
+        sharedMirror: true,
+        sharedOriginOwnerId: owner,
+        sharedOriginEventId: eventId,
+        sharedWithUids: [],
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: event.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    await db().doc(`calendar/${owner}/events/${eventId}`).set({
+      mirroredToUids: wanted,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
 export const pushCalendarEvent = onCall(GOOGLE_SECRET_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const owner = String(request.data?.ownerUid || uid);
   await requireCalendarAccess(uid, owner, "edit");
   const eventId = String(request.data?.eventId || "");
+  const action = request.data?.action === "delete" ? "delete" : "sync";
   if (!eventId) throw new HttpsError("invalid-argument", "Missing event.");
   const eventSnap = await db().doc(`calendar/${owner}/events/${eventId}`).get();
   if (!eventSnap.exists) throw new HttpsError("not-found", "That event was not found.");
   const event = eventSnap.data() || {};
-  const settings = (await db().doc(`calendar/${owner}/meta/settings`).get()).data()?.google as { calendarId?: string } | undefined;
-  const calendarId = String(event.googleCalendarId || settings?.calendarId || "primary");
+  if (event.sharedMirror) throw new HttpsError("permission-denied", "Shared calendar copies are managed by their owner.");
+
+  await syncSharedMirrors(owner, eventId, event, action === "delete");
+
+  const settings = (await db().doc(`calendar/${owner}/meta/settings`).get()).data()?.google as {
+    calendarId?: string;
+    connected?: boolean;
+  } | undefined;
+  if (!settings?.connected) return { shared: true, googleEventId: null };
+
+  const calendarId = String(event.googleCalendarId || settings.calendarId || "primary");
   const { accessToken } = await getTokens(owner);
+
+  if (action === "delete") {
+    if (event.googleEventId) {
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(String(event.googleEventId))}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      if (!response.ok && response.status !== 404 && response.status !== 410) {
+        throw new HttpsError("internal", "Google Calendar could not delete that event.");
+      }
+    }
+    return { shared: true, googleEventId: null };
+  }
+
   const body = toGoogleCalendarBody({
     title: String(event.title || ""),
     description: String(event.description || ""),
@@ -328,7 +415,7 @@ export const pushCalendarEvent = onCall(GOOGLE_SECRET_OPTS, async (request) => {
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(String(event.googleEventId))}`,
       { method: "PUT", body: JSON.stringify(body) },
     );
-    return { googleEventId: String(event.googleEventId) };
+    return { shared: true, googleEventId: String(event.googleEventId) };
   }
   const created = await googleJson(
     accessToken,
@@ -342,7 +429,7 @@ export const pushCalendarEvent = onCall(GOOGLE_SECRET_OPTS, async (request) => {
     googleCalendarId: calendarId,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
-  return { googleEventId };
+  return { shared: true, googleEventId };
 });
 
 export const disconnectGoogleCalendar = onCall(GOOGLE_SECRET_OPTS, async (request) => {
