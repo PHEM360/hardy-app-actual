@@ -39,6 +39,7 @@ import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
 import CalendarPage from "@/pages/Calendar";
 import CalendarFocus from "@/pages/CalendarFocus";
+import CalendarFocusSettings from "@/pages/CalendarFocusSettings";
 import Softphone from "@/pages/Softphone";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
@@ -266,6 +267,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="calendar">
                   <CalendarFocus />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/calendar-focus/settings"
+              element={
+                <RequireFeature featureKey="calendar">
+                  <CalendarFocusSettings />
                 </RequireFeature>
               }
             />

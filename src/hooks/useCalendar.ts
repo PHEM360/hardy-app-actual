@@ -18,6 +18,11 @@ import type { CalendarEvent, CalendarSettings } from "@/types/app";
 
 const DEFAULT_SETTINGS: CalendarSettings = { defaultView: "month" };
 
+type ExtendedCalendarEvent = CalendarEvent & {
+  sharedMirror?: boolean;
+  sharedWithUids?: string[];
+};
+
 export function useCalendar(scopeUserId?: string) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS);
@@ -50,6 +55,16 @@ export function useCalendar(scopeUserId?: string) {
     return unsub;
   }, [uid]);
 
+  const syncServerSide = useCallback(async (eventId: string, action: "sync" | "delete" = "sync") => {
+    if (!uid) return;
+    try {
+      await pushCalendarEvent(eventId, uid, action);
+    } catch {
+      // Local Firestore is the source of truth. Google/shared mirrors can catch up
+      // on the next edit or explicit sync if an integration is temporarily down.
+    }
+  }, [uid]);
+
   const addEvent = useCallback(async (event: Omit<CalendarEvent, "id">) => {
     if (!uid) throw new Error("You need to be signed in to add an event.");
     const ref = await addDoc(collection(db, "calendar", uid, "events"), calendarWriteData({
@@ -59,35 +74,32 @@ export function useCalendar(scopeUserId?: string) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }));
-    if (settings.google?.connected) {
-      try {
-        await pushCalendarEvent(ref.id, uid);
-      } catch {
-        /* Local save already succeeded; Google can catch up on the next sync. */
-      }
+    if (event.source !== "google" && !(event as ExtendedCalendarEvent).sharedMirror) {
+      await syncServerSide(ref.id);
     }
     return ref.id;
-  }, [settings.google?.connected, uid]);
+  }, [syncServerSide, uid]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CalendarEvent>) => {
     if (!uid) throw new Error("You need to be signed in to change an event.");
+    const current = events.find((event) => event.id === id) as ExtendedCalendarEvent | undefined;
+    if (current?.sharedMirror) throw new Error("Shared calendar items are read-only on this calendar.");
     await updateDoc(doc(db, "calendar", uid, "events", id), calendarWriteData({
       ...data,
       updatedAt: serverTimestamp(),
     }));
-    if (settings.google?.connected) {
-      try {
-        await pushCalendarEvent(id, uid);
-      } catch {
-        /* Local save already succeeded. */
-      }
+    if (current?.source !== "google" && data.source !== "google") {
+      await syncServerSide(id);
     }
-  }, [settings.google?.connected, uid]);
+  }, [events, syncServerSide, uid]);
 
   const deleteEvent = useCallback(async (id: string) => {
     if (!uid) throw new Error("You need to be signed in to delete an event.");
+    const current = events.find((event) => event.id === id) as ExtendedCalendarEvent | undefined;
+    if (current?.sharedMirror) throw new Error("Shared calendar items can only be deleted by their owner.");
+    if (current?.source !== "google") await syncServerSide(id, "delete");
     await deleteDoc(doc(db, "calendar", uid, "events", id));
-  }, [uid]);
+  }, [events, syncServerSide, uid]);
 
   /** Bulk-remove previously-synced events matching a predicate — used when a
    *  user disconnects Google or unsubscribes an ICS feed and chooses "delete"

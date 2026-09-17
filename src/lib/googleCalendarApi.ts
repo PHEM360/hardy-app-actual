@@ -50,12 +50,16 @@ export async function syncGoogleCalendar(ownerUid?: string) {
   }
 }
 
-export async function pushCalendarEvent(eventId: string, ownerUid?: string) {
+export async function pushCalendarEvent(
+  eventId: string,
+  ownerUid?: string,
+  action: "sync" | "delete" = "sync",
+) {
   const call = httpsCallable(functions, "pushCalendarEvent");
   try {
-    await call({ eventId, ownerUid });
+    await call({ eventId, ownerUid, action });
   } catch (err) {
-    throw new Error(friendly(err, "Could not update Google Calendar."));
+    throw new Error(friendly(err, "Could not sync that calendar item."));
   }
 }
 
