@@ -28,6 +28,7 @@ export const ROUTE_FEATURE_KEY: Record<string, FeatureKey> = {
   "/health": "weight_tracking", // Health page is also served at /weight
   "/notes/quick": "notes",
   "/companies/social": "companies",
+  "/companies/business-hub": "companies",
 };
 
 /** FeatureKey -> pageShares.page value. Invitees can open the route even without the feature enabled. */
