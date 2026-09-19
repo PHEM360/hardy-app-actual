@@ -46,7 +46,12 @@ export function roundMoney(value: number) {
 }
 
 export function invoiceStatus(invoice: BusinessInvoice): BusinessInvoice["status"] {
-  if (invoice.status === "paid" || invoice.status === "void" || invoice.status === "draft") {
+  if (
+    invoice.status === "paid" ||
+    invoice.status === "void" ||
+    invoice.status === "written_off" ||
+    invoice.status === "draft"
+  ) {
     return invoice.status;
   }
   if ((invoice.amountPaid || 0) > 0 && (invoice.amountPaid || 0) < invoice.total) return "part_paid";
