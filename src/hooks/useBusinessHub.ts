@@ -184,6 +184,29 @@ export function useBusinessHub() {
   const createInvoice = useCallback(async (input: CreateInvoiceInput) => {
     const company = companies.find((item) => item.id === input.companyId);
     if (!company?.id) throw new Error("Company not found.");
+    const milion = rows
+      .find((row) => row.company.id === company.id)
+      ?.integrations.find((integration) => integration.provider === "milion" && integration.enabled && integration.externalId);
+    if (milion?.externalId) {
+      const bridge = httpsCallable<
+        {
+          action: "createInvoice";
+          companyId: string;
+          orgId: string;
+          input: CreateInvoiceInput;
+        },
+        Record<string, unknown>
+      >(functions, "milionBusinessBridge");
+      await bridge({
+        action: "createInvoice",
+        companyId: company.id,
+        orgId: milion.externalId,
+        input,
+      });
+      await syncMilion();
+      return;
+    }
+
     const legal = legalEntityForCompany(company, companies);
     const totals = invoiceTotals(input.lineItems);
     const issueDate = input.issueDate || dateKey();
@@ -227,7 +250,7 @@ export function useBusinessHub() {
     });
     await load();
     return invoice;
-  }, [companies, load]);
+  }, [companies, load, rows, syncMilion]);
 
   const updateInvoice = useCallback(async (invoice: BusinessInvoice, updates: Partial<BusinessInvoice>) => {
     if (!invoice.id || invoice.source === "milion") {
