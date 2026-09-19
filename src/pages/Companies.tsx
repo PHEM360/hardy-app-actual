@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
-  ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2, Rocket,
+  ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2, Rocket, Landmark,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
@@ -699,6 +699,9 @@ const Companies = () => {
       sharePage="companies"
       action={
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/companies/business-hub")} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10" title="Business Hub">
+            <Landmark className="h-4 w-4" /> <span className="hidden sm:inline">Business Hub</span>
+          </button>
           <button onClick={() => navigate("/qr-codes")} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground" title="QR codes">
             <QrCode className="h-4 w-4" />
           </button>
