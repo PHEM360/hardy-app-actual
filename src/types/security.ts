@@ -18,7 +18,7 @@ export const SECURITY_MODULES = [
   { id: "notes", label: "Notes", routes: ["/notes"] },
   { id: "photos", label: "Photos", routes: ["/photos"] },
   { id: "email", label: "Email", routes: ["/email"] },
-  { id: "companies", label: "Companies", routes: ["/companies", "/companies/social"] },
+  { id: "companies", label: "Companies", routes: ["/companies", "/companies/social", "/companies/business-hub"] },
   { id: "households", label: "Households", routes: ["/households", "/household-finance"] },
   { id: "pets", label: "Pets", routes: ["/pets"] },
   { id: "tasks", label: "Tasks", routes: ["/tasks"] },
