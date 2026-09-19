@@ -745,6 +745,16 @@ service cloud.firestore {
       }
     }
 
+    // Business website connector credentials and idempotency records are
+    // server-only. The client manages keys through authenticated Cloud Functions;
+    // raw connector tokens are never stored in Firestore.
+    match /businessApiKeys/{keyId} {
+      allow read, write: if false;
+    }
+    match /businessIngressEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     // Business setup modeller scenarios — private to the owner who created them.
     match /businessSetups/{setupId} {
       allow read, update, delete: if isAuthenticated() && (
