@@ -157,6 +157,7 @@ export interface MilionBridgeSnapshot {
     paymentMethod?: string;
     paidAt?: string;
     sentAt?: string;
+    lineItems?: BusinessInvoiceLine[];
   }>;
   income: number;
   expenses: number;
