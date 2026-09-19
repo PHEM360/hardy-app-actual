@@ -98,6 +98,7 @@ export {
 } from "./truelayer";
 export { analyzeFinanceSpending } from "./financeAnalysis";
 export { analyzeBusinessSetup } from "./businessSetupAi";
+export { milionBusinessBridge } from "./businessHub";
 
 // ── /display kiosk pairing ──
 export {
