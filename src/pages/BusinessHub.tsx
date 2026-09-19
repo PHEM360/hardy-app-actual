@@ -37,11 +37,12 @@ import { companyTotals, invoiceStatus, legalEntityForCompany, money, totalBusine
 import { downloadBusinessInvoicePdf } from "@/lib/businessInvoicePdf";
 import { toast } from "sonner";
 
-type Tab = "overview" | "invoices" | "leads" | "content" | "integrations";
+type Tab = "overview" | "invoices" | "banking" | "leads" | "content" | "integrations";
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Building2 }> = [
   { id: "overview", label: "Overview", icon: Building2 },
   { id: "invoices", label: "Invoices", icon: FileText },
+  { id: "banking", label: "Banking", icon: Landmark },
   { id: "leads", label: "Leads & forms", icon: Inbox },
   { id: "content", label: "Content", icon: Megaphone },
   { id: "integrations", label: "Integrations", icon: Settings2 },
@@ -279,6 +280,17 @@ export default function BusinessHub() {
     () => visibleRows.flatMap((row) => row.content).sort((a, b) => (b.scheduledFor || "").localeCompare(a.scheduledFor || "")),
     [visibleRows],
   );
+  const bankAccounts = useMemo(
+    () => visibleRows.flatMap((row) => row.bankAccounts),
+    [visibleRows],
+  );
+  const bankTransactions = useMemo(
+    () => visibleRows
+      .flatMap((row) => row.bankTransactions)
+      .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")),
+    [visibleRows],
+  );
+  const bankBalance = bankAccounts.reduce((sum, account) => sum + (Number(account.current) || 0), 0);
   const integrationRow = hub.rows.find((row) => row.company.id === integrationCompanyId) || null;
 
   const downloadDocument = (invoice: BusinessInvoice, kind: "invoice" | "receipt") => {
@@ -473,6 +485,89 @@ export default function BusinessHub() {
                 })}
               </div>
             )}
+          </section>
+        ) : tab === "banking" ? (
+          <section className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Bank balance" value={money(bankBalance)} helper="Across connected business accounts" icon={Landmark} />
+              <Metric label="Connected accounts" value={String(bankAccounts.length)} helper="Milion feeds appear after sync" icon={WalletCards} />
+              <Metric
+                label="Recent transactions"
+                value={String(bankTransactions.length)}
+                helper="Current downloaded feed"
+                icon={RefreshCw}
+              />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[0.8fr_1.4fr]">
+              <div className="rounded-2xl border border-border/50 bg-card shadow-card">
+                <div className="border-b border-border/40 px-4 py-3">
+                  <h2 className="font-display font-bold">Accounts</h2>
+                  <p className="text-xs text-muted-foreground">Balances are feed snapshots, not a substitute for reconciliation.</p>
+                </div>
+                {!bankAccounts.length ? (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    No business bank feed is connected for this selection.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/40">
+                    {bankAccounts.map((account) => {
+                      const company = hub.companies.find((item) => item.id === account.companyId);
+                      return (
+                        <div key={account.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">{account.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{company?.name || "Business"} · {account.provider}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold">{money(account.current)}</p>
+                            {account.available != null && account.available !== account.current && (
+                              <p className="text-[10px] text-muted-foreground">{money(account.available)} available</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
+                <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+                  <div>
+                    <h2 className="font-display font-bold">Bank activity</h2>
+                    <p className="text-xs text-muted-foreground">Latest transactions from connected feeds.</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setTab("integrations")}>Manage feeds</Button>
+                </div>
+                {!bankTransactions.length ? (
+                  <div className="p-8 text-center text-sm text-muted-foreground">No bank transactions have been synced yet.</div>
+                ) : (
+                  <div className="divide-y divide-border/40">
+                    {bankTransactions.slice(0, 80).map((tx) => {
+                      const company = hub.companies.find((item) => item.id === tx.companyId);
+                      return (
+                        <div key={tx.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{tx.description}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {company?.name || "Business"} · {tx.accountName || tx.accountId} · {tx.timestamp ? new Date(tx.timestamp).toLocaleDateString("en-GB") : ""}
+                            </p>
+                          </div>
+                          <p className={`text-sm font-bold ${tx.amount >= 0 ? "text-emerald-600" : "text-foreground"}`}>
+                            {tx.amount >= 0 ? "+" : ""}{money(tx.amount)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-foreground/75">
+              <strong className="text-foreground">Reconciliation model:</strong> bank transactions are evidence of cash movement; they are kept separate from invoices and expenses until matched. Milion-linked bank feeds are read from Milion so BGM Medical/Gwynology do not develop a second bank ledger in Hardy.
+            </div>
           </section>
         ) : tab === "leads" ? (
           <section className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
