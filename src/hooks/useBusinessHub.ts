@@ -54,7 +54,15 @@ function fromMilion(companyId: string, snapshot: MilionBridgeSnapshot): Business
       name: invoice.patientName || "Recipient",
       email: invoice.patientEmail,
     },
-    lineItems: [],
+    lineItems: Array.isArray(invoice.lineItems)
+      ? invoice.lineItems.map((line, index) => ({
+          id: line.id || `milion-line-${index}`,
+          description: line.description || "Item",
+          quantity: Number(line.quantity) || 0,
+          unitPrice: Number(line.unitPrice) || 0,
+          vatRate: Number(line.vatRate) || 0,
+        }))
+      : [],
     currency: "GBP",
     subtotal: Number(invoice.subtotal) || Number(invoice.total) || 0,
     vatAmount: Number(invoice.vatAmount) || 0,
@@ -260,12 +268,16 @@ export function useBusinessHub() {
           ?.integrations.find((item) => item.provider === "milion" && item.enabled && item.externalId);
         if (!integration?.externalId) throw new Error("Milion integration is not configured.");
         const bridge = httpsCallable(functions, "milionBusinessBridge");
+        const remoteUpdates = {
+          ...updates,
+          status: updates.status === "issued" ? "pending" : updates.status,
+        };
         await bridge({
           action: "updateInvoice",
           companyId: invoice.companyId,
           orgId: integration.externalId,
           invoiceId: invoice.externalId,
-          updates,
+          updates: remoteUpdates,
         });
         await syncMilion();
         return;
