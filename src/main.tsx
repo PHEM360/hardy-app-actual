@@ -8,10 +8,13 @@ import { SharedScopeProvider } from "@/hooks/useSharedScope";
 import { NoteVaultProvider } from "@/hooks/useNoteVault";
 import { AppearanceProvider } from "@/hooks/useAppearance";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { bootstrapNativeApp, isNativeApp } from "@/lib/nativeApp";
 
 const firebaseAliases = new Set(["hardyhub-7b30d.web.app", "hardyhub-7b30d.firebaseapp.com"]);
 
-if (firebaseAliases.has(window.location.hostname)) {
+void bootstrapNativeApp();
+
+if (!isNativeApp() && firebaseAliases.has(window.location.hostname)) {
 	window.location.replace(`https://hardyapp.co.uk${window.location.pathname}${window.location.search}${window.location.hash}`);
 } else {
 	createRoot(document.getElementById("root")!).render(

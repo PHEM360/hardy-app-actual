@@ -13,6 +13,7 @@ import {
   syncBankBalances,
   unlinkBankAccount,
 } from "@/lib/truelayerApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 
 function formatSynced(value?: { toDate?: () => Date } | null) {
   try {
@@ -48,7 +49,7 @@ export default function BankSyncSettings({
     setBusy("connect");
     try {
       const url = await startBankConnect();
-      window.location.href = url;
+      await openExternalUrl(url);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Could not start bank connection.";
       toast.error(message.replace(/^FirebaseError:\s*/i, ""));

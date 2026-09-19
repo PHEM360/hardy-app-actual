@@ -23,6 +23,7 @@ import {
   syncMailbox,
   updateMailFlags,
 } from "@/lib/mailApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import {
   DEFAULT_MAIL_INSTRUCTIONS,
   extractEmailAddress,
@@ -266,7 +267,7 @@ export default function Email() {
               onGmail={async () => {
                 setBusy(true);
                 try {
-                  window.location.href = await startGmailConnect(owner);
+                  await openExternalUrl(await startGmailConnect(owner));
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : "Could not start Gmail");
                   setBusy(false);

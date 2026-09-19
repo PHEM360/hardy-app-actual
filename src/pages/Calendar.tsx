@@ -52,6 +52,7 @@ import {
   startGoogleCalendarConnect,
   syncGoogleCalendar,
 } from "@/lib/googleCalendarApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import { applyCalendarMergeRules } from "@/lib/calendarMerge";
 import { allDayEventCoversDate, londonDateFromIso, londonDayEndIso, londonDayStartIso } from "@/lib/londonCalendarDate";
 import { downloadIcs, eventsToIcs } from "@/lib/calendarIcs";
@@ -1670,7 +1671,7 @@ const CalendarPage = () => {
                   <Button size="sm" disabled={gcalBusy} onClick={async () => {
                     setGcalBusy(true);
                     try {
-                      window.location.href = await startGoogleCalendarConnect();
+                      await openExternalUrl(await startGoogleCalendarConnect());
                     } catch (err) {
                       toast.error(err instanceof Error ? err.message : "Could not start Google Calendar");
                       setGcalBusy(false);

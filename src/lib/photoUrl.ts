@@ -1,15 +1,21 @@
 import { getDownloadURL, ref } from "firebase/storage";
 import { storage } from "@/lib/firebase";
+import { isNativeApp, NATIVE_API_ORIGIN } from "@/lib/nativeApp";
 
 const PROXY_PATHS = new Set(["/api/drive-photo", "/api/gphotos-photo"]);
+
+function photoProxyOrigin() {
+  if (isNativeApp()) return NATIVE_API_ORIGIN;
+  return typeof window !== "undefined" ? window.location.origin : "";
+}
 
 /** Point Drive / Google Photos proxies at the current origin so Vite can forward them. */
 export function rewritePhotoProxyUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return "";
   try {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const parsed = new URL(trimmed, origin || "https://hardyhub-7b30d.web.app");
+    const origin = photoProxyOrigin();
+    const parsed = new URL(trimmed, origin || NATIVE_API_ORIGIN);
     if (PROXY_PATHS.has(parsed.pathname) && origin) {
       return `${origin}${parsed.pathname}${parsed.search}`;
     }

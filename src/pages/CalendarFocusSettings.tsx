@@ -12,6 +12,7 @@ import { useCalendar } from "@/hooks/useCalendar";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { googleMapsConfigured } from "@/lib/googleMapsClient";
 import { startGoogleCalendarConnect, syncGoogleCalendar } from "@/lib/googleCalendarApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import type { CalendarNotificationPref } from "@/types/app";
 
 const COLORS = ["#6366f1", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#ef4444", "#14b8a6"];
@@ -98,7 +99,7 @@ export default function CalendarFocusSettings() {
   const connectGoogle = async () => {
     setConnecting(true);
     try {
-      window.location.href = await startGoogleCalendarConnect();
+      await openExternalUrl(await startGoogleCalendarConnect());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not connect Google Calendar");
       setConnecting(false);
