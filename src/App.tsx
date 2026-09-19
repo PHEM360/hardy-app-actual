@@ -20,6 +20,7 @@ import Tasks from "@/pages/Tasks";
 import Today from "@/pages/Today";
 import Companies from "@/pages/Companies";
 import CompanySocial from "@/pages/CompanySocial";
+import BusinessHub from "@/pages/BusinessHub";
 import BusinessModeller from "@/pages/BusinessModeller";
 import BusinessModellerDetail from "@/pages/BusinessModellerDetail";
 import CompanyDetail from "@/pages/CompanyDetail";
@@ -202,6 +203,14 @@ const App = () => (
               element={
                 <RequireFeature featureKey="companies">
                   <Companies />
+                </RequireFeature>
+              }
+            />
+            <Route
+              path="/companies/business-hub"
+              element={
+                <RequireFeature featureKey="companies">
+                  <BusinessHub />
                 </RequireFeature>
               }
             />
