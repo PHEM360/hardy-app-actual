@@ -37,7 +37,7 @@ import { companyTotals, invoiceStatus, legalEntityForCompany, money, totalBusine
 import { downloadBusinessInvoicePdf } from "@/lib/businessInvoicePdf";
 import { toast } from "sonner";
 
-type Tab = "overview" | "invoices" | "banking" | "leads" | "content" | "integrations";
+type Tab = "overview" | "invoices" | "banking" | "leads" | "content" | "compliance" | "integrations";
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Building2 }> = [
   { id: "overview", label: "Overview", icon: Building2 },
@@ -45,6 +45,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Building2 }> = [
   { id: "banking", label: "Banking", icon: Landmark },
   { id: "leads", label: "Leads & forms", icon: Inbox },
   { id: "content", label: "Content", icon: Megaphone },
+  { id: "compliance", label: "Tax & filings", icon: FileText },
   { id: "integrations", label: "Integrations", icon: Settings2 },
 ];
 
@@ -383,7 +384,7 @@ export default function BusinessHub() {
               <section className="rounded-2xl border border-border/50 bg-card shadow-card">
                 <div className="border-b border-border/40 px-4 py-3">
                   <h2 className="font-display font-bold">Business performance</h2>
-                  <p className="text-xs text-muted-foreground">Legal entities and trading brands stay separate but roll up here.</p>
+                  <p className="text-xs text-muted-foreground">Legal entities and trading brands stay separate but roll up here for management oversight.</p>
                 </div>
                 <div className="divide-y divide-border/40">
                   {visibleRows.map((row) => {
@@ -428,7 +429,7 @@ export default function BusinessHub() {
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-primary">Accounting principle</p>
                   <p className="mt-2 text-xs leading-relaxed text-foreground/75">
-                    Invoices track what is owed; the existing income ledger remains the cash/recognised-income view. This avoids double counting the same sale in the consolidated profit figure.
+                    Invoices track what is owed; the existing income ledger remains the cash/recognised-income view. This avoids double counting the same sale. The all-business total is a management view only: BGM Health Ltd and the sole-trader businesses remain separate for tax and filing.
                   </p>
                 </div>
               </section>
@@ -613,6 +614,64 @@ export default function BusinessHub() {
                 ))}
               </div>
             )}
+          </section>
+        ) : tab === "compliance" ? (
+          <section className="space-y-4">
+            <div className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
+              <h2 className="font-display font-bold">Tax & filing overview</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Filing records are shown per legal taxpayer. Trading names inherit the filing identity of their parent legal entity.
+              </p>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {visibleRows.map((row) => {
+                const parent = row.company.parentCompanyId
+                  ? hub.companies.find((company) => company.id === row.company.parentCompanyId)
+                  : null;
+                const legal = row.company.companyType === "trading_name" && parent ? parent : row.company;
+                const legalRow = visibleRows.find((candidate) => candidate.company.id === legal.id) || hub.rows.find((candidate) => candidate.company.id === legal.id);
+                const returns = legalRow?.taxReturns || [];
+                const latest = returns[0];
+                const duplicateTradingName = legal.id !== row.company.id;
+                return (
+                  <div key={row.company.id} className="rounded-2xl border border-border/50 bg-card p-4 shadow-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold">{row.company.name}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {duplicateTradingName ? `Files under ${legal.name}` : row.company.companyType === "sole_trader" ? "Sole trader" : row.company.companyType === "registered" ? "Registered company" : "Business"}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to={`/companies/${legal.id}`}>Open record</Link>
+                      </Button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase text-muted-foreground">Tax year starts</p>
+                        <p className="mt-1 font-semibold">{legal.taxYearStart || "Not set"}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase text-muted-foreground">Returns held</p>
+                        <p className="mt-1 font-semibold">{returns.length}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase text-muted-foreground">Latest return</p>
+                        <p className="mt-1 font-semibold">{latest?.taxYear || "None recorded"}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase text-muted-foreground">Tax paid</p>
+                        <p className="mt-1 font-semibold">{latest?.taxPaid == null ? "—" : money(Number(latest.taxPaid))}</p>
+                      </div>
+                    </div>
+                    {latest?.filingDate && <p className="mt-3 text-[11px] text-muted-foreground">Latest filing date recorded: {latest.filingDate}</p>}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="rounded-2xl border border-amber-300/50 bg-amber-50/60 p-4 text-xs leading-relaxed text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+              This screen deliberately does not auto-submit HMRC or Companies House returns. It is a management/completeness view; filing data should be reconciled to the relevant legal entity and reviewed before submission.
+            </div>
           </section>
         ) : (
           <section className="space-y-4">
