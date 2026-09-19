@@ -5,9 +5,13 @@ export type BusinessInvoiceStatus =
   | "pending"
   | "issued"
   | "part_paid"
+  | "partially_paid"
+  | "sent"
+  | "viewed"
   | "paid"
   | "overdue"
-  | "void";
+  | "void"
+  | "written_off";
 
 export type BusinessInvoiceSource = "hardy" | "milion" | "stripe" | "xero" | "import";
 
