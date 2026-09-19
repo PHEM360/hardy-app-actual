@@ -12,7 +12,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { useCompanies } from "@/hooks/useCompanies";
-import type { CompanyExpense, CompanyIncome, ContentPiece } from "@/types/app";
+import type { CompanyExpense, CompanyIncome, CompanyTaxReturn, ContentPiece } from "@/types/app";
 import type {
   BusinessBankAccount,
   BusinessBankTransaction,
@@ -107,6 +107,7 @@ export function useBusinessHub() {
             integrationSnap,
             bankAccountSnap,
             bankTransactionSnap,
+            taxReturnSnap,
           ] = await Promise.all([
             getDocs(collection(db, "companies", id, "income")),
             getDocs(collection(db, "companies", id, "expenses")),
@@ -116,6 +117,7 @@ export function useBusinessHub() {
             getDocs(collection(db, "companies", id, "businessIntegrations")),
             getDocs(collection(db, "companies", id, "bankAccounts")),
             getDocs(collection(db, "companies", id, "bankTransactions")),
+            getDocs(collection(db, "companies", id, "taxReturns")),
           ]);
 
           const content = asRows<ContentPiece>(contentSnap).map((item) => ({
@@ -149,6 +151,8 @@ export function useBusinessHub() {
               currency: tx.currency || "GBP",
               amount: Number(tx.amount) || 0,
             })),
+            taxReturns: asRows<CompanyTaxReturn>(taxReturnSnap)
+              .sort((a, b) => String(b.taxYear || "").localeCompare(String(a.taxYear || ""))),
           };
         }),
       );
