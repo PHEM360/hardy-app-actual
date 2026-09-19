@@ -1,4 +1,4 @@
-import type { Company, CompanyExpense, CompanyIncome, ContentPiece } from "@/types/app";
+import type { Company, CompanyExpense, CompanyIncome, CompanyTaxReturn, ContentPiece } from "@/types/app";
 
 export type BusinessInvoiceStatus =
   | "draft"
@@ -150,6 +150,7 @@ export interface BusinessCompanyData {
   integrations: BusinessIntegration[];
   bankAccounts: BusinessBankAccount[];
   bankTransactions: BusinessBankTransaction[];
+  taxReturns: CompanyTaxReturn[];
 }
 
 export interface BusinessCompanyTotals {
