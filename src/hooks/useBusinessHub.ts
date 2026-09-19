@@ -14,6 +14,8 @@ import { db, functions } from "@/lib/firebase";
 import { useCompanies } from "@/hooks/useCompanies";
 import type { CompanyExpense, CompanyIncome, ContentPiece } from "@/types/app";
 import type {
+  BusinessBankAccount,
+  BusinessBankTransaction,
   BusinessCompanyData,
   BusinessIntegration,
   BusinessInvoice,
@@ -38,7 +40,7 @@ type CreateInvoiceInput = {
   lineItems: BusinessInvoiceLine[];
 };
 
-function asRows<T extends { id?: string }>(snapshot: Awaited<ReturnType<typeof getDocs>>) {
+function asRows<T extends { id?: string }>(snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) {
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as T));
 }
 
@@ -96,13 +98,24 @@ export function useBusinessHub() {
       const next = await Promise.all(
         companies.filter((company) => company.id).map(async (company): Promise<BusinessCompanyData> => {
           const id = company.id!;
-          const [incomeSnap, expenseSnap, invoiceSnap, leadSnap, contentSnap, integrationSnap] = await Promise.all([
+          const [
+            incomeSnap,
+            expenseSnap,
+            invoiceSnap,
+            leadSnap,
+            contentSnap,
+            integrationSnap,
+            bankAccountSnap,
+            bankTransactionSnap,
+          ] = await Promise.all([
             getDocs(collection(db, "companies", id, "income")),
             getDocs(collection(db, "companies", id, "expenses")),
             getDocs(collection(db, "companies", id, "invoices")),
             getDocs(collection(db, "companies", id, "leads")),
             getDocs(collection(db, "companies", id, "content")),
             getDocs(collection(db, "companies", id, "businessIntegrations")),
+            getDocs(collection(db, "companies", id, "bankAccounts")),
+            getDocs(collection(db, "companies", id, "bankTransactions")),
           ]);
 
           const content = asRows<ContentPiece>(contentSnap).map((item) => ({
@@ -120,6 +133,21 @@ export function useBusinessHub() {
             integrations: asRows<BusinessIntegration>(integrationSnap).map((integration) => ({
               ...integration,
               companyId: id,
+            })),
+            bankAccounts: asRows<BusinessBankAccount>(bankAccountSnap).map((account) => ({
+              ...account,
+              companyId: id,
+              provider: account.provider || "manual",
+              source: account.source || "hardy",
+              currency: account.currency || "GBP",
+              current: Number(account.current) || 0,
+            })),
+            bankTransactions: asRows<BusinessBankTransaction>(bankTransactionSnap).map((tx) => ({
+              ...tx,
+              companyId: id,
+              source: tx.source || "hardy",
+              currency: tx.currency || "GBP",
+              amount: Number(tx.amount) || 0,
             })),
           };
         }),
@@ -158,11 +186,45 @@ export function useBusinessHub() {
               companyId: row.company.id!,
               orgId: integration.externalId!,
             });
-            return { companyId: row.company.id!, invoices: fromMilion(row.company.id!, response.data), error: "" };
+            const bankFeed = response.data.bankFeed;
+            const bankAccounts: BusinessBankAccount[] = (bankFeed?.accounts || []).map((account) => ({
+              id: `milion:${response.data.orgId}:${account.id}`,
+              externalId: account.id,
+              companyId: row.company.id!,
+              name: account.name || "Bank account",
+              type: account.type,
+              currency: account.currency || "GBP",
+              current: Number(account.current) || 0,
+              available: account.available == null ? undefined : Number(account.available),
+              provider: bankFeed?.providerName || "TrueLayer",
+              source: "milion",
+            }));
+            const bankTransactions: BusinessBankTransaction[] = (bankFeed?.transactions || []).map((tx) => ({
+              id: `milion:${response.data.orgId}:${tx.id}`,
+              companyId: row.company.id!,
+              accountId: tx.accountId,
+              accountName: tx.accountName,
+              timestamp: tx.timestamp,
+              description: tx.description || "Bank transaction",
+              amount: Number(tx.amount) || 0,
+              currency: tx.currency || "GBP",
+              type: tx.type,
+              provider: bankFeed?.providerName || "TrueLayer",
+              source: "milion",
+            }));
+            return {
+              companyId: row.company.id!,
+              invoices: fromMilion(row.company.id!, response.data),
+              bankAccounts,
+              bankTransactions,
+              error: bankFeed?.error || "",
+            };
           } catch (bridgeError) {
             return {
               companyId: row.company.id!,
               invoices: [] as BusinessInvoice[],
+              bankAccounts: [] as BusinessBankAccount[],
+              bankTransactions: [] as BusinessBankTransaction[],
               error: bridgeError instanceof Error ? bridgeError.message : "Milion sync failed",
             };
           }
@@ -173,9 +235,13 @@ export function useBusinessHub() {
           const match = remote.find((item) => item.companyId === row.company.id);
           if (!match) return row;
           const native = row.invoices.filter((invoice) => invoice.source !== "milion");
+          const nativeBankAccounts = row.bankAccounts.filter((account) => account.source !== "milion");
+          const nativeBankTransactions = row.bankTransactions.filter((tx) => tx.source !== "milion");
           return {
             ...row,
             invoices: [...native, ...match.invoices],
+            bankAccounts: [...nativeBankAccounts, ...match.bankAccounts],
+            bankTransactions: [...nativeBankTransactions, ...match.bankTransactions],
             integrations: row.integrations.map((integration) =>
               integration.provider === "milion"
                 ? { ...integration, lastSyncAt: new Date().toISOString(), lastError: match.error || undefined }
@@ -344,6 +410,8 @@ export function useBusinessHub() {
   const invoices = useMemo(() => rows.flatMap((row) => row.invoices), [rows]);
   const leads = useMemo(() => rows.flatMap((row) => row.leads), [rows]);
   const content = useMemo(() => rows.flatMap((row) => row.content), [rows]);
+  const bankAccounts = useMemo(() => rows.flatMap((row) => row.bankAccounts), [rows]);
+  const bankTransactions = useMemo(() => rows.flatMap((row) => row.bankTransactions), [rows]);
 
   return {
     companies,
@@ -351,6 +419,8 @@ export function useBusinessHub() {
     invoices,
     leads,
     content,
+    bankAccounts,
+    bankTransactions,
     loading: loading || companiesLoading,
     error,
     reload: load,
