@@ -61,6 +61,7 @@ import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
 import RequireFeature from "@/auth/RequireFeature";
 import { MandatoryPasskeyGate } from "@/components/security/SecurityGate";
+import { NativeDeepLinkHandler } from "@/components/native/NativeDeepLinkHandler";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <NativeDeepLinkHandler />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/locate" element={<Locate />} />

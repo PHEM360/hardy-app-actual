@@ -46,6 +46,7 @@ import { setFlatDocumentCategories, useFlat } from "@/hooks/useFlats";
 import { ReceiptLightbox, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { computeFlatReturns, estimateFlatTax, fmtGbp, fmtPct } from "@/lib/flatFinance";
 import { importFlatBankTransactions, startBankConnect } from "@/lib/truelayerApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import {
   FLAT_LEDGER_FREQUENCIES,
   OWNERSHIP_LABELS,
@@ -431,7 +432,7 @@ export default function FlatDashboard({
     setBusy("connect");
     try {
       const url = await startBankConnect(window.location.pathname);
-      window.location.href = url;
+      await openExternalUrl(url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start bank connect");
       setBusy(null);

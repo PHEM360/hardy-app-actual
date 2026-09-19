@@ -758,6 +758,12 @@ input[type="date"] {
     background-color: hsl(215, 32%, 18%);
   }
 
+  html.native-app,
+  html.native-app body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   #root {
     height: 100%;
     min-height: 100dvh;

@@ -28,3 +28,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Native / Capacitor build output (keep the Xcode and Android Studio projects)
+android/.gradle
+android/app/build
+android/build
+android/captures
+android/local.properties
+android/.idea
+ios/App/Pods
+ios/App/App/public
+ios/DerivedData
+ios/App/App.xcworkspace/xcuserdata
+ios/App/App.xcodeproj/xcuserdata
+*.jks
+*.keystore
+!debug.keystore
+

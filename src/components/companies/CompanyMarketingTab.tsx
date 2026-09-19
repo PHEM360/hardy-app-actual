@@ -49,6 +49,7 @@ import {
   rejectMarketingContent,
   requestMarketingEdits,
 } from "@/lib/marketingApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import type {
   Company,
   ContentPiece,
@@ -1261,7 +1262,7 @@ function ConnectionsSection({ state, companyId }: { state: MarketingState; compa
                   if (!result.available || !result.authUrl) {
                     setMessages((current) => ({ ...current, [platform]: result.reason || `${PLATFORM_LABELS[platform]} connection is not available.` }));
                   } else {
-                    window.location.assign(result.authUrl);
+                    await openExternalUrl(result.authUrl);
                   }
                 } catch (error) {
                   setMessages((current) => ({ ...current, [platform]: errorMessage(error) }));
