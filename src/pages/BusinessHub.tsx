@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
+import BusinessIntegrationDialog from "@/components/companies/BusinessIntegrationDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,8 @@ import type {
   BusinessInvoiceLine,
   BusinessLeadStatus,
 } from "@/types/businessHub";
-import { companyTotals, invoiceStatus, money, totalBusiness } from "@/lib/businessHub";
+import { companyTotals, invoiceStatus, legalEntityForCompany, money, totalBusiness } from "@/lib/businessHub";
+import { downloadBusinessInvoicePdf } from "@/lib/businessInvoicePdf";
 import { toast } from "sonner";
 
 type Tab = "overview" | "invoices" | "leads" | "content" | "integrations";
@@ -257,6 +259,7 @@ export default function BusinessHub() {
   const hub = useBusinessHub();
   const [tab, setTab] = useState<Tab>("overview");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [integrationCompanyId, setIntegrationCompanyId] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState("all");
 
   const visibleRows = useMemo(
@@ -276,6 +279,19 @@ export default function BusinessHub() {
     () => visibleRows.flatMap((row) => row.content).sort((a, b) => (b.scheduledFor || "").localeCompare(a.scheduledFor || "")),
     [visibleRows],
   );
+  const integrationRow = hub.rows.find((row) => row.company.id === integrationCompanyId) || null;
+
+  const downloadDocument = (invoice: BusinessInvoice, kind: "invoice" | "receipt") => {
+    const brand = hub.companies.find((company) => company.id === invoice.companyId);
+    if (!brand) {
+      toast.error("Business details are missing for this invoice.");
+      return;
+    }
+    const legal = invoice.legalEntityCompanyId
+      ? hub.companies.find((company) => company.id === invoice.legalEntityCompanyId) || legalEntityForCompany(brand, hub.companies)
+      : legalEntityForCompany(brand, hub.companies);
+    downloadBusinessInvoicePdf(invoice, brand, legal, kind);
+  };
 
   return (
     <FeaturePageShell
@@ -295,6 +311,13 @@ export default function BusinessHub() {
       }
     >
       <InvoiceDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} companies={hub.companies} onCreate={hub.createInvoice} />
+      <BusinessIntegrationDialog
+        company={integrationRow?.company || null}
+        existing={integrationRow?.integrations[0]}
+        open={!!integrationRow}
+        onOpenChange={(value) => { if (!value) setIntegrationCompanyId(null); }}
+        onSave={hub.saveIntegration}
+      />
 
       <div className="space-y-4 px-1 pb-8">
         <div className="rounded-2xl border border-border/50 bg-card p-2 shadow-card">
@@ -418,9 +441,30 @@ export default function BusinessHub() {
                       <div><p className="text-sm font-semibold">{invoice.recipient.name}</p><p className="text-[11px] text-muted-foreground">{invoice.recipient.email || "No email"}</p></div>
                       <div><p className="text-xs text-muted-foreground">Due {invoice.dueDate}</p><p className="text-sm font-semibold">{money(invoice.total)}</p></div>
                       <div><span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${statusClass(status)}`}>{status.replace("_", " ")}</span></div>
-                      <div className="flex justify-end gap-1">
-                        {status !== "paid" && status !== "void" && (
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {status === "draft" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void hub.updateInvoice(invoice, { status: "issued" }).then(() => toast.success("Invoice issued")).catch((error) => toast.error(error.message))}
+                          >
+                            Issue
+                          </Button>
+                        )}
+                        {status !== "paid" && status !== "void" && status !== "written_off" && (
                           <Button size="sm" variant="outline" onClick={() => void hub.markInvoicePaid(invoice).then(() => toast.success("Invoice marked paid")).catch((error) => toast.error(error.message))}>Mark paid</Button>
+                        )}
+                        <Button size="sm" variant="ghost" onClick={() => downloadDocument(invoice, "invoice")}>PDF</Button>
+                        {status === "paid" && <Button size="sm" variant="ghost" onClick={() => downloadDocument(invoice, "receipt")}>Receipt</Button>}
+                        {status !== "paid" && status !== "void" && status !== "written_off" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() => void hub.updateInvoice(invoice, { status: "void" }).then(() => toast.success("Invoice voided")).catch((error) => toast.error(error.message))}
+                          >
+                            Void
+                          </Button>
                         )}
                         {invoice.externalUrl && <Button size="icon" variant="ghost" asChild><a href={invoice.externalUrl} target="_blank" rel="noreferrer"><ArrowUpRight className="h-4 w-4" /></a></Button>}
                       </div>
@@ -493,8 +537,12 @@ export default function BusinessHub() {
                 {visibleRows.map((row) => (
                   <div key={row.company.id} className="rounded-xl border border-border/40 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div><p className="text-sm font-semibold">{row.company.name}</p><p className="text-[11px] text-muted-foreground">{row.integrations.length ? `${row.integrations.length} configured connector(s)` : "No connectors configured"}</p></div>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div>
+                        <p className="text-sm font-semibold">{row.company.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{row.integrations.length ? `${row.integrations.length} configured connector(s)` : "No connectors configured"}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[10px]" onClick={() => setIntegrationCompanyId(row.company.id || null)}>Configure</Button>
                         {(["milion","stripe","xero","tide","website"] as BusinessIntegrationProvider[]).map((provider) => {
                           const configured = row.integrations.find((item) => item.provider === provider && item.enabled);
                           return <span key={provider} className={`rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${configured ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"}`}>{provider}{configured ? " · on" : ""}</span>;
