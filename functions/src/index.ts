@@ -100,6 +100,7 @@ export { analyzeFinanceSpending } from "./financeAnalysis";
 export { analyzeBusinessSetup } from "./businessSetupAi";
 export { milionBusinessBridge } from "./businessHub";
 export { createBusinessWebsiteKey, listBusinessWebsiteKeys, revokeBusinessWebsiteKey, businessWebsiteIngress } from "./businessIngress";
+export { createBusinessPublisherCredential, publishBusinessWebsiteContent } from "./businessPublishing";
 
 // ── /display kiosk pairing ──
 export {
