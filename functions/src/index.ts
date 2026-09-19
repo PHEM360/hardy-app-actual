@@ -99,6 +99,7 @@ export {
 export { analyzeFinanceSpending } from "./financeAnalysis";
 export { analyzeBusinessSetup } from "./businessSetupAi";
 export { milionBusinessBridge } from "./businessHub";
+export { createBusinessWebsiteKey, listBusinessWebsiteKeys, revokeBusinessWebsiteKey, businessWebsiteIngress } from "./businessIngress";
 
 // ── /display kiosk pairing ──
 export {
