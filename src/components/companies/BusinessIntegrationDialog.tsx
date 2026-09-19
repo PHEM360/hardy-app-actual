@@ -58,6 +58,8 @@ export default function BusinessIntegrationDialog({
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [newToken, setNewToken] = useState("");
   const [copied, setCopied] = useState(false);
+  const [publisherSecret, setPublisherSecret] = useState("");
+  const [publisherCopied, setPublisherCopied] = useState(false);
 
   const loadWebsiteKeys = useCallback(async () => {
     if (!company?.id) return;
@@ -85,6 +87,8 @@ export default function BusinessIntegrationDialog({
     setEnabled(existing?.enabled ?? true);
     setNewToken("");
     setCopied(false);
+    setPublisherSecret("");
+    setPublisherCopied(false);
   }, [existing, open]);
 
   useEffect(() => {
@@ -112,6 +116,29 @@ export default function BusinessIntegrationDialog({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create website key.");
     }
+  };
+
+  const createPublisherCredential = async () => {
+    if (!company?.id) return;
+    try {
+      const call = httpsCallable<
+        { companyId: string },
+        { secret: string; targetSecretName: string; warning: string }
+      >(functions, "createBusinessPublisherCredential");
+      const response = await call({ companyId: company.id });
+      setPublisherSecret(response.data.secret);
+      setPublisherCopied(false);
+      toast.success("Publishing credential created");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create publishing credential.");
+    }
+  };
+
+  const copyPublisherSecret = async () => {
+    if (!publisherSecret) return;
+    await navigator.clipboard.writeText(publisherSecret);
+    setPublisherCopied(true);
+    window.setTimeout(() => setPublisherCopied(false), 1800);
   };
 
   const revokeWebsiteKey = async (keyId: string) => {
@@ -184,13 +211,44 @@ export default function BusinessIntegrationDialog({
           </div>
           {(provider === "website" || provider === "other") && (
             <div className="space-y-1.5">
-              <Label>Base URL</Label>
-              <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://…" autoCapitalize="none" />
+              <Label>{provider === "website" ? "Signed publishing endpoint URL" : "Base URL"}</Label>
+              <Input
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                placeholder={provider === "website" ? "https://…/hardyPublishArticle" : "https://…"}
+                autoCapitalize="none"
+              />
+              {provider === "website" && (
+                <p className="text-[10px] text-muted-foreground">This must be the receiving site's HTTPS server endpoint, not its public homepage.</p>
+              )}
             </div>
           )}
 
           {provider === "website" && company?.id && (
-            <div className="space-y-3 rounded-xl border border-border/50 p-3">
+            <div className="space-y-4 rounded-xl border border-border/50 p-3">
+              <div className="space-y-2 rounded-lg bg-muted/35 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-sm font-semibold"><KeyRound className="h-4 w-4" /> Outbound publishing signature</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      Generate a signing secret and add it to the receiving website as <span className="font-mono">HARDY_PUBLISH_SECRET</span>.
+                    </p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={createPublisherCredential}>Generate secret</Button>
+                </div>
+                {publisherSecret && (
+                  <div className="rounded-lg border border-amber-300/60 bg-amber-50/70 p-2.5 dark:bg-amber-950/20">
+                    <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Copy once into the receiving site's server secret store.</p>
+                    <div className="mt-2 flex gap-2">
+                      <Input readOnly value={publisherSecret} className="h-8 font-mono text-[10px]" />
+                      <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={copyPublisherSecret}>
+                        {publisherCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-1.5 text-sm font-semibold"><KeyRound className="h-4 w-4" /> Server connector keys</p>
