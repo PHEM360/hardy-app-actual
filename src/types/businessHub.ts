@@ -104,6 +104,37 @@ export interface BusinessIntegration {
   updatedAt?: unknown;
 }
 
+export interface BusinessBankAccount {
+  id: string;
+  companyId: string;
+  name: string;
+  type?: string;
+  currency: string;
+  current: number;
+  available?: number;
+  provider: string;
+  source: "hardy" | "milion" | string;
+  externalId?: string;
+}
+
+export interface BusinessBankTransaction {
+  id: string;
+  companyId: string;
+  accountId: string;
+  accountName?: string;
+  timestamp: string;
+  description: string;
+  amount: number;
+  currency: string;
+  type?: string;
+  provider?: string;
+  source: "hardy" | "milion" | string;
+  reconciled?: boolean;
+  matchedInvoiceId?: string;
+  matchedExpenseId?: string;
+  category?: string;
+}
+
 export interface BusinessContentItem extends ContentPiece {
   companyId: string;
   companyName: string;
@@ -117,6 +148,8 @@ export interface BusinessCompanyData {
   leads: BusinessLead[];
   content: BusinessContentItem[];
   integrations: BusinessIntegration[];
+  bankAccounts: BusinessBankAccount[];
+  bankTransactions: BusinessBankTransaction[];
 }
 
 export interface BusinessCompanyTotals {
@@ -163,5 +196,30 @@ export interface MilionBridgeSnapshot {
   expenses: number;
   outstanding: number;
   overdue: number;
+  bankFeed?: {
+    configured?: boolean;
+    connected?: boolean;
+    providerName?: string;
+    lastSyncedAt?: string;
+    accounts?: Array<{
+      id: string;
+      name: string;
+      type?: string;
+      currency?: string;
+      current?: number;
+      available?: number;
+    }>;
+    transactions?: Array<{
+      id: string;
+      accountId: string;
+      accountName?: string;
+      timestamp: string;
+      description?: string;
+      amount?: number;
+      currency?: string;
+      type?: string;
+    }>;
+    error?: string;
+  } | null;
   lastUpdatedAt?: string;
 }
