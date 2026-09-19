@@ -217,18 +217,18 @@ async function ingestPayment(companyId: string, body: Record<string, any>, event
 
   await db().runTransaction(async (tx) => {
     const incomeSnap = await tx.get(incomeRef);
-    if (!incomeSnap.exists) {
-      tx.set(incomeRef, {
-        date,
-        description: safeText(body.description, 500) || `Website payment${invoice?.data?.invoiceNumber ? ` — ${invoice.data.invoiceNumber}` : ""}`,
-        amount,
-        category: safeText(body.category, 120) || "Sales",
-        invoiceRef: invoice?.data?.invoiceNumber || safeText(body.invoiceNumber, 160) || null,
-        source: safeText(body.source, 120) || "website",
-        externalId: paymentId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
+    if (incomeSnap.exists) return;
+
+    tx.set(incomeRef, {
+      date,
+      description: safeText(body.description, 500) || `Website payment${invoice?.data?.invoiceNumber ? ` — ${invoice.data.invoiceNumber}` : ""}`,
+      amount,
+      category: safeText(body.category, 120) || "Sales",
+      invoiceRef: invoice?.data?.invoiceNumber || safeText(body.invoiceNumber, 160) || null,
+      source: safeText(body.source, 120) || "website",
+      externalId: paymentId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     if (invoice) {
       const currentPaid = Number(invoice.data.amountPaid) || 0;
