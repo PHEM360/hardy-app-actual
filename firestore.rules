@@ -762,6 +762,9 @@ service cloud.firestore {
     match /businessIngressEvents/{eventId} {
       allow read, write: if false;
     }
+    match /businessOutboundSecrets/{companyId} {
+      allow read, write: if false;
+    }
 
     // Business setup modeller scenarios — private to the owner who created them.
     match /businessSetups/{setupId} {
