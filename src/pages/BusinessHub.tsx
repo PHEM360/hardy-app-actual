@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Banknote,
   Building2,
+  CheckCircle2,
   CircleAlert,
   FileText,
   Inbox,
@@ -35,6 +36,7 @@ import type {
 } from "@/types/businessHub";
 import { companyTotals, invoiceStatus, legalEntityForCompany, money, totalBusiness } from "@/lib/businessHub";
 import { downloadBusinessInvoicePdf } from "@/lib/businessInvoicePdf";
+import { approveMarketingContent } from "@/lib/marketingApi";
 import { toast } from "sonner";
 
 type Tab = "overview" | "invoices" | "banking" | "leads" | "content" | "compliance" | "integrations";
@@ -257,10 +259,106 @@ function InvoiceDialog({
   );
 }
 
+function ArticleDialog({
+  open,
+  onOpenChange,
+  companies,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  companies: Array<{ id?: string; name: string }>;
+  onCreate: ReturnType<typeof useBusinessHub>["createWebsiteArticle"];
+}) {
+  const [companyId, setCompanyId] = useState("");
+  const [title, setTitle] = useState("");
+  const [excerpt, setExcerpt] = useState("");
+  const [body, setBody] = useState("");
+  const [tags, setTags] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setCompanyId("");
+    setTitle("");
+    setExcerpt("");
+    setBody("");
+    setTags("");
+  };
+
+  const save = async () => {
+    if (!companyId || !title.trim() || !body.trim()) {
+      toast.error("Choose a business and add an article title and body.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onCreate({
+        companyId,
+        title,
+        body,
+        excerpt,
+        tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      });
+      toast.success("Article created and sent for approval");
+      reset();
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the article.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => { onOpenChange(value); if (!value) reset(); }}>
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto rounded-2xl">
+        <DialogHeader><DialogTitle>New website article</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Website / business</Label>
+            <Select value={companyId} onValueChange={setCompanyId}>
+              <SelectTrigger><SelectValue placeholder="Choose business…" /></SelectTrigger>
+              <SelectContent>
+                {companies.filter((company) => company.id).map((company) => (
+                  <SelectItem key={company.id} value={company.id!}>{company.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Title</Label>
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Article headline" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Short introduction / excerpt</Label>
+            <Textarea value={excerpt} onChange={(event) => setExcerpt(event.target.value)} rows={2} placeholder="Optional summary shown on article lists" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Article</Label>
+            <Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={14} placeholder="Write or paste the full article here…" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Tags</Label>
+            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="ADHD, autism, work — comma separated" />
+          </div>
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground/75">
+            The article enters Hardy's existing approval/versioning workflow. Once approved, publishing uses the site's signed server endpoint rather than direct database credentials.
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button onClick={save} disabled={saving}>{saving ? "Creating…" : "Create article"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function BusinessHub() {
   const hub = useBusinessHub();
   const [tab, setTab] = useState<Tab>("overview");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [articleOpen, setArticleOpen] = useState(false);
   const [integrationCompanyId, setIntegrationCompanyId] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState("all");
 
@@ -294,6 +392,25 @@ export default function BusinessHub() {
   const bankBalance = bankAccounts.reduce((sum, account) => sum + (Number(account.current) || 0), 0);
   const integrationRow = hub.rows.find((row) => row.company.id === integrationCompanyId) || null;
 
+  const publishArticle = async (item: (typeof content)[number]) => {
+    if (!item.id) return;
+    try {
+      if (item.status === "awaiting_approval") {
+        await approveMarketingContent(item.companyId, item.id, item.approvalVersion);
+      } else if (item.status !== "approved" && item.status !== "scheduled") {
+        toast.error("This article must be awaiting approval or already approved before publishing.");
+        return;
+      }
+      const published = await hub.publishWebsiteArticle(item.companyId, item.id);
+      toast.success("Article published");
+      if (published.externalPostUrl) {
+        window.open(published.externalPostUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not publish the article.");
+    }
+  };
+
   const downloadDocument = (invoice: BusinessInvoice, kind: "invoice" | "receipt") => {
     const brand = hub.companies.find((company) => company.id === invoice.companyId);
     if (!brand) {
@@ -324,6 +441,7 @@ export default function BusinessHub() {
       }
     >
       <InvoiceDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} companies={hub.companies} onCreate={hub.createInvoice} />
+      <ArticleDialog open={articleOpen} onOpenChange={setArticleOpen} companies={hub.companies} onCreate={hub.createWebsiteArticle} />
       <BusinessIntegrationDialog
         company={integrationRow?.company || null}
         existing={integrationRow?.integrations[0]}
@@ -596,20 +714,35 @@ export default function BusinessHub() {
           </section>
         ) : tab === "content" ? (
           <section className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
-            <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
               <div><h2 className="font-display font-bold">Content & publishing</h2><p className="text-xs text-muted-foreground">Social posts, articles and website content from the existing marketing system.</p></div>
-              <Button size="sm" variant="outline" asChild><Link to="/companies/social">Open content studio <ArrowUpRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setArticleOpen(true)}><Plus className="mr-1 h-3.5 w-3.5" /> New article</Button>
+                <Button size="sm" variant="outline" asChild><Link to="/companies/social">Open content studio <ArrowUpRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
+              </div>
             </div>
             {!content.length ? (
               <div className="p-10 text-center text-sm text-muted-foreground">No content records yet.</div>
             ) : (
               <div className="divide-y divide-border/40">
                 {content.slice(0, 100).map((item) => (
-                  <div key={`${item.companyId}:${item.id}`} className="grid gap-3 px-4 py-3 md:grid-cols-[0.7fr_1.6fr_0.7fr_0.7fr] md:items-center">
+                  <div key={`${item.companyId}:${item.id}`} className="grid gap-3 px-4 py-3 md:grid-cols-[0.7fr_1.6fr_0.7fr_0.7fr_auto] md:items-center">
                     <div><p className="text-xs font-semibold">{item.companyName}</p><p className="text-[10px] text-muted-foreground capitalize">{item.platform} · {item.type.replace("_"," ")}</p></div>
                     <div><p className="text-sm font-medium">{item.topic || item.draft?.slice(0, 80) || "Untitled content"}</p><p className="line-clamp-1 text-[11px] text-muted-foreground">{item.refinedDraft || item.draft}</p></div>
                     <div><p className="text-xs">{item.scheduledFor ? new Date(item.scheduledFor).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "Not scheduled"}</p></div>
                     <div><span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${statusClass(item.status)}`}>{item.status.replace("_"," ")}</span></div>
+                    <div className="flex justify-end gap-1">
+                      {item.platform === "website" && item.type === "article" && ["awaiting_approval", "approved", "scheduled"].includes(item.status) && (
+                        <Button size="sm" variant="outline" onClick={() => void publishArticle(item)}>
+                          {item.status === "awaiting_approval" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve & publish</> : "Publish"}
+                        </Button>
+                      )}
+                      {item.platform === "website" && item.type === "article" && item.status === "published" && item.externalPostUrl && (
+                        <Button size="icon" variant="ghost" asChild>
+                          <a href={item.externalPostUrl} target="_blank" rel="noreferrer"><ArrowUpRight className="h-4 w-4" /></a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
