@@ -40,6 +40,14 @@ type CreateInvoiceInput = {
   lineItems: BusinessInvoiceLine[];
 };
 
+type CreateWebsiteArticleInput = {
+  companyId: string;
+  title: string;
+  body: string;
+  excerpt?: string;
+  tags?: string[];
+};
+
 function asRows<T extends { id?: string }>(snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) {
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as T));
 }
@@ -390,6 +398,64 @@ export function useBusinessHub() {
     await load();
   }, [load]);
 
+  const createWebsiteArticle = useCallback(async (input: CreateWebsiteArticleInput) => {
+    const company = companies.find((item) => item.id === input.companyId);
+    if (!company?.id) throw new Error("Company not found.");
+    const title = input.title.trim();
+    const body = input.body.trim();
+    if (!title || !body) throw new Error("Article title and body are required.");
+
+    const ref = await addDoc(collection(db, "companies", company.id, "content"), {
+      type: "article",
+      platform: "website",
+      campaignId: "",
+      topic: title.slice(0, 240),
+      audience: "",
+      objective: (input.excerpt || "").trim().slice(0, 600),
+      trendReason: (input.excerpt || "").trim().slice(0, 600),
+      draft: body,
+      refinedDraft: body,
+      hashtags: (input.tags || []).map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean).slice(0, 20),
+      visualDirection: "",
+      mediaAssetIds: [],
+      sourceUrls: [],
+      brandChecks: [],
+      complianceFlags: [],
+      engagementSuggestions: [],
+      bestTimeReason: "",
+      scheduledFor: "",
+      timezone: "Europe/London",
+      status: "awaiting_approval",
+      approvalVersion: 1,
+      approvedVersion: 0,
+      approvedAt: "",
+      approvedBy: "",
+      rejectedAt: "",
+      rejectedBy: "",
+      rejectionReason: "",
+      publishedAt: "",
+      externalPostId: "",
+      externalPostUrl: "",
+      publishMode: "dry_run",
+      publishError: "",
+      publishAttempts: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await load();
+    return ref.id;
+  }, [companies, load]);
+
+  const publishWebsiteArticle = useCallback(async (companyId: string, contentId: string) => {
+    const call = httpsCallable<
+      { companyId: string; contentId: string },
+      { ok: boolean; publishedAt: string; externalPostId: string; externalPostUrl: string }
+    >(functions, "publishBusinessWebsiteContent");
+    const response = await call({ companyId, contentId });
+    await load();
+    return response.data;
+  }, [load]);
+
   const addLead = useCallback(async (
     companyId: string,
     lead: Omit<BusinessLead, "id" | "companyId" | "updatedAt">,
@@ -434,6 +500,8 @@ export function useBusinessHub() {
     updateInvoice,
     markInvoicePaid,
     saveIntegration,
+    createWebsiteArticle,
+    publishWebsiteArticle,
     addLead,
     updateLead,
   };
