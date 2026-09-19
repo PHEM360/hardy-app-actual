@@ -689,6 +689,14 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
       }
+      match /bankAccounts/{accountId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /bankTransactions/{transactionId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
       match /taxReturns/{returnId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
