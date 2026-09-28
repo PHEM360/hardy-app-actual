@@ -174,6 +174,28 @@ export const getDogTagProfileBySlug = onCall(async (request) => {
   return { ...toPublicInfo(petName, tag.data), petId, tagId };
 });
 
+// Short /t/{code} links: what dog tag QR codes encode, kept tiny so the code
+// is simple enough to laser engrave. The lookup doc only says where to look;
+// the tag itself must still carry the same shortCode, so regenerating a tag's
+// code retires the old one even if its lookup doc was never cleaned up.
+const SHORT_CODE_PATTERN = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{7}$/;
+
+export const getDogTagProfileByShortCode = onCall(async (request) => {
+  const shortCode = String(request.data?.shortCode || "").toUpperCase().trim();
+  if (!SHORT_CODE_PATTERN.test(shortCode)) return { valid: false };
+
+  const lookup = await admin.firestore().doc(`dogTagShortCodes/${shortCode}`).get();
+  if (!lookup.exists) return { valid: false };
+
+  const { petId, tagId } = lookup.data()!;
+  const tag = await loadTag(String(petId || ""), String(tagId || ""));
+  if (!tag || tag.data.shortCode !== shortCode) return { valid: false };
+
+  const petSnap = await admin.firestore().doc(`pets/${petId}`).get();
+  const petName = petSnap.exists ? petSnap.data()?.name || "This pet" : "This pet";
+  return { ...toPublicInfo(petName, tag.data), petId, tagId };
+});
+
 // Lets the Designer show "Notifies: Chris, Sarah, ..." — the caller must be
 // signed in, but doesn't need to already have access to the pet: household
 // membership isn't sensitive the way the tag's contact details are.
@@ -206,6 +228,7 @@ export const reportDogTagScan = onCall(
     const petId = String(request.data?.petId || "");
     const tagId = String(request.data?.tagId || "");
     const code = request.data?.code ? String(request.data.code) : null;
+    const shortCode = request.data?.shortCode ? String(request.data.shortCode).toUpperCase() : null;
     const lat = Number(request.data?.lat);
     const lng = Number(request.data?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -213,10 +236,14 @@ export const reportDogTagScan = onCall(
     }
 
     const tag = await loadTag(petId, tagId);
-    // A code is only checked when supplied (the /tag/:petId/:tagId?c= flow) —
-    // the /p/:slug flow already proved provenance by knowing the slug, which
-    // resolves server-side to this exact petId/tagId.
-    if (!tag || (code !== null && tag.data.code !== code)) {
+    // A code is only checked when supplied (the /tag/:petId/:tagId?c= and
+    // /t/:shortCode flows) — the /p/:slug flow already proved provenance by
+    // knowing the slug, which resolves server-side to this exact petId/tagId.
+    if (
+      !tag ||
+      (code !== null && tag.data.code !== code) ||
+      (shortCode !== null && tag.data.shortCode !== shortCode)
+    ) {
       throw new HttpsError("not-found", "This tag is no longer active.");
     }
 

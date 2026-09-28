@@ -55,6 +55,12 @@ export async function getDogTagProfileBySlug(slug: string): Promise<DogTagPublic
   return res.data;
 }
 
+export async function getDogTagProfileByShortCode(shortCode: string): Promise<DogTagPublicInfoBySlug> {
+  const fn = httpsCallable<{ shortCode: string }, DogTagPublicInfoBySlug>(functions, "getDogTagProfileByShortCode");
+  const res = await fn({ shortCode });
+  return res.data;
+}
+
 export interface DogTagNotifyRecipient {
   uid: string;
   name: string;
@@ -75,11 +81,12 @@ export async function reportDogTagScan(
   tagId: string,
   lat: number,
   lng: number,
-  code?: string
+  code?: string,
+  shortCode?: string
 ): Promise<void> {
   const fn = httpsCallable<
-    { petId: string; tagId: string; code?: string; lat: number; lng: number },
+    { petId: string; tagId: string; code?: string; shortCode?: string; lat: number; lng: number },
     { success: boolean }
   >(functions, "reportDogTagScan");
-  await fn({ petId, tagId, code, lat, lng });
+  await fn({ petId, tagId, code, shortCode, lat, lng });
 }

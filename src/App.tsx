@@ -23,6 +23,7 @@ import CompanySocial from "@/pages/CompanySocial";
 import BusinessModeller from "@/pages/BusinessModeller";
 import BusinessModellerDetail from "@/pages/BusinessModellerDetail";
 import CompanyDetail from "@/pages/CompanyDetail";
+import PublicInvoice from "@/pages/PublicInvoice";
 import More from "@/pages/More";
 import Settings from "@/pages/Settings";
 import NotificationSettings from "@/pages/NotificationSettings";
@@ -86,7 +87,9 @@ const App = () => (
           />
           <Route path="/tag/:petId/:tagId" element={<TagScan />} />
           <Route path="/p/:slug" element={<TagScanBySlug />} />
+          <Route path="/t/:slug" element={<TagScanBySlug kind="short" />} />
           <Route path="/l/:slug" element={<LinkRedirect />} />
+          <Route path="/i/:companyId/:invoiceId" element={<PublicInvoice />} />
           {import.meta.env.DEV && (
             <>
               <Route path="/dev/finance-preview" element={<FinancePreview />} />

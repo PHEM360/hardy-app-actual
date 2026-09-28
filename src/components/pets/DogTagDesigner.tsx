@@ -37,7 +37,7 @@ import { getDogTagNotifyRecipients, type DogTagNotifyRecipient } from "@/lib/dog
 import { DOG_TAG_SHAPES, dogTagShapeStyle } from "@/lib/dogTagShapes";
 import { DogTagProfilePanel } from "@/components/pets/DogTagProfilePanel";
 import { DogTagNotifyExtras } from "@/components/pets/DogTagNotifyExtras";
-import { publicTagUrl, TagFace } from "@/components/pets/DogTagFace";
+import { publicTagUrl, TagFace, tagQrModuleCount } from "@/components/pets/DogTagFace";
 import { DogTagPrintDialog } from "@/components/pets/DogTagPrintDialog";
 import { printTagKey } from "@/lib/dogTagPrint";
 
@@ -178,6 +178,11 @@ export function DogTagDesigner({
   };
 
   const previewPxPerCm = 220 / draft.sizeCm;
+  const qrModules = tagQrModuleCount(tag);
+  const qrDotMm = (draft.qrSizeCm * 10) / qrModules;
+  // Around 0.5 mm is where fibre/diode lasers and rotary engravers start
+  // losing dots on small metal tags.
+  const engraveFriendly = qrDotMm >= 0.5;
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
@@ -344,6 +349,21 @@ export function DogTagDesigner({
                 onValueChange={([v]) => setField("qrSizeCm", v)}
               />
             </div>
+            <div
+              className={`flex items-start gap-2 rounded-xl border-2 px-3 py-2 text-[11px] transition-colors ${
+                engraveFriendly
+                  ? "border-emerald-500/70 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+                  : "border-amber-500/80 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+              }`}
+            >
+              <Ruler className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong>{qrModules}×{qrModules} grid</strong>, each dot {qrDotMm.toFixed(2)} mm.{" "}
+                {engraveFriendly
+                  ? "Engraving friendly at this size."
+                  : "Dots this small are too fine for most engravers. Make the QR code bigger."}
+              </span>
+            </div>
             <p className="text-[11px] text-muted-foreground">
               Set your printer to 100% scale (not “fit to page”). Print lets you place stickers on leftover A4 sheet and include other pets’ tags.
             </p>
@@ -353,8 +373,9 @@ export function DogTagDesigner({
           <div className="space-y-1.5">
             {sectionLabel(<LinkIcon className="w-3 h-3" />, "bg-emerald-500", "Link when scanned")}
             <p className="text-[11px] text-muted-foreground -mt-0.5">
-              Scanning this tag opens a web page. Give it a friendly address below, or leave it blank
-              and we'll use an automatically generated one instead.
+              Scanning this tag opens a web page. The QR code always uses the short link above the
+              preview, so it stays simple enough to engrave. You can also claim a friendly address for
+              people to type by hand, for example on the back of the tag.
             </p>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground flex-shrink-0">hardyapp.co.uk/p/</span>
@@ -379,11 +400,11 @@ export function DogTagDesigner({
               tag.slug ? (
                 <p className="text-[11px] text-success flex items-center gap-1">
                   <Check className="w-3 h-3 flex-shrink-0" />
-                  Using your friendly address — QR and print use hardyapp.co.uk/p/{tag.slug}
+                  hardyapp.co.uk/p/{tag.slug} is live and opens the same page as the QR code.
                 </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  No friendly address set — this tag currently uses an automatically generated link.
+                  No friendly address set. That's fine, because the QR code works without one.
                 </p>
               )
             )}

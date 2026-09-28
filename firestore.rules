@@ -464,6 +464,19 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
 
+    // Dog tag short QR links (hardyapp.co.uk/t/{code}). Create-only, so the
+    // first write wins and a colliding code is rejected (the client retries
+    // with a new one). No client reads: only the getDogTagProfileByShortCode
+    // Cloud Function resolves them, and it also requires the tag itself to
+    // still carry the same shortCode.
+    match /dogTagShortCodes/{code} {
+      allow create: if isAuthenticated()
+        && request.resource.data.ownerId == request.auth.uid
+        && code.matches('^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{7}$')
+        && canAccessPet(request.resource.data.petId);
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
     // QR code friendly/auto-generated links (hardyapp.co.uk/l/{slug}). Same
     // first-write-wins uniqueness pattern as dogTagSlugs above, but public
     // read: unlike dog tags, resolution happens client-side (no Cloud
@@ -672,6 +685,41 @@ service cloud.firestore {
       match /income/{incomeId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /invoices/{invoiceId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /bills/{billId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /customers/{customerId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /leads/{leadId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /websiteContent/{articleId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /billing/{docId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /bankAccounts/{accountId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /bankTransactions/{txId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /hubSecrets/{secretId} {
+        allow read, write: if false;
       }
       match /taxReturns/{returnId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);

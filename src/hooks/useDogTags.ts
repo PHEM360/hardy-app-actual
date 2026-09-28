@@ -10,7 +10,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { normalizeSlug } from "@/lib/slug";
 
 export { normalizeSlug };
@@ -54,6 +54,8 @@ export interface DogTag {
   ownerId: string;
   label: string;
   code: string;
+  /** Short uppercase code behind the engraving friendly /t/:code link the QR encodes. */
+  shortCode: string;
   slug: string;
   shape: DogTagShape;
   bgColor: string;
@@ -96,11 +98,44 @@ function genCode(): string {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 }
 
+/** No 0/O, 1/I/L: the code may be read off a worn tag and typed by hand. */
+const SHORT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const SHORT_CODE_LENGTH = 7;
+
+function genShortCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(SHORT_CODE_LENGTH));
+  return Array.from(bytes, (b) => SHORT_CODE_ALPHABET[b % SHORT_CODE_ALPHABET.length]).join("");
+}
+
+/**
+ * Claims a fresh dogTagShortCodes/{code} lookup and stores the code on the
+ * tag. The lookup is create-only in firestore.rules, so a (vanishingly rare)
+ * collision is rejected and simply retried with a new code. The server only
+ * honours a lookup whose tag still carries the same shortCode, so replacing
+ * the code retires the old one even if its lookup doc can't be deleted.
+ */
+export async function assignShortCode(petId: string, tagId: string, previous?: string) {
+  const ownerId = auth.currentUser?.uid;
+  if (!ownerId) throw new Error("Not signed in.");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const shortCode = genShortCode();
+    try {
+      await setDoc(doc(db, "dogTagShortCodes", shortCode), { ownerId, petId, tagId, createdAt: serverTimestamp() });
+    } catch {
+      continue;
+    }
+    await updateDoc(doc(db, "pets", petId, "tags", tagId), { shortCode, updatedAt: serverTimestamp() });
+    if (previous) await deleteDoc(doc(db, "dogTagShortCodes", previous)).catch(() => {});
+    return shortCode;
+  }
+  throw new Error("Could not allocate a short code.");
+}
+
 export function genFieldId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-type TagInput = Partial<Omit<DogTag, "id" | "petId" | "ownerId" | "code" | "slug" | "lastScanLocation">>;
+type TagInput = Partial<Omit<DogTag, "id" | "petId" | "ownerId" | "code" | "shortCode" | "slug" | "lastScanLocation">>;
 
 export function dogTagFromFirestore(petId: string, id: string, data: Record<string, unknown>): DogTag {
   return {
@@ -109,6 +144,7 @@ export function dogTagFromFirestore(petId: string, id: string, data: Record<stri
     ownerId: String(data.ownerId || ""),
     label: String(data.label || "Tag"),
     code: String(data.code || ""),
+    shortCode: String(data.shortCode || ""),
     slug: String(data.slug || ""),
     shape: (data.shape as DogTagShape) || "rounded",
     bgColor: String(data.bgColor || "#ffffff"),
@@ -175,6 +211,8 @@ export function useDogTags(petId: string | null) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      // The short code is assigned by DogTagsSection's backfill as soon as the
+      // new tag reaches the live listener, same path as for older tags.
       return ref.id;
     },
     [petId]
@@ -198,8 +236,10 @@ export function useDogTags(petId: string | null) {
         code: genCode(),
         updatedAt: serverTimestamp(),
       });
+      const tag = tags.find((t) => t.id === tagId);
+      await assignShortCode(petId, tagId, tag?.shortCode || undefined);
     },
-    [petId]
+    [petId, tags]
   );
 
   const deleteTag = useCallback(
@@ -208,6 +248,9 @@ export function useDogTags(petId: string | null) {
       const tag = tags.find((t) => t.id === tagId);
       if (tag?.slug) {
         await deleteDoc(doc(db, "dogTagSlugs", tag.slug)).catch(() => {});
+      }
+      if (tag?.shortCode) {
+        await deleteDoc(doc(db, "dogTagShortCodes", tag.shortCode)).catch(() => {});
       }
       await deleteDoc(doc(db, "pets", petId, "tags", tagId));
     },

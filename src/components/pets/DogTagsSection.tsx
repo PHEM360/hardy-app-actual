@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Tag as TagIcon, QrCode, MapPin, Printer } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
-import { useAllDogTags, useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
+import { assignShortCode, useAllDogTags, useDogTags, DEFAULT_TAG_PROFILE, type DogTag } from "@/hooks/useDogTags";
 import { DogTagDesigner } from "@/components/pets/DogTagDesigner";
 import { DogTagPrintDialog } from "@/components/pets/DogTagPrintDialog";
 import { dogTagShapeStyle } from "@/lib/dogTagShapes";
@@ -77,6 +77,20 @@ function PetTagsGroup({
   const { tags, loading, addTag, updateTag, regenerateCode, deleteTag, claimSlug } = useDogTags(pet.id);
   const [editingTag, setEditingTag] = useState<DogTag | null>(null);
   const [creating, setCreating] = useState(false);
+  const backfillAttempted = useRef(new Set<string>());
+
+  // Tags created before short links existed get one the first time they're
+  // seen, so their QR shrinks to the engraving friendly size. Already printed
+  // tags keep working: the long /tag/ link and /p/ slugs stay valid. Tries
+  // once per tag per visit; view-only household members simply fail quietly.
+  useEffect(() => {
+    tags
+      .filter((tag) => !tag.shortCode && !backfillAttempted.current.has(tag.id))
+      .forEach((tag) => {
+        backfillAttempted.current.add(tag.id);
+        assignShortCode(pet.id, tag.id).catch(() => {});
+      });
+  }, [tags, pet.id]);
 
   const handleNewTag = async () => {
     setCreating(true);
@@ -91,6 +105,7 @@ function PetTagsGroup({
           ownerId,
           label,
           code: "",
+          shortCode: "",
           slug: "",
           shape: "rounded",
           bgColor: "#ffffff",
