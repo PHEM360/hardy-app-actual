@@ -5,12 +5,17 @@ import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
-  Megaphone, Repeat, Folder,
+  Megaphone, Repeat, Folder, Users, Newspaper, ScrollText, Wallet, BookOpen,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
 import CompanyMarketingTab from "@/components/companies/CompanyMarketingTab";
 import { CompanyDocumentsPanel } from "@/components/companies/CompanyDocumentsPanel";
+import { CompanyInvoicesPanel } from "@/components/companies/CompanyInvoicesPanel";
+import { CompanyBillsPanel } from "@/components/companies/CompanyBillsPanel";
+import { CompanyReportsPanel } from "@/components/companies/CompanyReportsPanel";
+import { CompanyLeadsPanel } from "@/components/companies/CompanyLeadsPanel";
+import { CompanyContentHub } from "@/components/companies/CompanyContentHub";
 import { ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
@@ -49,6 +54,11 @@ import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, Company
 const TABS = [
   { id: "overview",    label: "Overview",    icon: Info },
   { id: "finance",     label: "Finance",     icon: TrendingUp },
+  { id: "invoices",    label: "Invoices",    icon: ScrollText },
+  { id: "bills",       label: "Bills",       icon: Wallet },
+  { id: "reports",     label: "Books",       icon: BookOpen },
+  { id: "leads",       label: "Leads",       icon: Users },
+  { id: "content",     label: "Content",     icon: Newspaper },
   { id: "marketing",   label: "Social & Ads", icon: Megaphone },
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
@@ -155,7 +165,7 @@ function LoginsTab({ companyId }: { companyId: string }) {
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Login" : "Add Login"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
-            <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Xero, Companies House" className="h-9 rounded-xl" /></div>
+            <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Companies House, Tide" className="h-9 rounded-xl" /></div>
             <div className="space-y-1"><Label>Username / Email *</Label><Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="space-y-1"><Label>Password</Label><Input type="text" value={form.password || ""} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="h-9 rounded-xl font-mono" /></div>
             <div className="space-y-1"><Label>URL</Label><Input value={form.url || ""} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://" className="h-9 rounded-xl" /></div>
@@ -2243,7 +2253,8 @@ function TaxTab({ companyId, company, allCompanies }: {
 const CompanyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { scopeUserId } = useSharedScope("companies");
+  const { scopeUserId, permission } = useSharedScope("companies");
+  const canEdit = permission === "edit";
   const { companies, loading, updateCompany } = useCompanies(scopeUserId ?? undefined);
   const [activeTab, setActiveTab] = useState("overview");
   // Tabs mount lazily on first visit, then stay mounted (hidden) rather than
@@ -2359,6 +2370,11 @@ const CompanyDetail = () => {
           <div>
             {renderTab("overview", <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />)}
             {renderTab("finance", <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />)}
+            {renderTab("invoices", <CompanyInvoicesPanel company={company} canEdit={canEdit} />)}
+            {renderTab("bills", <CompanyBillsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("reports", <CompanyReportsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("leads", <CompanyLeadsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("content", <CompanyContentHub company={company} canEdit={canEdit} />)}
             {renderTab("marketing", (
               <div className="space-y-3">
                 <button

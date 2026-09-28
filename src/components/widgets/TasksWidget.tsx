@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { CheckSquare, ChevronRight, AlertTriangle } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
+import { isTaskOverdue } from "@/lib/tasks";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -18,7 +19,7 @@ export function TasksWidget() {
   const open = tasks.filter((t) => t.status !== "done");
   const done = tasks.length - open.length;
   const completion = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
-  const overdue = open.filter((t) => t.dueDate && new Date(t.dueDate) < new Date()).length;
+  const overdue = open.filter((t) => isTaskOverdue(t)).length;
   const top3 = open.slice(0, 3);
 
   return (

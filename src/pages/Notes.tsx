@@ -34,6 +34,7 @@ import { NoteCard } from "@/components/notes/NoteCard";
 import { NoteStartDialog } from "@/components/notes/NoteStartDialog";
 import { NoteCategorySettings } from "@/components/notes/NoteCategorySettings";
 import { noteHasDiagram } from "@/lib/noteDiagram";
+import { noteHasChecklist, noteChecklistItems, patchNoteChecklist } from "@/lib/noteChecklist";
 import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
 import { noteCategoryOptions } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
@@ -63,17 +64,14 @@ const BOARD_TONES = [
   { mix: "hsl(270, 55%, 55%)", label: "text-foreground" },
 ];
 
-function hasChecklist(note: HubNote) {
-  return (note.checklist ?? []).some((i) => i.text.trim()) || note.kind === "checklist" || note.kind === "task";
-}
-
 function previewText(note: HubNote) {
   if (note.locked) return "Locked note";
   if (note.kind === "drawing") return `${note.canvas?.blocks.length || 0} canvas item${note.canvas?.blocks.length === 1 ? "" : "s"}`;
   if (noteHasDiagram(note)) return "Diagram";
-  if (note.checklist?.length) {
-    const done = note.checklist.filter((i) => i.done).length;
-    return `${done}/${note.checklist.length} checked`;
+  const items = noteChecklistItems(note);
+  if (items.length) {
+    const done = items.filter((i) => i.done).length;
+    return `${done}/${items.length} checked`;
   }
   return note.body?.slice(0, 140) || "Empty note";
 }
@@ -191,7 +189,7 @@ export default function Notes() {
       if (filter === "archived") return n.archived;
       if (n.archived && filter !== "archived") return false;
       if (filter === "pinned") return n.pinned;
-      if (filter === "tasks") return hasChecklist(n);
+      if (filter === "tasks") return noteHasChecklist(n);
       if (filter === "drawings") return n.kind === "drawing";
       if (filter === "diagrams") return noteHasDiagram(n);
       if (filter === "inbox") return !n.folderId;
@@ -557,9 +555,7 @@ export default function Notes() {
                 prefs={notesApi.prefs}
                 onOpen={() => openNote(n)}
                 onToggleItem={(itemId, done) => {
-                  notesApi.updateNote(n, {
-                    checklist: n.checklist.map((item) => item.id === itemId ? { ...item, done } : item),
-                  });
+                  notesApi.updateNote(n, patchNoteChecklist(n, itemId, done));
                 }}
               />
             ))}
@@ -577,7 +573,7 @@ export default function Notes() {
                   className="flex w-full items-start gap-3 rounded-2xl px-4 py-3.5 text-left shadow-card"
                   style={styleFor(n, i)}
                 >
-                  {hasChecklist(n) ? (n.checklist.every((item) => item.done) && n.checklist.length ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-700" /> : <Circle className="mt-0.5 h-5 w-5" />) : <StickyNote className="mt-0.5 h-5 w-5" />}
+                  {noteHasChecklist(n) ? (noteChecklistItems(n).every((item) => item.done) && noteChecklistItems(n).length ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-700" /> : <Circle className="mt-0.5 h-5 w-5" />) : <StickyNote className="mt-0.5 h-5 w-5" />}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display font-bold">{n.locked ? "Locked note" : n.title || "Untitled"}</p>
                     <p className="truncate text-sm opacity-70">{previewText(n)}</p>
@@ -615,9 +611,7 @@ export default function Notes() {
                         prefs={notesApi.prefs}
                         onOpen={() => openNote(n)}
                         onToggleItem={(itemId, done) => {
-                          notesApi.updateNote(n, {
-                            checklist: n.checklist.map((item) => item.id === itemId ? { ...item, done } : item),
-                          });
+                          notesApi.updateNote(n, patchNoteChecklist(n, itemId, done));
                         }}
                       />
                     ))}

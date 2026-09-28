@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { Rnd } from "react-rnd";
 import {
   CheckSquare, ChevronDown, Circle, Diamond, GitBranch, Image, ListPlus, Loader2, MapPin,
-  Mic, MousePointer2, PenLine, Plus, Square, StopCircle, Trash2, Type, X,
+  Mic, MousePointer2, PenLine, Plus, Square, StopCircle, Table2, Trash2, Type, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,10 +15,16 @@ import { toast } from "sonner";
 interface PaperNoteCanvasEditorProps {
   canvas: NoteCanvas;
   canEdit: boolean;
+  /** Tick checklists and view diagrams even when the paper layout is locked. */
+  canInteract?: boolean;
   showTools?: boolean;
   ownerId: string;
   noteId: string;
   onChange: (canvas: NoteCanvas) => void;
+}
+
+function isBoxedText(block: NoteCanvasBlock): boolean {
+  return block.type === "text" && block.boxed !== false;
 }
 
 type ShapeKind = "rectangle" | "ellipse" | "diamond";
@@ -37,6 +43,7 @@ function nextPosition(canvas: NoteCanvas) {
 
 const TOOL_STYLE = {
   text: "border-sky-300/70 bg-sky-500/10 text-sky-800 hover:bg-sky-500/20 dark:text-sky-200",
+  table: "border-indigo-300/70 bg-indigo-500/10 text-indigo-800 hover:bg-indigo-500/20 dark:text-indigo-200",
   shape: "border-violet-300/70 bg-violet-500/10 text-violet-800 hover:bg-violet-500/20 dark:text-violet-200",
   draw: "border-rose-300/70 bg-rose-500/10 text-rose-800 hover:bg-rose-500/20 dark:text-rose-200",
   checklist: "border-emerald-300/70 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20 dark:text-emerald-200",
@@ -49,12 +56,14 @@ const TOOL_STYLE = {
 export function PaperNoteCanvasEditor({
   canvas,
   canEdit,
+  canInteract,
   showTools,
   ownerId,
   noteId,
   onChange,
 }: PaperNoteCanvasEditorProps) {
   const toolsVisible = showTools ?? canEdit;
+  const interactive = canInteract ?? canEdit;
   const paperRef = useRef<HTMLDivElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -72,6 +81,7 @@ export function PaperNoteCanvasEditor({
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [pendingChecklistFocus, setPendingChecklistFocus] = useState<string | null>(null);
+  const [pendingTextFocus, setPendingTextFocus] = useState<string | null>(null);
 
   const paperInk = useMemo(
     () => canvas.blocks.find((block): block is Extract<NoteCanvasBlock, { type: "drawing" }> => block.type === "drawing" && block.id === "paper-ink"),
@@ -89,6 +99,17 @@ export function PaperNoteCanvasEditor({
     input?.focus();
     if (input) setPendingChecklistFocus(null);
   }, [pendingChecklistFocus, canvas.blocks]);
+
+  useEffect(() => {
+    if (!pendingTextFocus) return;
+    const field = paperRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-paper-text="${pendingTextFocus}"]`);
+    field?.focus();
+    if (field) {
+      const end = field.value.length;
+      field.setSelectionRange(end, end);
+      setPendingTextFocus(null);
+    }
+  }, [pendingTextFocus, canvas.blocks]);
 
   useEffect(() => {
     const paper = paperRef.current;
@@ -129,7 +150,7 @@ export function PaperNoteCanvasEditor({
     setSelectedBlockId((current) => current === id ? null : current);
   };
 
-  const pointOnPaper = (event: ReactPointerEvent) => {
+  const pointOnPaper = (event: { clientX: number; clientY: number }) => {
     const bounds = paperRef.current?.getBoundingClientRect();
     if (!bounds) return { x: 0, y: 0 };
     return {
@@ -140,7 +161,57 @@ export function PaperNoteCanvasEditor({
 
   const addText = () => {
     const pos = nextPosition(canvas);
-    addBlock({ id: blockId(), type: "text", ...pos, width: availableBlockWidth(300), height: 170, text: "", textStyle: "body" });
+    const id = blockId();
+    addBlock({ id, type: "text", ...pos, width: availableBlockWidth(300), height: 170, text: "", textStyle: "body", boxed: true });
+    setPendingTextFocus(id);
+    setTool("select");
+  };
+
+  const addTable = () => {
+    const pos = nextPosition(canvas);
+    addBlock({
+      id: blockId(),
+      type: "table",
+      ...pos,
+      width: availableBlockWidth(440),
+      height: 220,
+      cells: [
+        ["", "", ""],
+        ["", "", ""],
+        ["", "", ""],
+      ],
+    });
+    setTool("select");
+  };
+
+  const placePaperText = (point: { x: number; y: number }) => {
+    const nearby = visibleBlocks.find((block) => {
+      if (block.type !== "text" || isBoxedText(block)) return false;
+      return point.x >= block.x - 12
+        && point.x <= block.x + block.width + 12
+        && point.y >= block.y - 12
+        && point.y <= block.y + block.height + 12;
+    });
+    if (nearby) {
+      setSelectedBlockId(nearby.id);
+      setPendingTextFocus(nearby.id);
+      return;
+    }
+    const x = Math.max(18, Math.min(point.x, Math.max(18, paperWidth - 160)));
+    const width = Math.max(160, paperWidth - x - 24);
+    const id = blockId();
+    addBlock({
+      id,
+      type: "text",
+      x,
+      y: Math.max(16, point.y - 10),
+      width,
+      height: 56,
+      text: "",
+      textStyle: "body",
+      boxed: false,
+    });
+    setPendingTextFocus(id);
     setTool("select");
   };
 
@@ -248,7 +319,8 @@ export function PaperNoteCanvasEditor({
   };
 
   const beginPaperAction = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!canEdit || tool === "select") return;
+    if (tool === "select") return;
+    if (!canEdit) return;
     const point = pointOnPaper(event);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     if (tool === "pen") {
@@ -344,7 +416,10 @@ export function PaperNoteCanvasEditor({
               <Plus className="h-3.5 w-3.5" /> Add to paper
             </span>
             <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.text}`} onClick={addText}>
-              <Type className="mr-1.5 h-4 w-4" /> Text
+              <Type className="mr-1.5 h-4 w-4" /> Text box
+            </Button>
+            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.table}`} onClick={addTable}>
+              <Table2 className="mr-1.5 h-4 w-4" /> Table
             </Button>
             <Popover>
               <PopoverTrigger asChild>
@@ -413,15 +488,31 @@ export function PaperNoteCanvasEditor({
         ref={paperRef}
         data-testid="note-paper"
         className={`relative min-h-[560px] overflow-hidden rounded-[1.4rem] border border-amber-950/10 bg-[#fffdf8] text-slate-900 shadow-[0_18px_50px_rgba(75,55,25,.14)] ${
-          tool === "pen" || tool.startsWith("shape:") ? "touch-none cursor-crosshair" : ""
+          tool === "pen" || tool.startsWith("shape:") ? "touch-none cursor-crosshair" : canEdit && tool === "select" ? "cursor-text" : ""
         }`}
         style={{
           height: Math.max(560, canvas.height),
           backgroundImage: "linear-gradient(rgba(148,120,70,.055) 1px, transparent 1px)",
           backgroundSize: "100% 28px",
         }}
+        tabIndex={canEdit ? 0 : undefined}
+        aria-label="Note paper"
         onClick={(event) => {
-          if (event.currentTarget === event.target) setSelectedBlockId(null);
+          if (tool !== "select") return;
+          const fromBlock = (event.target as HTMLElement | null)?.closest?.("[data-note-block]");
+          if (fromBlock) {
+            return;
+          }
+          setSelectedBlockId(null);
+          if (canEdit) placePaperText(pointOnPaper(event));
+        }}
+        onKeyDown={(event) => {
+          if (!canEdit || tool !== "select" || event.metaKey || event.ctrlKey || event.altKey) return;
+          const target = event.target as HTMLElement;
+          if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
+          if (event.key.length !== 1) return;
+          event.preventDefault();
+          placePaperText({ x: 24, y: 28 });
         }}
         onPointerDown={beginPaperAction}
         onPointerMove={continuePaperAction}
@@ -429,10 +520,10 @@ export function PaperNoteCanvasEditor({
         onPointerCancel={finishPaperAction}
       >
         {visibleBlocks.length === 0 && !paperInk?.paths.length && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-slate-400">
+          <div data-empty-paper className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-slate-400">
             <PenLine className="mb-3 h-8 w-8 opacity-40" />
             <p className="font-display text-base font-bold text-slate-600">Your blank note</p>
-            <p className="mt-1 max-w-sm text-xs leading-relaxed">Type, draw, place shapes, add a checklist, build a diagram or pin a location anywhere on this paper.</p>
+            <p className="mt-1 max-w-sm text-xs leading-relaxed">Click anywhere to write. Add a text box, table, checklist or diagram when you need one.</p>
           </div>
         )}
 
@@ -459,7 +550,9 @@ export function PaperNoteCanvasEditor({
 
         {visibleBlocks.map((block) => {
           const selected = selectedBlockId === block.id;
-          const transparent = block.type === "shape" || block.type === "text" || block.type === "drawing";
+          const paperWriting = block.type === "text" && !isBoxedText(block);
+          const transparent = block.type === "shape" || block.type === "drawing" || paperWriting;
+          const boxed = !transparent && block.type !== "checklist" && block.type !== "diagram";
           const renderedWidth = Math.min(block.width, Math.max(block.type === "shape" ? 30 : 120, paperWidth - 16));
           const renderedX = Math.max(0, Math.min(block.x, paperWidth - renderedWidth - 8));
           return (
@@ -468,10 +561,10 @@ export function PaperNoteCanvasEditor({
               bounds="parent"
               position={{ x: renderedX, y: block.y }}
               size={{ width: renderedWidth, height: block.height }}
-              disableDragging={!toolsVisible || tool !== "select"}
-              enableResizing={toolsVisible && tool === "select"}
-              minWidth={block.type === "shape" ? 30 : 120}
-              minHeight={block.type === "shape" ? 30 : 72}
+              disableDragging={!toolsVisible || tool !== "select" || (paperWriting && !selected)}
+              enableResizing={toolsVisible && tool === "select" && !paperWriting}
+              minWidth={block.type === "shape" ? 30 : paperWriting ? 80 : 120}
+              minHeight={block.type === "shape" ? 30 : paperWriting ? 40 : 72}
               dragHandleClassName="note-block-drag"
               onDragStop={(_event, data) => updateBlock(block.id, { x: data.x, y: data.y } as Partial<NoteCanvasBlock>)}
               onResizeStop={(_event, _direction, ref, _delta, position) => updateBlock(block.id, {
@@ -481,10 +574,10 @@ export function PaperNoteCanvasEditor({
                 height: ref.offsetHeight,
               } as Partial<NoteCanvasBlock>)}
               onMouseDown={() => setSelectedBlockId(block.id)}
-              className={`group z-20 ${selected ? "ring-2 ring-primary/60 ring-offset-2 ring-offset-[#fffdf8]" : ""}`}
+              className={`group z-20 ${selected && !paperWriting ? "ring-2 ring-primary/60 ring-offset-2 ring-offset-[#fffdf8]" : ""}`}
             >
-              <div className={`h-full overflow-hidden rounded-2xl ${transparent ? "border border-transparent bg-transparent" : "border border-slate-200/90 bg-white/90 shadow-card"}`}>
-                {toolsVisible && tool === "select" && (
+              <div data-note-block={block.id} className={`h-full overflow-hidden ${boxed ? "rounded-2xl border border-slate-200/90 bg-white/90 shadow-card" : "rounded-none border border-transparent bg-transparent"}`}>
+                {toolsVisible && tool === "select" && !paperWriting && (
                   <div className={`note-block-drag absolute -top-2 left-3 right-3 z-30 flex h-5 cursor-grab items-center justify-between rounded-full bg-slate-800 px-2 text-[9px] font-bold uppercase tracking-wider text-white transition ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
                     Drag
                     <button type="button" className="rounded-full p-0.5 hover:bg-white/20" onClick={() => removeBlock(block.id)}><Trash2 className="h-3 w-3" /></button>
@@ -492,8 +585,8 @@ export function PaperNoteCanvasEditor({
                 )}
 
                 {block.type === "text" && (
-                  <div className="flex h-full flex-col overflow-hidden p-2">
-                    {canEdit && selected && (
+                  <div className={`flex h-full flex-col overflow-hidden ${paperWriting ? "p-0" : "p-2"}`}>
+                    {canEdit && selected && isBoxedText(block) && (
                       <select value={block.textStyle} onChange={(event) => updateBlock(block.id, { textStyle: event.target.value as typeof block.textStyle })} className="mb-1 h-7 w-fit rounded-lg border border-slate-200 bg-white px-2 text-[10px]">
                         <option value="body">Body</option>
                         <option value="heading">Heading</option>
@@ -501,15 +594,75 @@ export function PaperNoteCanvasEditor({
                       </select>
                     )}
                     <textarea
-                      autoFocus={!block.text}
+                      data-paper-text={block.id}
                       value={block.text}
                       readOnly={!canEdit}
-                      onChange={(event) => updateBlock(block.id, { text: event.target.value })}
+                      onChange={(event) => {
+                        const nextHeight = paperWriting
+                          ? Math.max(56, event.currentTarget.scrollHeight)
+                          : block.height;
+                        updateBlock(block.id, { text: event.target.value, height: nextHeight });
+                      }}
                       placeholder="Start typing…"
-                      className={`min-h-0 flex-1 resize-none bg-transparent p-1 outline-none placeholder:text-slate-400 ${
+                      className={`min-h-0 flex-1 resize-none bg-transparent outline-none placeholder:text-slate-400 ${
+                        paperWriting ? "p-0" : "p-1"
+                      } ${
                         block.textStyle === "heading" ? "font-display text-2xl font-bold" : block.textStyle === "callout" ? "rounded-xl bg-amber-100/70 p-3 text-sm font-medium" : "text-[15px] leading-7"
                       }`}
                     />
+                  </div>
+                )}
+
+                {block.type === "table" && (
+                  <div className="flex h-full flex-col overflow-auto p-2">
+                    <table className="w-full border-collapse text-sm">
+                      <tbody>
+                        {block.cells.map((row, rowIndex) => (
+                          <tr key={`${block.id}-r${rowIndex}`}>
+                            {row.map((cell, colIndex) => (
+                              <td key={`${block.id}-r${rowIndex}-c${colIndex}`} className="border border-slate-300 bg-white p-0">
+                                <input
+                                  value={cell}
+                                  readOnly={!canEdit}
+                                  aria-label={`Table cell ${rowIndex + 1}, ${colIndex + 1}`}
+                                  onChange={(event) => {
+                                    const cells = block.cells.map((entry, r) =>
+                                      r === rowIndex ? entry.map((value, c) => (c === colIndex ? event.target.value : value)) : entry,
+                                    );
+                                    updateBlock(block.id, { cells });
+                                  }}
+                                  className="h-9 w-full bg-transparent px-2 text-[13px] outline-none"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {canEdit && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateBlock(block.id, {
+                            cells: [...block.cells, block.cells[0]?.map(() => "") ?? [""]],
+                            height: Math.max(block.height, (block.cells.length + 1) * 38 + 70),
+                          })}
+                          className="text-xs font-semibold text-indigo-700"
+                        >
+                          Add row
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateBlock(block.id, {
+                            cells: block.cells.map((row) => [...row, ""]),
+                            width: Math.max(block.width, ((block.cells[0]?.length ?? 0) + 1) * 110 + 24),
+                          })}
+                          className="text-xs font-semibold text-indigo-700"
+                        >
+                          Add column
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -540,7 +693,7 @@ export function PaperNoteCanvasEditor({
                     <div className="space-y-1.5">
                       {block.items.map((item, index) => (
                         <div key={item.id} className="flex items-center gap-2">
-                          <input type="checkbox" checked={item.done} disabled={!canEdit} onChange={(event) => {
+                          <input type="checkbox" checked={item.done} disabled={!interactive} onChange={(event) => {
                             const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, done: event.target.checked } : entry);
                             updateBlock(block.id, { items });
                           }} />

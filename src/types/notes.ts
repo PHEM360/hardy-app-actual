@@ -115,6 +115,17 @@ export type NoteCanvasBlock =
       height: number;
       text: string;
       textStyle: "body" | "heading" | "callout";
+      /** Boxed text is an explicit overlay. Paper writing has no chrome. */
+      boxed?: boolean;
+    }
+  | {
+      id: string;
+      type: "table";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      cells: string[][];
     }
   | {
       id: string;

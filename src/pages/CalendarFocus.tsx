@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   addDays,
   addMonths,
@@ -192,6 +192,17 @@ function typeLabel(type: FocusItemType) {
   return "Event";
 }
 
+function EditorRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex gap-3 border-b border-border/30 py-3 last:border-b-0">
+      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 function eventType(event: FocusEvent): FocusItemType {
   return event.itemType || "event";
 }
@@ -202,6 +213,11 @@ function eventTime(event: FocusEvent) {
   if (eventType(event) !== "event") return start;
   const end = event.endDate ? format(parseISO(event.endDate), "HH:mm") : "";
   return end && end !== start ? `${start}–${end}` : start;
+}
+
+function eventStartLabel(event: FocusEvent) {
+  if (event.allDay) return "";
+  return format(parseISO(event.startDate), "H:mm");
 }
 
 function initials(name: string) {
@@ -490,38 +506,76 @@ export default function CalendarFocus() {
     setSelectedDay(today);
   };
 
-  const chip = (event: FocusEvent, density: "month" | "row" = "row", index = 0) => {
+  const chip = (event: FocusEvent, density: "month" | "week" | "row" = "row", index = 0) => {
     const calendar = calendarFor(event);
     const type = eventType(event);
     const time = eventTime(event);
-    const compact = density === "month";
+    const startLabel = eventStartLabel(event);
+    const compact = density !== "row";
+    const key = event.id || `${event.title}-${event.startDate}-${index}`;
+    if (compact) {
+      return (
+        <button
+          key={key}
+          type="button"
+          title={`${time} ${event.title}`}
+          onClick={(e) => { e.stopPropagation(); openEdit(event); }}
+          className={`flex h-[22px] w-full min-w-0 items-center gap-1 rounded-[5px] px-1 text-left leading-none hover:brightness-95 sm:h-6 sm:gap-1.5 sm:px-1.5 ${
+            event.completed ? "opacity-60" : ""
+          }`}
+          style={{
+            background: `color-mix(in srgb, ${calendar.color} 20%, hsl(var(--card)))`,
+            boxShadow: `inset 3px 0 0 ${calendar.color}`,
+          }}
+        >
+          {density === "week" && type === "task" ? (
+            <span
+              className="flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border"
+              style={{ borderColor: calendar.color, background: event.completed ? calendar.color : "transparent" }}
+            >
+              {event.completed && <Check className="h-2 w-2 text-white" />}
+            </span>
+          ) : density === "week" && type === "reminder" ? (
+            <Bell className="h-2.5 w-2.5 shrink-0 sm:h-3 sm:w-3" style={{ color: calendar.color }} />
+          ) : null}
+          {startLabel ? (
+            <span className={`shrink-0 text-[10px] font-semibold tabular-nums text-foreground/70 sm:text-[11px] ${density === "month" ? "hidden sm:inline" : ""}`}>{startLabel}</span>
+          ) : null}
+          <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground sm:text-[12px] ${event.completed ? "line-through" : ""}`}>
+            {event.title}
+          </span>
+        </button>
+      );
+    }
     return (
       <button
-        key={event.id || `${event.title}-${event.startDate}-${index}`}
+        key={key}
         type="button"
         onClick={(e) => { e.stopPropagation(); openEdit(event); }}
-        className={`group flex min-w-0 items-center text-left transition ${compact
-          ? `h-[17px] w-full gap-1 rounded-[4px] border-l-2 px-1 text-[8px] leading-none hover:brightness-95 sm:h-[22px] sm:gap-1.5 sm:px-1.5 sm:text-[10px] ${index >= 3 ? "hidden sm:flex" : "flex"}`
-          : "w-full gap-2.5 rounded-xl border border-border/35 bg-background/45 px-3 py-2.5 hover:border-primary/25 hover:bg-muted/55"}`}
-        style={compact ? {
-          borderLeftColor: calendar.color,
-          background: `color-mix(in srgb, ${calendar.color} 16%, hsl(var(--card)))`,
-        } : undefined}
+        className="group flex w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted/55"
       >
-        {!compact && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: calendar.color }} />}
-        <span className={`shrink-0 ${compact ? "opacity-65" : "text-muted-foreground"}`}>{typeIcon(type, compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-4 w-4")}</span>
-        <span className={`shrink-0 font-semibold tabular-nums ${compact ? "max-w-[30px] sm:max-w-[42px]" : "w-[72px] text-xs text-muted-foreground"}`}>{event.allDay ? "" : time}</span>
-        <span className={`min-w-0 flex-1 truncate font-semibold ${event.completed ? "line-through opacity-55" : ""}`}>{event.title}</span>
-        {!compact && event.location && <span className="hidden max-w-[30%] truncate text-xs text-muted-foreground md:inline">{event.location}</span>}
-        {!compact && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/35 transition group-hover:translate-x-0.5" />}
+        <span className="w-[3.25rem] shrink-0 text-right text-[11px] font-semibold tabular-nums text-foreground/70 sm:w-14 sm:text-xs">
+          {event.allDay ? "All day" : startLabel}
+        </span>
+        <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: calendar.color }} />
+        <span className="min-w-0 flex-1">
+          <span className={`flex items-center gap-1.5 truncate text-sm font-semibold ${event.completed ? "line-through opacity-60" : ""}`}>
+            {type !== "event" && <span className="shrink-0 text-muted-foreground">{typeIcon(type, "h-3.5 w-3.5")}</span>}
+            {event.title}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+            {[type !== "event" ? typeLabel(type) : (event.allDay ? "All day" : time), event.location].filter(Boolean).join(" · ")}
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/35 transition group-hover:translate-x-0.5" />
       </button>
     );
   };
 
-  const editorTypeOptions: Array<{ id: FocusItemType; label: string; hint: string }> = [
-    { id: "event", label: "Event", hint: "A time or place" },
-    { id: "task", label: "Task", hint: "Something to do" },
-    { id: "reminder", label: "Reminder", hint: "Prompt me later" },
+  const editorTypeOptions: Array<{ id: FocusItemType; label: string }> = [
+    { id: "event", label: "Event" },
+    { id: "task", label: "Task" },
+    { id: "reminder", label: "Reminder" },
   ];
 
   const shareUsers = appUsers.filter((user) => user.id !== dataUid && user.id !== scopeUserId);
@@ -546,19 +600,17 @@ export default function CalendarFocus() {
       }
     >
       <div className="space-y-3 sm:space-y-4">
-        <div className="sticky top-[3.35rem] z-20 -mx-1 rounded-2xl border border-border/45 bg-background/92 p-2 shadow-soft backdrop-blur-xl sm:static sm:mx-0">
+        <div className="sticky top-[3.35rem] z-20 -mx-1 rounded-2xl border border-border/50 bg-card p-2 shadow-card sm:static sm:mx-0 sm:p-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
+              <Button size="sm" variant="outline" className="h-9 rounded-xl px-3 text-xs font-semibold" onClick={goToday}>Today</Button>
               <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl" onClick={previous}><ChevronLeft className="h-4 w-4" /></Button>
               <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl" onClick={next}><ChevronRight className="h-4 w-4" /></Button>
-              <button type="button" onClick={goToday} className="ml-1 rounded-xl px-2 py-1 text-left transition hover:bg-muted">
-                <span className="block font-display text-base font-bold leading-tight sm:text-lg">
-                  {view === "week" ? `Week of ${format(startOfWeek(cursor, { weekStartsOn: 1 }), "d MMM")}` : format(cursor, "MMMM yyyy")}
-                </span>
-                <span className="text-[11px] font-medium text-primary">Today</span>
-              </button>
+              <h2 className="ml-1 truncate font-display text-base font-bold sm:text-lg">
+                {view === "week" ? `Week of ${format(startOfWeek(cursor, { weekStartsOn: 1 }), "d MMM")}` : format(cursor, "MMMM yyyy")}
+              </h2>
             </div>
-            <div className="flex rounded-xl bg-muted/70 p-1">
+            <div className="flex rounded-xl bg-muted/80 p-1">
               {([
                 ["month", CalendarDays, "Month"],
                 ["week", Clock3, "Week"],
@@ -568,7 +620,7 @@ export default function CalendarFocus() {
                   key={id}
                   type="button"
                   onClick={() => changeView(id)}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${view === id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${view === id ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
                 </button>
@@ -578,7 +630,7 @@ export default function CalendarFocus() {
           {calendars.length > 1 && (
             <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
               {calendars.map((calendar) => (
-                <span key={calendar.id} className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-border/45 bg-card px-2 py-1 text-[10px] font-semibold ${calendar.visible === false ? "opacity-40" : ""}`}>
+                <span key={calendar.id} className={`flex shrink-0 items-center gap-1.5 rounded-lg border border-border/45 bg-background px-2 py-1 text-[10px] font-semibold ${calendar.visible === false ? "opacity-40" : ""}`}>
                   <span className="h-2 w-2 rounded-full" style={{ background: calendar.color }} />{calendar.name}
                 </span>
               ))}
@@ -589,9 +641,9 @@ export default function CalendarFocus() {
         {view === "month" && (
           <>
             <section className="min-w-0 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
-              <div className="grid grid-cols-7 border-b border-border/40 bg-muted/25">
+              <div className="grid grid-cols-7 border-b border-border/40 bg-muted/30">
                 {DAYS.map((day, index) => (
-                  <div key={day} className={`py-2 text-center text-[9px] font-bold uppercase tracking-wider sm:text-[10px] ${index > 4 ? "text-primary/70" : "text-muted-foreground"}`}>{day}</div>
+                  <div key={day} className={`py-2 text-center text-[10px] font-bold uppercase tracking-wider sm:text-[11px] ${index > 4 ? "text-primary/70" : "text-muted-foreground"}`}>{day}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
@@ -599,8 +651,6 @@ export default function CalendarFocus() {
                   const dayEvents = eventsForDay(day);
                   const selected = isSameDay(day, selectedDay);
                   const today = isToday(day);
-                  const mobileHidden = Math.max(0, dayEvents.length - 3);
-                  const desktopHidden = Math.max(0, dayEvents.length - 5);
                   return (
                     <div
                       key={day.toISOString()}
@@ -609,13 +659,13 @@ export default function CalendarFocus() {
                       onClick={() => setSelectedDay(day)}
                       onDoubleClick={() => openCreate(day)}
                       onKeyDown={(event) => { if (event.key === "Enter") setSelectedDay(day); }}
-                      className={`relative h-[104px] min-w-0 cursor-pointer overflow-hidden border-b border-r border-border/30 p-1 text-left transition hover:bg-muted/35 sm:h-[154px] sm:p-1.5 ${!isSameMonth(day, cursor) ? "bg-muted/15 text-muted-foreground/45" : ""} ${selected ? "bg-primary/[0.045] ring-1 ring-inset ring-primary/20" : ""}`}
+                      className={`flex min-h-[138px] min-w-0 cursor-pointer flex-col border-b border-r border-border/30 p-1 text-left transition hover:bg-muted/30 sm:min-h-[176px] sm:p-1.5 ${!isSameMonth(day, cursor) ? "bg-muted/10 text-muted-foreground/50" : ""} ${selected ? "bg-primary/[0.06]" : ""} ${today && !selected ? "bg-primary/[0.03]" : ""}`}
                     >
-                      <span className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold sm:right-2 sm:top-2 sm:h-7 sm:w-7 sm:text-xs ${today ? "bg-primary text-primary-foreground shadow-sm" : selected ? "bg-primary/12 text-primary" : "bg-card/85"}`}>{format(day, "d")}</span>
-                      <div className="space-y-[2px] pt-7 sm:space-y-1 sm:pt-9">
-                        {dayEvents.slice(0, 5).map((event, index) => chip(event, "month", index))}
-                        {mobileHidden > 0 && <span className="block truncate px-1 text-[8px] font-bold text-muted-foreground sm:hidden">+{mobileHidden} more</span>}
-                        {desktopHidden > 0 && <span className="hidden truncate px-1 text-[10px] font-bold text-muted-foreground sm:block">+{desktopHidden} more</span>}
+                      <div className="mb-1 flex justify-end">
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-semibold sm:h-8 sm:w-8 sm:text-sm ${today ? "bg-gradient-primary text-primary-foreground shadow-sm" : selected ? "bg-primary/12 font-bold text-primary" : isSameMonth(day, cursor) ? "text-foreground" : "text-muted-foreground/40"}`}>{format(day, "d")}</span>
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                        {dayEvents.map((event, index) => chip(event, "month", index))}
                       </div>
                     </div>
                   );
@@ -623,18 +673,18 @@ export default function CalendarFocus() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border/45 bg-card p-3 shadow-card sm:p-4">
+            <section className="rounded-2xl border border-border/50 bg-card p-3 shadow-card sm:p-4">
               <div className="mb-2.5 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{isToday(selectedDay) ? "Today" : format(selectedDay, "EEEE")}</p>
                   <h2 className="truncate font-display text-base font-bold sm:text-lg">{format(selectedDay, "d MMMM yyyy")}</h2>
                 </div>
-                {canEdit && <Button size="sm" variant="outline" className="shrink-0 rounded-xl" onClick={() => openCreate(selectedDay)}><Plus className="mr-1 h-3.5 w-3.5" /> Add</Button>}
+                {canEdit && <Button size="sm" className="shrink-0 rounded-xl bg-gradient-primary shadow-sm" onClick={() => openCreate(selectedDay)}><Plus className="mr-1 h-3.5 w-3.5" /> Add</Button>}
               </div>
               {selectedEvents.length ? (
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{selectedEvents.map((event, index) => chip(event, "row", index))}</div>
+                <div className="divide-y divide-border/30">{selectedEvents.map((event, index) => chip(event, "row", index))}</div>
               ) : (
-                <button type="button" onClick={() => openCreate(selectedDay)} className="w-full rounded-xl border border-dashed border-border/70 px-4 py-5 text-center text-sm text-muted-foreground transition hover:border-primary/35 hover:bg-muted/25">
+                <button type="button" onClick={() => openCreate(selectedDay)} className="w-full rounded-xl bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground transition hover:bg-muted/60">
                   Nothing planned. {canEdit ? "Click to add something." : ""}
                 </button>
               )}
@@ -651,11 +701,15 @@ export default function CalendarFocus() {
                   <div key={day.toISOString()} className={`min-w-0 p-2.5 sm:min-h-[420px] sm:p-2 ${isToday(day) ? "bg-primary/[0.04]" : ""}`}>
                     <button type="button" onClick={() => setSelectedDay(day)} className="mb-2 flex w-full items-center gap-2 text-left sm:block sm:text-center">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{format(day, "EEE")}</span>
-                      <span className={`ml-auto flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold sm:mx-auto sm:mt-1 ${isToday(day) ? "bg-primary text-primary-foreground" : ""}`}>{format(day, "d")}</span>
+                      <span className={`ml-auto flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold sm:mx-auto sm:mt-1 ${isToday(day) ? "bg-gradient-primary text-primary-foreground shadow-sm" : isSameDay(day, selectedDay) ? "bg-primary/12 text-primary" : ""}`}>{format(day, "d")}</span>
                     </button>
-                    <div className="space-y-1.5">
-                      {dayEvents.map((event, index) => chip(event, "row", index))}
-                      {!dayEvents.length && canEdit && <button type="button" onClick={() => openCreate(day)} className="w-full rounded-lg border border-dashed border-border/50 py-3 text-[10px] text-muted-foreground hover:border-primary/30">+ Add</button>}
+                    <div className="space-y-1">
+                      {dayEvents.map((event, index) => chip(event, "week", index))}
+                      {!dayEvents.length && canEdit && (
+                        <button type="button" onClick={() => openCreate(day)} className="w-full rounded-lg px-1 py-2 text-left text-[11px] text-muted-foreground/55 transition hover:bg-muted/50 hover:text-muted-foreground">
+                          + Add
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -668,16 +722,16 @@ export default function CalendarFocus() {
           <section className="rounded-2xl border border-border/50 bg-card p-3 shadow-card sm:p-4">
             <div className="mb-3 flex items-center justify-between">
               <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Next 45 days</p><h2 className="font-display text-lg font-bold">Agenda</h2></div>
-              {canEdit && <Button size="sm" className="rounded-xl" onClick={() => openCreate()}><Plus className="mr-1 h-4 w-4" /> New</Button>}
+              {canEdit && <Button size="sm" className="rounded-xl bg-gradient-primary shadow-sm" onClick={() => openCreate()}><Plus className="mr-1 h-4 w-4" /> New</Button>}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {agendaEvents.map((event, index) => {
                 const date = event.allDay ? londonDateFromIso(event.startDate) : event.startDate.slice(0, 10);
                 const previous = index ? agendaEvents[index - 1] : null;
                 const previousDate = previous ? (previous.allDay ? londonDateFromIso(previous.startDate) : previous.startDate.slice(0, 10)) : null;
                 return (
                   <div key={event.id || `${event.title}-${index}`}>
-                    {date !== previousDate && <p className="mb-1 mt-3 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground first:mt-0">{format(parseISO(`${date}T12:00:00`), "EEEE d MMMM")}</p>}
+                    {date !== previousDate && <p className="mb-1 mt-4 px-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground first:mt-0">{format(parseISO(`${date}T12:00:00`), "EEEE d MMMM")}</p>}
                     {chip(event, "row", index)}
                   </div>
                 );
@@ -689,175 +743,188 @@ export default function CalendarFocus() {
       </div>
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-[1.75rem] border-border/55 p-0 shadow-2xl sm:w-full">
-          <div className="sticky top-0 z-20 border-b border-border/40 bg-background/95 px-4 pb-3 pt-4 backdrop-blur-xl sm:px-6 sm:pt-5">
-            <DialogHeader>
-              <div className="flex items-start justify-between gap-3 pr-8">
+        <DialogContent className="focus-editor max-h-[92vh] w-[calc(100vw-1rem)] max-w-xl overflow-hidden rounded-[1.35rem] border-border/55 p-0 shadow-2xl sm:w-full">
+          <div className="border-b border-border/40 bg-card px-4 pt-4 sm:px-6">
+            <DialogHeader className="pr-10">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">{readOnly ? "Calendar item" : editing ? "Edit" : "Create"}</p>
-                  <DialogTitle className="mt-0.5 font-display text-xl">{readOnly ? editing?.title : `${editing ? "Edit" : "New"} ${typeLabel(draft.itemType).toLowerCase()}`}</DialogTitle>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{readOnly ? "Calendar item" : editing ? "Edit" : "Create"}</p>
+                  <DialogTitle className="mt-0.5 font-display text-lg">{readOnly ? editing?.title : `${editing ? "Edit" : "New"} ${typeLabel(draft.itemType).toLowerCase()}`}</DialogTitle>
                 </div>
                 {editing?.sharedMirror && <span className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">Shared with you</span>}
                 {editing?.source === "google" && <span className="rounded-lg bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-300">Google</span>}
               </div>
             </DialogHeader>
             {!readOnly && (
-              <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl bg-muted/65 p-1.5">
-                {editorTypeOptions.map((option) => (
-                  <button key={option.id} type="button" onClick={() => selectType(option.id)} className={`rounded-xl px-2 py-2 text-left transition ${draft.itemType === option.id ? "bg-card shadow-sm ring-1 ring-border/40" : "hover:bg-card/55"}`}>
-                    <span className={`mb-1 flex h-7 w-7 items-center justify-center rounded-lg ${draft.itemType === option.id ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}>{typeIcon(option.id, "h-4 w-4")}</span>
-                    <span className="block text-xs font-bold">{option.label}</span>
-                    <span className="hidden text-[9px] text-muted-foreground sm:block">{option.hint}</span>
-                  </button>
-                ))}
+              <div className="mt-3 flex">
+                {editorTypeOptions.map((option) => {
+                  const active = draft.itemType === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectType(option.id)}
+                      className={`relative flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 text-sm font-semibold transition ${active ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {typeIcon(option.id, "h-4 w-4")}
+                      {option.label}
+                      {active && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-gradient-primary" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div className="space-y-4 px-4 py-4 sm:px-6 sm:py-5">
-            <div>
-              <Label htmlFor="focus-title" className="sr-only">Title</Label>
-              <Input
-                id="focus-title"
-                value={draft.title}
-                disabled={readOnly}
-                autoFocus={!editing}
-                onChange={(e) => setDraft((current) => ({ ...current, title: e.target.value }))}
-                placeholder={draft.itemType === "event" ? "Add title" : draft.itemType === "task" ? "What needs doing?" : "What should I remind you about?"}
-                className="h-12 rounded-2xl border-2 bg-card px-4 font-display text-lg font-semibold shadow-soft placeholder:font-normal placeholder:text-muted-foreground/55"
-              />
-            </div>
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
+            <Label htmlFor="focus-title" className="sr-only">Title</Label>
+            <Input
+              id="focus-title"
+              value={draft.title}
+              disabled={readOnly}
+              autoFocus={!editing}
+              onChange={(e) => setDraft((current) => ({ ...current, title: e.target.value }))}
+              placeholder={draft.itemType === "event" ? "Add title" : draft.itemType === "task" ? "What needs doing?" : "What should I remind you about?"}
+              className="h-12 rounded-none border-0 border-b-2 border-border/70 bg-transparent px-0 font-display text-xl font-semibold shadow-none placeholder:font-normal placeholder:text-muted-foreground/50 focus-visible:border-primary focus-visible:ring-0"
+            />
 
-            <section className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" /><span className="text-sm font-bold">When</span></div>
+            <EditorRow icon={<Clock3 className="h-4 w-4" />}>
+              <div className="mb-2.5 flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{draft.itemType === "event" ? "When" : "Due"}</span>
                 <div className="flex items-center gap-2"><Label htmlFor="focus-all-day" className="text-xs text-muted-foreground">All day</Label><Switch id="focus-all-day" checked={draft.allDay} disabled={readOnly} onCheckedChange={setAllDay} /></div>
               </div>
               <div className={`grid gap-2 ${draft.itemType === "event" ? "sm:grid-cols-2" : ""}`}>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{draft.itemType === "event" ? "Starts" : "Due"}</Label>
-                  <div className={`grid gap-2 ${draft.allDay ? "" : "grid-cols-[1fr_7.2rem]"}`}>
-                    <Input type="date" disabled={readOnly} value={draft.date} onChange={(e) => setDraft((current) => ({ ...current, date: e.target.value, endDate: current.endDate < e.target.value ? e.target.value : current.endDate }))} className="rounded-xl" />
-                    {!draft.allDay && <Input type="time" disabled={readOnly} value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} className="rounded-xl" />}
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{draft.itemType === "event" ? "Starts" : "Date"}</Label>
+                  <div className={`grid min-w-0 gap-2 ${draft.allDay ? "" : "grid-cols-[minmax(0,1fr)_5.6rem]"}`}>
+                    <Input type="date" disabled={readOnly} value={draft.date} onChange={(e) => setDraft((current) => ({ ...current, date: e.target.value, endDate: current.endDate < e.target.value ? e.target.value : current.endDate }))} className="h-10 min-w-0 rounded-xl" />
+                    {!draft.allDay && <Input type="time" disabled={readOnly} value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} className="h-10 min-w-0 rounded-xl" />}
                   </div>
                 </div>
                 {draft.itemType === "event" && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ends</Label>
-                    <div className={`grid gap-2 ${draft.allDay ? "" : "grid-cols-[1fr_7.2rem]"}`}>
-                      <Input type="date" disabled={readOnly} min={draft.date} value={draft.endDate} onChange={(e) => setDraft((current) => ({ ...current, endDate: e.target.value }))} className="rounded-xl" />
-                      {!draft.allDay && <Input type="time" disabled={readOnly} value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} className="rounded-xl" />}
+                    <div className={`grid min-w-0 gap-2 ${draft.allDay ? "" : "grid-cols-[minmax(0,1fr)_5.6rem]"}`}>
+                      <Input type="date" disabled={readOnly} min={draft.date} value={draft.endDate} onChange={(e) => setDraft((current) => ({ ...current, endDate: e.target.value }))} className="h-10 min-w-0 rounded-xl" />
+                      {!draft.allDay && <Input type="time" disabled={readOnly} value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} className="h-10 min-w-0 rounded-xl" />}
                     </div>
                   </div>
                 )}
               </div>
-            </section>
+            </EditorRow>
 
-            <section className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-              <div className="mb-2 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Calendar</span></div>
+            <EditorRow icon={<CalendarDays className="h-4 w-4" />}>
+              <p className="mb-2 text-sm font-semibold">Calendar</p>
               <div className="flex flex-wrap gap-2">
                 {calendars.map((calendar) => {
                   const selected = draft.calendarId === calendar.id;
                   return (
-                    <button key={calendar.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, calendarId: calendar.id }))} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition ${selected ? "border-primary/40 bg-primary/8 text-foreground shadow-sm" : "border-border/55 bg-background/55 text-muted-foreground hover:text-foreground"}`}>
+                    <button key={calendar.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, calendarId: calendar.id }))} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/45 bg-primary/10 text-foreground shadow-sm" : "border-border/55 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: calendar.color }} />{calendar.name}{selected && <Check className="h-3.5 w-3.5 text-primary" />}
                     </button>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => { setEditorOpen(false); navigate("/calendar-focus/settings"); }} className="rounded-xl border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:border-primary/30 hover:text-primary"><Plus className="mr-1 inline h-3.5 w-3.5" />Calendar</button>}
+                {!readOnly && <button type="button" onClick={() => { setEditorOpen(false); navigate("/calendar-focus/settings"); }} className="rounded-full border border-border/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/30 hover:text-primary"><Plus className="mr-1 inline h-3.5 w-3.5" />Calendar</button>}
               </div>
-            </section>
+            </EditorRow>
 
             {draft.itemType === "event" && (
-              <section className="relative rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-                <div className="mb-2 flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Location</span></div>
-                <Input
-                  value={draft.location}
-                  disabled={readOnly}
-                  onChange={(e) => setDraft((current) => ({ ...current, location: e.target.value, placeId: "", locationLat: undefined, locationLng: undefined, travelMinutes: undefined, travelDistanceMeters: undefined }))}
-                  placeholder="Search for an address or place"
-                  className="rounded-xl"
-                />
-                {placeLoading && <p className="mt-1.5 text-[10px] text-muted-foreground">Searching places…</p>}
-                {!!suggestions.length && (
-                  <div className="absolute left-3.5 right-3.5 z-30 mt-1 overflow-hidden rounded-xl border border-border bg-popover shadow-xl sm:left-4 sm:right-4">
-                    {suggestions.slice(0, 6).map((suggestion) => (
-                      <button key={suggestion.id} type="button" onClick={() => void selectPlace(suggestion)} className="flex w-full items-start gap-2 border-b border-border/35 px-3 py-2.5 text-left last:border-0 hover:bg-muted/55">
-                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="min-w-0"><span className="block truncate text-xs font-semibold">{suggestion.label}</span>{suggestion.secondary && <span className="block truncate text-[10px] text-muted-foreground">{suggestion.secondary}</span>}</span>
-                      </button>
-                    ))}
-                    <p className="border-t border-border/35 px-3 py-1.5 text-right text-[9px] font-semibold text-muted-foreground">Powered by Google</p>
-                  </div>
-                )}
-                {draft.location && (
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    {!readOnly && <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => void calculateTravel()} disabled={travelLoading}>{travelLoading ? "Calculating…" : draft.travelMinutes ? `${draft.travelMinutes} min · ${distanceLabel(draft.travelDistanceMeters)}` : "Travel from me"}</Button>}
-                    <Button size="sm" variant="outline" className="rounded-xl" asChild><a href={googleMapsDirectionsUrl(draft.location, draft.placeId)} target="_blank" rel="noreferrer"><Navigation className="mr-1 h-3.5 w-3.5" /> Google Maps</a></Button>
-                    <Button size="sm" variant="ghost" className="rounded-xl" asChild><a href={appleMapsDirectionsUrl(draft.location)} target="_blank" rel="noreferrer">Apple Maps</a></Button>
-                  </div>
-                )}
-                {!googleMapsConfigured() && !readOnly && <p className="mt-2 text-[10px] text-muted-foreground">Address entry and navigation work now. Google autocomplete and live travel time switch on when the Maps browser key is configured.</p>}
-              </section>
+              <EditorRow icon={<MapPin className="h-4 w-4" />}>
+                <div className="relative">
+                  <p className="mb-2 text-sm font-semibold">Location</p>
+                  <Input
+                    value={draft.location}
+                    disabled={readOnly}
+                    onChange={(e) => setDraft((current) => ({ ...current, location: e.target.value, placeId: "", locationLat: undefined, locationLng: undefined, travelMinutes: undefined, travelDistanceMeters: undefined }))}
+                    placeholder="Add location"
+                    className="h-10 rounded-xl"
+                  />
+                  {placeLoading && <p className="mt-1.5 text-[10px] text-muted-foreground">Searching places…</p>}
+                  {!!suggestions.length && (
+                    <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
+                      {suggestions.slice(0, 6).map((suggestion) => (
+                        <button key={suggestion.id} type="button" onClick={() => void selectPlace(suggestion)} className="flex w-full items-start gap-2 border-b border-border/35 px-3 py-2.5 text-left last:border-0 hover:bg-muted/55">
+                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="min-w-0"><span className="block truncate text-xs font-semibold">{suggestion.label}</span>{suggestion.secondary && <span className="block truncate text-[10px] text-muted-foreground">{suggestion.secondary}</span>}</span>
+                        </button>
+                      ))}
+                      <p className="border-t border-border/35 px-3 py-1.5 text-right text-[9px] font-semibold text-muted-foreground">Powered by Google</p>
+                    </div>
+                  )}
+                  {draft.location && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {!readOnly && <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => void calculateTravel()} disabled={travelLoading}>{travelLoading ? "Calculating…" : draft.travelMinutes ? `${draft.travelMinutes} min · ${distanceLabel(draft.travelDistanceMeters)}` : "Travel from me"}</Button>}
+                      <Button size="sm" variant="outline" className="rounded-xl" asChild><a href={googleMapsDirectionsUrl(draft.location, draft.placeId)} target="_blank" rel="noreferrer"><Navigation className="mr-1 h-3.5 w-3.5" /> Google Maps</a></Button>
+                      <Button size="sm" variant="ghost" className="rounded-xl" asChild><a href={appleMapsDirectionsUrl(draft.location)} target="_blank" rel="noreferrer">Apple Maps</a></Button>
+                    </div>
+                  )}
+                  {!googleMapsConfigured() && !readOnly && <p className="mt-2 text-[10px] text-muted-foreground">Address entry and navigation work now. Google autocomplete and live travel time switch on when the Maps browser key is configured.</p>}
+                </div>
+              </EditorRow>
             )}
 
-            <section className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-              <div className="mb-2.5 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Notifications</span></div>{!readOnly && <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg text-xs" onClick={() => setDraft((current) => ({ ...current, notifications: [...current.notifications, { id: crypto.randomUUID(), via: "push", amount: 10, unit: "minutes" }] }))}><Plus className="mr-1 h-3.5 w-3.5" /> Add</Button>}</div>
+            <EditorRow icon={<Bell className="h-4 w-4" />}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Notifications</p>
+                {!readOnly && <Button type="button" size="sm" variant="ghost" className="h-8 rounded-lg text-xs" onClick={() => setDraft((current) => ({ ...current, notifications: [...current.notifications, { id: crypto.randomUUID(), via: "push", amount: 10, unit: "minutes" }] }))}><Plus className="mr-1 h-3.5 w-3.5" /> Add</Button>}
+              </div>
               <div className="space-y-2">
                 {draft.notifications.map((notification) => (
-                  <div key={notification.id} className="grid grid-cols-[1fr_1.25fr_1.15fr_auto] items-center gap-1.5 rounded-xl bg-muted/45 p-2">
-                    <Input type="number" min={0} disabled={readOnly} value={notification.amount} onChange={(e) => setDraft((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === notification.id ? { ...item, amount: Math.max(0, Number(e.target.value) || 0) } : item) }))} className="h-9 rounded-lg" />
+                  <div key={notification.id} className="grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,0.9fr)_2rem] items-center gap-1.5 rounded-xl bg-muted/50 p-1.5">
+                    <Input type="number" min={0} disabled={readOnly} value={notification.amount} onChange={(e) => setDraft((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === notification.id ? { ...item, amount: Math.max(0, Number(e.target.value) || 0) } : item) }))} className="h-9 min-w-0 rounded-lg" />
                     <Select disabled={readOnly} value={notification.unit} onValueChange={(unit) => setDraft((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === notification.id ? { ...item, unit: unit as CalendarNotificationPref["unit"] } : item) }))}>
-                      <SelectTrigger className="h-9 rounded-lg"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="minutes">minutes</SelectItem><SelectItem value="hours">hours</SelectItem><SelectItem value="days">days</SelectItem></SelectContent>
+                      <SelectTrigger className="h-9 min-w-0 rounded-lg"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="minutes">minutes</SelectItem><SelectItem value="hours">hours</SelectItem><SelectItem value="days">days</SelectItem></SelectContent>
                     </Select>
                     <Select disabled={readOnly} value={notification.via} onValueChange={(via) => setDraft((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === notification.id ? { ...item, via: via as CalendarNotificationPref["via"] } : item) }))}>
-                      <SelectTrigger className="h-9 rounded-lg"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="push">Push</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="sms">SMS</SelectItem></SelectContent>
+                      <SelectTrigger className="h-9 min-w-0 rounded-lg"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="push">Push</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="sms">SMS</SelectItem></SelectContent>
                     </Select>
                     {!readOnly ? <button type="button" aria-label="Remove notification" onClick={() => setDraft((current) => ({ ...current, notifications: current.notifications.filter((item) => item.id !== notification.id) }))} className="rounded-lg p-2 text-muted-foreground hover:bg-background hover:text-destructive"><X className="h-4 w-4" /></button> : <span />}
                   </div>
                 ))}
-                {!draft.notifications.length && <p className="rounded-xl bg-muted/35 px-3 py-3 text-xs text-muted-foreground">No notification for this item.</p>}
+                {!draft.notifications.length && <p className="text-xs text-muted-foreground">No notification for this item.</p>}
               </div>
-            </section>
+            </EditorRow>
 
             {isOwnScope && !editing?.sharedMirror && editing?.source !== "google" && (
-              <section className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-                <div className="mb-2 flex items-center gap-2"><UserRoundPlus className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Share with</span></div>
-                <p className="mb-2.5 text-[10px] text-muted-foreground">People you select get a read-only copy on their own calendar, including the same reminders.</p>
+              <EditorRow icon={<UserRoundPlus className="h-4 w-4" />}>
+                <p className="mb-1 text-sm font-semibold">Share with</p>
+                <p className="mb-2 text-[10px] text-muted-foreground">People you select get a read-only copy on their own calendar, including the same reminders.</p>
                 <div className="flex flex-wrap gap-2">
                   {shareUsers.map((user) => {
                     const selected = draft.sharedWithUids.includes(user.id);
                     return (
-                      <button key={user.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, sharedWithUids: selected ? current.sharedWithUids.filter((id) => id !== user.id) : [...current.sharedWithUids, user.id] }))} className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/35 bg-primary/8 text-foreground" : "border-border/50 bg-background/55 text-muted-foreground hover:text-foreground"}`}>
-                        <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold ${selected ? "bg-primary text-primary-foreground" : "bg-muted"}`}>{initials(user.name)}</span>{user.name}{selected && <Check className="h-3.5 w-3.5 text-primary" />}
+                      <button key={user.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, sharedWithUids: selected ? current.sharedWithUids.filter((id) => id !== user.id) : [...current.sharedWithUids, user.id] }))} className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/35 bg-primary/10 text-foreground" : "border-border/50 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold ${selected ? "bg-gradient-primary text-primary-foreground" : "bg-background"}`}>{initials(user.name)}</span>{user.name}{selected && <Check className="h-3.5 w-3.5 text-primary" />}
                       </button>
                     );
                   })}
                   {!shareUsers.length && <p className="text-xs text-muted-foreground">No other app users found.</p>}
                 </div>
-              </section>
+              </EditorRow>
             )}
 
             {draft.itemType === "task" && (
-              <section className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-                <div><p className="text-sm font-bold">Completed</p><p className="text-[10px] text-muted-foreground">Keep it on the calendar but visually mark it done.</p></div>
-                <Switch checked={draft.completed} disabled={readOnly} onCheckedChange={(completed) => setDraft((current) => ({ ...current, completed }))} />
-              </section>
+              <EditorRow icon={<CheckSquare2 className="h-4 w-4" />}>
+                <div className="flex items-center justify-between gap-3">
+                  <div><p className="text-sm font-semibold">Completed</p><p className="text-[10px] text-muted-foreground">Keep it on the calendar but visually mark it done.</p></div>
+                  <Switch checked={draft.completed} disabled={readOnly} onCheckedChange={(completed) => setDraft((current) => ({ ...current, completed }))} />
+                </div>
+              </EditorRow>
             )}
 
-            <section className="rounded-2xl border border-border/50 bg-card p-3.5 shadow-soft sm:p-4">
-              <Label className="mb-2 block text-sm font-bold">Notes</Label>
-              <Textarea value={draft.description} disabled={readOnly} onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))} placeholder="Add useful details…" className="min-h-[88px] resize-none rounded-xl" />
-            </section>
+            <EditorRow icon={<List className="h-4 w-4" />}>
+              <Label className="mb-2 block text-sm font-semibold">Notes</Label>
+              <Textarea value={draft.description} disabled={readOnly} onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))} placeholder="Add description" className="min-h-[84px] resize-none rounded-xl border-border/60 bg-muted/30" />
+            </EditorRow>
 
             {readOnly && editing?.sharedMirror && <p className="rounded-xl bg-primary/7 px-3 py-2.5 text-xs text-muted-foreground">This was shared to your calendar. Changes are managed by the person who shared it.</p>}
             {readOnly && editing?.source === "google" && <p className="rounded-xl bg-blue-500/7 px-3 py-2.5 text-xs text-muted-foreground">This event came from Google Calendar. Use the connected Google calendar to edit it; Focus will pick up the synced change.</p>}
           </div>
 
-          <DialogFooter className="sticky bottom-0 z-20 flex-row items-center border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur-xl sm:px-6">
+          <DialogFooter className="flex-row items-center border-t border-border/40 bg-card px-4 py-3 sm:px-6">
             {editing?.id && !readOnly && <Button type="button" variant="ghost" className="mr-auto rounded-xl text-destructive hover:text-destructive" onClick={() => void remove()}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>}
             <Button type="button" variant="ghost" className="rounded-xl" onClick={() => setEditorOpen(false)}>{readOnly ? "Close" : "Cancel"}</Button>
-            {!readOnly && <Button type="button" className="rounded-xl bg-gradient-primary px-5 shadow-sm" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : editing ? "Save changes" : `Add ${typeLabel(draft.itemType).toLowerCase()}`}</Button>}
+            {!readOnly && <Button type="button" className="rounded-xl bg-gradient-primary px-5 shadow-sm" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : editing ? "Save" : `Save ${typeLabel(draft.itemType).toLowerCase()}`}</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

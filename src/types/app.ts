@@ -546,7 +546,7 @@ export interface MarketingPlatformConnection {
 
 export interface CompanyLogin {
   id?: string;
-  service: string;        // e.g. "Xero", "Companies House"
+  service: string;        // e.g. "Companies House", "Tide"
   username: string;
   password?: string;
   url?: string;

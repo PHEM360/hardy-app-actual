@@ -47,7 +47,7 @@ export default function BankSyncSettings({
     }
     setBusy("connect");
     try {
-      const url = await startBankConnect();
+      const url = await startBankConnect(window.location.pathname);
       window.location.href = url;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Could not start bank connection.";
@@ -75,7 +75,7 @@ export default function BankSyncSettings({
         <div>
           <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Bank connections</h3>
           <p className="text-xs text-foreground/75 mt-1">
-            Connect the bank once. Then attach each bank account to {pageLabel}. The same login can feed Personal Finance, Household Finance, and flats — pick a different account on each page.
+            Connect the bank once. Then attach each bank account to {pageLabel}. The same login can feed Personal Finance, Household Finance, and flats. Pick a different account on each page.
           </p>
           {configured && (
             <p className="mt-1 text-[11px] text-foreground/65">
@@ -97,7 +97,7 @@ export default function BankSyncSettings({
       ) : connections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {configured === false
-            ? "Bank linking is waiting on a TrueLayer app. Create one at console.truelayer.com (Sandbox is fine), add the Hardy Hub redirect URLs, then put the client ID and secret in Firebase secrets."
+            ? "Bank linking is waiting on a TrueLayer app. Add the Hardy Hub callback https://hardyapp.co.uk/api/truelayer/callback in Console, then put the client ID and secret in Firebase secrets."
             : "No banks connected yet. Connect once, then pick which account belongs here."}
         </p>
       ) : (

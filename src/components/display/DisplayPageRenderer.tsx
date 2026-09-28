@@ -19,6 +19,7 @@ import { useDisplayWeather } from "@/hooks/useDisplayWeather";
 import type { Birthday } from "@/types/birthdays";
 import { nextOccurrenceLabel } from "@/lib/birthdayDates";
 import type { FamilyMessage } from "@/hooks/useFamilyMessages";
+import { londonDateFromIso } from "@/lib/londonCalendarDate";
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => new Date());
@@ -128,10 +129,17 @@ function matchesCategories(categories: string[] | undefined, event: CalendarEven
 
 function eventsByDay(events: CalendarEvent[], categories: string[] | undefined) {
   const map = new Map<string, CalendarEvent[]>();
+  const mismatches: Array<{ utcKey: string; londonKey: string; allDay: boolean }> = [];
   events.filter((event) => matchesCategories(categories, event)).forEach((event) => {
-    const key = event.startDate.slice(0, 10);
+    const utcKey = event.startDate.slice(0, 10);
+    const londonKey = event.allDay ? londonDateFromIso(event.startDate) : utcKey;
+    if (event.allDay && utcKey !== londonKey) mismatches.push({ utcKey, londonKey, allDay: true });
+    const key = utcKey;
     map.set(key, [...(map.get(key) || []), event]);
   });
+  // #region agent log
+  fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H4',location:'DisplayPageRenderer.tsx:eventsByDay',message:'display month keys vs London dates',data:{eventCount:events.length,mismatchCount:mismatches.length,samples:mismatches.slice(0,6)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return map;
 }
 

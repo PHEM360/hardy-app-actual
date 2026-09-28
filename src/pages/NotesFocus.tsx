@@ -31,24 +31,22 @@ import { useNotes } from "@/hooks/useNotes";
 import { useNoteVault } from "@/hooks/useNoteVault";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { noteHasDiagram } from "@/lib/noteDiagram";
+import { noteHasChecklist, noteChecklistItems } from "@/lib/noteChecklist";
 import { noteSwatch } from "@/lib/noteStyle";
 import type { HubNote, NoteDiagram, NoteFolder, NoteKind } from "@/types/notes";
 import { noteCategoryOptions } from "@/types/notes";
 
 type FilterId = "all" | "pinned" | "tasks" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}` | `category:${string}`;
 
-function hasChecklist(note: HubNote) {
-  return note.kind === "checklist" || note.kind === "task" || (note.checklist ?? []).some((item) => item.text.trim());
-}
-
 function preview(note: HubNote) {
   if (note.locked) return "Locked note";
   if (note.kind === "drawing") return "Drawing";
   if (noteHasDiagram(note)) return "Diagram";
-  if (note.checklist?.length) {
-    const complete = note.checklist.filter((item) => item.done).length;
-    const firstOpen = note.checklist.find((item) => !item.done)?.text;
-    return firstOpen ? `${complete}/${note.checklist.length} complete · ${firstOpen}` : `${complete}/${note.checklist.length} complete`;
+  const items = noteChecklistItems(note);
+  if (items.length) {
+    const complete = items.filter((item) => item.done).length;
+    const firstOpen = items.find((item) => !item.done)?.text;
+    return firstOpen ? `${complete}/${items.length} complete · ${firstOpen}` : `${complete}/${items.length} complete`;
   }
   return note.body?.replace(/\s+/g, " ").trim().slice(0, 180) || "Empty note";
 }
@@ -125,7 +123,7 @@ export default function NotesFocus() {
       if (filter === "archived") return note.archived;
       if (note.archived) return false;
       if (filter === "pinned") return note.pinned;
-      if (filter === "tasks") return hasChecklist(note);
+      if (filter === "tasks") return noteHasChecklist(note);
       if (filter === "inbox") return !note.folderId;
       if (filter.startsWith("folder:")) return note.folderId === filter.slice(7);
       if (filter.startsWith("category:")) return note.category === filter.slice(9);

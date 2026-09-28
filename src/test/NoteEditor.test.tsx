@@ -53,12 +53,14 @@ const savedNote: HubNote = {
 };
 
 describe("NoteEditor paper layout", () => {
-  it("keeps colour and filing extras behind Options on a new note", () => {
+  it("keeps colour and filing extras behind Options on a new note", async () => {
     renderEditor();
     expect(screen.queryByText("General notes · Personal")).not.toBeInTheDocument();
     expect(screen.queryByText("Save to tab")).not.toBeInTheDocument();
     expect(screen.getByTestId("note-paper")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Start typing…")).toBeInTheDocument();
+    expect(screen.getByText("Your blank note")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("note-paper"), { clientX: 40, clientY: 50 });
+    expect(await screen.findByPlaceholderText("Start typing…")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
     fireEvent.click(screen.getByRole("button", { name: /Note details/ }));
@@ -98,7 +100,8 @@ describe("NoteEditor paper layout", () => {
 
   it("names a blank note from the first line of paper", async () => {
     const onSave = renderEditor();
-    fireEvent.change(screen.getByPlaceholderText("Start typing…"), { target: { value: "Buy milk\nAnd bread" } });
+    fireEvent.click(screen.getByTestId("note-paper"), { clientX: 40, clientY: 50 });
+    fireEvent.change(await screen.findByPlaceholderText("Start typing…"), { target: { value: "Buy milk\nAnd bread" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(
@@ -131,5 +134,39 @@ describe("NoteEditor paper layout", () => {
       expect.objectContaining({ title: "Milk" }),
       expect.objectContaining({ showOnDashboard: true }),
     ));
+  });
+
+  it("lets you tick a checklist in the expanded view without entering Edit", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const checklistNote: HubNote = {
+      ...savedNote,
+      id: "list-1",
+      kind: "checklist",
+      title: "Jobs",
+      body: "",
+      checklist: [{ id: "i1", text: "Milk", done: false }],
+      canvas: {
+        version: 1,
+        height: 520,
+        blocks: [{
+          id: "c1",
+          type: "checklist",
+          x: 28,
+          y: 28,
+          width: 330,
+          height: 210,
+          title: "Jobs",
+          items: [{ id: "i1", text: "Milk", done: false }],
+        }],
+      },
+    };
+    renderEditor(onSave, { note: checklistNote, noteId: "list-1" });
+    expect(screen.getByRole("button", { name: /Edit/ })).toBeInTheDocument();
+    const box = screen.getByRole("checkbox");
+    expect(box).not.toBeDisabled();
+    fireEvent.click(box);
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: [expect.objectContaining({ id: "i1", done: true })],
+    })));
   });
 });

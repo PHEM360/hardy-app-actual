@@ -89,7 +89,7 @@ export function TdTasksWidget() {
                 <p className="flex-1 text-xs font-medium leading-snug min-w-0 truncate">
                   {task.title}
                 </p>
-                <button onClick={() => task.id && toggleToday(task.id, false)} className="flex-shrink-0 text-amber-300 hover:text-muted-foreground transition-colors">
+                <button onClick={() => task.id && toggleToday(task.id, task.isToday)} className="flex-shrink-0 text-amber-500 hover:text-muted-foreground transition-colors">
                   <Sun className="w-3 h-3" />
                 </button>
               </motion.div>

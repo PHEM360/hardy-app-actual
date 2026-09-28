@@ -637,6 +637,20 @@ const CalendarPage = () => {
     });
   }, [events, virtualEvents, settings.autoImport?.birthdays, settings.mergeRules, hiddenSources]);
 
+  useEffect(() => {
+    const extras = allDisplayEvents
+      .filter((event) => event.allDay)
+      .map((event) => {
+        const start = londonDateFromIso(event.startDate);
+        const end = londonDateFromIso(event.endDate || event.startDate);
+        return { source: event.source || "local", start, end, extra: end > start };
+      })
+      .filter((item) => item.extra);
+    // #region agent log
+    fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H1',location:'Calendar.tsx:allDisplayEvents',message:'all-day events spanning extra UK days',data:{allDayCount:allDisplayEvents.filter((event)=>event.allDay).length,extraCount:extras.length,samples:extras.slice(0,8)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [allDisplayEvents]);
+
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   const eventsForDay = (day: Date) => {

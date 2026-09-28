@@ -44,6 +44,9 @@ export function parseIcsEvents(ics: string, feedId: string): CalendarEvent[] {
     const endRaw = body.split("\n").find((row) => row.startsWith("DTEND")) || startRaw;
     const start = parseIcsDate(startRaw);
     const end = parseIcsDate(endRaw);
+    // #region agent log
+    if (start.allDay) fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H5',location:'calendarIcs.ts:parseIcsEvents',message:'parsed ICS all-day event',data:{start:start.iso,end:end.iso,endAfterStart:end.iso>start.iso},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return {
       title: field("SUMMARY") || "Untitled",
       description: field("DESCRIPTION") || "",
