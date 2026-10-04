@@ -819,12 +819,12 @@ export default function CalendarFocus() {
                 {calendars.map((calendar) => {
                   const selected = draft.calendarId === calendar.id;
                   return (
-                    <button key={calendar.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, calendarId: calendar.id }))} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/45 bg-primary/10 text-foreground shadow-sm" : "border-border/55 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
+                    <button key={calendar.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, calendarId: calendar.id }))} className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/45 bg-primary/10 text-foreground shadow-sm" : "border-border/55 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: calendar.color }} />{calendar.name}{selected && <Check className="h-3.5 w-3.5 text-primary" />}
                     </button>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => { setEditorOpen(false); navigate("/calendar-focus/settings"); }} className="rounded-full border border-border/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/30 hover:text-primary"><Plus className="mr-1 inline h-3.5 w-3.5" />Calendar</button>}
+                {!readOnly && <button type="button" onClick={() => { setEditorOpen(false); navigate("/calendar-focus/settings"); }} className="rounded-md border border-border/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/30 hover:text-primary"><Plus className="mr-1 inline h-3.5 w-3.5" />Calendar</button>}
               </div>
             </EditorRow>
 
@@ -893,7 +893,7 @@ export default function CalendarFocus() {
                   {shareUsers.map((user) => {
                     const selected = draft.sharedWithUids.includes(user.id);
                     return (
-                      <button key={user.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, sharedWithUids: selected ? current.sharedWithUids.filter((id) => id !== user.id) : [...current.sharedWithUids, user.id] }))} className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/35 bg-primary/10 text-foreground" : "border-border/50 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
+                      <button key={user.id} type="button" disabled={readOnly} onClick={() => setDraft((current) => ({ ...current, sharedWithUids: selected ? current.sharedWithUids.filter((id) => id !== user.id) : [...current.sharedWithUids, user.id] }))} className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${selected ? "border-primary/35 bg-primary/10 text-foreground" : "border-border/50 bg-muted/40 text-muted-foreground hover:text-foreground"}`}>
                         <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold ${selected ? "bg-gradient-primary text-primary-foreground" : "bg-background"}`}>{initials(user.name)}</span>{user.name}{selected && <Check className="h-3.5 w-3.5 text-primary" />}
                       </button>
                     );

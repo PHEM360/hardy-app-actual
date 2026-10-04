@@ -693,12 +693,12 @@ function SubstancesContent({ onLock }: { onLock: () => void }) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-sm font-bold text-card-foreground truncate">{name}</h4>
                         {badge && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badge.color}`}>
                             {badge.text}
                           </span>
                         )}
                         {!latest && (
-                          <span className="text-[10px] text-muted-foreground border border-border/40 px-2 py-0.5 rounded-full">No doses logged</span>
+                          <span className="text-[10px] text-muted-foreground border border-border/40 px-2 py-0.5 rounded-md">No doses logged</span>
                         )}
                       </div>
 

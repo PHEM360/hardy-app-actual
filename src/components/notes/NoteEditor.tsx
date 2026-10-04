@@ -451,7 +451,7 @@ export function NoteEditor({
                         key={category.id}
                         type="button"
                         onClick={() => setDraft((current) => ({ ...current, category: category.id }))}
-                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${draft.category === category.id ? "border-foreground" : "border-transparent"}`}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${draft.category === category.id ? "border-foreground" : "border-transparent"}`}
                         style={{ background: `color-mix(in srgb, ${category.swatch} 45%, hsl(var(--card)))` }}
                       >
                         {category.label}

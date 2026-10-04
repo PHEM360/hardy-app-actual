@@ -54,12 +54,12 @@ export function NoteCard({
         {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
         <span className="ml-auto flex items-center gap-1">
           {featured && (
-            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               Dashboard
             </span>
           )}
           {cat && (
-            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               {cat.label}
             </span>
           )}
@@ -111,7 +111,7 @@ export function NoteCard({
         </div>
       ) : null}
       {note.dueDate && (
-        <p className={`mt-3 inline-flex rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-semibold ${filled ? "text-stone-800" : "text-foreground/70"}`}>
+        <p className={`mt-3 inline-flex rounded-md bg-black/10 px-2 py-0.5 text-[11px] font-semibold ${filled ? "text-stone-800" : "text-foreground/70"}`}>
           {format(parseISO(`${note.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}
         </p>
       )}

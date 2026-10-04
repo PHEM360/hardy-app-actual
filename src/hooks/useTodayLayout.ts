@@ -159,6 +159,40 @@ export const TODAY_WIDGET_ICONS: Record<TodayWidgetType, string> = {
   unallocated: "📥",
 };
 
+/**
+ * Each Today widget's own strong colour, used for its header band (see
+ * TdHead). Deep shades so white text stays readable. See AGENTS.md "Colour".
+ */
+export const TODAY_WIDGET_COLORS: Record<TodayWidgetType, string> = {
+  ai: "#3A2A5E",
+  focus: "#6E1F2F",
+  tasks: "#1F4D3A",
+  intentions: "#7A2E2A",
+  habits: "#6E1F2F",
+  water: "#1C4A6E",
+  mood: "#8A6424",
+  note: "#8A6424",
+  checklist: "#1B5E5A",
+  reflection: "#2E2F6E",
+  calendar: "#22407A",
+  birthdays: "#6B2248",
+  tomorrow: "#17475C",
+  overdue: "#6E1F2F",
+  quick_add: "#7A2E2A",
+  reminders: "#4A2A52",
+  messages: "#1B5E5A",
+  photos: "#3B4759",
+  weather: "#1C4A6E",
+  bills: "#6E1F2F",
+  fun_fact: "#3A2A5E",
+  pets_care: "#7A2E2A",
+  week: "#22407A",
+  quicklinks: "#1B5E5A",
+  clock: "#3B4759",
+  lights: "#8A6424",
+  unallocated: "#6E1F2F",
+};
+
 /** Widgets can be added more than once (e.g. two Quick Links boxes for different pages). */
 export const REPEATABLE_WIDGET_TYPES: TodayWidgetType[] = ["quicklinks", "note"];
 

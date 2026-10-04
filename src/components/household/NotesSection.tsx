@@ -207,14 +207,14 @@ export default function NotesSection({ preview }: { preview?: NotesSectionPrevie
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" className="rounded-full bg-gradient-primary" onClick={openNew}>
+        <Button size="sm" className="rounded-lg bg-gradient-primary" onClick={openNew}>
           <Plus className="mr-1 h-4 w-4" /> New note
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"
             variant="outline"
-            className="rounded-full"
+            className="rounded-lg"
             disabled={summaryBusy || !notes.length}
             onClick={() => void runSummary("download")}
           >
@@ -224,7 +224,7 @@ export default function NotesSection({ preview }: { preview?: NotesSectionPrevie
           <Button
             size="sm"
             variant="ghost"
-            className="rounded-full"
+            className="rounded-lg"
             disabled={summaryBusy || !notes.length}
             onClick={() => void runSummary("print")}
             title="Print summary"
@@ -234,7 +234,7 @@ export default function NotesSection({ preview }: { preview?: NotesSectionPrevie
           <Button
             size="sm"
             variant="ghost"
-            className="rounded-full"
+            className="rounded-lg"
             disabled={summaryBusy || !notes.length}
             onClick={() => void runSummary("share")}
             title="Email or share summary"
@@ -295,7 +295,7 @@ export default function NotesSection({ preview }: { preview?: NotesSectionPrevie
               : "Try another tag, or add a note with this type."}
           </p>
           {notes.length === 0 && (
-            <Button className="mt-4 rounded-full bg-gradient-primary" onClick={openNew}>
+            <Button className="mt-4 rounded-lg bg-gradient-primary" onClick={openNew}>
               <Plus className="mr-1 h-4 w-4" /> Write first note
             </Button>
           )}

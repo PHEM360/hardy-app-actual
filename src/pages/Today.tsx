@@ -10,6 +10,7 @@ import {
   useTodayLayout,
   TODAY_WIDGET_LABELS,
   TODAY_WIDGET_ICONS,
+  TODAY_WIDGET_COLORS,
   TODAY_TINT_PRESETS,
   PAGE_TINT_PRESETS,
   REPEATABLE_WIDGET_TYPES,
@@ -197,12 +198,10 @@ function TodayWidgetShell({
       style={{ zIndex: editMode ? 10 : 1 }}
     >
       <div
-        className={`w-full h-full rounded-2xl overflow-hidden flex flex-col border shadow-card transition-all duration-200 ${
-          editMode
-            ? "border-amber-400/40 ring-2 ring-amber-300/20 shadow-md"
-            : "border-border hover:shadow-elevated cursor-pointer"
+        className={`w-full h-full rounded-xl overflow-hidden flex flex-col border-2 shadow-card transition-shadow duration-200 ${
+          editMode ? "border-[#B7791F] ring-2 ring-amber-400/40" : "border-foreground/15"
         } ${!item.tintColor ? "bg-card" : ""}`}
-        style={item.tintColor ? { backgroundColor: item.tintColor } : undefined}
+        style={{ ["--td-accent" as string]: TODAY_WIDGET_COLORS[item.type], ...(item.tintColor ? { backgroundColor: item.tintColor } : {}) }}
       >
         {/* Edit drag handle bar */}
         {editMode && (
@@ -374,7 +373,7 @@ const Today = ({
             {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
           <button
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="btn-edge flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-[filter] hover:brightness-110"
           >
             <Plus className="w-3.5 h-3.5" /> Add widget
           </button>
@@ -382,13 +381,13 @@ const Today = ({
           <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <button className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5">
+                <button className="flex h-9 items-center gap-1 rounded-lg border border-foreground/25 bg-card px-2.5 text-xs font-bold text-foreground hover:border-primary" aria-label="Page colours">
                   <Palette className="w-3.5 h-3.5" />
                   Look
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-64 p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Page header</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em]st text-muted-foreground">Page header</p>
                 <div className="flex flex-wrap gap-1.5">
                   {HEADER_COLOR_PRESETS.map((p) => (
                     <button
@@ -402,7 +401,7 @@ const Today = ({
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Page colour</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em]st text-muted-foreground">Page colour</p>
                 <div className="flex flex-wrap gap-1.5">
                   {PAGE_TINT_PRESETS.map((p) => {
                     const active = (pageStyle.canvasTint || "") === p.value;
@@ -433,7 +432,7 @@ const Today = ({
             {editMode && (
               <button
                 onClick={resetLayout}
-                className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
+                className="flex h-9 items-center gap-1 rounded-lg border border-foreground/25 bg-card px-2.5 text-xs font-bold text-foreground hover:border-primary"
                 title="Reset to starter widgets"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -441,10 +440,10 @@ const Today = ({
             )}
             <button
               onClick={() => setEditMode((v) => !v)}
-              className={`flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 transition-colors ${
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors ${
                 editMode
-                  ? "bg-amber-500 text-white"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  ? "btn-edge bg-[#B7791F] text-white"
+                  : "border border-foreground/25 bg-card text-foreground hover:border-primary"
               }`}
             >
               {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
@@ -460,7 +459,7 @@ const Today = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700"
+            className="mt-2 rounded-lg bg-[#C9A24A] px-3 py-2 text-xs font-bold text-[#2A2110]"
           >
             Drag anywhere — they stay where you drop them, with a little space so they never touch.
           </motion.div>
@@ -469,14 +468,14 @@ const Today = ({
 
       {/* Empty state */}
       {loaded && layout.length === 0 && (
-        <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border/60 py-12 text-center">
-          <p className="text-sm font-semibold text-foreground">Nothing here yet</p>
-          <p className="max-w-xs text-xs text-muted-foreground">
+        <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-foreground/20 bg-card px-4 py-10 text-center shadow-card">
+          <p className="font-display text-lg font-bold text-foreground">Nothing here yet</p>
+          <p className="max-w-xs text-sm font-medium text-foreground/70">
             Tap "Add widget" to start building your page — tasks, calendar, quick links, a clock and more.
           </p>
           <button
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="btn-edge flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-[filter] hover:brightness-110"
           >
             <Plus className="w-3.5 h-3.5" /> Add widget
           </button>

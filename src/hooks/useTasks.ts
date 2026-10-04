@@ -14,7 +14,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { Task } from "@/types/app";
-import { sanitizeTaskWrite } from "@/lib/tasks";
+import { sanitizeTaskWrite, taskTrackingInfo } from "@/lib/tasks";
 
 function withClearedOptionals(updates: Partial<Task>) {
   const payload = sanitizeTaskWrite({ ...updates } as Record<string, unknown>) as Record<string, unknown>;
@@ -22,6 +22,8 @@ function withClearedOptionals(updates: Partial<Task>) {
   if ("company" in updates && !String(updates.company || "").trim()) payload.company = deleteField();
   if ("description" in updates && !String(updates.description || "").trim()) payload.description = deleteField();
   if ("notes" in updates && !String(updates.notes || "").trim()) payload.notes = deleteField();
+  // Choosing "Not set" must remove the stored value, not leave the old one behind.
+  if ("tracking" in updates && !taskTrackingInfo(updates.tracking)) payload.tracking = deleteField();
   return payload;
 }
 

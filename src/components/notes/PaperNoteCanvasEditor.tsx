@@ -578,7 +578,7 @@ export function PaperNoteCanvasEditor({
             >
               <div data-note-block={block.id} className={`h-full overflow-hidden ${boxed ? "rounded-2xl border border-slate-200/90 bg-white/90 shadow-card" : "rounded-none border border-transparent bg-transparent"}`}>
                 {toolsVisible && tool === "select" && !paperWriting && (
-                  <div className={`note-block-drag absolute -top-2 left-3 right-3 z-30 flex h-5 cursor-grab items-center justify-between rounded-full bg-slate-800 px-2 text-[9px] font-bold uppercase tracking-wider text-white transition ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
+                  <div className={`note-block-drag absolute -top-2 left-3 right-3 z-30 flex h-5 cursor-grab items-center justify-between rounded-md bg-slate-800 px-2 text-[9px] font-bold uppercase tracking-wider text-white transition ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
                     Drag
                     <button type="button" className="rounded-full p-0.5 hover:bg-white/20" onClick={() => removeBlock(block.id)}><Trash2 className="h-3 w-3" /></button>
                   </div>

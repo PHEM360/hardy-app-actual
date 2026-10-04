@@ -55,7 +55,7 @@ export function NoteCategorySettings({
           return (
             <span
               key={category.id}
-              className="flex items-center gap-1.5 rounded-full border border-border/60 px-2 py-1 text-xs font-semibold"
+              className="flex items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs font-semibold"
               style={{ background: `color-mix(in srgb, ${category.swatch} 42%, hsl(var(--card)))` }}
             >
               <input

@@ -216,12 +216,12 @@ export function DogTagDesigner({
       <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-y-auto sm:overflow-hidden">
         {/* Preview */}
         <div className="sm:flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-gradient-to-br from-sky-100 via-indigo-50 to-amber-100 flex-shrink-0">
-          <div className="flex items-center gap-1 bg-white/70 backdrop-blur-sm rounded-full p-1 shadow-sm">
+          <div className="flex items-center gap-1 bg-white/70 backdrop-blur-sm rounded-lg p-1 shadow-sm">
             {(["front", "back"] as Side[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setSide(s)}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors ${
+                className={`px-4 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors ${
                   side === s ? "bg-orange-500 text-white shadow-sm" : "text-muted-foreground hover:bg-white"
                 }`}
               >

@@ -325,7 +325,7 @@ export function CompanyInvoicesPanel({ company, canEdit }: { company: Company; c
                     <p className="font-semibold">{invoice.kind === "credit" ? "Credit · " : ""}{invoice.number} · {invoice.customerName}</p>
                     <p className="truncate text-xs text-muted-foreground">{invoice.issueDate}{invoice.repeat?.active ? " · repeats" : ""}</p>
                   </div>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[status]}`}>{INVOICE_STATUS_LABEL[status]}</span>
+                  <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[status]}`}>{INVOICE_STATUS_LABEL[status]}</span>
                   <span className="w-24 text-right text-sm font-bold">{gbp(amountDue(invoice) || invoice.total)}</span>
                 </button>
               );

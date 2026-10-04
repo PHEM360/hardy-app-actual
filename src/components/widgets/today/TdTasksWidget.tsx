@@ -4,6 +4,7 @@ import { Circle, Clock, CheckCircle2, ChevronRight, Sun } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import type { Task, TaskStatus } from "@/types/app";
 
+import { TdHead } from "./TdHead";
 const STATUSES: { value: TaskStatus; icon: any; color: string }[] = [
   { value: "todo",        icon: Circle,       color: "text-muted-foreground" },
   { value: "in_progress", icon: Clock,        color: "text-blue-500" },
@@ -35,16 +36,15 @@ export function TdTasksWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">✅</span>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Today's Tasks</p>
-        </div>
-        <button onClick={() => navigate("/tasks")} className="text-[11px] text-primary font-medium flex items-center gap-0.5">
+      <TdHead
+        emoji="✅"
+        title="Today's Tasks"
+        action={
+          <button onClick={() => navigate("/tasks")} className="text-[11px] text-primary font-medium flex items-center gap-0.5">
           All <ChevronRight className="w-3 h-3" />
         </button>
-      </div>
+        }
+      />
 
       {/* Progress */}
       {total > 0 && (

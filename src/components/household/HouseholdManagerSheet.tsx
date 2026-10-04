@@ -105,7 +105,7 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
                         {h.name}
                       </span>
                       {h.id === activeHouseholdId && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
                           Active
                         </span>
                       )}
@@ -135,7 +135,7 @@ export default function HouseholdManagerSheet({ open, onClose }: { open: boolean
 
                 <div className="flex flex-wrap gap-1.5">
                   {h.memberIds.map((uid) => (
-                    <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+                    <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-md text-foreground">
                       {nameFor(uid)}
                       {(canManage || uid === user?.uid) && h.memberIds.length > 1 && (
                         <button

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ChevronLeft, Sparkles } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PageShareBar from "@/components/sharing/PageShareBar";
 
@@ -45,22 +45,22 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="page-back group text-muted-foreground transition-colors hover:bg-card hover:text-primary"
+            className="page-back group text-primary transition-colors hover:bg-card"
           >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            <ChevronLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
             Back
           </button>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex flex-wrap items-center gap-3 border-b border-foreground/20 pb-4 after:absolute after:-bottom-px after:left-0 after:h-[3px] after:w-14 after:bg-gold">
           {icon && (
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary shadow-glow flex items-center justify-center text-primary-foreground flex-shrink-0">
+            <div className="btn-edge flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               {icon}
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold font-display text-foreground">{title}</h1>
+          <div className="min-w-[60%] flex-1 sm:min-w-0">
+            <h1 className="font-display text-[1.75rem] font-semibold leading-[1.1] text-foreground">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+              <p className="mt-1 text-sm text-foreground/70">{subtitle}</p>
             )}
           </div>
           {comparePage && (

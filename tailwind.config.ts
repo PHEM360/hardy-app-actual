@@ -117,10 +117,17 @@ export default {
   				ring: 'hsl(var(--sidebar-ring))'
   			}
   		},
+  		// Hardy Hub corner scale. Deliberately tighter than Tailwind's defaults
+  		// so boxes read as crisp native surfaces, not soft web bubbles. The
+  		// class names stay the same across the app; only the sizes change.
+  		// See AGENTS.md ("Shape").
   		borderRadius: {
+  			sm: '2px',
+  			md: '4px',
   			lg: 'var(--radius)',
-  			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
+  			xl: '8px',
+  			'2xl': '10px',
+  			'3xl': '14px'
   		},
   		keyframes: {
   			'accordion-down': {

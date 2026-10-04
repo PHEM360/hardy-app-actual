@@ -883,7 +883,7 @@ export default function FlatDashboard({
                         <span>{fmtDateShort(e.date)}</span>
                         <span>·</span>
                         <span
-                          className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
                           style={{ background: tint(20) }}
                         >
                           {e.category}
@@ -1671,7 +1671,7 @@ export default function FlatDashboard({
               {categoryDraft.map((c) => (
                 <span
                   key={c}
-                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold"
                   style={{ background: tint(20) }}
                 >
                   {c}

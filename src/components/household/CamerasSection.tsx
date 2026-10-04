@@ -195,7 +195,7 @@ function CameraTile({
           </div>
 
           {/* Status pill */}
-          <div className={`absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${active ? "bg-red-500 text-white" : "bg-black/50 text-white/70"}`}>
+          <div className={`absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${active ? "bg-red-500 text-white" : "bg-black/50 text-white/70"}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white animate-pulse" : "bg-white/40"}`} />
             {active ? "LIVE" : "Off"}
           </div>
@@ -209,7 +209,7 @@ function CameraTile({
               {camera.location && (
                 <span className="text-[10px] text-muted-foreground">{camera.location}</span>
               )}
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${streamColour[camera.streamType]}`}>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${streamColour[camera.streamType]}`}>
                 {streamLabel[camera.streamType]}
               </span>
             </div>

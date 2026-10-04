@@ -20,8 +20,9 @@ export function TdPhotosWidget() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-3 pt-3">
+      <div>
         <TdHead
+          flush
           emoji="🖼️"
           title="Photos"
           action={

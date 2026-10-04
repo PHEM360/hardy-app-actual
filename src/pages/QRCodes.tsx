@@ -288,7 +288,7 @@ function QRCard({ item, index, onEdit, onDelete, onPrint, onLabel }: {
         <div className="flex-1 min-w-0 pt-0.5 space-y-1">
           <p className="text-sm font-bold text-card-foreground leading-tight truncate">{item.name}</p>
           {item.category && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground inline-block">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground inline-block">
               {item.category}
             </span>
           )}
@@ -759,7 +759,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
           {cats.map((cat) => (
             <span
               key={cat}
-              className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground"
+              className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground"
             >
               {cat}
               <button onClick={() => setCats((prev) => prev.filter((c) => c !== cat))} className="hover:text-destructive transition-colors">
@@ -987,7 +987,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
             <button
               onClick={() => onCategoryChange("")}
-              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${
                 !selectedCategory ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
               }`}
             >
@@ -997,7 +997,7 @@ function LibraryView({ qrCodes, loading, onNew, onEdit, onDelete, onPrint, onLab
               <button
                 key={cat}
                 onClick={() => onCategoryChange(cat === selectedCategory ? "" : cat)}
-                className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${
                   selectedCategory === cat ? "bg-primary text-white border-primary" : "border-border text-muted-foreground bg-muted/40"
                 }`}
               >

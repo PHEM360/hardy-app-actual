@@ -80,3 +80,24 @@ describe("task list helpers", () => {
     expect(draft.priority).toBe("high");
   });
 });
+
+describe("task tracking", () => {
+  it("filters by how a task is going, independently of its status", () => {
+    const tasks = [
+      task({ id: "a", status: "in_progress", tracking: "off_track" }),
+      task({ id: "b", status: "todo", tracking: "on_track" }),
+      task({ id: "c", status: "in_progress" }),
+    ];
+    const ids = (filter: Parameters<typeof filterTasks>[1]["filter"]) =>
+      filterTasks(tasks, { filter, query: "", showCompleted: true }).map((t) => t.id);
+    expect(ids("tracking:off_track")).toEqual(["a"]);
+    expect(ids("tracking:on_track")).toEqual(["b"]);
+    expect(ids("tracking:needs_adjusting")).toEqual([]);
+    expect(ids("progress")).toEqual(["a", "c"]);
+  });
+
+  it("keeps a chosen tracking value and drops a blank one when saving", () => {
+    expect(sanitizeTaskWrite({ title: "x", tracking: "adjusted" })).toEqual({ title: "x", tracking: "adjusted" });
+    expect(sanitizeTaskWrite({ title: "x", tracking: "" })).toEqual({ title: "x" });
+  });
+});

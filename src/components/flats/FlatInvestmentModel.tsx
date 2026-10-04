@@ -436,7 +436,7 @@ export default function FlatInvestmentModelPanel({
       : "border-border/50 bg-card";
 
   const pill = (active: boolean) =>
-    `rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+    `rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
       active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
     }`;
 

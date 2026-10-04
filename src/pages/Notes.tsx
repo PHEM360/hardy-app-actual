@@ -578,7 +578,7 @@ export default function Notes() {
                     <p className="truncate font-display font-bold">{n.locked ? "Locked note" : n.title || "Untitled"}</p>
                     <p className="truncate text-sm opacity-70">{previewText(n)}</p>
                   </div>
-                  {n.dueDate && <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-semibold">{format(parseISO(`${n.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}</span>}
+                  {n.dueDate && <span className="rounded-md bg-black/10 px-2 py-0.5 text-[11px] font-semibold">{format(parseISO(`${n.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}</span>}
                 </button>
               ))}
             </div>
@@ -624,9 +624,9 @@ export default function Notes() {
           {view === "calendar" && (
             <div className="min-w-0 overflow-hidden rounded-2xl border border-border/40 bg-card p-3 shadow-card">
               <div className="mb-3 flex items-center justify-between">
-                <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>Prev</Button>
+                <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>Prev</Button>
                 <p className="font-display text-lg font-bold">{format(calMonth, "MMMM yyyy")}</p>
-                <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>Next</Button>
+                <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>Next</Button>
               </div>
               <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-foreground/50">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}

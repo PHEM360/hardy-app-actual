@@ -345,7 +345,7 @@ export default function HealthMeds({ scopeUserId }: { scopeUserId?: string } = {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Conditions</p>
                 <div className="flex flex-wrap gap-1.5">
                   {profile.pastConditions.map((c, i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-medium">{c}</span>
+                    <span key={i} className="px-2.5 py-1 rounded-md bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-medium">{c}</span>
                   ))}
                 </div>
               </div>
@@ -365,7 +365,7 @@ export default function HealthMeds({ scopeUserId }: { scopeUserId?: string } = {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Allergies</p>
                 <div className="flex flex-wrap gap-1.5">
                   {profile.allergies.map((a, i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 text-[11px] font-medium">{a}</span>
+                    <span key={i} className="px-2.5 py-1 rounded-md bg-red-100 text-red-700 border border-red-200 text-[11px] font-medium">{a}</span>
                   ))}
                 </div>
               </div>

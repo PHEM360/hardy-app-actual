@@ -695,8 +695,8 @@ const Settings = () => {
           {/* Pinned items preview */}
           <div className="flex items-center gap-2 pt-1">
             <span className="text-[10px] text-muted-foreground">Always shown:</span>
-            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">More</span>
-            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-full text-muted-foreground">Sign Out</span>
+            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-md text-muted-foreground">More</span>
+            <span className="text-[10px] bg-muted/60 px-2 py-0.5 rounded-md text-muted-foreground">Sign Out</span>
           </div>
           {navSaveSuccess && <p className="text-xs text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ Navigation saved</p>}
           <Button onClick={saveNavItems} className="w-full h-10 rounded-xl text-sm bg-gradient-primary">Save Navigation</Button>

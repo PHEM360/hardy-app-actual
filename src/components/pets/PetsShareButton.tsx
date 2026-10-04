@@ -113,14 +113,14 @@ export function PetsShareButton({
           <button
             type="button"
             onClick={openManage}
-            className="flex items-center gap-1 max-w-[16rem] px-2.5 py-1.5 rounded-full bg-primary/8 text-[11px] font-semibold text-primary hover:bg-primary/12 transition-colors"
+            className="flex items-center gap-1 max-w-[16rem] px-2.5 py-1.5 rounded-md bg-primary/8 text-[11px] font-semibold text-primary hover:bg-primary/12 transition-colors"
             title="Manage who pets are shared with"
           >
             <span className="text-muted-foreground font-medium">Shared with</span>
             <span className="truncate">{sharedSummary}</span>
           </button>
         )}
-        <Button size="sm" variant="ghost" className="rounded-full gap-1.5" onClick={openWhat}>
+        <Button size="sm" variant="ghost" className="rounded-lg gap-1.5" onClick={openWhat}>
           <Share2 className="w-4 h-4" />
           <span className="hidden sm:inline">Share</span>
         </Button>

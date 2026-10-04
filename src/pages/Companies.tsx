@@ -113,7 +113,7 @@ function SharingSection({ sharing }: { sharing: SharingProps }) {
           {sharedWith.map((uid) => {
             const person = appUsers.find((u) => u.id === uid);
             return (
-              <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+              <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-md text-foreground">
                 {person?.name || "Unknown user"}
                 <button onClick={() => onUnshare(uid)} className="text-muted-foreground hover:text-destructive">
                   <X className="w-3 h-3" />

@@ -49,11 +49,11 @@ export function DisplayAlbumPicker<T extends PhotoPickItem>({
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-white/80">Albums</p>
         {selectedCount > 0 ? (
-          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+          <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
             {selectedCount} photo{selectedCount === 1 ? "" : "s"} selected
           </span>
         ) : (
-          <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+          <span className="flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
             <ImageOff className="h-2.5 w-2.5" /> Nothing selected yet
           </span>
         )}

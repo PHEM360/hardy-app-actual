@@ -195,7 +195,7 @@ export default function AiAnalysis() {
             <button
               key={q}
               onClick={() => setQuestion(q)}
-              className={`text-[11px] px-2.5 py-1.5 rounded-full border transition-colors ${
+              className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors ${
                 question === q
                   ? "bg-primary/10 border-primary/40 text-primary font-medium"
                   : "bg-muted/40 border-border/30 text-muted-foreground hover:text-foreground"

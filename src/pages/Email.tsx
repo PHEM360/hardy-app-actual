@@ -223,7 +223,7 @@ export default function Email() {
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden truncate sm:inline">{item.label}</span>
                   {count > 0 && (
-                    <span className={`ml-auto hidden rounded-full px-1.5 text-[10px] font-bold sm:inline ${rail === item.id ? "bg-primary-foreground/20" : "border border-border/60 bg-background"}`}>
+                    <span className={`ml-auto hidden rounded-md px-1.5 text-[10px] font-bold sm:inline ${rail === item.id ? "bg-primary-foreground/20" : "border border-border/60 bg-background"}`}>
                       {count}
                     </span>
                   )}

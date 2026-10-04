@@ -8,6 +8,7 @@ import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { hasFeatureAccess, QUICK_LINK_FEATURE_KEY } from "@/lib/features";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FitTileGrid } from "@/components/widgets/FitTileGrid";
 
 export const ALL_LINKS = [
   { id: "today",       icon: CheckSquare2, label: "Today",      sub: "Focus list",  bg: "bg-amber-500",   tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",     href: "/today" },
@@ -23,6 +24,22 @@ export const ALL_LINKS = [
 ];
 
 const DEFAULT_LINK_IDS = ALL_LINKS.map((l) => l.id);
+
+type QuickLink = (typeof ALL_LINKS)[number];
+
+/** The home quick links as a fit-to-box grid. See FitTileGrid. */
+export function QuickLinkGrid({ links, onRun }: { links: QuickLink[]; onRun: (link: QuickLink) => void }) {
+  return (
+    <FitTileGrid
+      className="mt-2.5"
+      tiles={links.map((link) => ({ id: link.id, label: link.label, icon: link.icon }))}
+      onRun={(id) => {
+        const link = links.find((l) => l.id === id);
+        if (link) onRun(link);
+      }}
+    />
+  );
+}
 
 export function QuickLinksWidget() {
   const navigate = useNavigate();
@@ -55,7 +72,7 @@ export function QuickLinksWidget() {
   };
 
   return (
-    <div className="w-full h-full p-3 pb-3.5 flex flex-col overflow-y-auto">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden p-3">
       <div
         className="flex items-center gap-2 -mx-3 -mt-3 px-3 py-2.5 flex-shrink-0"
         style={{ background: accentGradient(WIDGET_ACCENT.quick_links) }}
@@ -74,23 +91,7 @@ export function QuickLinksWidget() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 mt-2.5 flex-shrink-0">
-        {visibleLinks.map((link) => {
-          const Icon = link.icon;
-          return (
-          <button
-            key={link.id}
-            onClick={() => runLink(link)}
-            className={`group flex flex-col items-center justify-center gap-1 min-h-16 rounded-xl border shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all active:scale-[0.96] text-center px-1 ${link.tint}`}
-          >
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm text-white ${link.bg}`}>
-              <Icon className="w-3.5 h-3.5" />
-            </div>
-            <p className="text-[10px] font-semibold text-card-foreground leading-tight">{link.label}</p>
-          </button>
-          );
-        })}
-      </div>
+      <QuickLinkGrid links={visibleLinks} onRun={runLink} />
 
       <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
       <AddExpenseDocumentDialog open={expenseOpen} onOpenChange={setExpenseOpen} />

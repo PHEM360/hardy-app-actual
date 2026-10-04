@@ -7,7 +7,7 @@ import {
   Clock, Settings2, X, Flag,
   LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
-  Building2, Search, AlertTriangle,
+  Building2, Search, AlertTriangle, Activity,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import {
   isTaskOverdue,
   newSubtaskId,
   sortTasks,
+  TASK_TRACKING,
+  taskTrackingInfo,
   type TaskFilter,
 } from "@/lib/tasks";
 import {
@@ -44,16 +46,16 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string; hex: string }[] = [
-  { value: "critical", label: "Critical", color: "text-red-600",    bg: "bg-red-100 text-red-700",      hex: "#ef4444" },
+  { value: "critical", label: "Critical", color: "text-red-600",    bg: "bg-red-100 text-red-700",      hex: "#B4443C" },
   { value: "high",     label: "High",     color: "text-orange-500", bg: "bg-orange-100 text-orange-700", hex: "#f97316" },
   { value: "medium",   label: "Medium",   color: "text-yellow-600", bg: "bg-yellow-100 text-yellow-700", hex: "#eab308" },
-  { value: "low",      label: "Low",      color: "text-green-600",  bg: "bg-green-100 text-green-700",   hex: "#22c55e" },
+  { value: "low",      label: "Low",      color: "text-green-600",  bg: "bg-green-100 text-green-700",   hex: "#2E7D5B" },
 ];
 
 const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
   { value: "todo",        label: "To Do",       icon: Circle, color: "text-muted-foreground", hex: "#94a3b8" },
   { value: "in_progress", label: "In Progress", icon: Clock,  color: "text-blue-500",         hex: "#3b82f6" },
-  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#22c55e" },
+  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#2E7D5B" },
 ];
 
 // Urgency levels cycle: none → amber → red
@@ -69,12 +71,24 @@ function urgencyDotStyle(u: UrgencyLevel): string {
   return "bg-muted-foreground/30";
 }
 
-type ColourBy = "none" | "priority" | "status" | "category" | "company";
+/** Solid chip showing how a task is going. Renders nothing when tracking is not set. */
+function TrackingChip({ task, className = "" }: { task: Pick<Task, "tracking">; className?: string }) {
+  const info = taskTrackingInfo(task.tracking);
+  if (!info) return null;
+  return (
+    <span className={`flex-shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold text-white ${className}`} style={{ background: info.hex }}>
+      {info.label}
+    </span>
+  );
+}
+
+type ColourBy = "none" | "priority" | "status" | "tracking" | "category" | "company";
 
 const COLOUR_BY_OPTIONS: { value: ColourBy; label: string }[] = [
   { value: "none",     label: "No colour" },
   { value: "priority", label: "Priority" },
   { value: "status",   label: "Status" },
+  { value: "tracking", label: "Tracking" },
   { value: "category", label: "Category" },
   { value: "company",  label: "Company" },
 ];
@@ -97,7 +111,7 @@ function readStoredView(): TaskView {
 function readStoredColour(): ColourBy {
   try {
     const value = localStorage.getItem(COLOUR_STORAGE);
-    if (value === "none" || value === "priority" || value === "status" || value === "category" || value === "company") return value;
+    if (value === "none" || value === "priority" || value === "status" || value === "tracking" || value === "category" || value === "company") return value;
   } catch {
     // ignore
   }
@@ -156,6 +170,9 @@ function getTaskColour(task: Task, colourBy: ColourBy, settings: TaskSettings): 
   if (colourBy === "status") {
     const s = STATUSES.find((x) => x.value === task.status);
     return s?.hex ?? "";
+  }
+  if (colourBy === "tracking") {
+    return taskTrackingInfo(task.tracking)?.hex ?? "";
   }
   if (colourBy === "category") {
     return settings.categoryColors?.[task.category] ?? "";
@@ -278,18 +295,41 @@ function TaskDetailSheet({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Tracking: one tap to say how the task is going */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/60">How is it going?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {TASK_TRACKING.map((t) => {
+                const on = task.tracking === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => task.id && void updateTask(task.id, { tracking: on ? ("" as never) : t.value })}
+                    className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on ? "btn-edge text-white" : "bg-card text-foreground"}`}
+                    style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+                    aria-pressed={on}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Meta chips */}
           <div className="flex flex-wrap gap-2">
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${priority.bg}`}>{priority.label}</span>
-            <span className={`text-xs px-2.5 py-1 rounded-full bg-muted font-medium ${status.color}`}>{status.label}</span>
-            {task.category && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.category}</span>}
-            {task.company && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.company}</span>}
+            <span className={`text-xs px-2.5 py-1 rounded-md font-medium ${priority.bg}`}>{priority.label}</span>
+            <span className={`text-xs px-2.5 py-1 rounded-md bg-muted font-medium ${status.color}`}>{status.label}</span>
+            <TrackingChip task={task} className="!px-2.5 !py-1 !text-xs" />
+            {task.category && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.category}</span>}
+            {task.company && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.company}</span>}
             {task.dueDate && (
-              <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">
+              <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">
                 Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             )}
-            {task.isToday && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">Today</span>}
+            {task.isToday && <span className="text-xs px-2.5 py-1 rounded-md bg-amber-100 text-amber-700 font-medium">Today</span>}
           </div>
 
           {/* Tags */}
@@ -298,7 +338,7 @@ function TaskDetailSheet({
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tags</p>
               <div className="flex flex-wrap gap-1.5">
                 {task.tags.map((t) => (
-                  <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
+                  <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-md text-muted-foreground">{t}</span>
                 ))}
               </div>
             </div>
@@ -425,7 +465,7 @@ function TaskDetailSheet({
                           patchSub(sub.id, { status: next.value, done: next.value === "done" });
                         }}
                         title="Cycle status"
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}
                       >
                         {subStatusMeta.label}
                       </button>
@@ -438,7 +478,7 @@ function TaskDetailSheet({
                           patchSub(sub.id, { priority: next.value });
                         }}
                         title="Cycle priority"
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}
                       >
                         {subPriority.label}
                       </button>
@@ -738,6 +778,36 @@ function TaskForm({
         </div>
       </div>
 
+      {/* Tracking: how the task is going, separate from its status */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracking</Label>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => set("tracking", "" as never)}
+            className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${
+              !form.tracking ? "btn-edge border-foreground bg-foreground text-background" : "border-foreground/20 bg-card text-foreground hover:border-foreground/50"
+            }`}
+          >
+            Not set
+          </button>
+          {TASK_TRACKING.map((t) => {
+            const on = form.tracking === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => set("tracking", t.value)}
+                className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on ? "btn-edge text-white" : "bg-card text-foreground"}`}
+                style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Category + Due Date */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -811,7 +881,7 @@ function TaskForm({
         {form.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {form.tags.map((t) => (
-              <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full">
+              <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-md">
                 {t}
                 <button onClick={() => set("tags", form.tags.filter((x) => x !== t))} className="text-muted-foreground hover:text-foreground">×</button>
               </span>
@@ -871,13 +941,13 @@ function TaskForm({
 
 const COLOUR_PRESETS = [
   // Indigo / Blue / Violet
-  "#6366f1", "#4f46e5", "#3b82f6", "#0ea5e9", "#8b5cf6", "#7c3aed", "#a78bfa",
+  "#3D5A99", "#4f46e5", "#3b82f6", "#0ea5e9", "#8b5cf6", "#7c3aed", "#a78bfa",
   // Green / Teal / Cyan
-  "#22c55e", "#16a34a", "#14b8a6", "#0d9488", "#06b6d4", "#10b981",
+  "#2E7D5B", "#16a34a", "#14b8a6", "#0d9488", "#06b6d4", "#10b981",
   // Amber / Orange / Red
-  "#f59e0b", "#f97316", "#ef4444", "#dc2626", "#fb7185", "#e11d48",
+  "#f59e0b", "#f97316", "#B4443C", "#9B2C2C", "#fb7185", "#e11d48",
   // Pink / Rose / Fuchsia
-  "#ec4899", "#db2777", "#d946ef", "#c026d3", "#a21caf",
+  "#ec4899", "#db2777", "#d946ef", "#c026d3", "#4A2A52",
   // Neutral
   "#64748b", "#475569", "#374151", "#1e293b",
 ];
@@ -895,7 +965,7 @@ function ColourPicker({ value, onChange, onClose }: { value: string; onChange: (
       ))}
       <input
         type="color"
-        value={value || "#6366f1"}
+        value={value || "#3D5A99"}
         onChange={(e) => onChange(e.target.value)}
         className="w-6 h-6 rounded-full cursor-pointer border-0 bg-transparent"
         title="Custom colour"
@@ -1047,7 +1117,7 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
                 <button
                   key={o.value}
                   onClick={() => setColourBy(o.value)}
-                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-150 border ${
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150 border ${
                     colourBy === o.value
                       ? "bg-primary text-primary-foreground border-transparent shadow-sm"
                       : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
@@ -1229,16 +1299,17 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
             <Flag className={`w-3 h-3 flex-shrink-0 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />
           )}
           {task.status === "in_progress" && !isDone && (
-            <span className="text-[10px] font-semibold px-1.5 py-px rounded-full bg-sky-500/15 text-sky-800 dark:text-sky-200 flex-shrink-0">Doing</span>
+            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-sky-500/15 text-sky-800 dark:text-sky-200 flex-shrink-0">Doing</span>
           )}
+          {!isDone && <TrackingChip task={task} />}
           {overdue && (
-            <span className="text-[10px] font-semibold px-1.5 py-px rounded-full bg-red-500/15 text-red-700 dark:text-red-300 flex-shrink-0">Overdue</span>
+            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-red-500/15 text-red-700 dark:text-red-300 flex-shrink-0">Overdue</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
           {task.category && (
             catColour ? (
-              <span className="text-[10px] font-semibold px-1.5 py-px rounded-full flex-shrink-0" style={{ background: `${catColour}22`, color: catColour }}>{task.category}</span>
+              <span className="text-[10px] font-semibold px-1.5 py-px rounded-md flex-shrink-0" style={{ background: `${catColour}22`, color: catColour }}>{task.category}</span>
             ) : (
               <span className="text-[10px] text-muted-foreground flex-shrink-0">{task.category}</span>
             )
@@ -1327,18 +1398,19 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
         <div className="flex items-start gap-1.5 mb-2">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-xs font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+          {!isDone && <TrackingChip task={task} />}
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5">
           {task.category && (() => {
             const catColour = settings.categoryColors?.[task.category];
             return catColour ? (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
             ) : (
-              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{task.category}</span>
             );
           })()}
-          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
         </div>
         <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
@@ -1403,18 +1475,19 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onU
         <div className="flex items-start gap-1.5 mb-1">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-[11px] font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+          {!isDone && <TrackingChip task={task} />}
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
         <div className="flex flex-wrap gap-1 mb-1">
           {task.category && (() => {
             const catColour = settings.categoryColors?.[task.category];
             return catColour ? (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
             ) : (
-              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{task.category}</span>
             );
           })()}
-          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
         </div>
         <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
@@ -1453,6 +1526,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
 
   const groupOptions: { value: string; label: string }[] = [
     { value: "status", label: "Status" },
+    { value: "tracking", label: "Tracking" },
     { value: "priority", label: "Priority" },
     { value: "category", label: "Category" },
     ...(settings.companies.length > 0 ? [{ value: "company", label: "Company" }] : []),
@@ -1462,6 +1536,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   const columns: { key: string; label: string; color: string }[] = useMemo(() => {
     if (groupBy === "status") return STATUSES.map((s) => ({ key: s.value, label: s.label, color: s.color }));
     if (groupBy === "priority") return PRIORITIES.map((p) => ({ key: p.value, label: p.label, color: p.color }));
+    if (groupBy === "tracking") return [...TASK_TRACKING.map((t) => ({ key: t.value, label: t.label, color: "text-foreground" })), { key: "", label: "Not set", color: "text-muted-foreground" }];
     if (groupBy === "category") {
       const cats = [...new Set([...settings.categories, ...tasks.map((t) => t.category).filter(Boolean)])];
       return cats.map((c) => ({ key: c, label: c, color: "text-foreground" }));
@@ -1487,6 +1562,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   const getColTasks = (colKey: string) => {
     if (groupBy === "status") return visibleTasks.filter((t) => t.status === colKey);
     if (groupBy === "priority") return visibleTasks.filter((t) => t.priority === colKey);
+    if (groupBy === "tracking") return visibleTasks.filter((t) => (t.tracking ?? "") === colKey);
     if (groupBy === "category") return visibleTasks.filter((t) => t.category === colKey);
     if (groupBy === "company") return visibleTasks.filter((t) => (t.company ?? "") === colKey);
     const cfId = groupBy.replace("cf_", "");
@@ -1505,10 +1581,10 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
       {/* Single compact controls row */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {/* Group-by segmented pill */}
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-full p-0.5">
+        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5">
           {groupOptions.map((o) => (
             <button key={o.value} onClick={() => setGroupBy(o.value)}
-              className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               {o.label}
             </button>
           ))}
@@ -1524,7 +1600,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
               setFilterCompany(settings.companies.includes(val) ? val : "");
               setFilterPriority(PRIORITIES.find((p) => p.value === val) ? val : "");
             }}
-            className="text-[10px] font-semibold bg-muted/50 rounded-full px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none"
+            className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none"
           >
             <option value="">All</option>
             {settings.categories.length > 0 && <optgroup label="Category">
@@ -1540,7 +1616,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
         )}
         {/* Priority filter only (when no cats/cos) */}
         {settings.categories.length === 0 && settings.companies.length === 0 && (
-          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="text-[10px] font-semibold bg-muted/50 rounded-full px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none">
+          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none">
             <option value="">All priorities</option>
             {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
@@ -1556,7 +1632,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
 
         {/* Column toggle button */}
         <button onClick={() => setShowColToggle((v) => !v)}
-          className={`ml-auto flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 ${showColToggle ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}>
+          className={`ml-auto flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${showColToggle ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}>
           {showColToggle ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           Columns
           {hiddenCols.size > 0 && <span className="ml-0.5 w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">{hiddenCols.size}</span>}
@@ -1570,7 +1646,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
             <div className="flex flex-wrap gap-1.5 p-2 bg-muted/30 rounded-2xl">
               {columns.map((col) => (
                 <button key={col.key} onClick={() => toggleCol(col.key)}
-                  className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 ${
+                  className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${
                     hiddenCols.has(col.key) ? "bg-muted/40 text-muted-foreground/50" : "bg-primary/10 text-primary border border-primary/20"
                   }`}>
                   {hiddenCols.has(col.key) ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
@@ -1588,11 +1664,11 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
           const colTasks = getColTasks(col.key);
           return (
             <div key={col.key} className="flex flex-col gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-full bg-muted/50">
+              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-md bg-muted/50">
                 {groupBy === "status" && <span className={col.color}><StatusIcon status={col.key as TaskStatus} className="w-3 h-3" /></span>}
                 {groupBy === "priority" && <Flag className={`w-3 h-3 ${col.color}`} />}
                 <span className="text-[11px] font-bold flex-1 truncate">{col.label}</span>
-                <span className="text-[9px] font-bold bg-background px-1.5 py-0.5 rounded-full text-muted-foreground">{colTasks.length}</span>
+                <span className="text-[9px] font-bold bg-background px-1.5 py-0.5 rounded-md text-muted-foreground">{colTasks.length}</span>
               </div>
               <div className="flex flex-col gap-1.5 min-h-[60px]">
                 <AnimatePresence mode="popLayout">
@@ -1721,8 +1797,9 @@ function CompanyGroupView({
                           </button>
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+                            {!isDone && <TrackingChip task={task} />}
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${pData.hex}22`, color: pData.hex }}>{pData.label}</span>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${pData.hex}22`, color: pData.hex }}>{pData.label}</span>
                               {subs.length > 0 && (
                                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                   <ListChecks className="w-2.5 h-2.5" />{subDone}/{subs.length}
@@ -1908,7 +1985,7 @@ const Tasks = () => {
         <Icon className="h-4 w-4 shrink-0" />
         <span className="w-full truncate text-[10px] font-semibold leading-tight sm:text-sm">{label}</span>
         {count != null && count > 0 && (
-          <span className={`text-[10px] font-bold px-1.5 py-px rounded-full ${on ? "bg-white/20" : "bg-card text-foreground/70"}`}>{count}</span>
+          <span className={`text-[10px] font-bold px-1.5 py-px rounded-md ${on ? "bg-white/20" : "bg-card text-foreground/70"}`}>{count}</span>
         )}
       </button>
     );
@@ -1951,6 +2028,10 @@ const Tasks = () => {
             {railItem("overdue", "Overdue", AlertTriangle, overdueCount, "hsl(0, 72%, 51%)")}
             {railItem("progress", "Doing", Clock, tasks.filter((t) => t.status === "in_progress").length, "hsl(199, 89%, 48%)")}
             {railItem("critical", "Critical", Flag, criticalCount, "hsl(0, 72%, 51%)")}
+            <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Tracking</p>
+            {TASK_TRACKING.map((t) =>
+              railItem(`tracking:${t.value}`, t.label, Activity, tasks.filter((task) => task.tracking === t.value && (showCompleted || task.status !== "done")).length, t.hex)
+            )}
             <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Categories</p>
             {settings.categories.map((cat) =>
               railItem(`category:${cat}`, cat, Circle, tasks.filter((t) => t.category === cat && (showCompleted || t.status !== "done")).length, settings.categoryColors?.[cat])
@@ -2000,7 +2081,7 @@ const Tasks = () => {
               {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{showCompleted ? "Done shown" : "Done hidden"}</span>
               {!showCompleted && doneCount > 0 && (
-                <span className="text-[10px] font-bold bg-card text-foreground px-1.5 py-px rounded-full border border-border">{doneCount}</span>
+                <span className="text-[10px] font-bold bg-card text-foreground px-1.5 py-px rounded-md border border-border">{doneCount}</span>
               )}
             </button>
           </div>
@@ -2150,6 +2231,7 @@ const Tasks = () => {
               notes: editTask.notes || editTask.description || "",
               priority: editTask.priority,
               status: editTask.status,
+              tracking: editTask.tracking,
               category: editTask.category,
               company: editTask.company || "",
               dueDate: editTask.dueDate || "",

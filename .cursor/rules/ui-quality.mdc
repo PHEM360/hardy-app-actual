@@ -1,27 +1,31 @@
 ---
-description: Family-facing UI must look finished, colourful, and consumer-app quality — not a grey admin draft.
+description: Hardy Hub must look like a designed native app with strong colour, not a generic AI made website. Full rule book is AGENTS.md.
 alwaysApply: true
 ---
 
 # Hardy Hub UI quality
 
-This is a private family app. Match **Home dashboard**, **Personal Finance**, and **Pets** — not a settings form and not a neon marketing page.
+The full rule book is `AGENTS.md` at the repo root. Read it before changing any screen. This file is the short version, and `AGENTS.md` wins if they differ.
 
-- First implementation should look **finished**: colour, spacing, empty states, motion, mobile, a clear primary action.
-- Do not ship sparse grey cards, dashed placeholders, or “coming soon” shells when the feature exists.
-- Use `FeaturePageShell` (Back, gradient-primary icon tile, `font-display` title), rounded-2xl cards, `shadow-card`, and per-domain accents (BottomNav / widget colours).
-- Colour language: `bg-gradient-primary` for the active tab and primary action; tinted cards (`color-mix` ~10–22% accent into `--card`); a left accent bar on tiles. Not shouting 500-level fills on every chip.
-- Page filters belong in a **left rail**. Keep the bottom nav. Do not put section tabs in a horizontal scroller across the top.
-- Copy is short and friendly. Hide long how-to text behind settings.
-- If the user asks for polish, change layout and colour — do not only add another dropdown.
+The reference page is the Business Setup Modeller (`src/pages/BusinessModeller.tsx` and `src/pages/BusinessModellerDetail.tsx`).
 
-## Contrast, not camouflage or neon
+## Never
 
-A tab, chip, or nested box must read as a **different** colour from the surface behind it — a step, not a shout.
+- Pill shapes. No `rounded-full` on buttons, chips, tabs, filters, badges or toggles. Only avatars, dots, switch thumbs and progress bars are round.
+- Pale on pale. No screens built from white cards with faint tints, `bg-muted/40` wells and `text-muted-foreground` everywhere.
+- Hover lift (`hover:-translate-y`) as the interaction, soft glows, or gradient icon tiles with a glow.
+- Dashed placeholder boxes, "coming soon" shells, or text links standing in for buttons.
+- Sideways scrolling pages or control rows, or a small widget that scrolls to reach more buttons.
+- Hyphens or dashes joining sentences in any text a person reads.
 
-- ❌ Pale-on-pale: `bg-white/70` on cream, `bg-muted` inside `bg-card`, grey tabs on a grey toolbar.
-- ❌ A box whose background matches its parent.
-- ❌ Rainbow saturated pills (solid orange / green / blue / violet) for every filter.
-- ✅ Active control: gradient-primary (or a soft accent tint + 2px border) on a `bg-card` tray.
-- ✅ Nested surfaces step: page → card → inner well. Equal left/right padding; `mx-auto`; `min-w-0`; **no horizontal page scroll** on mobile (`overflow-x-hidden` on the page shell, stack or wrap columns instead of `overflow-x-auto`).
-- ✅ Text has real contrast. Do not use `text-muted-foreground` on `bg-muted`.
+## Always
+
+- Premium, not loud. Deep jewel tones from `src/lib/brandPalette.ts`, never bright primaries. Serif `font-display` for titles and key figures. Header bands take the `band` class (brass hairline). Cards use a fine 1px border with `shadow-card`.
+
+- Use `Button` from `src/components/ui/button.tsx`, icon first then label. It adds the icon chip and the tactile pressed edge. Do not restyle it per page.
+- Solid, saturated colour blocks for section headers, selected options, key numbers and statuses, with white text. Give each section of a page its own strong colour through a `--sec` CSS variable.
+- Squared corners from the shared scale: `rounded-md` chips, `rounded-lg` buttons and inputs, `rounded-xl` cards. No `rounded-[...]`.
+- Visible borders (`border border-foreground/20` or stronger) and contrast you can see at a glance.
+- Pages in `FeaturePageShell`. Section cards with a solid header band. Stat blocks for key numbers.
+- Fit all items of a small widget in view by measuring and sizing in pixels (`src/lib/quickLinkGrid.ts`).
+- Phone first at 390px. A restyle changes classes and markup only, never logic.

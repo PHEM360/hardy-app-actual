@@ -1,7 +1,19 @@
 import { stripUndefined } from "@/lib/displayPages";
-import type { Task, TaskPriority, TaskSubtask } from "@/types/app";
+import type { Task, TaskPriority, TaskSubtask, TaskTracking } from "@/types/app";
 
-const OPTIONAL_STRINGS = new Set(["description", "notes", "company", "dueDate"]);
+const OPTIONAL_STRINGS = new Set(["description", "notes", "company", "dueDate", "tracking"]);
+
+/** Tracking states in order from best to worst, with the solid colour each one shows as. */
+export const TASK_TRACKING: { value: TaskTracking; label: string; hex: string }[] = [
+  { value: "on_track", label: "On track", hex: "#1F6B4F" },
+  { value: "adjusted", label: "Adjusted", hex: "#22407A" },
+  { value: "needs_adjusting", label: "Needs adjusting", hex: "#B7791F" },
+  { value: "off_track", label: "Off track", hex: "#9B2C2C" },
+];
+
+export function taskTrackingInfo(value?: string) {
+  return TASK_TRACKING.find((t) => t.value === value);
+}
 
 export function localYmd(date = new Date()) {
   const y = date.getFullYear();
@@ -125,7 +137,7 @@ export function defaultTaskDraft(category: string, extras?: Partial<Task>): Omit
   };
 }
 
-export type TaskFilter = "all" | "today" | "overdue" | "progress" | "critical" | `category:${string}` | `company:${string}`;
+export type TaskFilter = "all" | "today" | "overdue" | "progress" | "critical" | `tracking:${string}` | `category:${string}` | `company:${string}`;
 
 export function filterTasks(
   tasks: Task[],
@@ -139,6 +151,7 @@ export function filterTasks(
     if (args.filter === "overdue") return isTaskOverdue(task, today);
     if (args.filter === "progress") return task.status === "in_progress";
     if (args.filter === "critical") return task.priority === "critical" && task.status !== "done";
+    if (args.filter.startsWith("tracking:")) return task.tracking === args.filter.slice("tracking:".length);
     if (args.filter.startsWith("category:")) return task.category === args.filter.slice("category:".length);
     if (args.filter.startsWith("company:")) return (task.company ?? "") === args.filter.slice("company:".length);
     return true;

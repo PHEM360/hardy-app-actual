@@ -69,7 +69,7 @@ export function PetsWidget() {
         <>
           <div className="flex gap-1.5 mb-2 flex-shrink-0 flex-wrap">
             {pets.slice(0, 4).map((p) => (
-              <div key={p.id} className="flex items-center gap-1 bg-muted/60 rounded-full px-2 py-0.5 border border-border/50">
+              <div key={p.id} className="flex items-center gap-1 bg-muted/60 rounded-md px-2 py-0.5 border border-border/50">
                 <span className="text-sm">{p.avatar ?? "🐾"}</span>
                 <span className="text-[10px] font-medium text-foreground">{p.name}</span>
               </div>

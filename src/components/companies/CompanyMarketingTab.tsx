@@ -197,7 +197,7 @@ function StatusPill({ status }: { status: ContentStatus }) {
   const caution = status === "failed" || status === "rejected";
   const success = status === "published" || status === "approved" || status === "scheduled";
   return (
-    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+    <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${
       caution
         ? "border-destructive/30 bg-destructive/10 text-destructive"
         : success
@@ -866,7 +866,7 @@ function ReviewSection({ state, companyId }: { state: MarketingState; companyId:
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-semibold">{item.topic || "Untitled post"}</h3>
                 <StatusPill status={item.status} />
-                <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-semibold">Version {item.approvalVersion}</span>
+                <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold">Version {item.approvalVersion}</span>
               </div>
               {item.rejectionReason && <p className="mt-2 text-sm text-destructive">Previous feedback: {item.rejectionReason}</p>}
             </div>
@@ -1047,7 +1047,7 @@ function CampaignsSection({ state, company }: { state: MarketingState; company: 
           <article key={campaign.id} className={`${cardClass} min-w-0 p-4`} style={companySurface(company.color, 8)}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0"><h3 className="truncate font-semibold">{campaign.name}</h3><p className="mt-1 text-xs capitalize text-muted-foreground">{campaign.status} · {campaign.platforms.map((item) => PLATFORM_LABELS[item]).join(", ")}</p></div>
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold">{campaign.budget === undefined ? "No budget" : `£${campaign.budget.toLocaleString("en-GB")}`}</span>
+              <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold">{campaign.budget === undefined ? "No budget" : `£${campaign.budget.toLocaleString("en-GB")}`}</span>
             </div>
             <p className="mt-3 text-sm">{campaign.objective || "No objective set"}</p>
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{campaign.brief || "No campaign brief yet."}</p>
@@ -1134,7 +1134,7 @@ function MediaSection({ state, companyId }: { state: MarketingState; companyId: 
           <article key={asset.id} className={`${cardClass} min-w-0 overflow-hidden`}>
             {asset.mediaType === "video" ? <video src={asset.url} controls className="aspect-video w-full bg-black object-contain" aria-label={asset.altText || asset.name} /> : <img src={asset.url} alt={asset.altText || asset.name} className="aspect-video w-full object-cover" />}
             <div className="p-3">
-              <div className="flex items-start justify-between gap-2"><p className="min-w-0 truncate text-sm font-semibold">{asset.name}</p><span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold">{asset.source === "ai_generated" ? "AI generated" : "Uploaded"}</span></div>
+              <div className="flex items-start justify-between gap-2"><p className="min-w-0 truncate text-sm font-semibold">{asset.name}</p><span className="shrink-0 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold">{asset.source === "ai_generated" ? "AI generated" : "Uploaded"}</span></div>
               <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{asset.altText || "No alt text yet"}</p>
               <div className="mt-3 flex gap-2"><Button size="sm" variant="outline" onClick={() => setEditing(asset)}>Edit details</Button><Button size="sm" variant="ghost" className="text-destructive" aria-label={`Delete ${asset.name}`} onClick={async () => { if (!window.confirm(`Delete ${asset.name}?`)) return; try { await state.deleteAsset(asset); toast.success("Media deleted."); } catch (error) { toast.error(errorMessage(error)); } }}><Trash2 className="h-4 w-4" /></Button></div>
             </div>

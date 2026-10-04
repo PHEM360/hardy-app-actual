@@ -155,7 +155,7 @@ export function CompanyBillsPanel({ company, canEdit }: { company: Company; canE
                     <p className="font-semibold">{bill.number} · {bill.supplierName}</p>
                     <p className="truncate text-xs text-muted-foreground">{bill.issueDate} · due {bill.dueDate}</p>
                   </div>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[status]}`}>{BILL_STATUS_LABEL[status]}</span>
+                  <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_TONE[status]}`}>{BILL_STATUS_LABEL[status]}</span>
                   <span className="w-24 text-right text-sm font-bold">{gbp(amountOwedOnBill(bill) || bill.total)}</span>
                 </button>
               );

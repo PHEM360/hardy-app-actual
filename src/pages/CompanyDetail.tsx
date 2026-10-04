@@ -570,15 +570,15 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="text-sm font-semibold text-card-foreground">{exp.description}</p>
                     {exp.recurrence?.active && (
-                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                      <span className="flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
                         <Repeat className="h-2.5 w-2.5" /> {exp.recurrence.frequency}
                       </span>
                     )}
                     {exp.recurrence && !exp.recurrence.active && (
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">Cancelled</span>
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">Cancelled</span>
                     )}
                     {exp.recurringSourceId && (
-                      <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                      <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
                         <Repeat className="h-2.5 w-2.5" /> auto
                       </span>
                     )}
@@ -741,7 +741,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                         key={c.id}
                         type="button"
                         onClick={() => setAssignCompanyIds((prev) => active ? prev.filter((x) => x !== c.id) : [...prev, c.id!])}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
                           active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
                         }`}
                       >
@@ -1607,7 +1607,7 @@ function InsuranceTab({ companyId }: { companyId: string }) {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {p.renewalDate && (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
                         {label}
                       </span>
                     )}
@@ -1916,14 +1916,14 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
           <button
             onClick={() => setSelectedEntity("consolidated")}
-            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === "consolidated" ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === "consolidated" ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
             style={selectedEntity === "consolidated" ? { backgroundColor: company.color } : {}}
           >
             All Entities
           </button>
           <button
             onClick={() => setSelectedEntity(companyId)}
-            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === companyId ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === companyId ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
             style={selectedEntity === companyId ? { backgroundColor: company.color } : {}}
           >
             {company.emoji} {company.name}
@@ -1932,7 +1932,7 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
             <button
               key={child.id}
               onClick={() => setSelectedEntity(child.id!)}
-              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === child.id ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === child.id ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
               style={selectedEntity === child.id ? { backgroundColor: child.color } : {}}
             >
               {child.emoji} {child.name}
@@ -2169,7 +2169,7 @@ function TaxTab({ companyId, company, allCompanies }: {
             <div key={r.id} className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{r.taxYear}</span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-primary/10 text-primary">{r.taxYear}</span>
                   {r.filingDate && (
                     <span className="text-[10px] text-muted-foreground">Filed {new Date(r.filingDate).toLocaleDateString("en-GB")}</span>
                   )}
