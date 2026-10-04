@@ -510,6 +510,11 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "finance");
     }
 
+    match /finance/{userId}/models/{modelId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
     // Bank-link metadata (TrueLayer). Tokens live in bankSecrets and are
     // Functions/Admin SDK only — clients can see connection status & mappings.
     match /finance/{userId}/bankConnections/{connId} {
