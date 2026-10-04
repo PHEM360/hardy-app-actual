@@ -30,6 +30,7 @@ import FinanceSummary from "@/components/finance/FinanceSummary";
 import { FinanceAssetsPanel } from "@/components/finance/FinanceAssetsPanel";
 import FinanceTaxPanel from "@/components/finance/FinanceTaxPanel";
 import PensionModellerPanel from "@/components/finance/PensionModellerPanel";
+import FinancialModellerPanel from "@/components/finance/FinancialModellerPanel";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
@@ -198,13 +199,14 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "pension" | "settings";
+type ViewMode = "chart" | "table" | "summary" | "analysis" | "modeller" | "tax" | "pension" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
   { id: "table", label: "Table", Icon: Table2 },
   { id: "summary", label: "Summary", Icon: BarChart3 },
   { id: "analysis", label: "Analysis", Icon: Brain },
+  { id: "modeller", label: "Modeller", Icon: Sparkles },
   { id: "tax", label: "Tax", Icon: Calculator },
   { id: "pension", label: "Pension", Icon: Landmark },
   { id: "settings", label: "Settings", Icon: Settings2 },
@@ -1171,6 +1173,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       {viewMode === "analysis" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
           <FinanceAnalysisPanel accounts={visibleAccounts} />
+        </motion.div>
+      )}
+
+      {viewMode === "modeller" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
+          <FinancialModellerPanel accounts={visibleAccounts} entries={entries} scopeUserId={scopeUserId ?? undefined} canEdit={canEdit} />
         </motion.div>
       )}
 
