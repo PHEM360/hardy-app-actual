@@ -5,6 +5,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { DEFAULT_ACCOUNT_TYPES, withOtherLast } from "@/lib/financeAccounts";
 import { mergeDisplayStats, type FinanceStatId } from "@/lib/financeDisplay";
 import { defaultPensionModel, mergePensionModel, type PensionModelDoc } from "@/lib/pensionModel";
+import { defaultPlatformComparison, mergePlatformComparison, type PlatformComparisonDoc } from "@/lib/platformComparison";
 
 export function useFinanceSettings(scopeUserId?: string) {
   const { dataUid } = useAuth();
@@ -12,6 +13,7 @@ export function useFinanceSettings(scopeUserId?: string) {
   const [accountTypes, setAccountTypes] = useState<string[]>([...DEFAULT_ACCOUNT_TYPES]);
   const [displayStats, setDisplayStats] = useState<Record<FinanceStatId, boolean>>(mergeDisplayStats());
   const [pensionModel, setPensionModel] = useState<PensionModelDoc>(defaultPensionModel());
+  const [platformComparison, setPlatformComparison] = useState<PlatformComparisonDoc>(defaultPlatformComparison());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,6 +21,7 @@ export function useFinanceSettings(scopeUserId?: string) {
         setAccountTypes([...DEFAULT_ACCOUNT_TYPES]);
         setDisplayStats(mergeDisplayStats());
         setPensionModel(defaultPensionModel());
+        setPlatformComparison(defaultPlatformComparison());
         setLoading(false);
       return;
     }
@@ -34,6 +37,7 @@ export function useFinanceSettings(scopeUserId?: string) {
         }
         setDisplayStats(mergeDisplayStats(data?.displayStats));
         setPensionModel(mergePensionModel(data?.pensionModel));
+        setPlatformComparison(mergePlatformComparison(data?.platformComparison));
         setLoading(false);
       },
       () => setLoading(false)
@@ -83,6 +87,21 @@ export function useFinanceSettings(scopeUserId?: string) {
     [uid]
   );
 
+  const savePlatformComparison = useCallback(
+    async (next: PlatformComparisonDoc) => {
+      if (!uid) return;
+      setPlatformComparison(next);
+      // mergeFields replaces the whole comparison: a plain merge would keep
+      // figures the user has just cleared inside each account's values map.
+      await setDoc(
+        doc(db, "finance", uid, "settings", "default"),
+        { platformComparison: next, updatedAt: serverTimestamp() },
+        { mergeFields: ["platformComparison", "updatedAt"] }
+      );
+    },
+    [uid]
+  );
+
   const ensureType = useCallback(
     async (type: string) => {
       const trimmed = type.trim();
@@ -93,5 +112,5 @@ export function useFinanceSettings(scopeUserId?: string) {
     [accountTypes, saveAccountTypes]
   );
 
-  return { accountTypes, displayStats, pensionModel, loading, saveAccountTypes, saveDisplayStats, savePensionModel, ensureType };
+  return { accountTypes, displayStats, pensionModel, platformComparison, loading, saveAccountTypes, saveDisplayStats, savePensionModel, savePlatformComparison, ensureType };
 }

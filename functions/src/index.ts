@@ -187,6 +187,7 @@ export {
 	getDogTagNotifyRecipients,
 	reportDogTagScan,
 } from "./dogTags";
+export { platformCompareAssist } from "./platformCompareAi";
 
 // ── Holidays price watches ──
 export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";

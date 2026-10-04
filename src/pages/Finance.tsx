@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
-  Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
+  Wallet, Plus, Scale, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
   Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator, Brain, Landmark,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -30,6 +30,7 @@ import FinanceSummary from "@/components/finance/FinanceSummary";
 import { FinanceAssetsPanel } from "@/components/finance/FinanceAssetsPanel";
 import FinanceTaxPanel from "@/components/finance/FinanceTaxPanel";
 import PensionModellerPanel from "@/components/finance/PensionModellerPanel";
+import PlatformComparisonPanel from "@/components/finance/PlatformComparisonPanel";
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
@@ -97,7 +98,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-xs font-semibold text-foreground">{label}</p>
           {projected && (
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
               Estimate
             </span>
           )}
@@ -157,7 +158,7 @@ function TaxYearLabel({ viewBox, value, isDark }: { viewBox?: { x: number; y: nu
 }
 
 function pillClass(active: boolean) {
-  return `h-9 px-3.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors border-2 ${
+  return `h-9 px-3.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors border-2 ${
     active
       ? "bg-primary text-primary-foreground border-primary shadow-sm"
       : "bg-card border-border text-foreground hover:border-primary/50"
@@ -198,7 +199,7 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "pension" | "settings";
+type ViewMode = "chart" | "table" | "summary" | "analysis" | "tax" | "pension" | "platforms" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
   { id: "chart", label: "Chart", Icon: LineChartIcon },
@@ -207,6 +208,7 @@ const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] 
   { id: "analysis", label: "Analysis", Icon: Brain },
   { id: "tax", label: "Tax", Icon: Calculator },
   { id: "pension", label: "Pension", Icon: Landmark },
+  { id: "platforms", label: "Compare", Icon: Scale },
   { id: "settings", label: "Settings", Icon: Settings2 },
 ];
 
@@ -224,7 +226,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const { scopeUserId, permission: scopePermission, pageTitle, isOwnScope } = useSharedScope("finance");
   const canEdit = mockData ? false : scopePermission === "edit";
   const live = useFinance(scopeUserId ?? undefined);
-  const { accountTypes, displayStats, pensionModel, saveAccountTypes, saveDisplayStats, savePensionModel, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
+  const { accountTypes, displayStats, pensionModel, platformComparison, saveAccountTypes, saveDisplayStats, savePensionModel, savePlatformComparison, ensureType } = useFinanceSettings(scopeUserId ?? undefined);
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
   const assets = mockData?.assets ?? live.assets;
@@ -1035,7 +1037,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                     key={acc.id}
                     type="button"
                     onClick={() => toggleAccount(acc.id)}
-                    className="flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2.5 py-1 border transition-opacity"
+                    className="flex items-center gap-1.5 text-[11px] font-semibold rounded-md px-2.5 py-1 border transition-opacity"
                     style={{
                       color: on ? color : undefined,
                       borderColor: on ? color : "hsl(var(--border))",
@@ -1050,13 +1052,13 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 );
               })}
               {showTotalLine && selectedAccounts.length > 1 && (
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground bg-muted rounded-full px-2.5 py-1 border border-border">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground bg-muted rounded-md px-2.5 py-1 border border-border">
                   <span className="w-3.5 h-0.5 rounded-full flex-shrink-0" style={{ background: isDark ? "#ffffff" : "#0b0b0b" }} />
                   Total
                 </span>
               )}
               {showProjection && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-foreground bg-muted rounded-full px-2.5 py-1 border border-border">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-foreground bg-muted rounded-md px-2.5 py-1 border border-border">
                   <svg width="14" height="2" className="flex-shrink-0"><line x1="0" y1="1" x2="14" y2="1" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" /></svg>
                   Projected ({SCENARIO_LABELS[scenario]})
                 </span>
@@ -1189,6 +1191,12 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             canEdit={canEdit}
             onSave={savePensionModel}
           />
+        </motion.div>
+      )}
+
+      {viewMode === "platforms" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <PlatformComparisonPanel doc={platformComparison} canEdit={canEdit} onSave={savePlatformComparison} />
         </motion.div>
       )}
 
