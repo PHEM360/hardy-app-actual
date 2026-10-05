@@ -1,13 +1,16 @@
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Circle, Clock, CheckCircle2, ChevronRight, Sun } from "lucide-react";
+import { Circle, Clock, CheckCircle2, ChevronRight, Sun, AlertTriangle, RotateCcw, Ban } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
-import type { Task, TaskStatus } from "@/types/app";
+import { normalizeTaskStatus, taskStatusIsClosed, type Task, type TaskStatus } from "@/types/app";
 
 const STATUSES: { value: TaskStatus; icon: any; color: string }[] = [
-  { value: "todo",        icon: Circle,       color: "text-muted-foreground" },
-  { value: "in_progress", icon: Clock,        color: "text-blue-500" },
-  { value: "done",        icon: CheckCircle2, color: "text-green-500" },
+  { value: "todo", icon: Circle, color: "text-muted-foreground" },
+  { value: "in_progress_on_track", icon: Clock, color: "text-blue-500" },
+  { value: "in_progress_off_track", icon: AlertTriangle, color: "text-orange-500" },
+  { value: "in_progress_reassess", icon: RotateCcw, color: "text-violet-500" },
+  { value: "done", icon: CheckCircle2, color: "text-green-500" },
+  { value: "no_longer_needed", icon: Ban, color: "text-slate-500" },
 ];
 
 export function TdTasksWidget() {
@@ -17,19 +20,19 @@ export function TdTasksWidget() {
   const allTodayTasks = tasks.filter((t) => t.isToday);
 
   const todayTasks = allTodayTasks
-    .filter((t) => t.status !== "done")
+    .filter((t) => !taskStatusIsClosed(t.status))
     .sort((a, b) => {
       const pw: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
       return (pw[a.priority] ?? 2) - (pw[b.priority] ?? 2);
     });
 
-  const done = allTodayTasks.filter((t) => t.status === "done").length;
+  const done = allTodayTasks.filter((t) => taskStatusIsClosed(t.status)).length;
   const total = allTodayTasks.length;
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const cycle = (task: Task) => {
     if (!task.id) return;
-    const idx = STATUSES.findIndex((s) => s.value === task.status);
+    const idx = STATUSES.findIndex((s) => s.value === normalizeTaskStatus(task.status));
     setStatus(task.id, STATUSES[(idx + 1) % STATUSES.length].value);
   };
 
@@ -77,7 +80,7 @@ export function TdTasksWidget() {
         )}
         <AnimatePresence mode="popLayout">
           {todayTasks.map((task) => {
-            const s = STATUSES.find((x) => x.value === task.status)!;
+            const s = STATUSES.find((x) => x.value === normalizeTaskStatus(task.status)) ?? STATUSES[0];
             const Icon = s.icon;
             return (
               <motion.div key={task.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}

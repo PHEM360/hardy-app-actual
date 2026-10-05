@@ -329,9 +329,9 @@ function taskRows(tasks: Task[], widget: DisplayWidgetLayout): TaskRow[] {
   const mode = widget.subtaskMode || "open";
   const chosen = tasks.filter((task) => {
     if (widget.taskIds?.length && (!task.id || !widget.taskIds.includes(task.id))) return false;
-    if (widget.taskFilter === "today") return task.isToday && task.status !== "done";
+    if (widget.taskFilter === "today") return task.isToday && task.status !== "done" && task.status !== "no_longer_needed";
     if (widget.taskFilter === "all") return true;
-    return task.status !== "done";
+    return task.status !== "done" && task.status !== "no_longer_needed";
   });
 
   return chosen.flatMap((task) => {
@@ -341,7 +341,7 @@ function taskRows(tasks: Task[], widget: DisplayWidgetLayout): TaskRow[] {
     const parent: TaskRow = {
       key: task.id || task.title,
       title: task.title,
-      done: task.status === "done",
+      done: task.status === "done" || task.status === "no_longer_needed",
       child: false,
       // A parent used as a heading looks finished unless its progress shows.
       meta: subtasks.length > 0

@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
-import { Task } from "@/types/app";
+import { normalizeTaskStatus, type Task } from "@/types/app";
 
 export function useTasks(scopeUserId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -29,7 +29,17 @@ export function useTasks(scopeUserId?: string) {
     );
     const unsub = onSnapshot(q, (snap) => {
       setTasks(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task))
+        snap.docs.map((d) => {
+          const task = { id: d.id, ...d.data() } as Task;
+          return {
+            ...task,
+            status: normalizeTaskStatus(task.status),
+            subtasks: task.subtasks?.map((subtask) => ({
+              ...subtask,
+              status: normalizeTaskStatus(subtask.status ?? (subtask.done ? "done" : "todo")),
+            })),
+          };
+        })
       );
       setLoading(false);
     });

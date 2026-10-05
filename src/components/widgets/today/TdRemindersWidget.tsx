@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import { useNotes } from "@/hooks/useNotes";
 import { useTasks } from "@/hooks/useTasks";
 import { daysUntilDate } from "@/lib/todayInsights";
+import { taskStatusIsClosed } from "@/types/app";
 import { TdHead } from "./TdHead";
 
 export function TdRemindersWidget() {
@@ -13,7 +14,7 @@ export function TdRemindersWidget() {
     .filter((n) => daysUntilDate(n.date) <= 14)
     .sort((a, b) => daysUntilDate(a.date) - daysUntilDate(b.date));
   const taskReminders = tasks
-    .filter((t) => t.dueDate && t.status !== "done")
+    .filter((t) => t.dueDate && !taskStatusIsClosed(t.status))
     .map((t) => ({ id: t.id || t.title, title: t.title, date: t.dueDate!, kind: "task" as const }))
     .filter((t) => daysUntilDate(t.date) >= 0 && daysUntilDate(t.date) <= 14)
     .sort((a, b) => daysUntilDate(a.date) - daysUntilDate(b.date));

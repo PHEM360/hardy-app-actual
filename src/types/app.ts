@@ -223,8 +223,23 @@ export function getDisplayName(user: User): string {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export type TaskPriority = "critical" | "high" | "medium" | "low";
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus =
+  | "todo"
+  | "in_progress" // legacy value; normalised to in_progress_on_track when loaded
+  | "in_progress_on_track"
+  | "in_progress_off_track"
+  | "in_progress_reassess"
+  | "done"
+  | "no_longer_needed";
 export type TaskUrgency = "none" | "amber" | "red";
+
+export function normalizeTaskStatus(status: TaskStatus | undefined): TaskStatus {
+  return status === "in_progress" ? "in_progress_on_track" : status || "todo";
+}
+
+export function taskStatusIsClosed(status: TaskStatus | undefined): boolean {
+  return status === "done" || status === "no_longer_needed";
+}
 
 export interface TaskSubtask {
   id: string;

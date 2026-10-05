@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CheckSquare, Plus, Trash2, Sun, Circle, CheckCircle2,
-  Clock, Settings2, X, Flag,
+  Clock, Settings2, X, Flag, AlertTriangle, RotateCcw, Ban,
   LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
   Building2,
@@ -19,7 +19,17 @@ import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
+import {
+  normalizeTaskStatus,
+  taskStatusIsClosed,
+  type Task,
+  type TaskPriority,
+  type TaskStatus,
+  type TaskUrgency,
+  type TaskSettings,
+  type TaskCustomField,
+  type TaskSubtask,
+} from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,9 +41,12 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: strin
 ];
 
 const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
-  { value: "todo",        label: "To Do",       icon: Circle, color: "text-muted-foreground", hex: "#94a3b8" },
-  { value: "in_progress", label: "In Progress", icon: Clock,  color: "text-blue-500",         hex: "#3b82f6" },
-  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#22c55e" },
+  { value: "todo", label: "Not Started", icon: Circle, color: "text-slate-500", hex: "#64748b" },
+  { value: "in_progress_on_track", label: "In Progress · On Track", icon: Clock, color: "text-blue-600", hex: "#3b82f6" },
+  { value: "in_progress_off_track", label: "In Progress · Off Track", icon: AlertTriangle, color: "text-orange-600", hex: "#ea580c" },
+  { value: "in_progress_reassess", label: "In Progress · Needs Reassessing", icon: RotateCcw, color: "text-violet-600", hex: "#7c3aed" },
+  { value: "done", label: "Completed", icon: CheckCircle2, color: "text-emerald-600", hex: "#16a34a" },
+  { value: "no_longer_needed", label: "No Longer Needed", icon: Ban, color: "text-slate-500", hex: "#64748b" },
 ];
 
 // Urgency levels cycle: none → amber → red
@@ -63,8 +76,18 @@ const BASE_FILTER_TABS = ["All", "Today", "Priority", "Status", "Category", "Com
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function getStatusMeta(status: TaskStatus) {
+  return STATUSES.find((item) => item.value === normalizeTaskStatus(status)) ?? STATUSES[0];
+}
+
+function nextTaskStatus(status: TaskStatus): TaskStatus {
+  const normalized = normalizeTaskStatus(status);
+  const index = STATUSES.findIndex((item) => item.value === normalized);
+  return STATUSES[(index + 1) % STATUSES.length].value;
+}
+
 function StatusIcon({ status, className = "w-4 h-4" }: { status: TaskStatus; className?: string }) {
-  const s = STATUSES.find((x) => x.value === status)!;
+  const s = getStatusMeta(status);
   const Icon = s.icon;
   return <Icon className={`flex-shrink-0 ${className} ${s.color}`} />;
 }
@@ -81,20 +104,19 @@ function UrgencyDot({ urgency, done, onClick }: { urgency: UrgencyLevel; done: b
   );
 }
 
-// Status circle — clicking cycles todo ↔ in_progress (done handled by checkbox)
+// Compact status control used in list rows.
 function StatusCircle({ status, onClick }: { status: TaskStatus; onClick: (e: React.MouseEvent) => void }) {
-  if (status === "done") return null;
-  const isInProgress = status === "in_progress";
+  if (taskStatusIsClosed(status)) return null;
+  const meta = getStatusMeta(status);
+  const Icon = meta.icon;
   return (
     <button
       onClick={onClick}
-      title={isInProgress ? "In Progress — click for Not Started" : "Not Started — click for In Progress"}
-      className={`w-3.5 h-3.5 rounded-full flex-shrink-0 border-2 transition-all duration-150 hover:scale-125 ${
-        isInProgress
-          ? "bg-orange-400 border-orange-400 shadow-[0_0_4px_1px_rgba(251,146,60,0.5)]"
-          : "bg-red-400 border-red-400 shadow-[0_0_4px_1px_rgba(248,113,113,0.4)]"
-      }`}
-    />
+      title={`${meta.label} — click for next status`}
+      className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-card transition hover:scale-110 ${meta.color}`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
@@ -120,7 +142,7 @@ function getTaskColour(task: Task, colourBy: ColourBy, settings: TaskSettings): 
     return p?.hex ?? "";
   }
   if (colourBy === "status") {
-    const s = STATUSES.find((x) => x.value === task.status);
+    const s = getStatusMeta(task.status);
     return s?.hex ?? "";
   }
   if (colourBy === "category") {
@@ -170,10 +192,10 @@ function TaskDetailSheet({
   if (!task) return null;
 
   const priority = PRIORITIES.find((p) => p.value === task.priority) ?? PRIORITIES[2];
-  const status = STATUSES.find((s) => s.value === task.status) ?? STATUSES[0];
+  const status = getStatusMeta(task.status);
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
-  const isDone = task.status === "done";
+  const isDone = taskStatusIsClosed(task.status);
 
   const patchSub = (subId: string, patch: Partial<TaskSubtask>) => {
     if (!task.id) return;
@@ -223,11 +245,10 @@ function TaskDetailSheet({
           <div className="flex items-start gap-3">
             <button
               onClick={() => {
-                const idx = STATUSES.findIndex((s) => s.value === task.status);
-                onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
+                onStatusChange(nextTaskStatus(task.status));
               }}
               className="mt-0.5 flex-shrink-0 hover:scale-110 transition-transform"
-              title="Cycle status (To Do → In Progress → Done)"
+              title={`Current status: ${status.label}. Click for next status.`}
             >
               <StatusIcon status={task.status} className="w-5 h-5" />
             </button>
@@ -247,7 +268,14 @@ function TaskDetailSheet({
           {/* Meta chips */}
           <div className="flex flex-wrap gap-2">
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${priority.bg}`}>{priority.label}</span>
-            <span className={`text-xs px-2.5 py-1 rounded-full bg-muted font-medium ${status.color}`}>{status.label}</span>
+            <Select value={normalizeTaskStatus(task.status)} onValueChange={(value) => onStatusChange(value as TaskStatus)}>
+              <SelectTrigger className={`h-7 w-auto min-w-[9rem] rounded-xl border-border/70 bg-card px-2.5 text-xs font-semibold ${status.color}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
             {task.category && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.category}</span>}
             {task.company && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.company}</span>}
             {task.dueDate && (
@@ -302,7 +330,7 @@ function TaskDetailSheet({
                 const idx = (task.subtasks ?? []).findIndex((s) => s.id === sub.id);
                 const subStatus = sub.status ?? (sub.done ? "done" : "todo");
                 const subPriority = PRIORITIES.find((p) => p.value === (sub.priority ?? "medium"))!;
-                const subStatusMeta = STATUSES.find((s) => s.value === subStatus)!;
+                const subStatusMeta = getStatusMeta(subStatus);
                 const isExpanded = expandedSubId === sub.id;
                 const isEditingTitle = editingSubId === sub.id;
 
@@ -386,8 +414,7 @@ function TaskDetailSheet({
                       {/* Status pill — click to cycle */}
                       <button
                         onClick={() => {
-                          const idx2 = STATUSES.findIndex((s) => s.value === subStatus);
-                          const next = STATUSES[(idx2 + 1) % STATUSES.length];
+                          const next = getStatusMeta(nextTaskStatus(subStatus));
                           patchSub(sub.id, { status: next.value, done: next.value === "done" });
                         }}
                         title="Cycle status"
@@ -690,7 +717,7 @@ function TaskForm({
       </div>
 
       {/* Priority + Status */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Priority</Label>
           <Select value={form.priority} onValueChange={(v) => set("priority", v as TaskPriority)}>
@@ -719,7 +746,7 @@ function TaskForm({
       </div>
 
       {/* Category + Due Date */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Category</Label>
           <Select value={safeCategory} onValueChange={(v) => set("category", v)}>
@@ -856,10 +883,10 @@ function SubFilter({ items, active, onToggle, onClear }: {
 }) {
   const allSelected = active.length === 0;
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 no-scrollbar">
+    <div className="mb-3 flex flex-wrap gap-1.5 rounded-2xl border border-border/60 bg-card p-2 shadow-sm">
       <button
         onClick={onClear}
-        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${allSelected ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+        className={`flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${allSelected ? "bg-gradient-primary text-primary-foreground shadow-sm" : "border border-border/60 bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
       >
         All
       </button>
@@ -869,7 +896,7 @@ function SubFilter({ items, active, onToggle, onClear }: {
           <button
             key={item.value}
             onClick={() => onToggle(item.value)}
-            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${isActive ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+            className={`flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${isActive ? "bg-gradient-primary text-primary-foreground shadow-sm" : "border border-border/60 bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
           >
             {item.label}
           </button>
@@ -1211,7 +1238,7 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
   settings: TaskSettings; colourBy: ColourBy;
   selected?: boolean;
 }) {
-  const isDone = task.status === "done";
+  const isDone = taskStatusIsClosed(task.status);
   const isHighPriority = task.priority === "critical" || task.priority === "high";
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
@@ -1274,7 +1301,7 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
           status={task.status}
           onClick={(e) => {
             e.stopPropagation();
-            onStatusChange(task.status === "in_progress" ? "todo" : "in_progress");
+            onStatusChange(nextTaskStatus(task.status));
           }}
         />
         <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
@@ -1294,7 +1321,7 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: () => void;
 }) {
   const isHighPriority = task.priority === "critical" || task.priority === "high";
-  const isDone = task.status === "done";
+  const isDone = taskStatusIsClosed(task.status);
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const accentColour = getTaskColour(task, colourBy, settings);
@@ -1376,7 +1403,7 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onU
   settings: TaskSettings; colourBy: ColourBy;
 }) {
   const isHighPriority = task.priority === "critical" || task.priority === "high";
-  const isDone = task.status === "done";
+  const isDone = taskStatusIsClosed(task.status);
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const accentColour = getTaskColour(task, colourBy, settings);
@@ -1510,10 +1537,10 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
       {/* Single compact controls row */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {/* Group-by segmented pill */}
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-full p-0.5">
+        <div className="flex flex-wrap items-center gap-0.5 rounded-xl border border-border/60 bg-card p-1 shadow-sm">
           {groupOptions.map((o) => (
             <button key={o.value} onClick={() => setGroupBy(o.value)}
-              className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[10px] font-semibold transition-all duration-150 ${groupBy === o.value ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}>
               {o.label}
             </button>
           ))}
@@ -1588,7 +1615,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
       </AnimatePresence>
 
       {/* Kanban columns */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(visibleColumns.length, 5)}, minmax(0, 1fr))` }}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {visibleColumns.map((col) => {
           const colTasks = getColTasks(col.key);
           return (
@@ -1602,7 +1629,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
               <div className="flex flex-col gap-1.5 min-h-[60px]">
                 <AnimatePresence mode="popLayout">
                   {colTasks.length === 0 ? (
-                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border-2 border-dashed border-border/40 py-5 text-center">
+                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border border-border/50 bg-card/70 py-5 text-center">
                       <p className="text-[10px] text-muted-foreground">Empty</p>
                     </motion.div>
                   ) : (
@@ -1672,7 +1699,7 @@ function CompanyGroupView({
         const label = companyKey === "__none__" ? "No Company" : companyKey;
         const isExpanded = expandedCompanies.has(companyKey);
         const colour = settings.companyColors?.[companyKey] ?? "";
-        const doneCount = companyTasks.filter((t) => t.status === "done").length;
+        const doneCount = companyTasks.filter((t) => taskStatusIsClosed(t.status)).length;
 
         return (
           <div key={companyKey} className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
@@ -1709,7 +1736,7 @@ function CompanyGroupView({
                     {companyTasks.map((task) => {
                       const subs = task.subtasks ?? [];
                       const subDone = subs.filter((s) => s.done).length;
-                      const isDone = task.status === "done";
+                      const isDone = taskStatusIsClosed(task.status);
                       const pData = PRIORITIES.find((p) => p.value === task.priority)!;
 
                       return (
@@ -1798,7 +1825,7 @@ const Tasks = () => {
 
   const filtered = useMemo(() => {
     let list = [...tasks];
-    if (!showCompleted) list = list.filter((t) => t.status !== "done");
+    if (!showCompleted) list = list.filter((t) => !taskStatusIsClosed(t.status));
     if (activeTab === "Today") list = list.filter((t) => t.isToday || t.subtasks?.some((s) => s.isToday && !s.done));
     if (activeTab === "Priority" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.priority));
     if (activeTab === "Status" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.status));
@@ -1808,8 +1835,8 @@ const Tasks = () => {
     if (customField && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.customFields?.[customField.id] ?? ""));
     const pw: Record<TaskPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
     list.sort((a, b) => {
-      const aDone = a.status === "done" ? 1 : 0;
-      const bDone = b.status === "done" ? 1 : 0;
+      const aDone = taskStatusIsClosed(a.status) ? 1 : 0;
+      const bDone = taskStatusIsClosed(b.status) ? 1 : 0;
       if (aDone !== bDone) return aDone - bDone;
       return pw[a.priority] - pw[b.priority];
     });
@@ -1859,9 +1886,10 @@ const Tasks = () => {
   // Sync detailTask with latest from tasks list
   const liveDetailTask = detailTask ? tasks.find((t) => t.id === detailTask.id) ?? detailTask : null;
 
-  const todayCount = tasks.filter((t) => t.isToday && t.status !== "done").length;
+  const todayCount = tasks.filter((t) => t.isToday && !taskStatusIsClosed(t.status)).length;
+  const closedCount = tasks.filter((t) => taskStatusIsClosed(t.status)).length;
   const doneCount = tasks.filter((t) => t.status === "done").length;
-  const criticalCount = tasks.filter((t) => t.priority === "critical" && t.status !== "done").length;
+  const criticalCount = tasks.filter((t) => t.priority === "critical" && !taskStatusIsClosed(t.status)).length;
 
   if (tasksLoading || settingsLoading) {
     return (
@@ -1881,11 +1909,11 @@ const Tasks = () => {
       sharePage="tasks"
     >
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-0.5 bg-muted/70 rounded-full p-0.5">
+      <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-card p-2 shadow-card">
+        <div className="flex items-center gap-0.5 rounded-xl border border-border/60 bg-card p-0.5">
           {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tile"], ["kanban", Columns2, "Kanban"], ["company", Building2, "Companies"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
             <button key={mode} onClick={() => setViewMode(mode)} aria-label={label}
-              className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-all duration-150 ${viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all duration-150 ${viewMode === mode ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
             >
               <Icon className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{label}</span>
@@ -1899,24 +1927,24 @@ const Tasks = () => {
               setShowCompletedOverride(next);
               saveSettings({ ...settings, showCompleted: next });
             }}
-            title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
+            title={showCompleted ? "Hide closed tasks" : "Show closed tasks"}
             className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-colors ${
               showCompleted
                 ? "text-emerald-600 bg-emerald-500/12 hover:bg-emerald-500/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
             }`}
-            aria-label={showCompleted ? "Hide completed" : "Show completed"}
+            aria-label={showCompleted ? "Hide closed" : "Show closed"}
           >
             {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{showCompleted ? "Done visible" : "Done hidden"}</span>
-            {!showCompleted && doneCount > 0 && (
-              <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-px rounded-full">{doneCount}</span>
+            <span className="hidden sm:inline">{showCompleted ? "Closed visible" : "Closed hidden"}</span>
+            {!showCompleted && closedCount > 0 && (
+              <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-px rounded-full">{closedCount}</span>
             )}
           </button>
           <button onClick={() => setSettingsOpen(true)} className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors" aria-label="Settings">
             <Settings2 className="w-4 h-4" />
           </button>
-          <button onClick={openAdd} disabled={!canEdit} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-40 disabled:pointer-events-none">
+          <button onClick={openAdd} disabled={!canEdit} className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40">
             <Plus className="w-3.5 h-3.5" />
             <span>New</span>
           </button>
@@ -1928,7 +1956,7 @@ const Tasks = () => {
         {[
           { label: "Today",    value: todayCount,    text: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-400/25" },
           { label: "Critical", value: criticalCount, text: "text-red-600 dark:text-red-400",       bg: "bg-red-500/10",     border: "border-red-400/25" },
-          { label: "Done",     value: doneCount,     text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/25" },
+          { label: "Completed", value: doneCount, text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/25" },
         ].map((s) => (
           <div key={s.label} className={`rounded-xl border ${s.border} ${s.bg} px-3 py-2 text-center`}>
             <p className={`text-xl font-bold font-display leading-none ${s.text}`}>{s.value}</p>
@@ -1937,45 +1965,60 @@ const Tasks = () => {
         ))}
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-border/40">
-        {filterTabs.map((tab) => {
-          const isActive = activeTab === tab;
-          const catColour = settings.categoryColors?.[tab];
-          return (
-            <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setFilterValues([]); }}
-              style={catColour ? {
-                background: isActive ? catColour : `${catColour}18`,
-                color: isActive ? "#fff" : catColour,
-                borderColor: `${catColour}44`,
-              } : undefined}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-150 border ${
-                catColour
-                  ? "border-transparent"
-                  : isActive
-                    ? "bg-primary text-primary-foreground shadow-sm border-transparent"
-                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border-transparent"
-              }`}
+      <div className="flex min-w-0 items-start gap-4">
+        <aside className="hidden w-52 shrink-0 sm:block">
+          <div className="sticky top-2 rounded-2xl border border-border/60 bg-card p-2.5 shadow-card">
+            <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Filter tasks</p>
+            <nav className="space-y-1">
+              {filterTabs.map((tab) => {
+                const isActive = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => { setActiveTab(tab); setFilterValues([]); }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
+                      isActive
+                        ? "bg-gradient-primary text-primary-foreground shadow-sm"
+                        : "border border-transparent text-foreground hover:border-border hover:bg-accent"
+                    }`}
+                  >
+                    <span className="truncate">{tab}</span>
+                    {isActive && filterValues.length > 0 && (
+                      <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[9px]">{filterValues.length}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 rounded-2xl border border-border/60 bg-card p-2.5 shadow-card sm:hidden">
+            <Label htmlFor="task-mobile-filter" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              Show tasks by
+            </Label>
+            <select
+              id="task-mobile-filter"
+              value={activeTab}
+              onChange={(event) => { setActiveTab(event.target.value); setFilterValues([]); }}
+              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground"
             >
-              {tab}
-            </button>
-          );
-        })}
-      </div>
+              {filterTabs.map((tab) => <option key={tab} value={tab}>{tab}</option>)}
+            </select>
+          </div>
 
-      {/* Sub-filters */}
-      {activeTab === "Priority" && <SubFilter items={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Status" && <SubFilter items={STATUSES.map((s) => ({ value: s.value, label: s.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Category" && <SubFilter items={settings.categories.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Company" && <SubFilter items={companyFilterOptions.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {settings.customFields.map((field) =>
-        activeTab === field.label ? <SubFilter key={field.id} items={field.options.map((o) => ({ value: o, label: o }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} /> : null
-      )}
+          {/* Sub-filters */}
+          {activeTab === "Priority" && <SubFilter items={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+          {activeTab === "Status" && <SubFilter items={STATUSES.map((s) => ({ value: s.value, label: s.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+          {activeTab === "Category" && <SubFilter items={settings.categories.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+          {activeTab === "Company" && <SubFilter items={companyFilterOptions.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
+          {settings.customFields.map((field) =>
+            activeTab === field.label ? <SubFilter key={field.id} items={field.options.map((o) => ({ value: o, label: o }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} /> : null
+          )}
 
-      {/* Views */}
-      {viewMode === "company" ? (
+          {/* Views */}
+          {viewMode === "company" ? (
         <CompanyGroupView
           tasks={filtered}
           settings={settings}
@@ -2042,7 +2085,9 @@ const Tasks = () => {
             </div>
           )}
         </div>
-      )}
+          )}
+        </div>
+      </div>
 
       {/* Task detail side panel */}
       <TaskDetailSheet
@@ -2063,7 +2108,7 @@ const Tasks = () => {
 
       {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditTask(null); }}>
-        <DialogContent className="max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="font-display text-base">{editTask ? "Edit Task" : "New Task"}</DialogTitle>
           </DialogHeader>

@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { CheckSquare, ChevronRight, AlertTriangle } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
+import { taskStatusIsClosed } from "@/types/app";
 
 const PRIORITY_DOT: Record<string, string> = {
   critical: "hsl(var(--destructive))",
@@ -15,7 +16,7 @@ export function TasksWidget() {
   const { tasks, loading } = useTasks();
   const accent = WIDGET_ACCENT.tasks;
 
-  const open = tasks.filter((t) => t.status !== "done");
+  const open = tasks.filter((t) => !taskStatusIsClosed(t.status));
   const done = tasks.length - open.length;
   const completion = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
   const overdue = open.filter((t) => t.dueDate && new Date(t.dueDate) < new Date()).length;

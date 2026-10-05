@@ -5,6 +5,7 @@ import { useTodayPage } from "@/hooks/useTodayPage";
 import { useTasks } from "@/hooks/useTasks";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { format } from "date-fns";
+import { taskStatusIsClosed } from "@/types/app";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -29,7 +30,7 @@ export function TdAiWidget() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const todayTasks = tasks.filter((t) => t.isToday);
-  const doneTasks = todayTasks.filter((t) => t.status === "done").length;
+  const doneTasks = todayTasks.filter((t) => taskStatusIsClosed(t.status)).length;
   const name = profile?.firstName ?? "there";
 
   // Build system prompt with live context

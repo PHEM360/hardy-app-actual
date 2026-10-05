@@ -2,14 +2,15 @@ import { useNavigate } from "react-router-dom";
 import { Sun, Circle, ChevronRight } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
+import { taskStatusIsClosed } from "@/types/app";
 
 export function TodayWidget() {
   const navigate = useNavigate();
   const { tasks, loading } = useTasks();
   const accent = WIDGET_ACCENT.today;
 
-  const todayTasks = tasks.filter((t) => t.isToday && t.status !== "done");
-  const done = tasks.filter((t) => t.isToday && t.status === "done").length;
+  const todayTasks = tasks.filter((t) => t.isToday && !taskStatusIsClosed(t.status));
+  const done = tasks.filter((t) => t.isToday && taskStatusIsClosed(t.status)).length;
   const allToday = tasks.filter((t) => t.isToday);
   const total = allToday.length;
   const pending = todayTasks.length;

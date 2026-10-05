@@ -102,14 +102,14 @@ export function billsDueSoon<T extends { endDate?: string }>(items: T[], from = 
 
 export function overdueByDueDate<T extends { dueDate?: string; status?: string }>(items: T[], from = new Date()): T[] {
   return items.filter((item) => {
-    if (!item.dueDate || item.status === "done") return false;
+    if (!item.dueDate || item.status === "done" || item.status === "no_longer_needed") return false;
     return daysUntilDate(item.dueDate, from) < 0;
   });
 }
 
 export function dueOnDay<T extends { dueDate?: string; status?: string }>(items: T[], day: Date): T[] {
   return items.filter((item) => {
-    if (!item.dueDate || item.status === "done") return false;
+    if (!item.dueDate || item.status === "done" || item.status === "no_longer_needed") return false;
     return isSameDay(new Date(item.dueDate), day);
   });
 }
