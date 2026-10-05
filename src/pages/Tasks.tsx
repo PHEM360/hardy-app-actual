@@ -8,6 +8,7 @@ import {
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
   Building2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: strin
   { value: "low",      label: "Low",      color: "text-green-600",  bg: "bg-green-100 text-green-700",   hex: "#22c55e" },
 ];
 
-const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
+const STATUSES: { value: TaskStatus; label: string; icon: LucideIcon; color: string; hex: string }[] = [
   { value: "todo", label: "Not Started", icon: Circle, color: "text-slate-500", hex: "#64748b" },
   { value: "in_progress_on_track", label: "In Progress · On Track", icon: Clock, color: "text-blue-600", hex: "#3b82f6" },
   { value: "in_progress_off_track", label: "In Progress · Off Track", icon: AlertTriangle, color: "text-orange-600", hex: "#ea580c" },
@@ -675,7 +676,8 @@ function TaskForm({
   const [tagInput, setTagInput] = useState("");
   const [subtaskInput, setSubtaskInput] = useState("");
 
-  const set = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((current) => ({ ...current, [key]: value }));
 
   const setCustomField = (id: string, value: string) =>
     setForm((f) => ({ ...f, customFields: { ...(f.customFields ?? {}), [id]: value } }));
@@ -1526,7 +1528,12 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   };
 
   const toggleCol = (key: string) =>
-    setHiddenCols((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
 
@@ -1687,7 +1694,12 @@ function CompanyGroupView({
   }, [tasks]);
 
   const toggleCompany = (key: string) =>
-    setExpandedCompanies((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+    setExpandedCompanies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   if (groups.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-10">No tasks match this filter.</p>;

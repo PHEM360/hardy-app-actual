@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Circle, Clock, CheckCircle2, ChevronRight, Sun, AlertTriangle, RotateCcw, Ban } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
 import { normalizeTaskStatus, taskStatusIsClosed, type Task, type TaskStatus } from "@/types/app";
 
-const STATUSES: { value: TaskStatus; icon: any; color: string }[] = [
+const STATUSES: { value: TaskStatus; icon: LucideIcon; color: string }[] = [
   { value: "todo", icon: Circle, color: "text-muted-foreground" },
   { value: "in_progress_on_track", icon: Clock, color: "text-blue-500" },
   { value: "in_progress_off_track", icon: AlertTriangle, color: "text-orange-500" },
