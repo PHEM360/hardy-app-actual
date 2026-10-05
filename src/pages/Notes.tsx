@@ -34,6 +34,7 @@ import { NoteCard } from "@/components/notes/NoteCard";
 import { NoteStartDialog } from "@/components/notes/NoteStartDialog";
 import { NoteCategorySettings } from "@/components/notes/NoteCategorySettings";
 import { noteHasDiagram } from "@/lib/noteDiagram";
+import { taskStatusIsClosed } from "@/types/app";
 import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
 import { noteCategoryOptions } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
@@ -329,7 +330,7 @@ export default function Notes() {
       ? events.filter((e) => isSameDay(new Date(e.startDate), day))
       : [];
     const taskItems = notesApi.prefs.showTasksPageItems
-      ? tasks.filter((t) => t.dueDate && t.status !== "done" && isSameDay(parseISO(t.dueDate), day))
+      ? tasks.filter((t) => t.dueDate && !taskStatusIsClosed(t.status) && isSameDay(parseISO(t.dueDate), day))
       : [];
     return { notes, hubEvents, taskItems };
   };
@@ -387,8 +388,52 @@ export default function Notes() {
         </div>
       }
     >
-      <div className="flex min-w-0 gap-3">
-        <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
+      <div className="mb-3 rounded-2xl border border-border/60 bg-card p-3 shadow-card sm:hidden">
+        <Label htmlFor="notes-mobile-filter" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+          Browse notes
+        </Label>
+        <select
+          id="notes-mobile-filter"
+          value={filter}
+          onChange={(event) => event.target.value === "secure" ? openSecure() : setFilter(event.target.value as FilterId)}
+          className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground"
+        >
+          <option value="all">All notes</option>
+          <option value="pinned">Pinned</option>
+          <option value="tasks">Checklists</option>
+          <option value="diagrams">Diagrams</option>
+          <option value="drawings">Drawings</option>
+          <option value="inbox">Inbox</option>
+          {noteCategoryOptions(notesApi.prefs).map((category) => (
+            <option key={category.id} value={`category:${category.id}`}>{category.label}</option>
+          ))}
+          {notesApi.folders.map((folder) => (
+            <option key={folder.id} value={`folder:${folder.id}`}>{folder.emoji ? `${folder.emoji} ` : ""}{folder.name}</option>
+          ))}
+          <option value="secure">Secure</option>
+          <option value="shared">Shared</option>
+          <option value="archived">Archive</option>
+        </select>
+        {canEdit && (
+          <form
+            className="mt-2 flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!newFolder.trim()) return;
+              notesApi.addFolder(newFolder.trim());
+              setNewFolder("");
+            }}
+          >
+            <Input value={newFolder} onChange={(event) => setNewFolder(event.target.value)} placeholder="New folder" className="h-9 min-w-0 flex-1 rounded-xl" />
+            <Button type="submit" size="sm" variant="outline" className="h-9 rounded-xl px-3">
+              <FolderPlus className="h-3.5 w-3.5" /><span className="sr-only">Add folder</span>
+            </Button>
+          </form>
+        )}
+      </div>
+
+      <div className="flex min-w-0 gap-4">
+        <aside className="hidden w-[12.5rem] shrink-0 sm:block">
           <div className="sticky top-2 space-y-1">
             {railItem("all", "All", StickyNote)}
             {railItem("pinned", "Pinned", Pin)}
@@ -686,7 +731,7 @@ export default function Notes() {
                   <span className="min-w-0 truncate font-display font-semibold">{n.title || "Untitled"}</span>
                 </button>
               ))}
-              {notesApi.prefs.showTasksPageItems && tasks.filter((t) => t.dueDate && t.status !== "done").map((t) => (
+              {notesApi.prefs.showTasksPageItems && tasks.filter((t) => t.dueDate && !taskStatusIsClosed(t.status)).map((t) => (
                 <div key={t.id} className="flex items-center gap-3 rounded-2xl bg-violet-200/70 px-4 py-3 text-sm dark:bg-violet-500/20">
                   <span className="w-16 text-xs font-bold">{t.dueDate ? format(parseISO(t.dueDate), "d MMM") : ""}</span>
                   Task · {t.title}
