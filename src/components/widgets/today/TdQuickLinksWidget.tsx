@@ -13,7 +13,7 @@ type PickableTile = {
   id: string;
   label: string;
   icon: LucideIcon;
-  gradient: string;
+  accent: string;
   route?: string;
   action?: "expense" | "upload";
 };
@@ -23,8 +23,8 @@ type PickableTile = {
 // these they could never appear as pickable quick links here even though
 // they're already available as buttons in that other quick-links widget.
 const ACTION_TILES: PickableTile[] = [
-  { id: "expense", label: "Add expense or document", icon: Receipt, gradient: "linear-gradient(135deg,hsl(350,70%,55%),hsl(340,60%,46%))", action: "expense" },
-  { id: "upload", label: "Upload document", icon: FileUp, gradient: "linear-gradient(135deg,hsl(200,70%,55%),hsl(210,60%,46%))", action: "upload" },
+  { id: "expense", label: "Add expense or document", icon: Receipt, accent: "#31506f", action: "expense" },
+  { id: "upload", label: "Upload document", icon: FileUp, accent: "#47738a", action: "upload" },
 ];
 
 const PICKABLE: PickableTile[] = [...HOME_TILES.filter((t) => t.id !== "quick_links" && t.route), ...ACTION_TILES];
@@ -82,28 +82,42 @@ export function TdQuickLinksWidget({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-border/60 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl border border-border/60 bg-card text-xs text-muted-foreground shadow-sm hover:border-primary/40 hover:text-foreground"
           >
+            <Settings2 className="mb-1 h-5 w-5 text-primary" />
             Tap to choose pages
           </button>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {selected.map((tile) => {
               const Icon = tile.icon;
+              const featured = tile.id === "expense";
               return (
                 <button
                   key={tile.id}
                   type="button"
                   onClick={() => runTile(tile)}
-                  className="flex flex-col items-center gap-1.5 rounded-xl border border-border/50 bg-background/60 px-2 py-2.5 text-center hover:border-primary/40 hover:bg-primary/5"
+                  className={`overflow-hidden rounded-xl border text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    featured
+                      ? "col-span-3 flex min-h-[58px] items-center gap-2.5 border-white/10 px-3 text-left text-white"
+                      : "flex flex-col items-center gap-1.5 px-2 py-2.5"
+                  }`}
+                  style={{
+                    background: featured
+                      ? "var(--gradient-primary)"
+                      : `color-mix(in srgb, ${tile.accent} 11%, hsl(var(--card)))`,
+                    borderColor: featured ? undefined : `color-mix(in srgb, ${tile.accent} 28%, hsl(var(--border)))`,
+                    borderLeftWidth: featured ? 1 : 3,
+                    borderLeftColor: featured ? undefined : tile.accent,
+                  }}
                 >
                   <span
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
-                    style={{ background: tile.gradient }}
+                    className={`flex items-center justify-center rounded-lg ${featured ? "h-9 w-9 bg-white/12 text-white" : "h-8 w-8"}`}
+                    style={featured ? undefined : { background: `color-mix(in srgb, ${tile.accent} 18%, hsl(var(--card)))`, color: tile.accent }}
                   >
                     <Icon className="h-4 w-4" />
                   </span>
-                  <span className="truncate text-[10px] font-semibold text-foreground">{tile.label}</span>
+                  <span className={`min-w-0 truncate font-semibold ${featured ? "font-display text-xs" : "text-[10px] text-foreground"}`}>{tile.label}</span>
                 </button>
               );
             })}

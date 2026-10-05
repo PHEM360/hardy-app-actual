@@ -25,6 +25,7 @@ import { ShareNoteDialog } from "@/components/notes/ShareNoteDialog";
 import { VaultGate } from "@/components/notes/VaultGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { useNotes } from "@/hooks/useNotes";
@@ -241,7 +242,7 @@ export default function NotesFocus() {
                   key={id}
                   type="button"
                   onClick={() => id === "secure" ? openSecure() : setFilter(id)}
-                  className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-medium transition ${filter === id ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-muted/60 hover:text-foreground"}`}
+                  className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-medium transition ${filter === id ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"}`}
                 >
                   <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 flex-1 truncate">{label}</span>
                 </button>
@@ -253,7 +254,7 @@ export default function NotesFocus() {
                 <p className="px-2 pb-1.5 pt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Categories</p>
                 <div className="space-y-0.5">
                   {noteCategoryOptions(notesApi.prefs).map((category) => (
-                    <button key={category.id} type="button" onClick={() => setFilter(`category:${category.id}`)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${filter === `category:${category.id}` ? "bg-primary/10 text-primary" : "text-foreground/75 hover:bg-muted/60"}`}>
+                    <button key={category.id} type="button" onClick={() => setFilter(`category:${category.id}`)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${filter === `category:${category.id}` ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-foreground/75 hover:bg-accent"}`}>
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: category.swatch }} /><span className="truncate">{category.label}</span>
                     </button>
                   ))}
@@ -264,7 +265,7 @@ export default function NotesFocus() {
             <p className="px-2 pb-1.5 pt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Folders</p>
             <div className="space-y-0.5">
               {notesApi.folders.map((folder) => (
-                <button key={folder.id} type="button" onClick={() => setFilter(`folder:${folder.id}`)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${filter === `folder:${folder.id}` ? "bg-primary/10 text-primary" : "text-foreground/75 hover:bg-muted/60"}`}>
+                <button key={folder.id} type="button" onClick={() => setFilter(`folder:${folder.id}`)} className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${filter === `folder:${folder.id}` ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-foreground/75 hover:bg-accent"}`}>
                   <Folder className="h-4 w-4 shrink-0" /><span className="truncate">{folder.emoji ? `${folder.emoji} ` : ""}{folder.name}</span>
                 </button>
               ))}
@@ -287,12 +288,32 @@ export default function NotesFocus() {
               </div>
               {canEdit && <Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-gradient-primary lg:hidden" onClick={() => setStartOpen(true)}><Plus className="h-4 w-4" /></Button>}
             </div>
-            <div className="flex gap-1 overflow-x-auto pb-0.5 lg:hidden">
-              {filters.slice(0, 6).map(({ id, label, icon: Icon }) => (
-                <button key={id} type="button" onClick={() => id === "secure" ? openSecure() : setFilter(id)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${filter === id ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
-                  <Icon className="h-3.5 w-3.5" />{label}
-                </button>
-              ))}
+            <div className="rounded-xl border border-border/60 bg-card p-2 lg:hidden">
+              <Label htmlFor="notes-focus-mobile-filter" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                Browse notes
+              </Label>
+              <select
+                id="notes-focus-mobile-filter"
+                value={filter}
+                onChange={(event) => event.target.value === "secure" ? openSecure() : setFilter(event.target.value as FilterId)}
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold text-foreground"
+              >
+                {filters.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                {noteCategoryOptions(notesApi.prefs).map((category) => (
+                  <option key={category.id} value={`category:${category.id}`}>{category.label}</option>
+                ))}
+                {notesApi.folders.map((folder) => (
+                  <option key={folder.id} value={`folder:${folder.id}`}>{folder.emoji ? `${folder.emoji} ` : ""}{folder.name}</option>
+                ))}
+              </select>
+              {canEdit && (
+                <form className="mt-2 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!newFolder.trim()) return; notesApi.addFolder(newFolder.trim()); setNewFolder(""); }}>
+                  <Input value={newFolder} onChange={(event) => setNewFolder(event.target.value)} placeholder="New folder" className="h-9 min-w-0 flex-1 rounded-xl" />
+                  <Button type="submit" size="icon" variant="outline" className="h-9 w-9 shrink-0 rounded-xl" aria-label="Add folder">
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
+                </form>
+              )}
             </div>
           </div>
 
@@ -316,7 +337,7 @@ export default function NotesFocus() {
               <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={() => setVaultOpen(true)}>Unlock</Button>
             </div>
           ) : visibleNotes.length === 0 ? (
-            <button type="button" onClick={() => canEdit && setStartOpen(true)} className="w-full rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center shadow-soft transition hover:border-primary/40">
+            <button type="button" onClick={() => canEdit && setStartOpen(true)} className="w-full rounded-2xl border border-border bg-card px-6 py-14 text-center shadow-card transition hover:border-primary/40">
               <StickyNote className="mx-auto mb-3 h-6 w-6 text-primary" />
               <span className="block font-display text-lg font-bold">Nothing here yet</span>
               <span className="mt-1 block text-sm text-muted-foreground">Create a note, list, drawing or diagram.</span>
