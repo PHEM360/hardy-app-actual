@@ -51,38 +51,45 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
             Back
           </button>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(115deg, color-mix(in srgb, hsl(var(--primary)) 10%, transparent), transparent 48%), radial-gradient(circle at 92% 12%, color-mix(in srgb, hsl(var(--primary)) 10%, transparent), transparent 32%)",
+            }}
+          />
           {icon && (
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary shadow-glow flex items-center justify-center text-primary-foreground flex-shrink-0">
+            <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
               {icon}
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold font-display text-foreground">{title}</h1>
+          <div className="relative min-w-0 flex-1">
+            <h1 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
             )}
           </div>
           {comparePage && (
-            <div className="flex shrink-0 items-center rounded-xl border border-border/60 bg-muted/55 p-1" aria-label={`${comparePage} design`}>
+            <div className="relative flex shrink-0 items-center rounded-xl border border-border/70 bg-card p-1 shadow-sm" aria-label={`${comparePage} design`}>
               <button
                 type="button"
                 onClick={() => switchDesign(false)}
-                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${!focusSelected ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${!focusSelected ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
               >
                 Current
               </button>
               <button
                 type="button"
                 onClick={() => switchDesign(true)}
-                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${focusSelected ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${focusSelected ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
               >
                 Focus
               </button>
             </div>
           )}
           {(sharePage || action) && (
-            <div className="flex-shrink-0">
+            <div className="relative flex-shrink-0">
               {sharePage ? <PageShareBar page={sharePage} extra={action} access={shareAccess} /> : action}
             </div>
           )}

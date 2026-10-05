@@ -28,7 +28,7 @@ const AppLayout = () => {
 
   return (
     <HomeLayoutGate>
-      <div className="flex min-h-[100dvh] min-h-[100svh] flex-col bg-background">
+      <div className="app-canvas flex min-h-[100dvh] min-h-[100svh] flex-col">
         <FcmBootstrap />
         <AlarmRingingOverlay uid={dataUid} />
         <TopBar />
