@@ -56,6 +56,7 @@ import { applyCalendarMergeRules } from "@/lib/calendarMerge";
 import { allDayEventCoversDate, londonDateFromIso, londonDayEndIso, londonDayStartIso } from "@/lib/londonCalendarDate";
 import { downloadIcs, eventsToIcs } from "@/lib/calendarIcs";
 import { mergedCalendarSubscribeUrl, publishMergedCalendar, syncCalendarFeed } from "@/lib/calendarFeedsApi";
+import { taskStatusIsClosed } from "@/types/app";
 import type { CalendarEvent, CalendarEventCategory, CalendarFeed, CalendarNotificationPref } from "@/types/app";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -559,7 +560,7 @@ const CalendarPage = () => {
     // Task due dates
     if (settings.autoImport?.tasks !== false) {
       tasks.forEach((task) => {
-        if (!task.dueDate || task.status === "done") return;
+        if (!task.dueDate || taskStatusIsClosed(task.status)) return;
         const due = parseISO(task.dueDate);
         if (due < cutoff) return;
         vEvents.push({
@@ -745,7 +746,7 @@ const CalendarPage = () => {
 
       <div className="min-w-0">
         {/* ── Toolbar ── */}
-        <div className="mb-3 rounded-2xl border border-border/50 bg-card p-2.5 shadow-card sm:mb-4 sm:p-3">
+        <div className="mb-3 rounded-2xl border border-border/60 bg-card p-2.5 shadow-card sm:mb-4 sm:p-3">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-1">
               <button
@@ -775,7 +776,7 @@ const CalendarPage = () => {
             </div>
 
             <div className="flex items-center justify-between gap-2 sm:justify-end">
-              <div className="flex gap-0.5 rounded-xl bg-muted p-1">
+              <div className="flex gap-0.5 rounded-xl border border-border/70 bg-card p-1 shadow-sm">
                 {([
                   { id: "month" as const, label: "Month" },
                   { id: "week" as const, label: "Week" },
@@ -786,7 +787,7 @@ const CalendarPage = () => {
                     type="button"
                     onClick={() => setView(item.id)}
                     className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors sm:px-3 sm:text-xs ${
-                      view === item.id ? "bg-card text-card-foreground shadow-sm" : "text-muted-foreground hover:text-card-foreground"
+                      view === item.id ? "bg-gradient-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     {item.label}
@@ -851,7 +852,7 @@ const CalendarPage = () => {
 
       {/* ── Month view ── */}
       {view === "month" && (
-        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-card">
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-card">
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-border/40 bg-muted/40">
             {WEEK_DAYS.map((d, i) => (
@@ -880,13 +881,13 @@ const CalendarPage = () => {
                   key={day.toISOString()}
                   type="button"
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`group relative flex min-h-[64px] flex-col items-start border-b border-r border-border/25 p-1.5 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
+                  className={`calendar-month-day group relative flex flex-col items-start overflow-hidden border-b border-r border-border/30 p-1 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
                     !inMonth ? "bg-muted/10" : selected ? "bg-primary/10" : "bg-card hover:bg-primary/5"
                   }`}
                   style={today && inMonth ? { background: "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))" } : undefined}
                 >
                   <span
-                    className={`mb-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] sm:h-7 sm:w-7 sm:text-xs ${
+                    className={`mb-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] sm:mb-1 sm:h-7 sm:w-7 sm:text-xs ${
                       today
                         ? "bg-gradient-primary font-extrabold text-primary-foreground shadow-sm"
                         : inMonth
@@ -909,11 +910,29 @@ const CalendarPage = () => {
                     )}
                   </div>
 
-                  {/* Mobile: compact dots — full detail is one tap away below */}
-                  <div className="flex flex-wrap gap-0.5 sm:hidden">
-                    {dayEvts.slice(0, 4).map((e) => (
-                      <span key={e.id} className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: getEventColor(e) }} />
-                    ))}
+                  {/* Mobile: Google/Apple-style compact event strips keep names visible. */}
+                  <div className="w-full min-w-0 space-y-0.5 sm:hidden">
+                    {dayEvts.slice(0, 2).map((e) => {
+                      const color = getEventColor(e);
+                      return (
+                        <div
+                          key={e.id}
+                          onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
+                          className="flex h-[13px] min-w-0 items-center gap-0.5 overflow-hidden rounded-[3px] px-0.5"
+                          style={{
+                            background: `color-mix(in srgb, ${color} 14%, hsl(var(--card)))`,
+                            borderLeft: `2px solid ${color}`,
+                          }}
+                        >
+                          <span className="min-w-0 truncate text-[7px] font-bold leading-none text-foreground">
+                            {e.allDay ? "" : `${format(parseISO(e.startDate), "H:mm")} `}{e.title}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {dayEvts.length > 2 && (
+                      <span className="block pl-0.5 text-[7px] font-bold leading-none text-muted-foreground">+{dayEvts.length - 2}</span>
+                    )}
                   </div>
                 </button>
               );
