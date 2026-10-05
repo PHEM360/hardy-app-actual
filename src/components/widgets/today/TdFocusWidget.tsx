@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useTodayPage } from "@/hooks/useTodayPage";
 
+import { TdHead } from "./TdHead";
 export function TdFocusWidget() {
   const { daily, saveDaily } = useTodayPage();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -12,10 +13,7 @@ export function TdFocusWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-        <span className="text-base">🎯</span>
-        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Today's Focus</p>
-      </div>
+      <TdHead emoji="🎯" title="Today's Focus" />
       <textarea
         defaultValue={daily.focus}
         onChange={(e) => onChange(e.target.value)}

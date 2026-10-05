@@ -473,7 +473,7 @@ const Admin = () => {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {h.memberIds.map((uid) => (
-                    <span key={uid} className="flex items-center gap-1 text-[10px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+                    <span key={uid} className="flex items-center gap-1 text-[10px] font-medium bg-muted px-2 py-1 rounded-md text-foreground">
                       {nameForUid(uid)}
                       <button onClick={() => removeHouseholdMember(h.id, uid)} className="text-muted-foreground hover:text-destructive">
                         <UserX className="w-3 h-3" />

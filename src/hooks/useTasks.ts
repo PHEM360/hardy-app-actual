@@ -9,10 +9,23 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/auth/AuthContext";
 import { Task } from "@/types/app";
+import { sanitizeTaskWrite, taskTrackingInfo } from "@/lib/tasks";
+
+function withClearedOptionals(updates: Partial<Task>) {
+  const payload = sanitizeTaskWrite({ ...updates } as Record<string, unknown>) as Record<string, unknown>;
+  if ("dueDate" in updates && !String(updates.dueDate || "").trim()) payload.dueDate = deleteField();
+  if ("company" in updates && !String(updates.company || "").trim()) payload.company = deleteField();
+  if ("description" in updates && !String(updates.description || "").trim()) payload.description = deleteField();
+  if ("notes" in updates && !String(updates.notes || "").trim()) payload.notes = deleteField();
+  // Choosing "Not set" must remove the stored value, not leave the old one behind.
+  if ("tracking" in updates && !taskTrackingInfo(updates.tracking)) payload.tracking = deleteField();
+  return payload;
+}
 
 export function useTasks(scopeUserId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -22,24 +35,35 @@ export function useTasks(scopeUserId?: string) {
   const uid = scopeUserId ?? dataUid;
 
   useEffect(() => {
-    if (!uid) return;
+    if (!uid) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     const q = query(
       collection(db, "tasks", uid, "items"),
       orderBy("createdAt", "desc")
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setTasks(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task))
-      );
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task)));
+        setLoading(false);
+      },
+      () => {
+        setTasks([]);
+        setLoading(false);
+      },
+    );
     return unsub;
   }, [uid]);
 
   const addTask = useCallback(async (task: Omit<Task, "id" | "createdAt" | "updatedAt">) => {
     if (!uid) return;
+    const payload = sanitizeTaskWrite({ ...task } as Record<string, unknown>);
     await addDoc(collection(db, "tasks", uid, "items"), {
-      ...task,
+      ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -48,7 +72,7 @@ export function useTasks(scopeUserId?: string) {
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
     if (!uid) return;
     await updateDoc(doc(db, "tasks", uid, "items", id), {
-      ...updates,
+      ...withClearedOptionals(updates),
       updatedAt: serverTimestamp(),
     });
   }, [uid]);

@@ -21,7 +21,12 @@ export function useTaskSettings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!dataUid) return;
+    if (!dataUid) {
+      setSettings(DEFAULT_SETTINGS);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     const ref = doc(db, "taskSettings", dataUid);
     getDoc(ref).then((snap) => {
       if (snap.exists()) {
@@ -32,6 +37,7 @@ export function useTaskSettings() {
           customFields: data.customFields ?? [],
           categoryColors: data.categoryColors ?? {},
           companyColors: data.companyColors ?? {},
+          tileOrder: data.tileOrder ?? [],
           showCompleted: data.showCompleted ?? false,
         });
       }

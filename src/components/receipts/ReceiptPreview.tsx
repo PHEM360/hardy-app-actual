@@ -154,7 +154,7 @@ export function ReceiptLightbox({
           <div className="flex min-w-0 items-center gap-2">
             <DialogTitle className="min-w-0 truncate font-display text-sm">{label}</DialogTitle>
             {hasMultiple && (
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+              <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
                 {safeIndex + 1} / {pageCount}
               </span>
             )}

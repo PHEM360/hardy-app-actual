@@ -88,7 +88,7 @@ function ReminderEditor({ reminder, onChange, onDelete }: { reminder: ReminderCo
             key={c.value}
             type="button"
             onClick={() => toggleChannel(c.value)}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${reminder.channels.includes(c.value) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${reminder.channels.includes(c.value) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
           >
             {c.label}
           </button>
@@ -220,7 +220,7 @@ function BirthdayFormDialog({
                     key={u.id}
                     type="button"
                     onClick={() => toggleMember(u.id)}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${someUids.includes(u.id) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${someUids.includes(u.id) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
                   >
                     {u.name}
                   </button>

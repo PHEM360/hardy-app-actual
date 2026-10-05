@@ -225,6 +225,11 @@ export function getDisplayName(user: User): string {
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskUrgency = "none" | "amber" | "red";
+/**
+ * How a task is going, separate from where it is in the workflow: a task can
+ * be "in_progress" and "off_track" at once. Optional; unset means not tracked.
+ */
+export type TaskTracking = "on_track" | "adjusted" | "needs_adjusting" | "off_track";
 
 export interface TaskSubtask {
   id: string;
@@ -245,6 +250,7 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   urgency?: TaskUrgency;   // red/amber dot — separate from priority
+  tracking?: TaskTracking; // on track / adjusted / needs adjusting / off track
   category: string;       // e.g. "Admin", "Development", "Personal"
   company?: string;       // company ID or name
   dueDate?: string;       // ISO date string
@@ -546,7 +552,7 @@ export interface MarketingPlatformConnection {
 
 export interface CompanyLogin {
   id?: string;
-  service: string;        // e.g. "Xero", "Companies House"
+  service: string;        // e.g. "Companies House", "Tide"
   username: string;
   password?: string;
   url?: string;

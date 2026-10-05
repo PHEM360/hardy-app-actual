@@ -126,7 +126,7 @@ export default function HealthCustomTab({ tab }: Props) {
             </p>
           )}
           {days > 0 && days % 7 === 0 && (
-            <div className="mt-2 px-3 py-1.5 rounded-full bg-white/60 inline-block">
+            <div className="mt-2 px-3 py-1.5 rounded-md bg-white/60 inline-block">
               <span className="text-xs font-bold text-amber-700">🎉 {days / 7} week{days / 7 > 1 ? "s" : ""}!</span>
             </div>
           )}

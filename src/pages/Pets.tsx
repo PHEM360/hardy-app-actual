@@ -499,7 +499,7 @@ const Pets = () => {
                     <Share2 className="w-3.5 h-3.5 text-card-foreground/60" />
                   </button>
                 ) : (
-                  <span className="text-[9px] bg-black/10 text-card-foreground/50 rounded-full px-2 py-0.5 font-medium">Shared</span>
+                  <span className="text-[9px] bg-black/10 text-card-foreground/50 rounded-md px-2 py-0.5 font-medium">Shared</span>
                 )}
               </div>
               <div className="flex items-center gap-1.5 mt-1.5">
@@ -551,7 +551,7 @@ const Pets = () => {
                           </p>
                         )}
                       </div>
-                      <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${
+                      <span className={`text-[9px] font-bold px-2 py-1 rounded-md ${
                         status.bg.includes("destructive") ? "bg-destructive/20 text-destructive" :
                         status.bg.includes("warning") ? "bg-warning/20 text-warning" :
                         status.bg.includes("success") ? "bg-success/25 text-success" :
@@ -581,7 +581,7 @@ const Pets = () => {
                           </p>
                         )}
                       </div>
-                      <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${
+                      <span className={`text-[9px] font-bold px-2 py-1 rounded-md ${
                         status.bg.includes("destructive") ? "bg-destructive/20 text-destructive" :
                         status.bg.includes("warning") ? "bg-warning/20 text-warning" :
                         status.bg.includes("success") ? "bg-success/25 text-success" :
@@ -672,7 +672,7 @@ const Pets = () => {
             <button
               key={p.id}
               onClick={() => setVisiblePets((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
-              className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all ${
+              className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-all ${
                 visiblePets.has(p.id) ? "border-primary/30 bg-card shadow-soft" : "border-border/30 opacity-50"
               }`}
             >
@@ -849,7 +849,7 @@ const Pets = () => {
                       <button
                         key={p.id}
                         onClick={() => setDocPetIds(prev => selected ? prev.filter(id => id !== p.id) : [...prev, p.id])}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${selected ? "bg-primary text-primary-foreground border-primary" : "border-border bg-muted/30"}`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${selected ? "bg-primary text-primary-foreground border-primary" : "border-border bg-muted/30"}`}
                       >
                         {p.avatar} {p.name}
                       </button>
@@ -1028,7 +1028,7 @@ const Pets = () => {
                       <TableCell className="text-xs">{format(dueDate, "d MMM yyyy")}</TableCell>
                       <TableCell className="text-xs">{givenDate ? format(givenDate, "d MMM yyyy") : "—"}</TableCell>
                       <TableCell>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                           isLate ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success"
                         }`}>
                           {notGiven ? "Not given" : isLate ? `Late (${lateByDays}d)` : "On time"}

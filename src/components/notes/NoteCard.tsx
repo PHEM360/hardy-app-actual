@@ -2,6 +2,7 @@ import { CheckSquare, GitBranch, Home, Lock, PenLine, Pin } from "lucide-react";
 import type { HubNote, NotesListStyle } from "@/types/notes";
 import { NOTE_CATEGORIES, noteCategoryOptions, type NotesPrefs } from "@/types/notes";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
+import { noteChecklistItems } from "@/lib/noteChecklist";
 import { format, parseISO } from "date-fns";
 
 export function NoteCard({
@@ -26,11 +27,14 @@ export function NoteCard({
   const filled = listStyle === "filled";
   const compact = listStyle === "compact";
   const paper = listStyle === "paper";
-  const items = (note.checklist ?? []).filter((i) => i.text.trim());
+  const items = noteChecklistItems(note).filter((i) => i.text.trim());
   const done = items.filter((i) => i.done).length;
   const cat = noteCategoryOptions(prefs).find((c) => c.id === note.category) ?? NOTE_CATEGORIES.find((c) => c.id === note.category);
   const drawing = note.canvas?.blocks.find((block) => block.type === "drawing");
   const image = note.canvas?.blocks.find((block) => block.type === "media" && block.mediaType === "image");
+  const diagram = note.diagram?.nodes?.length
+    ? note.diagram
+    : note.canvas?.blocks.find((block) => block.type === "diagram" && (block.diagram?.nodes.length ?? 0) > 0)?.diagram;
 
   return (
     <button
@@ -46,16 +50,16 @@ export function NoteCard({
         {featured && <Home className="h-3.5 w-3.5" />}
         {note.locked && <Lock className="h-3.5 w-3.5" />}
         {items.length > 0 && <CheckSquare className="h-3.5 w-3.5" />}
-        {note.diagram?.nodes?.length ? <GitBranch className="h-3.5 w-3.5" /> : null}
+        {note.diagram?.nodes?.length || note.canvas?.blocks.some((block) => block.type === "diagram" && (block.diagram?.nodes.length ?? 0) > 0) ? <GitBranch className="h-3.5 w-3.5" /> : null}
         {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
         <span className="ml-auto flex items-center gap-1">
           {featured && (
-            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               Dashboard
             </span>
           )}
           {cat && (
-            <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               {cat.label}
             </span>
           )}
@@ -101,13 +105,13 @@ export function NoteCard({
           )}
         </div>
       )}
-      {!note.locked && note.diagram?.nodes?.length ? (
+      {!note.locked && diagram?.nodes?.length ? (
         <div className="mt-3 overflow-hidden rounded-xl bg-black/5">
-          <DiagramCanvas diagram={note.diagram} className="h-24 w-full" />
+          <DiagramCanvas diagram={diagram} className="h-24 w-full" />
         </div>
       ) : null}
       {note.dueDate && (
-        <p className={`mt-3 inline-flex rounded-full bg-black/10 px-2 py-0.5 text-[11px] font-semibold ${filled ? "text-stone-800" : "text-foreground/70"}`}>
+        <p className={`mt-3 inline-flex rounded-md bg-black/10 px-2 py-0.5 text-[11px] font-semibold ${filled ? "text-stone-800" : "text-foreground/70"}`}>
           {format(parseISO(`${note.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}
         </p>
       )}

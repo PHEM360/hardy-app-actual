@@ -54,7 +54,7 @@ function ChannelPills({
             type="button"
             disabled={!enabled}
             onClick={() => toggle(channel)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
               !enabled
                 ? "opacity-30 cursor-not-allowed bg-muted border-border text-muted-foreground"
                 : active

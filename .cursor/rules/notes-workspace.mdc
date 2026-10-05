@@ -9,7 +9,7 @@ alwaysApply: false
 - `/notes` is **in addition to** `/tasks`. Never replace or merge away the Tasks page.
 - A **checklist lives inside a note** (tick-boxes + optional body/date/diagram). It is not a Tasks-page item.
 - Layout matches Finance/Pets: `FeaturePageShell` + **left filter rail** (All, Pinned, Checklists, folders, Secure…) + main canvas. Do not put those filters in a top horizontal chip strip.
-- Colour is the app palette: gradient-primary for the active rail item, soft tinted cards, left accent bars. Not neon pills. New notes still get a real card colour, not `default` grey.
+- Colour follows `AGENTS.md`: a solid fill for the active rail item, squared corners, no pill shapes and no pale on pale. Note cards keep their own real card colour, not `default` grey.
 - Every view (grid, list, board/due date, calendar, agenda) must fit one viewport width. Stack board columns on a phone; never `overflow-x-auto` on the page.
 - Phone home screen means the **device icon** (long-press / Add to Home Screen), not the in-app dashboard. Be honest: Android shortcuts work; iOS PWAs cannot be real widgets.
 - Preserve `pathname + search` through login so `/notes?new=1` opens Notes with the composer, already signed in if the session exists.

@@ -7,6 +7,10 @@ import * as admin from "firebase-admin";
 import {
   apiHost,
   authHost,
+  buildTrueLayerAuthUrl,
+  CANONICAL_REDIRECT_URI,
+  envFromClientId,
+  normalizeTrueLayerSecret,
   resolveTrueLayerEnv,
   type TrueLayerEnv,
 } from "./truelayerEnv";
@@ -15,7 +19,7 @@ const truelayerClientId = defineSecret("TRUELAYER_CLIENT_ID");
 const truelayerClientSecret = defineSecret("TRUELAYER_CLIENT_SECRET");
 const truelayerUseSandbox = defineString("TRUELAYER_USE_SANDBOX", { default: "true" });
 
-const APP_HOST = "https://hardyhub-7b30d.web.app";
+const APP_HOST = "https://hardyapp.co.uk";
 const SCOPES = "info accounts balance transactions offline_access";
 const SECRET_OPTS = { secrets: [truelayerClientId, truelayerClientSecret] };
 const SECRET_CALL_OPTS = { ...SECRET_OPTS, timeoutSeconds: 180 };
@@ -54,13 +58,26 @@ function safeReturnPath(value: unknown, fallback: string): string {
   return /^\/[A-Za-z0-9/_-]*$/.test(s) ? s : fallback;
 }
 
+function isAllowedReturnOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return url.protocol === "http:";
+    return url.protocol === "https:" && ALLOWED_REDIRECT_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+}
+
 /** The user should land back on whichever real domain they started from, not a hardcoded one. */
 function originFromRedirectUri(redirectUri: string): string {
   try {
-    return new URL(redirectUri).origin;
+    const origin = new URL(redirectUri).origin;
+    if (isAllowedReturnOrigin(origin)) return origin;
   } catch {
-    return APP_HOST;
+    // fall through
   }
+  return APP_HOST;
 }
 
 type TlAccount = {
@@ -95,12 +112,18 @@ function requireUid(auth?: { uid: string; token?: Record<string, unknown> }) {
 }
 
 function preferredEnv(): TrueLayerEnv {
+  try {
+    const fromId = envFromClientId(truelayerClientId.value());
+    if (fromId) return fromId;
+  } catch {
+    // Secret not bound on this function.
+  }
   return truelayerUseSandbox.value() !== "false" ? "sandbox" : "live";
 }
 
 let resolvedEnvCache: { env: TrueLayerEnv; mismatch: boolean } | null = null;
 
-async function resolveEnv(redirectUri = `${APP_HOST}/api/truelayer/callback`) {
+async function resolveEnv(redirectUri = CANONICAL_REDIRECT_URI) {
   if (resolvedEnvCache) return resolvedEnvCache;
   const { clientId, clientSecret } = credentials();
   const resolved = await resolveTrueLayerEnv({
@@ -148,15 +171,15 @@ async function envForConnection(uid: string, connectionId: string): Promise<True
 }
 
 function credentialsConfigured() {
-  const clientId = truelayerClientId.value();
-  const clientSecret = truelayerClientSecret.value();
+  const clientId = normalizeTrueLayerSecret(truelayerClientId.value());
+  const clientSecret = normalizeTrueLayerSecret(truelayerClientSecret.value());
   return Boolean(clientId && clientSecret && clientId !== "UNSET" && clientSecret !== "UNSET");
 }
 
 function credentials() {
-  const clientId = truelayerClientId.value();
-  const clientSecret = truelayerClientSecret.value();
-  if (!credentialsConfigured()) {
+  const clientId = normalizeTrueLayerSecret(truelayerClientId.value());
+  const clientSecret = normalizeTrueLayerSecret(truelayerClientSecret.value());
+  if (!clientId || !clientSecret || clientId === "UNSET" || clientSecret === "UNSET") {
     throw new HttpsError(
       "failed-precondition",
       "Bank linking is not set up yet. Add the TrueLayer client ID and secret to Firebase secrets.",
@@ -536,31 +559,40 @@ export const getTrueLayerStatus = onCall(SECRET_OPTS, async (request) => {
 export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const { clientId } = credentials();
-  const redirectUri = String(request.data?.redirectUri || `${APP_HOST}/finance/bank-callback`);
-  if (!isAllowedRedirect(redirectUri)) {
+  const clientRedirect = String(request.data?.redirectUri || CANONICAL_REDIRECT_URI);
+  if (!isAllowedRedirect(clientRedirect)) {
     throw new HttpsError("invalid-argument", "That redirect URI is not allowed.");
   }
+  // TrueLayer only has hardyapp.co.uk allowlisted. Always send that URI, then
+  // bounce the user back to the page they started from after the callback.
+  const redirectUri = CANONICAL_REDIRECT_URI;
+  const returnOrigin = originFromRedirectUri(clientRedirect);
   const resolved = await resolveEnv(redirectUri);
   const returnPath = safeReturnPath(request.data?.returnPath, "/finance");
   const state = randomUUID();
   await db().doc(`trueLayerOAuth/${state}`).set({
     uid,
     redirectUri,
+    returnOrigin,
     returnPath,
     authEnv: resolved.env,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: Date.now() + 15 * 60 * 1000,
   });
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
     scope: SCOPES,
     state,
     providers: "uk-ob-all uk-oauth-all",
-  });
-  if (resolved.env === "sandbox") params.set("enable_mock", "true");
-  return { authUrl: `${authBase(resolved.env)}/?${params.toString()}`, env: resolved.env, mismatch: resolved.mismatch };
+  };
+  if (resolved.env === "sandbox") params.enable_mock = "true";
+  return {
+    authUrl: buildTrueLayerAuthUrl(resolved.env, params),
+    env: resolved.env,
+    mismatch: resolved.mismatch,
+  };
 });
 
 async function finishConnect(uid: string, code: string, redirectUri: string, authEnv?: TrueLayerEnv) {
@@ -825,7 +857,10 @@ export const trueLayerCallback = onRequest(
       try {
         const stateData = (await db().doc(`trueLayerOAuth/${state}`).get()).data();
         if (stateData) {
-          origin = originFromRedirectUri(String(stateData.redirectUri || ""));
+          const storedOrigin = String(stateData.returnOrigin || "");
+          origin = isAllowedReturnOrigin(storedOrigin)
+            ? storedOrigin
+            : originFromRedirectUri(String(stateData.redirectUri || ""));
           returnPath = safeReturnPath(stateData.returnPath, "/finance");
         }
       } catch {
@@ -843,7 +878,10 @@ export const trueLayerCallback = onRequest(
     await stateSnap.ref.delete();
     const storedEnv = stateData.authEnv === "live" || stateData.authEnv === "sandbox" ? stateData.authEnv : undefined;
     await finishConnect(String(stateData.uid), code, String(stateData.redirectUri), storedEnv);
-    const origin = originFromRedirectUri(String(stateData.redirectUri || ""));
+    const storedOrigin = String(stateData.returnOrigin || "");
+    const origin = isAllowedReturnOrigin(storedOrigin)
+      ? storedOrigin
+      : originFromRedirectUri(String(stateData.redirectUri || ""));
     const returnPath = safeReturnPath(stateData.returnPath, "/finance");
     res.redirect(302, `${origin}${returnPath}?bank=connected`);
   } catch (err) {

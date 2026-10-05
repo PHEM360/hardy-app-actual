@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Plus, Trash2, Pencil, X } from "lucide-react";
 import { useTodayPage } from "@/hooks/useTodayPage";
 
+import { TdHead } from "./TdHead";
 export function TdHabitsWidget() {
   const { config, daily, saveConfig, saveDaily } = useTodayPage();
   const [editing, setEditing] = useState(false);
@@ -23,16 +24,15 @@ export function TdHabitsWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🔥</span>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Habits</p>
-        </div>
-        <button onClick={() => setEditing((v) => !v)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors">
+      <TdHead
+        emoji="🔥"
+        title="Habits"
+        action={
+          <button onClick={() => setEditing((v) => !v)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors">
           {editing ? <X className="w-3.5 h-3.5 text-muted-foreground" /> : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
         </button>
-      </div>
+        }
+      />
 
       {/* Progress strip */}
       {config.habits.length > 0 && (

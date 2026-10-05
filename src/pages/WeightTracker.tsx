@@ -84,12 +84,12 @@ function bpCategory(sys: number, dia: number): { label: string; colour: string }
 
 function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   return (
-    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-full border border-border/30">
+    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-lg border border-border/30">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           onClick={() => onChange(p.value)}
-          className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+          className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all duration-200 ${
             value === p.value
               ? "bg-card shadow-sm text-foreground ring-1 ring-border/40"
               : "text-muted-foreground hover:text-foreground hover:bg-card/50"
@@ -104,12 +104,12 @@ function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period
 
 function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v: "chart" | "table") => void }) {
   return (
-    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-full border border-border/30">
+    <div className="flex gap-0.5 p-1 bg-muted/60 backdrop-blur-sm rounded-lg border border-border/30">
       {(["chart", "table"] as const).map((v) => (
         <button
           key={v}
           onClick={() => onChange(v)}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 ${
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all duration-200 ${
             view === v
               ? "bg-card shadow-sm text-foreground ring-1 ring-border/40"
               : "text-muted-foreground hover:text-foreground hover:bg-card/50"
@@ -582,7 +582,7 @@ const HealthTracker = () => {
                   <span className="text-xs font-semibold text-card-foreground">
                     {new Date(rec.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
                   </span>
-                  <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">
+                  <span className="text-[10px] bg-primary/10 text-primary rounded-md px-2 py-0.5 font-medium">
                     {rec.unitsRight + rec.unitsLeft}u total
                   </span>
                 </div>

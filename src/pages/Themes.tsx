@@ -147,7 +147,7 @@ const Themes = () => {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-semibold text-card-foreground">{t.name}</p>
                             {isActive && (
-                              <span className="flex items-center gap-0.5 text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                              <span className="flex items-center gap-0.5 text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                                 <Check className="w-3 h-3" /> Active
                               </span>
                             )}
@@ -288,7 +288,7 @@ const Themes = () => {
                                 : [...headerAlbumIds, album.id];
                               setHeaderDisplay({ headerAlbumIds: next, headerPictureMode: pictureMode });
                             }}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${
                               on ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground"
                             }`}
                           >
@@ -419,7 +419,7 @@ const Themes = () => {
                         <p className="text-sm font-semibold">Now using {active.label}</p>
                         <p className="text-[11px] text-muted-foreground">{active.hint}</p>
                       </div>
-                      <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold">{active.feel}</span>
+                      <span className="rounded-md bg-background px-2 py-0.5 text-[10px] font-semibold">{active.feel}</span>
                     </div>
                     <HomeTilesStylePreview preset={active.id} large />
                   </div>
@@ -442,7 +442,7 @@ const Themes = () => {
                           <p className="text-sm font-semibold">{option.label}</p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">{option.hint}</p>
                         </div>
-                        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{option.feel}</span>
+                        <span className="rounded-md bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">{option.feel}</span>
                       </div>
                       <HomeTilesStylePreview preset={option.id} />
                     </button>

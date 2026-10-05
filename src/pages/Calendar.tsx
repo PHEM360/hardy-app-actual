@@ -114,7 +114,7 @@ function EventChip({
         </p>
         <span
           className={`mt-0.5 inline-flex font-semibold ${
-            event.category === "health" ? "rounded-full" : event.category === "work" ? "rounded-sm" : "rounded-md"
+            event.category === "health" ? "rounded-lg" : event.category === "work" ? "rounded-sm" : "rounded-md"
           } ${dense ? "px-1 text-[7px]" : "px-1.5 text-[9px]"}`}
           style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}
         >
@@ -637,6 +637,20 @@ const CalendarPage = () => {
     });
   }, [events, virtualEvents, settings.autoImport?.birthdays, settings.mergeRules, hiddenSources]);
 
+  useEffect(() => {
+    const extras = allDisplayEvents
+      .filter((event) => event.allDay)
+      .map((event) => {
+        const start = londonDateFromIso(event.startDate);
+        const end = londonDateFromIso(event.endDate || event.startDate);
+        return { source: event.source || "local", start, end, extra: end > start };
+      })
+      .filter((item) => item.extra);
+    // #region agent log
+    fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H1',location:'Calendar.tsx:allDisplayEvents',message:'all-day events spanning extra UK days',data:{allDayCount:allDisplayEvents.filter((event)=>event.allDay).length,extraCount:extras.length,samples:extras.slice(0,8)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [allDisplayEvents]);
+
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   const eventsForDay = (day: Date) => {
@@ -1086,7 +1100,7 @@ const CalendarPage = () => {
                       )}
                     </div>
                     <span
-                      className="text-[9px] font-bold px-2 py-1 rounded-full text-white self-start flex-shrink-0"
+                      className="text-[9px] font-bold px-2 py-1 rounded-md text-white self-start flex-shrink-0"
                       style={{ backgroundColor: color }}
                     >
                       {e.memberId && e.memberId !== "all"
@@ -1238,7 +1252,7 @@ const CalendarPage = () => {
                     <button
                       key={key}
                       onClick={() => setForm((f) => ({ ...f, category: key }))}
-                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-all ${
+                      className={`px-3 py-1.5 rounded-md text-[11px] font-semibold text-white transition-all ${
                         form.category === key ? "ring-2 ring-offset-2 ring-offset-background scale-105" : "opacity-70"
                       }`}
                       style={{ backgroundColor: val.color }}
@@ -1259,7 +1273,7 @@ const CalendarPage = () => {
                 {/* Everyone / shared option */}
                 <button
                   onClick={() => setForm((f) => ({ ...f, memberId: "all" }))}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-all ${
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-semibold text-white transition-all ${
                     form.memberId === "all" ? "ring-2 ring-offset-2 ring-offset-background scale-105" : "opacity-70"
                   }`}
                   style={{ backgroundColor: settings.memberColors?.["all"] ?? "#f59e0b" }}
@@ -1270,7 +1284,7 @@ const CalendarPage = () => {
                   <button
                     key={m.id}
                     onClick={() => setForm((f) => ({ ...f, memberId: m.id }))}
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-all ${
+                    className={`px-3 py-1.5 rounded-md text-[11px] font-semibold text-white transition-all ${
                       form.memberId === m.id ? "ring-2 ring-offset-2 ring-offset-background scale-105" : "opacity-70"
                     }`}
                     style={{ backgroundColor: settings.memberColors?.[m.id] ?? "#6366f1" }}

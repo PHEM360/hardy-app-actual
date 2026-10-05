@@ -14,6 +14,7 @@ function tag(partial: Partial<DogTag> = {}): DogTag {
     ownerId: "owner",
     label: "Collar tag",
     code: "abc",
+    shortCode: "",
     slug: "billy",
     shape: "rounded",
     bgColor: "#ffffff",

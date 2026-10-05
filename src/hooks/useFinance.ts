@@ -144,7 +144,10 @@ export function useFinance(scopeUserId?: string) {
         assetsLoaded = true;
         checkDone();
       },
-      () => {
+      (error) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H3',location:'useFinance.ts:assetsSnapshot',message:'assets listener failed',data:{code:(error as {code?:string})?.code||'unknown',message:String((error as {message?:string})?.message||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setAssets([]);
         assetsLoaded = true;
         checkDone();
@@ -253,11 +256,26 @@ export function useFinance(scopeUserId?: string) {
 
   const addAsset = useCallback(
     async (input: Omit<FinanceAsset, "id">) => {
-      if (!uid) return;
-      await addDoc(collection(db, "finance", uid, "assets"), {
-        ...financeAssetWriteData(input),
-        createdAt: serverTimestamp(),
-      });
+      if (!uid) {
+        // #region agent log
+        fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H3',location:'useFinance.ts:addAsset',message:'addAsset skipped',data:{noUid:true},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+      try {
+        await addDoc(collection(db, "finance", uid, "assets"), {
+          ...financeAssetWriteData(input),
+          createdAt: serverTimestamp(),
+        });
+        // #region agent log
+        fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H3',location:'useFinance.ts:addAsset',message:'addAsset wrote',data:{ok:true,hasValue:Number(input.value)>0,hasRent:Number(input.rentMonthly)>0},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H3',location:'useFinance.ts:addAsset',message:'addAsset failed',data:{code:(error as {code?:string})?.code||'unknown',message:String((error as {message?:string})?.message||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        throw error;
+      }
     },
     [uid]
   );

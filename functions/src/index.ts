@@ -83,6 +83,18 @@ export {
 } from "./notifications/featureSchedulers";
 export { onBirthdayWrite, refreshBirthdayReminders } from "./notifications/birthdayScheduler";
 export { generateRecurringExpenses, remindRegularExpenseReview } from "./companyExpenses";
+export {
+	sendCompanyInvoiceEmail,
+	sendCompanyReceiptEmail,
+	recordCompanyInvoicePaid,
+	createCompanyIngestKey,
+	ingestCompanyLead,
+	ingestCompanyPayment,
+	ingestMillionInvoice,
+	getPublicInvoice,
+	publishCompanyWebsiteArticle,
+	remindOverdueCompanyInvoices,
+} from "./companyHub";
 
 export {
 	getTrueLayerStatus,
@@ -169,7 +181,14 @@ export {
 } from "./marketingConnect";
 
 // ── Dog tags (Pets page) ──
-export { getDogTagPublicInfo, getDogTagProfileBySlug, getDogTagNotifyRecipients, reportDogTagScan } from "./dogTags";
+export {
+	getDogTagPublicInfo,
+	getDogTagProfileBySlug,
+	getDogTagProfileByShortCode,
+	getDogTagNotifyRecipients,
+	reportDogTagScan,
+} from "./dogTags";
+export { platformCompareAssist } from "./platformCompareAi";
 
 // ── Holidays price watches ──
 export { runHolidayPriceSearch, processHolidayPriceWatches } from "./holidays";

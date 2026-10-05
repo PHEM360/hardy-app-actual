@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { CheckSquare, ChevronRight, AlertTriangle } from "lucide-react";
 import { useTasks } from "@/hooks/useTasks";
+import { isTaskOverdue } from "@/lib/tasks";
 import { WIDGET_ACCENT, accentGradient } from "@/lib/widgetAccents";
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -18,7 +19,7 @@ export function TasksWidget() {
   const open = tasks.filter((t) => t.status !== "done");
   const done = tasks.length - open.length;
   const completion = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
-  const overdue = open.filter((t) => t.dueDate && new Date(t.dueDate) < new Date()).length;
+  const overdue = open.filter((t) => isTaskOverdue(t)).length;
   const top3 = open.slice(0, 3);
 
   return (
@@ -45,11 +46,11 @@ export function TasksWidget() {
             <p className="text-3xl font-bold font-display text-foreground leading-none">{open.length}</p>
             <p className="text-sm text-muted-foreground">open</p>
             {overdue > 0 ? (
-              <span className="ml-auto flex items-center gap-1 text-xs font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-full flex-shrink-0">
+              <span className="ml-auto flex items-center gap-1 text-xs font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-md flex-shrink-0">
                 <AlertTriangle className="w-3 h-3" /> {overdue}
               </span>
             ) : tasks.length > 0 ? (
-              <span className="ml-auto text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full flex-shrink-0">
+              <span className="ml-auto text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded-md flex-shrink-0">
                 On track
               </span>
             ) : null}

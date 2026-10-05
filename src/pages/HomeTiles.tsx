@@ -39,7 +39,7 @@ function renderHomeTile(
     return (
       <div
         key={tile.id}
-        className={`home-tile relative min-h-[220px] overflow-hidden border border-border/40 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
+        className={`home-tile relative flex min-h-[220px] flex-col overflow-hidden border border-border/40 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
         style={{ ["--tile-accent" as string]: tile.accent, background: surface.background }}
       >
         {editMode && (

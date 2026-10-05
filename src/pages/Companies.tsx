@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   Building2, Plus, Edit2, Trash2, QrCode, UserPlus, X,
   ImagePlus, ExternalLink, Mail, Phone, Megaphone, LayoutGrid, Settings2, Rocket,
+  FileText, Users, Newspaper, Wallet, BookOpen,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
@@ -15,6 +16,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SharedCategorySettingsPanel } from "@/components/settings/SharedCategorySettingsPanel";
+import { CompanyCommandCentre } from "@/components/companies/CompanyCommandCentre";
+import { CompanyInvoicesPanel } from "@/components/companies/CompanyInvoicesPanel";
+import { CompanyBillsPanel } from "@/components/companies/CompanyBillsPanel";
+import { CompanyReportsPanel } from "@/components/companies/CompanyReportsPanel";
+import { CompanyLeadsPanel } from "@/components/companies/CompanyLeadsPanel";
+import { CompanyContentHub } from "@/components/companies/CompanyContentHub";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { storage } from "@/lib/firebase";
@@ -106,7 +113,7 @@ function SharingSection({ sharing }: { sharing: SharingProps }) {
           {sharedWith.map((uid) => {
             const person = appUsers.find((u) => u.id === uid);
             return (
-              <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-full text-foreground">
+              <span key={uid} className="flex items-center gap-1 text-[11px] font-medium bg-muted px-2 py-1 rounded-md text-foreground">
                 {person?.name || "Unknown user"}
                 <button onClick={() => onUnshare(uid)} className="text-muted-foreground hover:text-destructive">
                   <X className="w-3 h-3" />
@@ -587,7 +594,16 @@ const Companies = () => {
   const { user } = useAuth();
   const appUsers = useAppUsers();
   const navigate = useNavigate();
-  const [view, setView] = useState<"overview" | "settings">("overview");
+  const [params, setParams] = useSearchParams();
+  const view = (["overview", "invoices", "bills", "reports", "leads", "content", "settings"].includes(params.get("view") || "")
+    ? params.get("view")
+    : "overview") as "overview" | "invoices" | "bills" | "reports" | "leads" | "content" | "settings";
+  const setView = (next: typeof view) => {
+    const nextParams = new URLSearchParams(params);
+    if (next === "overview") nextParams.delete("view");
+    else nextParams.set("view", next);
+    setParams(nextParams, { replace: true });
+  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
   const [saving, setSaving] = useState(false);
@@ -715,6 +731,11 @@ const Companies = () => {
           <nav className="sticky top-2 space-y-1 rounded-2xl border border-border/50 bg-card p-1.5 shadow-card">
             {([
               { id: "overview" as const, label: "Overview", icon: LayoutGrid },
+              { id: "invoices" as const, label: "Invoices", icon: FileText },
+              { id: "bills" as const, label: "Bills", icon: Wallet },
+              { id: "reports" as const, label: "Books", icon: BookOpen },
+              { id: "leads" as const, label: "Leads", icon: Users },
+              { id: "content" as const, label: "Content", icon: Newspaper },
               { id: "settings" as const, label: "Settings", icon: Settings2 },
             ]).map((item) => {
               const Icon = item.icon;
@@ -744,6 +765,11 @@ const Companies = () => {
           <div className="flex flex-wrap gap-1.5 lg:hidden">
             {([
               { id: "overview" as const, label: "Overview" },
+              { id: "invoices" as const, label: "Invoices" },
+              { id: "bills" as const, label: "Bills" },
+              { id: "reports" as const, label: "Books" },
+              { id: "leads" as const, label: "Leads" },
+              { id: "content" as const, label: "Content" },
               { id: "settings" as const, label: "Settings" },
             ]).map((item) => {
               const on = view === item.id;
@@ -789,8 +815,54 @@ const Companies = () => {
             </Button>
           )}
         </motion.div>
+      ) : view === "invoices" ? (
+        <div className="space-y-6">
+          {companies.map((company) => (
+            <section key={company.id} className="space-y-3">
+              <h2 className="font-display text-lg font-bold">{company.name}</h2>
+              <CompanyInvoicesPanel company={company} canEdit={canEdit} />
+            </section>
+          ))}
+        </div>
+      ) : view === "bills" ? (
+        <div className="space-y-6">
+          {companies.map((company) => (
+            <section key={company.id} className="space-y-3">
+              <h2 className="font-display text-lg font-bold">{company.name}</h2>
+              <CompanyBillsPanel company={company} canEdit={canEdit} />
+            </section>
+          ))}
+        </div>
+      ) : view === "reports" ? (
+        <div className="space-y-6">
+          {companies.map((company) => (
+            <section key={company.id} className="space-y-3">
+              <h2 className="font-display text-lg font-bold">{company.name}</h2>
+              <CompanyReportsPanel company={company} canEdit={canEdit} />
+            </section>
+          ))}
+        </div>
+      ) : view === "leads" ? (
+        <div className="space-y-6">
+          {companies.map((company) => (
+            <section key={company.id} className="space-y-3">
+              <h2 className="font-display text-lg font-bold">{company.name}</h2>
+              <CompanyLeadsPanel company={company} canEdit={canEdit} />
+            </section>
+          ))}
+        </div>
+      ) : view === "content" ? (
+        <div className="space-y-6">
+          {companies.map((company) => (
+            <section key={company.id} className="space-y-3">
+              <h2 className="font-display text-lg font-bold">{company.name}</h2>
+              <CompanyContentHub company={company} canEdit={canEdit} />
+            </section>
+          ))}
+        </div>
       ) : (
         <div className="space-y-5">
+          <CompanyCommandCentre companies={companies} />
           <button
             type="button"
             onClick={() => navigate("/companies/social")}

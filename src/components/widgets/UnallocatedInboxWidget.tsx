@@ -29,7 +29,7 @@ export function UnallocatedInboxWidget({ compact = false }: { compact?: boolean 
         <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-sm">
           <Inbox className="h-5 w-5" />
           {items.length > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-bold text-foreground shadow-sm">
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-md bg-card px-1 text-[10px] font-bold text-foreground shadow-sm">
               {items.length > 99 ? "99+" : items.length}
             </span>
           )}

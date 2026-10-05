@@ -14,6 +14,11 @@ export function deriveNoteTitle(draft: {
     const first = text.text.trim().split("\n")[0]?.trim();
     if (first) return first.slice(0, 80);
   }
+  const table = blocks.find((block) => block.type === "table" && block.cells.some((row) => row.some((cell) => cell.trim())));
+  if (table?.type === "table") {
+    const first = table.cells.flat().find((cell) => cell.trim());
+    if (first) return first.trim().slice(0, 80);
+  }
 
   const list = blocks.find((block) => block.type === "checklist");
   if (list?.type === "checklist") {

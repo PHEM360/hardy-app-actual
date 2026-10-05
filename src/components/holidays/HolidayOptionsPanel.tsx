@@ -400,7 +400,7 @@ export function HolidayOptionsPanel({
                         {p.hotelName || p.packageLabel || p.sourceName}
                       </p>
                       <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
                         style={{ background: live ? LIVE_TINT : ESTIMATE_TINT }}
                       >
                         {live ? <CheckCircle2 className="h-2.5 w-2.5" /> : <AlertTriangle className="h-2.5 w-2.5" />}

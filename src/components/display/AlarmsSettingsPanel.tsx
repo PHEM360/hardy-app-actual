@@ -34,7 +34,7 @@ function LightPicker({
               key={light.id}
               type="button"
               onClick={() => onToggle(light.id)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 active ? "bg-primary text-primary-foreground" : "bg-background border border-border text-muted-foreground"
               }`}
             >

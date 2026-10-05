@@ -301,7 +301,7 @@ export default function AiHealthAssessment({
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Data in assessment</p>
-            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
               dataCount >= 6 ? "bg-green-100 text-green-700"
               : dataCount >= 3 ? "bg-yellow-100 text-yellow-700"
               : "bg-red-100 text-red-600"
@@ -369,7 +369,7 @@ export default function AiHealthAssessment({
             <div className="flex items-center gap-2">
               <Settings2 className="w-3.5 h-3.5" />
               Add optional details for a more accurate assessment
-              <span className="text-[10px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full font-semibold">
+              <span className="text-[10px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-md font-semibold">
                 improves accuracy
               </span>
             </div>

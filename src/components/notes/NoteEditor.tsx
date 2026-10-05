@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CalendarPlus, CheckSquare, ChevronDown, ExternalLink, Lock, PenLine, Pencil, Settings2, Share2, Shield, StickyNote, Trash2, Unlock,
 } from "lucide-react";
@@ -84,6 +84,7 @@ export function NoteEditor({
   const [showExtras, setShowExtras] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [onDashboard, setOnDashboard] = useState(false);
+  const viewSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categories = noteCategoryOptions(prefs);
 
   useEffect(() => {
@@ -115,15 +116,6 @@ export function NoteEditor({
         width: 520,
         height: 540,
         diagram: starterDiagram,
-      }] : !note && defaultKind === "note" ? [{
-        id: `start-text-${noteId}`,
-        type: "text",
-        x: 18,
-        y: 18,
-        width: 520,
-        height: 500,
-        text: "",
-        textStyle: "body",
       }] : [],
     };
     const migratedBlocks = [...baseCanvas.blocks];
@@ -163,10 +155,15 @@ export function NoteEditor({
         diagram: note.diagram,
       });
     }
+    const normalizedBlocks = migratedBlocks.map((block) => {
+      if (block.type !== "text" || block.boxed !== undefined) return block;
+      const paperLike = block.id.startsWith("start-text-") || (block.x <= 24 && block.y <= 24 && block.width >= 400);
+      return { ...block, boxed: !paperLike };
+    });
     const initialCanvas: NoteCanvas = {
       ...baseCanvas,
-      height: Math.max(baseCanvas.height, ...migratedBlocks.map((block) => block.y + block.height + 80)),
-      blocks: migratedBlocks,
+      height: Math.max(baseCanvas.height, ...normalizedBlocks.map((block) => block.y + block.height + 80)),
+      blocks: normalizedBlocks,
     };
     setDraft(note
       ? { ...note, canvas: initialCanvas }
@@ -188,8 +185,9 @@ export function NoteEditor({
   const extrasOpen = paperEditable && showExtras;
   const heading = deriveNoteTitle(draft);
   const isDiagramNote = !!canvasDiagram;
+  const isChecklistNote = !!canvasChecklist || draft.kind === "checklist" || draft.kind === "task";
   const sheetHeading = note
-    ? (isEditing ? "Edit note" : "Note")
+    ? (isEditing ? "Edit note" : isChecklistNote ? "Checklist" : isDiagramNote ? "Diagram" : "Note")
     : isDiagramNote
       ? "New diagram"
       : defaultKind === "checklist" || defaultKind === "task"
@@ -197,6 +195,32 @@ export function NoteEditor({
         : defaultKind === "drawing"
           ? "New sketch"
           : "New note";
+
+  const searchableFromCanvas = (canvas: NoteCanvas) => canvas.blocks
+    .flatMap((block) => {
+      if (block.type === "text") return [block.text];
+      if (block.type === "table") return block.cells.flat();
+      return [];
+    })
+    .join("\n\n")
+    .trim();
+
+  const persistViewCanvas = (canvas: NoteCanvas) => {
+    setDraft((current) => ({ ...current, canvas }));
+    if (!note || !canEdit || isEditing) return;
+    if (viewSaveTimer.current) clearTimeout(viewSaveTimer.current);
+    viewSaveTimer.current = setTimeout(() => {
+      const checklist = canvas.blocks.find((block) => block.type === "checklist");
+      const diagram = canvas.blocks.find((block) => block.type === "diagram");
+      void onSave({
+        title: deriveNoteTitle({ ...draft, canvas }),
+        body: searchableFromCanvas(canvas),
+        canvas,
+        checklist: checklist?.type === "checklist" ? checklist.items : [],
+        diagram: diagram?.type === "diagram" ? diagram.diagram : null,
+      });
+    }, 280);
+  };
 
   const reveal = async () => {
     if (!note?.cipher) {
@@ -280,11 +304,7 @@ export function NoteEditor({
     setBusy(true);
     try {
       const canvas = draft.canvas ?? { version: 1 as const, height: 520, blocks: [] };
-      const searchableBody = canvas.blocks
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("\n\n")
-        .trim();
+      const searchableBody = searchableFromCanvas(canvas);
       const checklist = canvas.blocks.find((block) => block.type === "checklist");
       const diagram = canvas.blocks.find((block) => block.type === "diagram");
       await onSave({
@@ -431,7 +451,7 @@ export function NoteEditor({
                         key={category.id}
                         type="button"
                         onClick={() => setDraft((current) => ({ ...current, category: category.id }))}
-                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${draft.category === category.id ? "border-foreground" : "border-transparent"}`}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${draft.category === category.id ? "border-foreground" : "border-transparent"}`}
                         style={{ background: `color-mix(in srgb, ${category.swatch} 45%, hsl(var(--card)))` }}
                       >
                         {category.label}
@@ -525,10 +545,11 @@ export function NoteEditor({
             <PaperNoteCanvasEditor
               canvas={draft.canvas ?? { version: 1, height: 520, blocks: [] }}
               canEdit={paperEditable}
-              showTools={extrasOpen}
+              canInteract={canEdit && !locked}
+              showTools={paperEditable}
               ownerId={ownerId}
               noteId={noteId}
-              onChange={(canvas) => setDraft((current) => ({ ...current, canvas }))}
+              onChange={(canvas) => persistViewCanvas(canvas)}
             />
 
             {paperEditable && (

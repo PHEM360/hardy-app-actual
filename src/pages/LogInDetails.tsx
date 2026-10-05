@@ -280,7 +280,7 @@ function CredentialCard({
           </span>
         </span>
         {credential.individualShares.length > 0 && canShare && <Share2 className="h-3.5 w-3.5 text-primary" />}
-        {credential.category && <span className="rounded-full bg-muted px-2 py-1 text-[9px] font-semibold">{credential.category}</span>}
+        {credential.category && <span className="rounded-md bg-muted px-2 py-1 text-[9px] font-semibold">{credential.category}</span>}
         {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
 
@@ -1130,7 +1130,7 @@ export default function LogInDetails() {
               <Label>Category</Label>
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORIES.map((item) => (
-                  <button key={item} type="button" onClick={() => setForm((value) => ({ ...value, category: value.category === item ? "" : item }))} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${form.category === item ? "bg-gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  <button key={item} type="button" onClick={() => setForm((value) => ({ ...value, category: value.category === item ? "" : item }))} className={`rounded-md px-2.5 py-1 text-[10px] font-semibold ${form.category === item ? "bg-gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                     {item}
                   </button>
                 ))}

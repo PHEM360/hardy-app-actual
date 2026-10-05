@@ -62,7 +62,7 @@ export default function Display() {
         <button
           type="button"
           onClick={restartPairing}
-          className="mt-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+          className="mt-2 rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
         >
           Link again
         </button>

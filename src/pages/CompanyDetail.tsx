@@ -5,12 +5,17 @@ import {
   ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Upload, ExternalLink,
   Key, Briefcase, Receipt, BarChart3, Info, Settings2, Shield,
   TrendingUp, FileText, Pencil, Download, ChevronRight, History, ChevronDown, ChevronUp, Camera,
-  Megaphone, Repeat, Folder,
+  Megaphone, Repeat, Folder, Users, Newspaper, ScrollText, Wallet, BookOpen,
 } from "lucide-react";
 import DocumentScannerSheet, { ScanModeChooser } from "@/components/DocumentScannerSheet";
 import CompanyLogoMark from "@/components/companies/CompanyLogoMark";
 import CompanyMarketingTab from "@/components/companies/CompanyMarketingTab";
 import { CompanyDocumentsPanel } from "@/components/companies/CompanyDocumentsPanel";
+import { CompanyInvoicesPanel } from "@/components/companies/CompanyInvoicesPanel";
+import { CompanyBillsPanel } from "@/components/companies/CompanyBillsPanel";
+import { CompanyReportsPanel } from "@/components/companies/CompanyReportsPanel";
+import { CompanyLeadsPanel } from "@/components/companies/CompanyLeadsPanel";
+import { CompanyContentHub } from "@/components/companies/CompanyContentHub";
 import { ReceiptLightbox, ReceiptManageCard, ReceiptThumb } from "@/components/receipts/ReceiptPreview";
 import { alignedReceiptNames, type ReceiptSource } from "@/lib/receipts";
 import { toast } from "sonner";
@@ -49,6 +54,11 @@ import { CompanyLogin, CompanyService, CompanyExpense, CompanyInsurance, Company
 const TABS = [
   { id: "overview",    label: "Overview",    icon: Info },
   { id: "finance",     label: "Finance",     icon: TrendingUp },
+  { id: "invoices",    label: "Invoices",    icon: ScrollText },
+  { id: "bills",       label: "Bills",       icon: Wallet },
+  { id: "reports",     label: "Books",       icon: BookOpen },
+  { id: "leads",       label: "Leads",       icon: Users },
+  { id: "content",     label: "Content",     icon: Newspaper },
   { id: "marketing",   label: "Social & Ads", icon: Megaphone },
   { id: "logins",      label: "Logins",      icon: Key },
   { id: "services",    label: "Services",    icon: Briefcase },
@@ -155,7 +165,7 @@ function LoginsTab({ companyId }: { companyId: string }) {
         <DialogContent aria-describedby={undefined} className="max-w-sm mx-4">
           <DialogHeader><DialogTitle className="font-display">{edit ? "Edit Login" : "Add Login"}</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-1">
-            <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Xero, Companies House" className="h-9 rounded-xl" /></div>
+            <div className="space-y-1"><Label>Service *</Label><Input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="e.g. Companies House, Tide" className="h-9 rounded-xl" /></div>
             <div className="space-y-1"><Label>Username / Email *</Label><Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} className="h-9 rounded-xl" /></div>
             <div className="space-y-1"><Label>Password</Label><Input type="text" value={form.password || ""} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="h-9 rounded-xl font-mono" /></div>
             <div className="space-y-1"><Label>URL</Label><Input value={form.url || ""} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://" className="h-9 rounded-xl" /></div>
@@ -560,15 +570,15 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="text-sm font-semibold text-card-foreground">{exp.description}</p>
                     {exp.recurrence?.active && (
-                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                      <span className="flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
                         <Repeat className="h-2.5 w-2.5" /> {exp.recurrence.frequency}
                       </span>
                     )}
                     {exp.recurrence && !exp.recurrence.active && (
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">Cancelled</span>
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">Cancelled</span>
                     )}
                     {exp.recurringSourceId && (
-                      <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                      <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
                         <Repeat className="h-2.5 w-2.5" /> auto
                       </span>
                     )}
@@ -731,7 +741,7 @@ function ExpensesTab({ companyId }: { companyId: string }) {
                         key={c.id}
                         type="button"
                         onClick={() => setAssignCompanyIds((prev) => active ? prev.filter((x) => x !== c.id) : [...prev, c.id!])}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
                           active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
                         }`}
                       >
@@ -1597,7 +1607,7 @@ function InsuranceTab({ companyId }: { companyId: string }) {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {p.renewalDate && (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${urgent ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
                         {label}
                       </span>
                     )}
@@ -1906,14 +1916,14 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
           <button
             onClick={() => setSelectedEntity("consolidated")}
-            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === "consolidated" ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === "consolidated" ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
             style={selectedEntity === "consolidated" ? { backgroundColor: company.color } : {}}
           >
             All Entities
           </button>
           <button
             onClick={() => setSelectedEntity(companyId)}
-            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === companyId ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+            className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === companyId ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
             style={selectedEntity === companyId ? { backgroundColor: company.color } : {}}
           >
             {company.emoji} {company.name}
@@ -1922,7 +1932,7 @@ function FinanceTab({ companyId, company, allCompanies, updateCompany }: {
             <button
               key={child.id}
               onClick={() => setSelectedEntity(child.id!)}
-              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${selectedEntity === child.id ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
+              className={`flex-shrink-0 text-[11px] font-medium px-3 py-1.5 rounded-md border transition-colors ${selectedEntity === child.id ? "border-transparent text-white" : "border-border text-muted-foreground bg-muted/40"}`}
               style={selectedEntity === child.id ? { backgroundColor: child.color } : {}}
             >
               {child.emoji} {child.name}
@@ -2159,7 +2169,7 @@ function TaxTab({ companyId, company, allCompanies }: {
             <div key={r.id} className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{r.taxYear}</span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-primary/10 text-primary">{r.taxYear}</span>
                   {r.filingDate && (
                     <span className="text-[10px] text-muted-foreground">Filed {new Date(r.filingDate).toLocaleDateString("en-GB")}</span>
                   )}
@@ -2243,7 +2253,8 @@ function TaxTab({ companyId, company, allCompanies }: {
 const CompanyDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { scopeUserId } = useSharedScope("companies");
+  const { scopeUserId, permission } = useSharedScope("companies");
+  const canEdit = permission === "edit";
   const { companies, loading, updateCompany } = useCompanies(scopeUserId ?? undefined);
   const [activeTab, setActiveTab] = useState("overview");
   // Tabs mount lazily on first visit, then stay mounted (hidden) rather than
@@ -2359,6 +2370,11 @@ const CompanyDetail = () => {
           <div>
             {renderTab("overview", <OverviewTab company={company} onOpenMarketing={() => setActiveTab("marketing")} />)}
             {renderTab("finance", <FinanceTab companyId={id!} company={company} allCompanies={companies} updateCompany={updateCompany} />)}
+            {renderTab("invoices", <CompanyInvoicesPanel company={company} canEdit={canEdit} />)}
+            {renderTab("bills", <CompanyBillsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("reports", <CompanyReportsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("leads", <CompanyLeadsPanel company={company} canEdit={canEdit} />)}
+            {renderTab("content", <CompanyContentHub company={company} canEdit={canEdit} />)}
             {renderTab("marketing", (
               <div className="space-y-3">
                 <button

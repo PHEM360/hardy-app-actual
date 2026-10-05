@@ -51,10 +51,10 @@ export function bpCategory(sys: number, dia: number): { label: string; colour: s
 
 function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   return (
-    <div className="flex gap-0.5 p-1 bg-muted/60 rounded-full border border-border/30">
+    <div className="flex gap-0.5 p-1 bg-muted/60 rounded-lg border border-border/30">
       {PERIODS.map((p) => (
         <button key={p.value} onClick={() => onChange(p.value)}
-          className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all ${value === p.value ? "bg-card shadow-sm text-foreground ring-1 ring-border/40" : "text-muted-foreground hover:text-foreground"}`}>
+          className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${value === p.value ? "bg-card shadow-sm text-foreground ring-1 ring-border/40" : "text-muted-foreground hover:text-foreground"}`}>
           {p.label}
         </button>
       ))}
@@ -64,10 +64,10 @@ function PeriodPicker({ value, onChange }: { value: Period; onChange: (p: Period
 
 function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v: "chart" | "table") => void }) {
   return (
-    <div className="flex gap-0.5 p-1 bg-muted/60 rounded-full border border-border/30">
+    <div className="flex gap-0.5 p-1 bg-muted/60 rounded-lg border border-border/30">
       {(["chart", "table"] as const).map((v) => (
         <button key={v} onClick={() => onChange(v)}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold transition-all ${view === v ? "bg-card shadow-sm text-foreground ring-1 ring-border/40" : "text-muted-foreground"}`}>
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${view === v ? "bg-card shadow-sm text-foreground ring-1 ring-border/40" : "text-muted-foreground"}`}>
           {v === "chart" ? <LineChartIcon className="w-3 h-3" /> : <Table2 className="w-3 h-3" />}
           {v === "chart" ? "Chart" : "Table"}
         </button>
@@ -381,10 +381,10 @@ export default function HealthMetrics({ scopeUserId }: { scopeUserId?: string } 
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Body Measurements</h3>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex gap-0.5 p-0.5 bg-muted/60 rounded-full border border-border/30">
+            <div className="flex gap-0.5 p-0.5 bg-muted/60 rounded-lg border border-border/30">
               {(["cm", "in"] as const).map((u) => (
                 <button key={u} onClick={() => setUnit(u)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all ${unit === u ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
+                  className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold transition-all ${unit === u ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
                   {u}
                 </button>
               ))}
@@ -610,7 +610,7 @@ export default function HealthMetrics({ scopeUserId }: { scopeUserId?: string } 
                 className="p-4 rounded-xl bg-card border border-border/50 shadow-soft">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold">{new Date(rec.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
-                  <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">{rec.unitsRight + rec.unitsLeft}u total</span>
+                  <span className="text-[10px] bg-primary/10 text-primary rounded-md px-2 py-0.5 font-medium">{rec.unitsRight + rec.unitsLeft}u total</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <div className="p-2 rounded-lg bg-muted/40 text-center"><p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Right</p><p className="text-sm font-bold font-display">{rec.unitsRight}u</p></div>

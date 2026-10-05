@@ -197,7 +197,7 @@ export default function Health() {
     if (val === null || val === 0) return null;
     const pos = val > 0;
     return (
-      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pos ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"}`}>
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${pos ? "bg-red-100 text-red-600" : "bg-green-100 text-green-700"}`}>
         {pos ? "+" : ""}{val.toFixed(1)}{unit}
       </span>
     );
@@ -276,7 +276,7 @@ export default function Health() {
                   <button
                     key={key}
                     onClick={() => saveProfile({ [key]: !profile[key] })}
-                    className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                    className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border font-medium transition-colors ${
                       profile[key]
                         ? "bg-primary/10 border-primary/30 text-primary"
                         : "bg-muted/40 border-border/40 text-muted-foreground"
@@ -384,7 +384,7 @@ export default function Health() {
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Active Medications</p>
                     <div className="flex flex-wrap gap-2">
                       {activeMeds.map((m) => (
-                        <span key={m.id} className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border"
+                        <span key={m.id} className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border"
                           style={{ borderColor: m.color + "60", backgroundColor: m.color + "18", color: m.color }}>
                           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
                           {m.name} {m.dose}{m.unit}

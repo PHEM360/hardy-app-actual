@@ -616,7 +616,7 @@ export default function DocumentsSection() {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
-        <Button size="sm" className="rounded-full gap-1" onClick={() => { setEditTarget(null); setAddOpen(true); }}>
+        <Button size="sm" className="rounded-lg gap-1" onClick={() => { setEditTarget(null); setAddOpen(true); }}>
           <Plus className="w-4 h-4" /> Add
         </Button>
         {/* View toggle */}
@@ -643,7 +643,7 @@ export default function DocumentsSection() {
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
           <button
             onClick={() => setFilterCat("all")}
-            className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${filterCat === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-muted hover:border-primary hover:text-primary"}`}
+            className={`shrink-0 px-3 py-1 rounded-md text-xs font-semibold transition-colors border ${filterCat === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-muted hover:border-primary hover:text-primary"}`}
           >
             All ({documents.length})
           </button>
@@ -654,7 +654,7 @@ export default function DocumentsSection() {
               <button
                 key={cat}
                 onClick={() => setFilterCat(cat)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${filterCat === cat ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-muted hover:border-primary hover:text-primary"}`}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors border ${filterCat === cat ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-muted hover:border-primary hover:text-primary"}`}
               >
                 <Icon className="w-3 h-3" />
                 {meta.label} ({counts[cat]})

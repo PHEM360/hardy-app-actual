@@ -1,12 +1,13 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CheckSquare, Plus, Trash2, Sun, Circle, CheckCircle2,
   Clock, Settings2, X, Flag,
   LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
-  Building2,
+  Building2, Search, AlertTriangle, Activity,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -19,21 +20,42 @@ import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
 import { useSharedScope } from "@/hooks/useSharedScope";
-import { Task, TaskPriority, TaskStatus, TaskUrgency, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
+import { Task, TaskPriority, TaskStatus, TaskSettings, TaskCustomField, TaskSubtask } from "@/types/app";
+import {
+  defaultTaskDraft,
+  filterTasks,
+  formatTaskDue,
+  isTaskOverdue,
+  newSubtaskId,
+  sortTasks,
+  TASK_TRACKING,
+  taskTrackingInfo,
+  type TaskFilter,
+} from "@/lib/tasks";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string; hex: string }[] = [
-  { value: "critical", label: "Critical", color: "text-red-600",    bg: "bg-red-100 text-red-700",      hex: "#ef4444" },
+  { value: "critical", label: "Critical", color: "text-red-600",    bg: "bg-red-100 text-red-700",      hex: "#B4443C" },
   { value: "high",     label: "High",     color: "text-orange-500", bg: "bg-orange-100 text-orange-700", hex: "#f97316" },
   { value: "medium",   label: "Medium",   color: "text-yellow-600", bg: "bg-yellow-100 text-yellow-700", hex: "#eab308" },
-  { value: "low",      label: "Low",      color: "text-green-600",  bg: "bg-green-100 text-green-700",   hex: "#22c55e" },
+  { value: "low",      label: "Low",      color: "text-green-600",  bg: "bg-green-100 text-green-700",   hex: "#2E7D5B" },
 ];
 
 const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
   { value: "todo",        label: "To Do",       icon: Circle, color: "text-muted-foreground", hex: "#94a3b8" },
   { value: "in_progress", label: "In Progress", icon: Clock,  color: "text-blue-500",         hex: "#3b82f6" },
-  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#22c55e" },
+  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#2E7D5B" },
 ];
 
 // Urgency levels cycle: none → amber → red
@@ -49,17 +71,60 @@ function urgencyDotStyle(u: UrgencyLevel): string {
   return "bg-muted-foreground/30";
 }
 
-type ColourBy = "none" | "priority" | "status" | "category" | "company";
+/** Solid chip showing how a task is going. Renders nothing when tracking is not set. */
+function TrackingChip({ task, className = "" }: { task: Pick<Task, "tracking">; className?: string }) {
+  const info = taskTrackingInfo(task.tracking);
+  if (!info) return null;
+  return (
+    <span className={`flex-shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold text-white ${className}`} style={{ background: info.hex }}>
+      {info.label}
+    </span>
+  );
+}
+
+type ColourBy = "none" | "priority" | "status" | "tracking" | "category" | "company";
 
 const COLOUR_BY_OPTIONS: { value: ColourBy; label: string }[] = [
   { value: "none",     label: "No colour" },
   { value: "priority", label: "Priority" },
   { value: "status",   label: "Status" },
+  { value: "tracking", label: "Tracking" },
   { value: "category", label: "Category" },
   { value: "company",  label: "Company" },
 ];
 
-const BASE_FILTER_TABS = ["All", "Today", "Priority", "Status", "Category", "Company"];
+const VIEW_STORAGE = "hardy-tasks-view";
+const COLOUR_STORAGE = "hardy-tasks-colour";
+
+type TaskView = "list" | "tile" | "kanban" | "company";
+
+function readStoredView(): TaskView {
+  try {
+    const value = localStorage.getItem(VIEW_STORAGE);
+    if (value === "list" || value === "tile" || value === "kanban" || value === "company") return value;
+  } catch {
+    // ignore
+  }
+  return "list";
+}
+
+function readStoredColour(): ColourBy {
+  try {
+    const value = localStorage.getItem(COLOUR_STORAGE);
+    if (value === "none" || value === "priority" || value === "status" || value === "tracking" || value === "category" || value === "company") return value;
+  } catch {
+    // ignore
+  }
+  return "none";
+}
+
+function railBtnClass(on: boolean) {
+  return `relative flex w-full items-center gap-2 overflow-hidden rounded-xl px-2 py-2 text-left transition sm:px-3 ${
+    on
+      ? "bg-gradient-primary text-primary-foreground shadow-sm"
+      : "text-foreground hover:bg-card"
+  }`;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,25 +140,8 @@ function UrgencyDot({ urgency, done, onClick }: { urgency: UrgencyLevel; done: b
   return (
     <button
       onClick={onClick}
-      title={done ? "Done" : urgency === "none" ? "No urgency — click to set amber" : urgency === "amber" ? "Amber urgency — click for red" : "Red urgency — click to clear"}
+      title={done ? "Done" : urgency === "none" ? "No urgency. Click to set amber." : urgency === "amber" ? "Amber urgency. Click for red." : "Red urgency. Click to clear."}
       className={`w-3 h-3 rounded-full flex-shrink-0 transition-all duration-150 hover:scale-125 ${dotColour}`}
-    />
-  );
-}
-
-// Status circle — clicking cycles todo ↔ in_progress (done handled by checkbox)
-function StatusCircle({ status, onClick }: { status: TaskStatus; onClick: (e: React.MouseEvent) => void }) {
-  if (status === "done") return null;
-  const isInProgress = status === "in_progress";
-  return (
-    <button
-      onClick={onClick}
-      title={isInProgress ? "In Progress — click for Not Started" : "Not Started — click for In Progress"}
-      className={`w-3.5 h-3.5 rounded-full flex-shrink-0 border-2 transition-all duration-150 hover:scale-125 ${
-        isInProgress
-          ? "bg-orange-400 border-orange-400 shadow-[0_0_4px_1px_rgba(251,146,60,0.5)]"
-          : "bg-red-400 border-red-400 shadow-[0_0_4px_1px_rgba(248,113,113,0.4)]"
-      }`}
     />
   );
 }
@@ -122,6 +170,9 @@ function getTaskColour(task: Task, colourBy: ColourBy, settings: TaskSettings): 
   if (colourBy === "status") {
     const s = STATUSES.find((x) => x.value === task.status);
     return s?.hex ?? "";
+  }
+  if (colourBy === "tracking") {
+    return taskTrackingInfo(task.tracking)?.hex ?? "";
   }
   if (colourBy === "category") {
     return settings.categoryColors?.[task.category] ?? "";
@@ -244,18 +295,41 @@ function TaskDetailSheet({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Tracking: one tap to say how the task is going */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/60">How is it going?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {TASK_TRACKING.map((t) => {
+                const on = task.tracking === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => task.id && void updateTask(task.id, { tracking: on ? ("" as never) : t.value })}
+                    className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on ? "btn-edge text-white" : "bg-card text-foreground"}`}
+                    style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+                    aria-pressed={on}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Meta chips */}
           <div className="flex flex-wrap gap-2">
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${priority.bg}`}>{priority.label}</span>
-            <span className={`text-xs px-2.5 py-1 rounded-full bg-muted font-medium ${status.color}`}>{status.label}</span>
-            {task.category && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.category}</span>}
-            {task.company && <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">{task.company}</span>}
+            <span className={`text-xs px-2.5 py-1 rounded-md font-medium ${priority.bg}`}>{priority.label}</span>
+            <span className={`text-xs px-2.5 py-1 rounded-md bg-muted font-medium ${status.color}`}>{status.label}</span>
+            <TrackingChip task={task} className="!px-2.5 !py-1 !text-xs" />
+            {task.category && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.category}</span>}
+            {task.company && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.company}</span>}
             {task.dueDate && (
-              <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">
+              <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">
                 Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             )}
-            {task.isToday && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">Today</span>}
+            {task.isToday && <span className="text-xs px-2.5 py-1 rounded-md bg-amber-100 text-amber-700 font-medium">Today</span>}
           </div>
 
           {/* Tags */}
@@ -264,7 +338,7 @@ function TaskDetailSheet({
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tags</p>
               <div className="flex flex-wrap gap-1.5">
                 {task.tags.map((t) => (
-                  <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{t}</span>
+                  <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-md text-muted-foreground">{t}</span>
                 ))}
               </div>
             </div>
@@ -391,7 +465,7 @@ function TaskDetailSheet({
                           patchSub(sub.id, { status: next.value, done: next.value === "done" });
                         }}
                         title="Cycle status"
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 border transition-colors ${subStatusMeta.color} bg-muted/60 border-border/40 hover:border-border`}
                       >
                         {subStatusMeta.label}
                       </button>
@@ -404,7 +478,7 @@ function TaskDetailSheet({
                           patchSub(sub.id, { priority: next.value });
                         }}
                         title="Cycle priority"
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 border border-transparent hover:border-border/50 transition-colors ${subPriority.bg}`}
                       >
                         {subPriority.label}
                       </button>
@@ -465,7 +539,7 @@ function TaskDetailSheet({
                           <input
                             type="date"
                             value={sub.dueDate ?? ""}
-                            onChange={(e) => patchSub(sub.id, { dueDate: e.target.value || undefined })}
+                            onChange={(e) => patchSub(sub.id, { dueDate: e.target.value || "" })}
                             className="text-xs bg-muted/40 border border-border/40 rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/50 text-foreground"
                           />
                         </div>
@@ -506,7 +580,7 @@ function TaskDetailSheet({
                           e.preventDefault();
                           const title = quickAddInput.trim();
                           if (!title) return;
-                          const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
+                          const newSub: TaskSubtask = { id: newSubtaskId(), title, done: false, status: "todo", priority: "medium" };
                           updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
                           setExpandedSubId(newSub.id);
                           setQuickAddInput("");
@@ -523,7 +597,7 @@ function TaskDetailSheet({
                       onClick={() => {
                         const title = quickAddInput.trim();
                         if (!title) return;
-                        const newSub: TaskSubtask = { id: Date.now().toString(), title, done: false, status: "todo", priority: "medium" };
+                        const newSub: TaskSubtask = { id: newSubtaskId(), title, done: false, status: "todo", priority: "medium" };
                         updateTask(task.id!, { subtasks: [...(task.subtasks ?? []), newSub] });
                         setExpandedSubId(newSub.id);
                         setQuickAddInput("");
@@ -610,21 +684,7 @@ function TaskDetailSheet({
 
 // ─── Task Form ────────────────────────────────────────────────────────────────
 
-const EMPTY_TASK: Omit<Task, "id" | "createdAt" | "updatedAt"> = {
-  title: "",
-  description: "",
-  notes: "",
-  priority: "medium",
-  status: "todo",
-  urgency: "none",
-  category: "Admin",
-  company: "",
-  dueDate: "",
-  isToday: false,
-  tags: [],
-  subtasks: [],
-  customFields: {},
-};
+const EMPTY_TASK: Omit<Task, "id" | "createdAt" | "updatedAt"> = defaultTaskDraft("Admin");
 
 function TaskForm({
   initial,
@@ -662,7 +722,7 @@ function TaskForm({
   const addSubtask = () => {
     const t = subtaskInput.trim();
     if (!t) return;
-    const sub: TaskSubtask = { id: Date.now().toString(), title: t, done: false };
+    const sub: TaskSubtask = { id: newSubtaskId(), title: t, done: false };
     set("subtasks", [...(form.subtasks ?? []), sub]);
     setSubtaskInput("");
   };
@@ -718,6 +778,36 @@ function TaskForm({
         </div>
       </div>
 
+      {/* Tracking: how the task is going, separate from its status */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracking</Label>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => set("tracking", "" as never)}
+            className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${
+              !form.tracking ? "btn-edge border-foreground bg-foreground text-background" : "border-foreground/20 bg-card text-foreground hover:border-foreground/50"
+            }`}
+          >
+            Not set
+          </button>
+          {TASK_TRACKING.map((t) => {
+            const on = form.tracking === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => set("tracking", t.value)}
+                className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on ? "btn-edge text-white" : "bg-card text-foreground"}`}
+                style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Category + Due Date */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -748,7 +838,7 @@ function TaskForm({
       {settings.companies.length > 0 && (
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Company</Label>
-          <Select value={form.company || ""} onValueChange={(v) => set("company", v === "__none__" ? "" : v)}>
+          <Select value={form.company || "__none__"} onValueChange={(v) => set("company", v === "__none__" ? "" : v)}>
             <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="None" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">None</SelectItem>
@@ -771,9 +861,10 @@ function TaskForm({
       {settings.customFields.map((field) => (
         <div key={field.id} className="space-y-1.5">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{field.label}</Label>
-          <Select value={form.customFields?.[field.id] ?? ""} onValueChange={(v) => setCustomField(field.id, v)}>
+          <Select value={form.customFields?.[field.id] || "__none__"} onValueChange={(v) => setCustomField(field.id, v === "__none__" ? "" : v)}>
             <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder={`Select ${field.label}…`} /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
               {field.options.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -790,7 +881,7 @@ function TaskForm({
         {form.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {form.tags.map((t) => (
-              <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-full">
+              <span key={t} className="flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded-md">
                 {t}
                 <button onClick={() => set("tags", form.tags.filter((x) => x !== t))} className="text-muted-foreground hover:text-foreground">×</button>
               </span>
@@ -838,43 +929,10 @@ function TaskForm({
 
       <div className="flex gap-2 pt-4 mt-2 border-t border-border/40">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-10 rounded-xl">Cancel</Button>
-        <Button onClick={() => onSave({ ...form, category: safeCategory })} disabled={!form.title.trim() || saving} className="flex-1 h-10 rounded-xl bg-gradient-primary">
+        <Button onClick={() => onSave({ ...form, category: safeCategory, notes: form.notes || form.description })} disabled={!form.title.trim() || saving} className="flex-1 h-10 rounded-xl bg-gradient-primary">
           {saving ? "Saving…" : "Save Task"}
         </Button>
       </div>
-    </div>
-  );
-}
-
-// ─── SubFilter ────────────────────────────────────────────────────────────────
-
-function SubFilter({ items, active, onToggle, onClear }: {
-  items: { value: string; label: string }[];
-  active: string[];
-  onToggle: (v: string) => void;
-  onClear: () => void;
-}) {
-  const allSelected = active.length === 0;
-  return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 no-scrollbar">
-      <button
-        onClick={onClear}
-        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${allSelected ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
-      >
-        All
-      </button>
-      {items.map((item) => {
-        const isActive = active.includes(item.value);
-        return (
-          <button
-            key={item.value}
-            onClick={() => onToggle(item.value)}
-            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${isActive ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
-          >
-            {item.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -883,13 +941,13 @@ function SubFilter({ items, active, onToggle, onClear }: {
 
 const COLOUR_PRESETS = [
   // Indigo / Blue / Violet
-  "#6366f1", "#4f46e5", "#3b82f6", "#0ea5e9", "#8b5cf6", "#7c3aed", "#a78bfa",
+  "#3D5A99", "#4f46e5", "#3b82f6", "#0ea5e9", "#8b5cf6", "#7c3aed", "#a78bfa",
   // Green / Teal / Cyan
-  "#22c55e", "#16a34a", "#14b8a6", "#0d9488", "#06b6d4", "#10b981",
+  "#2E7D5B", "#16a34a", "#14b8a6", "#0d9488", "#06b6d4", "#10b981",
   // Amber / Orange / Red
-  "#f59e0b", "#f97316", "#ef4444", "#dc2626", "#fb7185", "#e11d48",
+  "#f59e0b", "#f97316", "#B4443C", "#9B2C2C", "#fb7185", "#e11d48",
   // Pink / Rose / Fuchsia
-  "#ec4899", "#db2777", "#d946ef", "#c026d3", "#a21caf",
+  "#ec4899", "#db2777", "#d946ef", "#c026d3", "#4A2A52",
   // Neutral
   "#64748b", "#475569", "#374151", "#1e293b",
 ];
@@ -907,7 +965,7 @@ function ColourPicker({ value, onChange, onClose }: { value: string; onChange: (
       ))}
       <input
         type="color"
-        value={value || "#6366f1"}
+        value={value || "#3D5A99"}
         onChange={(e) => onChange(e.target.value)}
         className="w-6 h-6 rounded-full cursor-pointer border-0 bg-transparent"
         title="Custom colour"
@@ -1042,7 +1100,7 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
             <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/40">
               <div>
                 <p className="text-xs font-medium text-card-foreground">Show completed tasks</p>
-                <p className="text-[10px] text-muted-foreground">Off by default — completed tasks are hidden</p>
+                <p className="text-[10px] text-muted-foreground">Off by default. Completed tasks stay hidden.</p>
               </div>
               <Switch
                 checked={draft.showCompleted ?? false}
@@ -1059,7 +1117,7 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
                 <button
                   key={o.value}
                   onClick={() => setColourBy(o.value)}
-                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-150 border ${
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150 border ${
                     colourBy === o.value
                       ? "bg-primary text-primary-foreground border-transparent shadow-sm"
                       : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
@@ -1201,8 +1259,6 @@ function TaskSettingsDialog({ open, onOpenChange, settings, onSave, colourBy, se
 
 // ─── View Types ───────────────────────────────────────────────────────────────
 
-type TaskView = "list" | "tile" | "kanban" | "company";
-
 // ─── Task Card (List view) ────────────────────────────────────────────────────
 
 function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, settings, colourBy, selected = false }: {
@@ -1215,9 +1271,10 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
   const isHighPriority = task.priority === "critical" || task.priority === "high";
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
-  const hasNotes = !!task.notes?.trim();
+  const hasNotes = !!task.notes?.trim() || !!task.description?.trim();
   const accentColour = getTaskColour(task, colourBy, settings);
   const catColour = settings.categoryColors?.[task.category];
+  const overdue = isTaskOverdue(task);
 
   const toggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1241,17 +1298,28 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
           {isHighPriority && !isDone && (
             <Flag className={`w-3 h-3 flex-shrink-0 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />
           )}
+          {task.status === "in_progress" && !isDone && (
+            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-sky-500/15 text-sky-800 dark:text-sky-200 flex-shrink-0">Doing</span>
+          )}
+          {!isDone && <TrackingChip task={task} />}
+          {overdue && (
+            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-red-500/15 text-red-700 dark:text-red-300 flex-shrink-0">Overdue</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
           {task.category && (
             catColour ? (
-              <span className="text-[10px] font-semibold px-1.5 py-px rounded-full flex-shrink-0" style={{ background: `${catColour}22`, color: catColour }}>{task.category}</span>
+              <span className="text-[10px] font-semibold px-1.5 py-px rounded-md flex-shrink-0" style={{ background: `${catColour}22`, color: catColour }}>{task.category}</span>
             ) : (
               <span className="text-[10px] text-muted-foreground flex-shrink-0">{task.category}</span>
             )
           )}
           {task.company && <span className="text-[10px] text-muted-foreground/70 truncate">· {task.company}</span>}
-          {task.dueDate && <span className="text-[10px] text-muted-foreground/70 flex-shrink-0">· {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+          {task.dueDate && (
+            <span className={`text-[10px] flex-shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground/70"}`}>
+              · {formatTaskDue(task.dueDate)}
+            </span>
+          )}
           {subtaskCount > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70 flex-shrink-0">
               <ListChecks className="w-2.5 h-2.5" />
@@ -1265,18 +1333,20 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Toggle Today"><Sun className="w-3.5 h-3.5" /></button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-        </div>
-        {task.isToday && <Sun className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-        <StatusCircle
-          status={task.status}
-          onClick={(e) => {
-            e.stopPropagation();
-            onStatusChange(task.status === "in_progress" ? "todo" : "in_progress");
-          }}
-        />
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleToday(); }}
+          className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}
+          title={task.isToday ? "Remove from Today" : "Add to Today"}
+        >
+          <Sun className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
+          title="Delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
         <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
       </div>
     </motion.div>
@@ -1328,30 +1398,29 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
         <div className="flex items-start gap-1.5 mb-2">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-xs font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+          {!isDone && <TrackingChip task={task} />}
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5">
           {task.category && (() => {
             const catColour = settings.categoryColors?.[task.category];
             return catColour ? (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
             ) : (
-              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{task.category}</span>
             );
           })()}
-          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
         </div>
         <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
             {subtaskCount > 0 && <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground"><ListChecks className="w-2.5 h-2.5" />{subtaskDone}/{subtaskCount}</span>}
           </div>
-          <div className="flex gap-0.5 items-center">
-            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-0.5 items-center">
               <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
               <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+              <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
             </div>
-            <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
-          </div>
         </div>
       </div>
       {subtaskCount > 0 && (
@@ -1406,30 +1475,29 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onU
         <div className="flex items-start gap-1.5 mb-1">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
           <p className={`flex-1 text-[11px] font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+          {!isDone && <TrackingChip task={task} />}
           {isHighPriority && <Flag className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />}
         </div>
         <div className="flex flex-wrap gap-1 mb-1">
           {task.category && (() => {
             const catColour = settings.categoryColors?.[task.category];
             return catColour ? (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${catColour}25`, color: catColour }}>{task.category}</span>
             ) : (
-              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{task.category}</span>
             );
           })()}
-          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+          {task.dueDate && <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-md">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
         </div>
         <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
             {subtaskCount > 0 && <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground"><ListChecks className="w-2.5 h-2.5" />{subtaskDone}/{subtaskCount}</span>}
           </div>
-          <div className="flex gap-0.5 items-center">
-            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-0.5 items-center">
               <button onClick={(e) => { e.stopPropagation(); onToggleToday(); }} className={`p-0.5 rounded ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}><Sun className="w-2.5 h-2.5" /></button>
               <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded text-muted-foreground hover:text-destructive"><Trash2 className="w-2.5 h-2.5" /></button>
+              <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
             </div>
-            <DoneCheckbox done={isDone} onClick={toggleDone} size="sm" />
-          </div>
         </div>
       </div>
       {subtaskCount > 0 && (
@@ -1458,6 +1526,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
 
   const groupOptions: { value: string; label: string }[] = [
     { value: "status", label: "Status" },
+    { value: "tracking", label: "Tracking" },
     { value: "priority", label: "Priority" },
     { value: "category", label: "Category" },
     ...(settings.companies.length > 0 ? [{ value: "company", label: "Company" }] : []),
@@ -1467,6 +1536,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   const columns: { key: string; label: string; color: string }[] = useMemo(() => {
     if (groupBy === "status") return STATUSES.map((s) => ({ key: s.value, label: s.label, color: s.color }));
     if (groupBy === "priority") return PRIORITIES.map((p) => ({ key: p.value, label: p.label, color: p.color }));
+    if (groupBy === "tracking") return [...TASK_TRACKING.map((t) => ({ key: t.value, label: t.label, color: "text-foreground" })), { key: "", label: "Not set", color: "text-muted-foreground" }];
     if (groupBy === "category") {
       const cats = [...new Set([...settings.categories, ...tasks.map((t) => t.category).filter(Boolean)])];
       return cats.map((c) => ({ key: c, label: c, color: "text-foreground" }));
@@ -1492,6 +1562,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   const getColTasks = (colKey: string) => {
     if (groupBy === "status") return visibleTasks.filter((t) => t.status === colKey);
     if (groupBy === "priority") return visibleTasks.filter((t) => t.priority === colKey);
+    if (groupBy === "tracking") return visibleTasks.filter((t) => (t.tracking ?? "") === colKey);
     if (groupBy === "category") return visibleTasks.filter((t) => t.category === colKey);
     if (groupBy === "company") return visibleTasks.filter((t) => (t.company ?? "") === colKey);
     const cfId = groupBy.replace("cf_", "");
@@ -1510,10 +1581,10 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
       {/* Single compact controls row */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {/* Group-by segmented pill */}
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-full p-0.5">
+        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5">
           {groupOptions.map((o) => (
             <button key={o.value} onClick={() => setGroupBy(o.value)}
-              className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               {o.label}
             </button>
           ))}
@@ -1529,7 +1600,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
               setFilterCompany(settings.companies.includes(val) ? val : "");
               setFilterPriority(PRIORITIES.find((p) => p.value === val) ? val : "");
             }}
-            className="text-[10px] font-semibold bg-muted/50 rounded-full px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none"
+            className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none"
           >
             <option value="">All</option>
             {settings.categories.length > 0 && <optgroup label="Category">
@@ -1545,7 +1616,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
         )}
         {/* Priority filter only (when no cats/cos) */}
         {settings.categories.length === 0 && settings.companies.length === 0 && (
-          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="text-[10px] font-semibold bg-muted/50 rounded-full px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none">
+          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none">
             <option value="">All priorities</option>
             {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
@@ -1561,7 +1632,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
 
         {/* Column toggle button */}
         <button onClick={() => setShowColToggle((v) => !v)}
-          className={`ml-auto flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 ${showColToggle ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}>
+          className={`ml-auto flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${showColToggle ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}>
           {showColToggle ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           Columns
           {hiddenCols.size > 0 && <span className="ml-0.5 w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">{hiddenCols.size}</span>}
@@ -1575,7 +1646,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
             <div className="flex flex-wrap gap-1.5 p-2 bg-muted/30 rounded-2xl">
               {columns.map((col) => (
                 <button key={col.key} onClick={() => toggleCol(col.key)}
-                  className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all duration-150 ${
+                  className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${
                     hiddenCols.has(col.key) ? "bg-muted/40 text-muted-foreground/50" : "bg-primary/10 text-primary border border-primary/20"
                   }`}>
                   {hiddenCols.has(col.key) ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
@@ -1593,17 +1664,17 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
           const colTasks = getColTasks(col.key);
           return (
             <div key={col.key} className="flex flex-col gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-full bg-muted/50">
+              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-md bg-muted/50">
                 {groupBy === "status" && <span className={col.color}><StatusIcon status={col.key as TaskStatus} className="w-3 h-3" /></span>}
                 {groupBy === "priority" && <Flag className={`w-3 h-3 ${col.color}`} />}
                 <span className="text-[11px] font-bold flex-1 truncate">{col.label}</span>
-                <span className="text-[9px] font-bold bg-background px-1.5 py-0.5 rounded-full text-muted-foreground">{colTasks.length}</span>
+                <span className="text-[9px] font-bold bg-background px-1.5 py-0.5 rounded-md text-muted-foreground">{colTasks.length}</span>
               </div>
               <div className="flex flex-col gap-1.5 min-h-[60px]">
                 <AnimatePresence mode="popLayout">
                   {colTasks.length === 0 ? (
-                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border-2 border-dashed border-border/40 py-5 text-center">
-                      <p className="text-[10px] text-muted-foreground">Empty</p>
+                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl bg-muted/40 px-3 py-6 text-center">
+                      <p className="text-[11px] text-foreground/70">Nothing here yet</p>
                     </motion.div>
                   ) : (
                     colTasks.map((task) => (
@@ -1726,8 +1797,9 @@ function CompanyGroupView({
                           </button>
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
+                            {!isDone && <TrackingChip task={task} />}
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${pData.hex}22`, color: pData.hex }}>{pData.label}</span>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${pData.hex}22`, color: pData.hex }}>{pData.label}</span>
                               {subs.length > 0 && (
                                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                   <ListChecks className="w-2.5 h-2.5" />{subDone}/{subs.length}
@@ -1739,7 +1811,7 @@ function CompanyGroupView({
                               {task.dueDate && <span className="text-[10px] text-muted-foreground">{new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
                             </div>
                           </div>
-                          <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/task:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => onToggleTaskToday(task)} className={`p-1 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`} title="Add task to Today"><Sun className="w-3.5 h-3.5" /></button>
                             <button onClick={() => onEdit(task)} className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors" title="Edit task"><Settings2 className="w-3.5 h-3.5" /></button>
                             <button onClick={() => onDelete(task)} className="p-1 rounded-lg text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -1767,8 +1839,9 @@ const Tasks = () => {
   const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, toggleToday, setStatus } = useTasks(scopeUserId ?? undefined);
   const { settings, loading: settingsLoading, saveSettings } = useTaskSettings();
 
-  const [activeTab, setActiveTab] = useState("All");
-  const [filterValues, setFilterValues] = useState<string[]>([]);
+  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [query, setQuery] = useState("");
+  const [quickTitle, setQuickTitle] = useState("");
   const [showCompletedOverride, setShowCompletedOverride] = useState<boolean | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1776,47 +1849,38 @@ const Tasks = () => {
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
   const showCompleted = showCompletedOverride ?? !!settings.showCompleted;
-  const [viewMode, setViewMode] = useState<TaskView>("list");
-  const [colourBy, setColourBy] = useState<ColourBy>("none");
+  const [viewMode, setViewMode] = useState<TaskView>(readStoredView);
+  const [colourBy, setColourBy] = useState<ColourBy>(readStoredColour);
 
-  // Tile drag state
   const [tileOrder, setTileOrder] = useState<string[]>([]);
   const dragId = useRef<string | null>(null);
   const dragOverId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (settings.tileOrder?.length) setTileOrder(settings.tileOrder);
+  }, [settings.tileOrder]);
+
+  const changeView = (mode: TaskView) => {
+    setViewMode(mode);
+    try { localStorage.setItem(VIEW_STORAGE, mode); } catch { /* ignore */ }
+  };
+
+  const changeColour = (value: ColourBy) => {
+    setColourBy(value);
+    try { localStorage.setItem(COLOUR_STORAGE, value); } catch { /* ignore */ }
+  };
 
   const setUrgency = useCallback(async (id: string, urgency: UrgencyLevel) => {
     await updateTask(id, { urgency } as Partial<Task>);
   }, [updateTask]);
 
-  const filterTabs = useMemo(() => [...BASE_FILTER_TABS, ...settings.customFields.map((f) => f.label)], [settings.customFields]);
+  const filtered = useMemo(
+    () => sortTasks(filterTasks(tasks, { filter, query, showCompleted })),
+    [tasks, filter, query, showCompleted],
+  );
 
-  const companyFilterOptions = useMemo(() => {
-    const merged = [...new Set([...settings.companies, ...tasks.map((t) => t.company).filter(Boolean) as string[]])].sort();
-    return merged;
-  }, [settings.companies, tasks]);
-
-  const filtered = useMemo(() => {
-    let list = [...tasks];
-    if (!showCompleted) list = list.filter((t) => t.status !== "done");
-    if (activeTab === "Today") list = list.filter((t) => t.isToday || t.subtasks?.some((s) => s.isToday && !s.done));
-    if (activeTab === "Priority" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.priority));
-    if (activeTab === "Status" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.status));
-    if (activeTab === "Category" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.category));
-    if (activeTab === "Company" && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.company ?? ""));
-    const customField = settings.customFields.find((f) => f.label === activeTab);
-    if (customField && filterValues.length > 0) list = list.filter((t) => filterValues.includes(t.customFields?.[customField.id] ?? ""));
-    const pw: Record<TaskPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    list.sort((a, b) => {
-      const aDone = a.status === "done" ? 1 : 0;
-      const bDone = b.status === "done" ? 1 : 0;
-      if (aDone !== bDone) return aDone - bDone;
-      return pw[a.priority] - pw[b.priority];
-    });
-    return list;
-  }, [tasks, activeTab, filterValues, settings.customFields, showCompleted]);
-
-  // Tile view: apply custom order
   const orderedTiles = useMemo(() => {
     if (tileOrder.length === 0) return filtered;
     const orderMap = new Map(tileOrder.map((id, i) => [id, i]));
@@ -1838,17 +1902,60 @@ const Tasks = () => {
     next.splice(toIdx, 0, dragId.current);
     setTileOrder(next);
     dragId.current = null;
-  }, [orderedTiles]);
+    void saveSettings({ ...settings, tileOrder: next });
+  }, [orderedTiles, saveSettings, settings]);
 
   const handleSave = async (form: Omit<Task, "id" | "createdAt" | "updatedAt">) => {
     setSaving(true);
     try {
-      if (editTask?.id) { await updateTask(editTask.id, form); }
-      else { await addTask(form); }
+      if (editTask?.id) {
+        await updateTask(editTask.id, form);
+        toast.success("Task updated");
+      } else {
+        await addTask(form);
+        toast.success("Task added");
+      }
       setDialogOpen(false);
       setEditTask(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save that task.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const draftFromFilter = (title = "") => {
+    const extras: Partial<Task> = { title };
+    if (filter === "today") extras.isToday = true;
+    if (filter === "critical") extras.priority = "critical";
+    if (filter === "progress") extras.status = "in_progress";
+    const category = filter.startsWith("category:") ? filter.slice("category:".length) : (settings.categories[0] ?? "Other");
+    if (filter.startsWith("company:")) extras.company = filter.slice("company:".length);
+    return defaultTaskDraft(category, extras);
+  };
+
+  const handleQuickAdd = async () => {
+    const title = quickTitle.trim();
+    if (!title || !canEdit) return;
+    try {
+      await addTask(draftFromFilter(title));
+      setQuickTitle("");
+      toast.success("Task added");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add that task.");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete?.id) return;
+    try {
+      await deleteTask(pendingDelete.id);
+      if (detailTask?.id === pendingDelete.id) setDetailOpen(false);
+      toast.success("Task deleted");
+    } catch {
+      toast.error("Could not delete that task.");
+    } finally {
+      setPendingDelete(null);
     }
   };
 
@@ -1856,16 +1963,37 @@ const Tasks = () => {
   const openDetail = (task: Task) => { setDetailTask(task); setDetailOpen(true); };
   const openEdit = (task: Task) => { setEditTask(task); setDetailOpen(false); setDialogOpen(true); };
 
-  // Sync detailTask with latest from tasks list
   const liveDetailTask = detailTask ? tasks.find((t) => t.id === detailTask.id) ?? detailTask : null;
 
   const todayCount = tasks.filter((t) => t.isToday && t.status !== "done").length;
   const doneCount = tasks.filter((t) => t.status === "done").length;
   const criticalCount = tasks.filter((t) => t.priority === "critical" && t.status !== "done").length;
+  const overdueCount = tasks.filter((t) => isTaskOverdue(t)).length;
+
+  const emptyCopy = tasks.length === 0
+    ? "No tasks yet. Add one below or tap New."
+    : showCompleted
+      ? "Nothing matches this filter."
+      : "No open tasks. Show completed to see finished ones.";
+
+  const railItem = (id: TaskFilter, label: string, Icon: React.ElementType, count?: number, accent?: string) => {
+    const on = filter === id;
+    return (
+      <button key={id} type="button" onClick={() => setFilter(id)} className={railBtnClass(on)}>
+        {on && accent && <span className="absolute left-0 top-1.5 bottom-1.5 hidden w-1 rounded-full bg-white/80 sm:block" />}
+        {!on && accent && <span className="absolute left-0 top-1.5 bottom-1.5 hidden w-1 rounded-full sm:block" style={{ background: accent }} />}
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="w-full truncate text-[10px] font-semibold leading-tight sm:text-sm">{label}</span>
+        {count != null && count > 0 && (
+          <span className={`text-[10px] font-bold px-1.5 py-px rounded-md ${on ? "bg-white/20" : "bg-card text-foreground/70"}`}>{count}</span>
+        )}
+      </button>
+    );
+  };
 
   if (tasksLoading || settingsLoading) {
     return (
-      <FeaturePageShell title={pageTitle} subtitle="Track everything" icon={<CheckSquare className="w-5 h-5" />} sharePage="tasks">
+      <FeaturePageShell title={pageTitle} subtitle="What needs doing" icon={<CheckSquare className="w-5 h-5" />} sharePage="tasks">
         <div className="flex items-center justify-center py-20">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </div>
@@ -1876,184 +2004,213 @@ const Tasks = () => {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle={isOwnScope ? "Track everything" : "Shared with you"}
+      subtitle={isOwnScope ? "What needs doing" : "Shared with you"}
       icon={<CheckSquare className="w-5 h-5" />}
       sharePage="tasks"
+      action={
+        <div className="flex items-center gap-1.5">
+          {canEdit && (
+            <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          )}
+          <Button size="icon" variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Task settings">
+            <Settings2 className="h-4 w-4" />
+          </Button>
+        </div>
+      }
     >
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-0.5 bg-muted/70 rounded-full p-0.5">
-          {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tile"], ["kanban", Columns2, "Kanban"], ["company", Building2, "Companies"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
-            <button key={mode} onClick={() => setViewMode(mode)} aria-label={label}
-              className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-all duration-150 ${viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={() => {
-              const next = !showCompleted;
-              setShowCompletedOverride(next);
-              saveSettings({ ...settings, showCompleted: next });
-            }}
-            title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
-            className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-colors ${
-              showCompleted
-                ? "text-emerald-600 bg-emerald-500/12 hover:bg-emerald-500/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
-            }`}
-            aria-label={showCompleted ? "Hide completed" : "Show completed"}
-          >
-            {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{showCompleted ? "Done visible" : "Done hidden"}</span>
-            {!showCompleted && doneCount > 0 && (
-              <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-px rounded-full">{doneCount}</span>
+      <div className="flex min-w-0 gap-3">
+        <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
+          <div className="sticky top-2 space-y-1">
+            {railItem("all", "All", CheckSquare, tasks.filter((t) => showCompleted || t.status !== "done").length)}
+            {railItem("today", "Today", Sun, todayCount, "hsl(38, 92%, 50%)")}
+            {railItem("overdue", "Overdue", AlertTriangle, overdueCount, "hsl(0, 72%, 51%)")}
+            {railItem("progress", "Doing", Clock, tasks.filter((t) => t.status === "in_progress").length, "hsl(199, 89%, 48%)")}
+            {railItem("critical", "Critical", Flag, criticalCount, "hsl(0, 72%, 51%)")}
+            <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Tracking</p>
+            {TASK_TRACKING.map((t) =>
+              railItem(`tracking:${t.value}`, t.label, Activity, tasks.filter((task) => task.tracking === t.value && (showCompleted || task.status !== "done")).length, t.hex)
             )}
-          </button>
-          <button onClick={() => setSettingsOpen(true)} className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors" aria-label="Settings">
-            <Settings2 className="w-4 h-4" />
-          </button>
-          <button onClick={openAdd} disabled={!canEdit} className="flex items-center gap-1.5 text-xs font-bold bg-primary text-primary-foreground px-3 py-2 rounded-full hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-40 disabled:pointer-events-none">
-            <Plus className="w-3.5 h-3.5" />
-            <span>New</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {[
-          { label: "Today",    value: todayCount,    text: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-400/25" },
-          { label: "Critical", value: criticalCount, text: "text-red-600 dark:text-red-400",       bg: "bg-red-500/10",     border: "border-red-400/25" },
-          { label: "Done",     value: doneCount,     text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-400/25" },
-        ].map((s) => (
-          <div key={s.label} className={`rounded-xl border ${s.border} ${s.bg} px-3 py-2 text-center`}>
-            <p className={`text-xl font-bold font-display leading-none ${s.text}`}>{s.value}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-1">{s.label}</p>
+            <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Categories</p>
+            {settings.categories.map((cat) =>
+              railItem(`category:${cat}`, cat, Circle, tasks.filter((t) => t.category === cat && (showCompleted || t.status !== "done")).length, settings.categoryColors?.[cat])
+            )}
+            {settings.companies.length > 0 && (
+              <>
+                <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Companies</p>
+                {settings.companies.map((co) =>
+                  railItem(`company:${co}`, co, Building2, tasks.filter((t) => t.company === co && (showCompleted || t.status !== "done")).length, settings.companyColors?.[co])
+                )}
+              </>
+            )}
           </div>
-        ))}
-      </div>
+        </aside>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-border/40">
-        {filterTabs.map((tab) => {
-          const isActive = activeTab === tab;
-          const catColour = settings.categoryColors?.[tab];
-          return (
+        <div className="min-w-0 flex-1 overflow-x-hidden">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tasks" className="h-10 rounded-xl border-2 bg-card pl-9 shadow-soft" />
+            </div>
+            <div className="flex items-center gap-1 rounded-2xl border-2 border-border bg-card p-1 shadow-soft">
+              {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tiles"], ["kanban", Columns2, "Board"], ["company", Building2, "By company"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
+                <button key={mode} type="button" title={label} onClick={() => changeView(mode)}
+                  className={`relative z-10 rounded-xl p-2 ${viewMode === mode ? "text-primary-foreground" : "text-foreground/70 hover:text-foreground"}`}
+                >
+                  {viewMode === mode && (
+                    <motion.span layoutId="tasks-view-tab" className="absolute inset-0 -z-10 rounded-xl bg-gradient-primary shadow-sm" transition={{ type: "spring", stiffness: 500, damping: 35 }} />
+                  )}
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
             <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setFilterValues([]); }}
-              style={catColour ? {
-                background: isActive ? catColour : `${catColour}18`,
-                color: isActive ? "#fff" : catColour,
-                borderColor: `${catColour}44`,
-              } : undefined}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-150 border ${
-                catColour
-                  ? "border-transparent"
-                  : isActive
-                    ? "bg-primary text-primary-foreground shadow-sm border-transparent"
-                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border-transparent"
+              onClick={() => {
+                const next = !showCompleted;
+                setShowCompletedOverride(next);
+                void saveSettings({ ...settings, showCompleted: next });
+              }}
+              title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
+              className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-2 rounded-xl border-2 transition-colors ${
+                showCompleted
+                  ? "border-emerald-400/40 bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
+                  : "border-border bg-card text-foreground/70 hover:text-foreground"
               }`}
             >
-              {tab}
+              {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{showCompleted ? "Done shown" : "Done hidden"}</span>
+              {!showCompleted && doneCount > 0 && (
+                <span className="text-[10px] font-bold bg-card text-foreground px-1.5 py-px rounded-md border border-border">{doneCount}</span>
+              )}
             </button>
-          );
-        })}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {[
+              { id: "today" as TaskFilter, label: "Today", value: todayCount, text: "text-amber-800 dark:text-amber-200", bg: "bg-amber-500/15", border: "border-amber-400/40" },
+              { id: "critical" as TaskFilter, label: "Critical", value: criticalCount, text: "text-red-800 dark:text-red-200", bg: "bg-red-500/15", border: "border-red-400/40" },
+              { id: "overdue" as TaskFilter, label: "Overdue", value: overdueCount, text: "text-red-800 dark:text-red-200", bg: "bg-red-500/12", border: "border-red-400/35" },
+            ].map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => setFilter(s.id)}
+                className={`rounded-xl border-2 ${s.border} ${s.bg} px-3 py-2 text-center transition ${filter === s.id ? "ring-2 ring-primary/40" : "hover:brightness-[1.03]"}`}
+              >
+                <p className={`text-xl font-bold font-display leading-none ${s.text}`}>{s.value}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/70 mt-1">{s.label}</p>
+              </button>
+            ))}
+          </div>
+
+          {canEdit && (
+            <form
+              className="mb-3 flex gap-2"
+              onSubmit={(e) => { e.preventDefault(); void handleQuickAdd(); }}
+            >
+              <Input
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.target.value)}
+                placeholder={filter === "today" ? "Add something for today" : "Add a task and press Enter"}
+                className="h-11 rounded-xl border-2 bg-card shadow-soft"
+              />
+              <Button type="submit" disabled={!quickTitle.trim()} className="h-11 rounded-xl bg-gradient-primary px-4">
+                Add
+              </Button>
+            </form>
+          )}
+
+          {viewMode === "company" ? (
+            <CompanyGroupView
+              tasks={filtered}
+              settings={settings}
+              onOpen={openDetail}
+              onEdit={openEdit}
+              onDelete={(t) => setPendingDelete(t)}
+              onToggleTaskToday={(t) => t.id && toggleToday(t.id, t.isToday)}
+              onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
+            />
+          ) : viewMode === "kanban" ? (
+            <KanbanView tasks={filtered} settings={settings} colourBy={colourBy}
+              onOpen={openDetail} onDelete={(t) => setPendingDelete(t)}
+              onToggleToday={(t) => t.id && toggleToday(t.id, t.isToday)}
+              onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
+              onUrgencyChange={(t, u) => t.id && setUrgency(t.id, u)}
+            />
+          ) : viewMode === "tile" ? (
+            <div>
+              {orderedTiles.length === 0 ? (
+                <div className="rounded-2xl border-2 border-border bg-card px-6 py-14 text-center shadow-card">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+                    <CheckSquare className="h-6 w-6" />
+                  </div>
+                  <p className="font-display text-xl font-bold">{emptyCopy}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {orderedTiles.map((task) => (
+                    <TileCard
+                      key={task.id}
+                      task={task}
+                      settings={settings}
+                      colourBy={colourBy}
+                      isDragging={dragId.current === task.id}
+                      onOpen={() => openDetail(task)}
+                      onDelete={() => setPendingDelete(task)}
+                      onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
+                      onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                      onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
+                      onDragStart={() => { dragId.current = task.id!; }}
+                      onDragOver={() => { dragOverId.current = task.id!; }}
+                      onDrop={() => handleDrop(task.id!)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-2xl border-2 border-border bg-card overflow-hidden shadow-card">
+              {filtered.length === 0 ? (
+                <div className="px-6 py-14 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+                    <CheckSquare className="h-6 w-6" />
+                  </div>
+                  <p className="font-display text-xl font-bold">{emptyCopy}</p>
+                  {canEdit && tasks.length === 0 && (
+                    <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={openAdd}>
+                      <Plus className="mr-1 h-4 w-4" /> New task
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="divide-y divide-border/40">
+                  {filtered.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      settings={settings}
+                      colourBy={colourBy}
+                      selected={detailOpen && detailTask?.id === task.id}
+                      onOpen={() => openDetail(task)}
+                      onDelete={() => setPendingDelete(task)}
+                      onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
+                      onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Sub-filters */}
-      {activeTab === "Priority" && <SubFilter items={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Status" && <SubFilter items={STATUSES.map((s) => ({ value: s.value, label: s.label }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Category" && <SubFilter items={settings.categories.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {activeTab === "Company" && <SubFilter items={companyFilterOptions.map((c) => ({ value: c, label: c }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} />}
-      {settings.customFields.map((field) =>
-        activeTab === field.label ? <SubFilter key={field.id} items={field.options.map((o) => ({ value: o, label: o }))} active={filterValues} onToggle={(v) => setFilterValues((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])} onClear={() => setFilterValues([])} /> : null
-      )}
-
-      {/* Views */}
-      {viewMode === "company" ? (
-        <CompanyGroupView
-          tasks={filtered}
-          settings={settings}
-          onOpen={openDetail}
-          onEdit={openEdit}
-          onDelete={(t) => t.id && deleteTask(t.id)}
-          onToggleTaskToday={(t) => t.id && toggleToday(t.id, t.isToday)}
-          onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
-        />
-      ) : viewMode === "kanban" ? (
-        <KanbanView tasks={filtered} settings={settings} colourBy={colourBy}
-          onOpen={openDetail} onDelete={(t) => t.id && deleteTask(t.id)}
-          onToggleToday={(t) => t.id && toggleToday(t.id, t.isToday)}
-          onStatusChange={(t, s) => t.id && setStatus(t.id, s)}
-          onUrgencyChange={(t, u) => t.id && setUrgency(t.id, u)}
-        />
-      ) : viewMode === "tile" ? (
-        <div>
-          {orderedTiles.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-10">{tasks.length === 0 ? "No tasks yet — add your first one." : "No tasks match this filter."}</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {orderedTiles.map((task) => (
-                <TileCard
-                  key={task.id}
-                  task={task}
-                  settings={settings}
-                  colourBy={colourBy}
-                  isDragging={dragId.current === task.id}
-                  onOpen={() => openDetail(task)}
-                  onDelete={() => task.id && deleteTask(task.id)}
-                  onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
-                  onStatusChange={(s) => task.id && setStatus(task.id, s)}
-                  onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
-                  onDragStart={() => { dragId.current = task.id!; }}
-                  onDragOver={() => { dragOverId.current = task.id!; }}
-                  onDrop={() => handleDrop(task.id!)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
-          {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              {tasks.length === 0 ? "No tasks yet — add your first one." : showCompleted ? "No tasks match this filter." : "No open tasks — show completed to see finished ones."}
-            </p>
-          ) : (
-            <div className="divide-y divide-border/40">
-              {filtered.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  settings={settings}
-                  colourBy={colourBy}
-                  selected={detailOpen && detailTask?.id === task.id}
-                  onOpen={() => openDetail(task)}
-                  onDelete={() => task.id && deleteTask(task.id)}
-                  onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
-                  onStatusChange={(s) => task.id && setStatus(task.id, s)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Task detail side panel */}
       <TaskDetailSheet
         task={liveDetailTask}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onEdit={() => liveDetailTask && openEdit(liveDetailTask)}
-        onDelete={() => {
-          if (liveDetailTask?.id) deleteTask(liveDetailTask.id);
-          setDetailOpen(false);
-        }}
+        onDelete={() => liveDetailTask && setPendingDelete(liveDetailTask)}
         onToggleToday={() => liveDetailTask?.id && toggleToday(liveDetailTask.id, liveDetailTask.isToday)}
         onStatusChange={(s) => liveDetailTask?.id && setStatus(liveDetailTask.id, s)}
         updateTask={updateTask}
@@ -2061,28 +2218,28 @@ const Tasks = () => {
         showCompleted={showCompleted}
       />
 
-      {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditTask(null); }}>
         <DialogContent className="max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="font-display text-base">{editTask ? "Edit Task" : "New Task"}</DialogTitle>
+            <DialogTitle className="font-display text-base">{editTask ? "Edit task" : "New task"}</DialogTitle>
           </DialogHeader>
           <TaskForm
             settings={settings}
             initial={editTask ? {
               title: editTask.title,
-              description: editTask.description || "",
-              notes: editTask.notes || "",
+              description: editTask.description || editTask.notes || "",
+              notes: editTask.notes || editTask.description || "",
               priority: editTask.priority,
               status: editTask.status,
+              tracking: editTask.tracking,
               category: editTask.category,
               company: editTask.company || "",
               dueDate: editTask.dueDate || "",
               isToday: editTask.isToday,
-              tags: editTask.tags,
+              tags: editTask.tags || [],
               subtasks: editTask.subtasks ?? [],
               customFields: editTask.customFields ?? {},
-            } : { ...EMPTY_TASK, category: settings.categories[0] ?? "Other" }}
+            } : draftFromFilter()}
             onSave={handleSave}
             onCancel={() => { setDialogOpen(false); setEditTask(null); }}
             saving={saving}
@@ -2090,7 +2247,6 @@ const Tasks = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Settings */}
       <TaskSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
@@ -2100,10 +2256,28 @@ const Tasks = () => {
           setShowCompletedOverride(next.showCompleted ?? false);
         }}
         colourBy={colourBy}
-        setColourBy={setColourBy}
+        setColourBy={changeColour}
       />
+
+      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => { if (!o) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete ? `"${pendingDelete.title}" will be removed. This cannot be undone.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmDelete()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FeaturePageShell>
   );
 };
+
 
 export default Tasks;

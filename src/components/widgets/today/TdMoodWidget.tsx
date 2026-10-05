@@ -1,5 +1,6 @@
 import { useTodayPage } from "@/hooks/useTodayPage";
 
+import { TdHead } from "./TdHead";
 const MOODS = ["😩", "😕", "😐", "🙂", "😄"];
 const ENERGY_LABELS = ["Low", "Tired", "OK", "Good", "Great"];
 
@@ -8,10 +9,7 @@ export function TdMoodWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-        <span className="text-base">😊</span>
-        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Mood</p>
-      </div>
+      <TdHead emoji="😊" title="Mood" />
 
       <div className="flex-1 flex flex-col justify-center gap-4">
         {/* Mood row */}

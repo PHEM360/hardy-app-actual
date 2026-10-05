@@ -1,5 +1,6 @@
 import { useTodayPage } from "@/hooks/useTodayPage";
 
+import { TdHead } from "./TdHead";
 const GLASSES = 8;
 
 export function TdWaterWidget() {
@@ -10,13 +11,13 @@ export function TdWaterWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">💧</span>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Water</p>
-        </div>
-        <span className="text-xs font-bold text-blue-500">{count}/{GLASSES}</span>
-      </div>
+      <TdHead
+        emoji="💧"
+        title="Water"
+        action={
+          <span className="text-xs font-bold text-blue-500">{count}/{GLASSES}</span>
+        }
+      />
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="grid grid-cols-4 gap-2">

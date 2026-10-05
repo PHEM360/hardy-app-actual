@@ -10,7 +10,7 @@ describe("NoteCanvasEditor", () => {
     vi.stubGlobal("PointerEvent", MouseEvent);
   });
 
-  it("starts blank and inserts a text block only when requested", () => {
+  it("starts blank and inserts a text box only when requested", () => {
     const onChange = vi.fn();
     render(
       <PaperNoteCanvasEditor
@@ -23,9 +23,31 @@ describe("NoteCanvasEditor", () => {
     );
 
     expect(screen.getByText("Your blank note")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Text" }));
+    fireEvent.click(screen.getByRole("button", { name: "Text box" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      blocks: [expect.objectContaining({ type: "text", text: "" })],
+      blocks: [expect.objectContaining({ type: "text", text: "", boxed: true })],
+    }));
+  });
+
+  it("starts writing on the paper where you click", () => {
+    const onChange = vi.fn();
+    render(<PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+    const paper = screen.getByTestId("note-paper");
+    vi.spyOn(paper, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 700, bottom: 560, width: 700, height: 560, toJSON: () => ({}),
+    });
+    fireEvent.click(screen.getByTestId("note-paper"), { clientX: 80, clientY: 90 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      blocks: [expect.objectContaining({ type: "text", boxed: false, x: 80 })],
+    }));
+  });
+
+  it("adds a table onto the paper", () => {
+    const onChange = vi.fn();
+    render(<PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      blocks: [expect.objectContaining({ type: "table", cells: [["", "", ""], ["", "", ""], ["", "", ""]] })],
     }));
   });
 
@@ -40,7 +62,7 @@ describe("NoteCanvasEditor", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Text" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Text box" })).not.toBeInTheDocument();
   });
 
   it("creates a shape at the size dragged on the paper", () => {

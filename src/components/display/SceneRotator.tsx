@@ -141,7 +141,7 @@ export function SceneRotator({
           style={{ top: "max(1.6vmin, calc(env(safe-area-inset-top, 0px) + 0.6rem))" }}
         >
           <p
-            className="rounded-full bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
+            className="rounded-md bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
             style={{ fontSize: "clamp(10px, 1.4vmin, 14px)" }}
           >
             Set from your phone · {current.name}
@@ -172,7 +172,7 @@ export function SceneRotator({
             style={{ bottom: "max(1.6vmin, calc(env(safe-area-inset-bottom, 0px) + 0.6rem))" }}
           >
             <p
-              className="rounded-full bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
+              className="rounded-md bg-black/45 px-[1.6vmin] py-[0.4vmin] text-center font-medium text-white/70 backdrop-blur-sm"
               style={{ fontSize: "clamp(10px, 1.4vmin, 14px)" }}
             >
               {current.name} · {index + 1} of {pages.length}

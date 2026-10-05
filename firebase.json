@@ -97,6 +97,30 @@
         }
       },
       {
+        "source": "/api/company/invoice",
+        "function": {
+          "functionId": "getPublicInvoice"
+        }
+      },
+      {
+        "source": "/api/company/lead",
+        "function": {
+          "functionId": "ingestCompanyLead"
+        }
+      },
+      {
+        "source": "/api/company/payment",
+        "function": {
+          "functionId": "ingestCompanyPayment"
+        }
+      },
+      {
+        "source": "/api/company/million-invoice",
+        "function": {
+          "functionId": "ingestMillionInvoice"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

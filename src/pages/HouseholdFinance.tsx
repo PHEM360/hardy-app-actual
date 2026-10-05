@@ -199,14 +199,14 @@ const HouseholdFinance = () => {
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setHouseholdsOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full bg-muted/70 hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-md bg-muted/70 hover:bg-muted transition-colors"
           >
             <Share2 className="w-3.5 h-3.5" />
             Share
           </button>
           <button
             onClick={() => setHouseholdsOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full bg-muted/70 hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-md bg-muted/70 hover:bg-muted transition-colors"
           >
             <Users className="w-3.5 h-3.5" />
             Households
@@ -220,7 +220,7 @@ const HouseholdFinance = () => {
             <button
               key={h.id}
               onClick={() => setActiveHouseholdId(h.id)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${
                 h.id === activeHouseholdId
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/60 text-muted-foreground hover:text-foreground"
@@ -251,17 +251,17 @@ const HouseholdFinance = () => {
       </div>
 
       {/* Tabs */}
-      <div className="relative flex p-0.5 bg-primary/10 rounded-full mb-5 border border-primary/15">
+      <div className="relative flex p-0.5 bg-primary/10 rounded-lg mb-5 border border-primary/15">
         <motion.div
-          className="absolute top-0.5 bottom-0.5 rounded-full"
+          className="absolute top-0.5 bottom-0.5 rounded-lg"
           style={{ width: "calc(50% - 2px)", background: "var(--gradient-primary)" }}
           animate={{ x: tab === "balances" ? 0 : "calc(100% + 2px)" }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
-        <button onClick={() => setTab("balances")} className={`relative flex-1 text-xs font-semibold py-2.5 rounded-full z-10 transition-colors ${tab === "balances" ? "text-white" : "text-muted-foreground"}`}>
+        <button onClick={() => setTab("balances")} className={`relative flex-1 text-xs font-semibold py-2.5 rounded-lg z-10 transition-colors ${tab === "balances" ? "text-white" : "text-muted-foreground"}`}>
           Account Balances
         </button>
-        <button onClick={() => setTab("analysis")} className={`relative flex-1 text-xs font-semibold py-2.5 rounded-full z-10 transition-colors ${tab === "analysis" ? "text-white" : "text-muted-foreground"}`}>
+        <button onClick={() => setTab("analysis")} className={`relative flex-1 text-xs font-semibold py-2.5 rounded-lg z-10 transition-colors ${tab === "analysis" ? "text-white" : "text-muted-foreground"}`}>
           AI Analysis
         </button>
       </div>

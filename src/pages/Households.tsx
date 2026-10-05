@@ -1718,7 +1718,7 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
                 {categories.map((c) => (
                   <div
                     key={c}
-                    className="group flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm hover:border-destructive/40 transition-colors"
+                    className="group flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:border-destructive/40 transition-colors"
                   >
                     <span>{c}</span>
                     <button
@@ -1771,7 +1771,7 @@ function SettingsSheet({ open, onClose, settings, onSave, appUsers }: {
                 {noteTypes.map((t) => (
                   <div
                     key={t}
-                    className="group flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-sm shadow-sm hover:border-destructive/40 transition-colors"
+                    className="group flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:border-destructive/40 transition-colors"
                   >
                     <span>{t}</span>
                     <button
@@ -2212,7 +2212,7 @@ export default function Households() {
             <button
               key={h.id}
               onClick={() => setActiveHouseholdId(h.id)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${
                 h.id === activeHouseholdId
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted/60 text-muted-foreground hover:text-foreground"
@@ -2233,7 +2233,7 @@ export default function Households() {
       {/* Header actions */}
       <div className="mb-4 flex items-center justify-between gap-2">
         {activeTab === "items" ? (
-          <Button size="sm" className="rounded-full" onClick={openAdd}>
+          <Button size="sm" className="rounded-lg" onClick={openAdd}>
             <Plus className="mr-1 h-4 w-4" /> Add Item
           </Button>
         ) : (
@@ -2307,7 +2307,7 @@ export default function Households() {
                           <span className="truncate text-sm font-medium text-amber-900 dark:text-amber-200">
                             {i.type}{i.provider ? ` · ${i.provider}` : ""}
                           </span>
-                          <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${d <= 7 ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
+                          <span className={`ml-2 shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${d <= 7 ? "bg-red-500 text-white" : "bg-amber-400 text-amber-900"}`}>
                             {d < 0 ? "Expired" : d === 0 ? "Today" : `${d}d`} · {dateLabel}
                           </span>
                         </button>

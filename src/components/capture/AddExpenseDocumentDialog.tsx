@@ -714,7 +714,7 @@ export function AddExpenseDocumentDialog({
                                 : { ...current, description: label, name: current.name || label },
                             )
                           }
-                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all ${
+                          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-bold transition-all ${
                             active
                               ? "border-primary bg-gradient-primary text-primary-foreground shadow-md"
                               : "border-border bg-card text-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-md"

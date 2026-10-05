@@ -60,7 +60,7 @@ function CategoryPill({ category }: { category?: string }) {
   if (!category) return null;
   const colors = getCategoryColorClasses(category);
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${colors.text} ${colors.bg}`}>
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ${colors.text} ${colors.bg}`}>
       {category}
     </span>
   );
@@ -88,7 +88,7 @@ function DocTile({ doc, onClick }: { doc: CompanyDocument; onClick: () => void }
           </div>
         )}
         {pages.length > 1 && (
-          <span className="absolute right-1.5 top-1.5 rounded-full bg-card/95 px-1.5 py-0.5 text-[10px] font-semibold text-foreground shadow-card">
+          <span className="absolute right-1.5 top-1.5 rounded-md bg-card/95 px-1.5 py-0.5 text-[10px] font-semibold text-foreground shadow-card">
             {pages.length} pages
           </span>
         )}

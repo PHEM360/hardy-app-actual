@@ -3,13 +3,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { defineSecret, defineString } from "firebase-functions/params";
+import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { apiHost, authHost, envFromClientId, normalizeTrueLayerSecret, type TrueLayerEnv } from "./truelayerEnv";
 
 const truelayerClientId = defineSecret("TRUELAYER_CLIENT_ID");
 const truelayerClientSecret = defineSecret("TRUELAYER_CLIENT_SECRET");
-const truelayerUseSandbox = defineString("TRUELAYER_USE_SANDBOX", { default: "true" });
 
 const SECRET_CALL_OPTS = {
   secrets: [truelayerClientId, truelayerClientSecret],
@@ -20,16 +20,20 @@ function db() {
   return admin.firestore();
 }
 
-function authBase() {
-  return truelayerUseSandbox.value() === "true"
-    ? "https://auth.truelayer-sandbox.com"
-    : "https://auth.truelayer.com";
+function credentials() {
+  return {
+    clientId: normalizeTrueLayerSecret(truelayerClientId.value()),
+    clientSecret: normalizeTrueLayerSecret(truelayerClientSecret.value()),
+  };
 }
 
-function apiBase() {
-  return truelayerUseSandbox.value() === "true"
-    ? "https://api.truelayer-sandbox.com"
-    : "https://api.truelayer.com";
+async function envForConnection(uid: string, connectionId: string): Promise<TrueLayerEnv> {
+  const snap = await db().doc(`finance/${uid}/bankConnections/${connectionId}`).get();
+  const stored = snap.data()?.authEnv;
+  if (stored === "live" || stored === "sandbox") return stored;
+  if (snap.data()?.sandbox === false) return "live";
+  if (snap.data()?.sandbox === true) return "sandbox";
+  return envFromClientId(credentials().clientId) || "live";
 }
 
 function requireUid(auth: { uid: string } | undefined) {
@@ -53,15 +57,17 @@ async function refreshAccess(uid: string, connectionId: string) {
   }
   const expiresAt = Number(data.accessExpiresAt || 0);
   if (data.accessToken && expiresAt > Date.now() + 60_000) {
-    return String(data.accessToken);
+    return { access: String(data.accessToken), env: await envForConnection(uid, connectionId) };
   }
+  const env = await envForConnection(uid, connectionId);
+  const { clientId, clientSecret } = credentials();
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    client_id: truelayerClientId.value(),
-    client_secret: truelayerClientSecret.value(),
+    client_id: clientId,
+    client_secret: clientSecret,
     refresh_token: String(data.refreshToken),
   });
-  const res = await fetch(`${authBase()}/connect/token`, {
+  const res = await fetch(`${authHost(env)}/connect/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -83,7 +89,7 @@ async function refreshAccess(uid: string, connectionId: string) {
     },
     { merge: true },
   );
-  return token.access_token;
+  return { access: token.access_token, env };
 }
 
 function guessCategory(description: string, kind: "income" | "expense") {
@@ -127,11 +133,11 @@ export const importFlatBankTransactions = onCall(SECRET_CALL_OPTS, async (reques
     throw new HttpsError("failed-precondition", "Link this bank account to the flat first.");
   }
 
-  const access = await refreshAccess(uid, connectionId);
+  const { access, env } = await refreshAccess(uid, connectionId);
   const to = new Date();
   const from = new Date(Date.now() - days * 86400000);
   const url =
-    `${apiBase()}/data/v1/accounts/${encodeURIComponent(bankAccountId)}` +
+    `${apiHost(env)}/data/v1/accounts/${encodeURIComponent(bankAccountId)}` +
     `/transactions?from=${isoDate(from)}&to=${isoDate(to)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${access}` } });
   if (!res.ok) {

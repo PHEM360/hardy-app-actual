@@ -41,6 +41,7 @@ function tag(partial: Partial<DogTag> & Pick<DogTag, "id" | "petId" | "label">):
   return {
     ownerId: "owner",
     code: "abc",
+    shortCode: "",
     slug: "",
     shape: "rounded",
     bgColor: "#ffffff",

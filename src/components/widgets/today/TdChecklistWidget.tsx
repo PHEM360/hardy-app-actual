@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTodayPage } from "@/hooks/useTodayPage";
 import type { ChecklistItem } from "@/hooks/useTodayPage";
 
+import { TdHead } from "./TdHead";
 export function TdChecklistWidget() {
   const { daily, saveDaily } = useTodayPage();
   const [newText, setNewText] = useState("");
@@ -24,10 +25,7 @@ export function TdChecklistWidget() {
 
   return (
     <div className="h-full flex flex-col p-3">
-      <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-        <span className="text-base">☑️</span>
-        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Checklist</p>
-      </div>
+      <TdHead emoji="☑️" title="Checklist" />
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 mb-2">
         {items.length === 0 && <p className="text-xs text-muted-foreground">Add items below…</p>}
