@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, FileUp, Zap, Pencil, Home, StickyNote, Mail } from "lucide-react";
-import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
@@ -10,16 +9,16 @@ import { hasFeatureAccess, QUICK_LINK_FEATURE_KEY } from "@/lib/features";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const ALL_LINKS = [
-  { id: "today",       icon: CheckSquare2, label: "Today",      sub: "Focus list",  bg: "bg-amber-500",   tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",     href: "/today" },
-  { id: "expense",     icon: Receipt,      label: "Add expense or document", sub: "Snap now, file later", bg: "bg-rose-500", tint: "bg-rose-50 dark:bg-rose-500/15 border-rose-200/70 dark:border-rose-500/25", action: "expense" as const },
-  { id: "logins",      icon: KeyRound,     label: "Log Ins",    sub: "Credentials", bg: "bg-violet-500",   tint: "bg-violet-50 dark:bg-violet-500/15 border-violet-200/70 dark:border-violet-500/25", href: "/login-details" },
-  { id: "event",       icon: CalendarPlus, label: "New Event",  sub: "Calendar",    bg: "bg-blue-500",     tint: "bg-blue-50 dark:bg-blue-500/15 border-blue-200/70 dark:border-blue-500/25",         href: "/calendar" },
-  { id: "task",        icon: ListPlus,     label: "Add Task",   sub: "Tasks",       bg: "bg-emerald-500",  tint: "bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200/70 dark:border-emerald-500/25", href: "/tasks" },
-  { id: "note",        icon: StickyNote,   label: "Add Note",   sub: "New note",    bg: "bg-amber-500",    tint: "bg-amber-50 dark:bg-amber-500/15 border-amber-200/70 dark:border-amber-500/25",         href: "/notes?new=1" },
-  { id: "email",       icon: Mail,         label: "Email",      sub: "Inbox",       bg: "bg-indigo-500",   tint: "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200/70 dark:border-indigo-500/25", href: "/email" },
-  { id: "finance",     icon: Wallet,       label: "Finance",    sub: "Personal",    bg: "bg-teal-500",     tint: "bg-teal-50 dark:bg-teal-500/15 border-teal-200/70 dark:border-teal-500/25",         href: "/finance" },
-  { id: "hh-finance",  icon: Home,         label: "HH Finance", sub: "Household",   bg: "bg-green-600",    tint: "bg-green-50 dark:bg-green-500/15 border-green-200/70 dark:border-green-500/25",     href: "/household-finance" },
-  { id: "upload",      icon: FileUp,       label: "Upload",     sub: "Documents",   bg: "bg-sky-500",      tint: "bg-sky-50 dark:bg-sky-500/15 border-sky-200/70 dark:border-sky-500/25",             action: "upload" as const },
+  { id: "today",       icon: CheckSquare2, label: "Today",      sub: "Focus list", accent: "#d39a34", href: "/today" },
+  { id: "expense",     icon: Receipt,      label: "Add expense or document", sub: "Capture it now and sort it later", accent: "#31506f", featured: true, action: "expense" as const },
+  { id: "logins",      icon: KeyRound,     label: "Log Ins",    sub: "Credentials", accent: "#73638f", href: "/login-details" },
+  { id: "event",       icon: CalendarPlus, label: "New Event",  sub: "Calendar", accent: "#4d6f9c", href: "/calendar" },
+  { id: "task",        icon: ListPlus,     label: "Add Task",   sub: "Tasks", accent: "#477b6a", href: "/tasks" },
+  { id: "note",        icon: StickyNote,   label: "Add Note",   sub: "New note", accent: "#b18338", href: "/notes?new=1" },
+  { id: "email",       icon: Mail,         label: "Email",      sub: "Inbox", accent: "#58698d", href: "/email" },
+  { id: "finance",     icon: Wallet,       label: "Finance",    sub: "Personal", accent: "#315f63", href: "/finance" },
+  { id: "hh-finance",  icon: Home,         label: "HH Finance", sub: "Household", accent: "#4d765d", href: "/household-finance" },
+  { id: "upload",      icon: FileUp,       label: "Upload",     sub: "Documents", accent: "#47738a", action: "upload" as const },
 ];
 
 const DEFAULT_LINK_IDS = ALL_LINKS.map((l) => l.id);
@@ -55,38 +54,62 @@ export function QuickLinksWidget() {
   };
 
   return (
-    <div className="w-full h-full p-3 pb-3.5 flex flex-col overflow-y-auto">
+    <div className="flex h-full w-full flex-col overflow-y-auto bg-card p-3 pb-3.5">
       <div
-        className="flex items-center gap-2 -mx-3 -mt-3 px-3 py-2.5 flex-shrink-0"
-        style={{ background: accentGradient(WIDGET_ACCENT.quick_links) }}
+        className="-mx-3 -mt-3 flex flex-shrink-0 items-center gap-2 px-3 py-3"
+        style={{ background: "var(--gradient-primary)" }}
       >
-        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-white/20 flex-shrink-0 text-white">
-          <Zap className="w-3.5 h-3.5" />
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-sm">
+          <Zap className="h-4 w-4" />
         </span>
-        <span className="text-[11px] font-bold text-white uppercase tracking-wider">Quick Links</span>
+        <span>
+          <span className="block font-display text-sm font-bold text-white">Quick links</span>
+          <span className="block text-[10px] font-medium text-white/60">The things you reach for most</span>
+        </span>
         <button
           type="button"
           onClick={() => setEditOpen(true)}
-          className="ml-auto p-1 rounded-md text-white/80 hover:text-white hover:bg-white/15"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 text-white/75 transition hover:bg-white/10 hover:text-white"
           title="Edit quick links"
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 mt-2.5 flex-shrink-0">
+      <div className="mt-2.5 grid flex-shrink-0 grid-cols-3 gap-2">
         {visibleLinks.map((link) => {
           const Icon = link.icon;
+          const featured = "featured" in link && link.featured;
           return (
           <button
             key={link.id}
             onClick={() => runLink(link)}
-            className={`group flex flex-col items-center justify-center gap-1 min-h-16 rounded-xl border shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all active:scale-[0.96] text-center px-1 ${link.tint}`}
+            className={`group relative overflow-hidden rounded-xl border text-left shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-sm active:scale-[0.98] ${
+              featured
+                ? "col-span-3 flex min-h-[64px] items-center gap-3 border-white/10 px-3 text-white"
+                : "flex min-h-[58px] flex-col items-center justify-center gap-1 px-1.5 text-center"
+            }`}
+            style={{
+              background: featured
+                ? "linear-gradient(120deg, hsl(216 48% 19%), hsl(208 35% 38%))"
+                : `color-mix(in srgb, ${link.accent} 11%, hsl(var(--card)))`,
+              borderColor: featured ? undefined : `color-mix(in srgb, ${link.accent} 28%, hsl(var(--border)))`,
+              borderLeftWidth: featured ? 1 : 3,
+              borderLeftColor: featured ? undefined : link.accent,
+            }}
           >
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm text-white ${link.bg}`}>
+            <div
+              className={`flex flex-shrink-0 items-center justify-center rounded-lg ${
+                featured ? "h-10 w-10 bg-white/12 text-white" : "h-7 w-7"
+              }`}
+              style={featured ? undefined : { background: `color-mix(in srgb, ${link.accent} 18%, hsl(var(--card)))`, color: link.accent }}
+            >
               <Icon className="w-3.5 h-3.5" />
             </div>
-            <p className="text-[10px] font-semibold text-card-foreground leading-tight">{link.label}</p>
+            <span className="min-w-0">
+              <span className={`block font-semibold leading-tight ${featured ? "font-display text-sm" : "text-[10px] text-card-foreground"}`}>{link.label}</span>
+              {featured && <span className="mt-0.5 block text-[10px] text-white/60">{link.sub}</span>}
+            </span>
           </button>
           );
         })}
@@ -113,7 +136,10 @@ export function QuickLinksWidget() {
                     on ? "border-primary/30 bg-primary/5" : "border-border/50 bg-muted/30 opacity-60"
                   }`}
                 >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white ${link.bg}`}>
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-lg"
+                    style={{ background: `color-mix(in srgb, ${link.accent} 18%, hsl(var(--card)))`, color: link.accent }}
+                  >
                     <link.icon className="w-3.5 h-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">

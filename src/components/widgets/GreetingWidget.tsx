@@ -47,6 +47,8 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const quote = useRotatingHeaderCopy(isHeaderCopyBank(sceneId) ? sceneId : null);
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const dayNumber = new Date().toLocaleDateString("en-GB", { day: "2-digit" });
+  const month = new Date().toLocaleDateString("en-GB", { month: "short" }).toUpperCase();
   const weatherLine = weather ? `${weather.temperature}° · ${weather.description}` : "";
 
   return (
@@ -56,7 +58,7 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
     >
       <ChromePhotoRotator urls={photoUrls} />
       <ChromeSceneLayer scene={sceneId} />
-      <div className="relative z-10 min-w-0 pr-8">
+      <div className="relative z-10 min-w-0 flex-1 pr-20 sm:pr-28">
         <motion.p
           key={`${greeting}-${firstName}`}
           initial={{ opacity: 0, y: 8 }}
@@ -79,6 +81,10 @@ export function GreetingWidget({ className }: { className?: string } = {}) {
             {today}{weatherLine ? ` · ${weatherLine}` : ""}{matchHeader && backdrop.eventLabel ? ` · ${backdrop.eventLabel}` : ""}
           </p>
         )}
+      </div>
+      <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center border-l border-white/15 pl-4 text-primary-foreground sm:right-5 sm:pl-5">
+        <span className="font-display text-3xl font-bold leading-none tracking-tight sm:text-4xl">{dayNumber}</span>
+        <span className="mt-1 text-[9px] font-extrabold tracking-[0.22em] text-primary-foreground/60 sm:text-[10px]">{month}</span>
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ function renderHomeTile(
     return (
       <div
         key={tile.id}
-        className={`home-tile relative min-h-[220px] overflow-hidden border border-border/40 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
+        className={`home-tile relative min-h-[270px] overflow-hidden border border-border/50 shadow-card ${surface.radius} ${tileMotionClass(preset, featured)} ${className}`}
         style={{ ["--tile-accent" as string]: tile.accent, background: surface.background }}
       >
         {editMode && (
@@ -222,49 +222,53 @@ export default function HomeTiles({
 
   return (
     <div className="page-gutter-x mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden pb-6">
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/30 bg-background/95 py-3 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-20 flex min-w-0 items-center justify-between gap-2 border-b border-border/40 bg-background/95 py-3 backdrop-blur-sm">
+        <div className="flex min-w-0 items-center gap-2">
           <div>
-            <p className="text-sm font-semibold text-foreground">Home</p>
-            <p className="text-[10px] text-muted-foreground">{HOME_TILE_PRESETS.find((item) => item.id === preset)?.label}</p>
+            <p className="font-display text-sm font-bold text-foreground">Home</p>
+            <p className="hidden text-[10px] text-muted-foreground sm:block">{HOME_TILE_PRESETS.find((item) => item.id === preset)?.label}</p>
           </div>
           {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1">
           {editMode && hiddenTiles.length > 0 && (
             <button
               type="button"
               onClick={() => setShowHidden((value) => !value)}
-              className="flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs text-muted-foreground"
+              className="flex h-8 items-center gap-1 rounded-xl border border-border bg-card px-2 text-xs text-muted-foreground"
+              title={`${hiddenTiles.length} hidden tiles`}
             >
               <EyeOff className="h-3.5 w-3.5" />
-              {hiddenTiles.length} hidden
+              <span className="hidden sm:inline">{hiddenTiles.length} hidden</span>
             </button>
           )}
           {editMode && (
             <button
               type="button"
               onClick={() => void resetLayout()}
-              className="flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs text-muted-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground"
+              title="Reset Home layout"
+              aria-label="Reset Home layout"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Reset
             </button>
           )}
           <button
             type="button"
             onClick={() => { setEditMode((value) => !value); setShowHidden(false); }}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
-              editMode ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"
+            className={`flex h-8 w-8 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold transition-all sm:w-auto sm:px-3 ${
+              editMode ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-muted-foreground shadow-sm hover:text-foreground"
             }`}
+            title={editMode ? "Finish editing" : "Edit Home"}
+            aria-label={editMode ? "Finish editing" : "Edit Home"}
           >
-            {editMode ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+            {editMode ? <><Check className="h-3.5 w-3.5" /><span className="hidden sm:inline">Done</span></> : <><Pencil className="h-3.5 w-3.5" /><span className="hidden sm:inline">Edit</span></>}
           </button>
         </div>
       </div>
 
       <div className={`space-y-3 pt-3 ${homeTileSkinClass(preset)}`}>
-        <div className="h-[100px] overflow-hidden rounded-2xl shadow-card">
+        <div className="h-[132px] overflow-hidden rounded-2xl shadow-card sm:h-[148px]">
           <GreetingWidget />
         </div>
 

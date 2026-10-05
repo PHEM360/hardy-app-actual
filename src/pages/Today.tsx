@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
+import { Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
 import { HomeViewToggle } from "@/components/home/HomeViewToggle";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
 import { format } from "date-fns";
@@ -355,36 +355,47 @@ const Today = ({
 
   return (
     <div className="page-gutter-x min-w-0 overflow-x-hidden pb-6" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
+      {/* Date hero + compact controls */}
+      <div className="sticky top-0 z-20 border-b border-border/40 bg-background/95 backdrop-blur-sm">
         <div
-          className="py-2 flex items-center justify-between"
+          className="relative flex min-h-[112px] items-center justify-between overflow-hidden rounded-b-2xl px-4 py-4 shadow-card sm:min-h-[128px] sm:px-5"
           style={{ background: pageStyle.headerColor || "var(--gradient-primary)" }}
         >
-          <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-white/80" />
-            <p className="text-sm font-bold text-white">Today</p>
+          <div
+            className="pointer-events-none absolute inset-0 opacity-70"
+            style={{ background: "radial-gradient(circle at 88% 8%, rgba(255,255,255,.18), transparent 34%), linear-gradient(110deg, transparent 45%, rgba(255,255,255,.05))" }}
+          />
+          <div className="relative">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.24em] text-white/55">Your day</p>
+            <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">{format(today, "EEEE")}</h1>
+            <p className="mt-1 text-xs font-medium text-white/65">{format(today, "MMMM yyyy")}</p>
           </div>
-          <p className="text-[11px] text-white/70 font-medium">
-            {format(today, "EEEE d MMMM")}
-          </p>
+          <div className="relative flex min-w-[76px] flex-col items-center border-l border-white/15 pl-5 sm:min-w-[92px] sm:pl-6">
+            <span className="font-display text-5xl font-bold leading-none tracking-[-0.06em] text-white sm:text-6xl">{format(today, "dd")}</span>
+            <span className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/55">{format(today, "MMM")}</span>
+          </div>
         </div>
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center justify-between gap-2 py-2.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
-          <button
-            onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold rounded-xl px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add widget
-          </button>
+            <button
+              onClick={() => setAddOpen(true)}
+              className="flex h-8 w-8 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 sm:w-auto sm:px-3"
+              title="Add widget"
+              aria-label="Add widget"
+            >
+              <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add widget</span>
+            </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             <Popover>
               <PopoverTrigger asChild>
-                <button className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5">
-                  <Palette className="w-3.5 h-3.5" />
-                  Look
+                <button
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+                  title="Change Today appearance"
+                  aria-label="Change Today appearance"
+                >
+                  <Palette className="h-3.5 w-3.5" />
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-64 p-3 space-y-3">
@@ -433,21 +444,24 @@ const Today = ({
             {editMode && (
               <button
                 onClick={resetLayout}
-                className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-xl px-2.5 py-1.5"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-sm"
                 title="Reset to starter widgets"
+                aria-label="Reset to starter widgets"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="h-3.5 w-3.5" />
               </button>
             )}
             <button
               onClick={() => setEditMode((v) => !v)}
-              className={`flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 transition-colors ${
+              className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs font-medium shadow-sm transition-colors ${
                 editMode
-                  ? "bg-amber-500 text-white"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  ? "bg-gradient-primary text-white"
+                  : "border border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
+              title={editMode ? "Finish editing" : "Edit Today layout"}
+              aria-label={editMode ? "Finish editing" : "Edit Today layout"}
             >
-              {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
+              {editMode ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
