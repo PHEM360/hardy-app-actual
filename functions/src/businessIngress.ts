@@ -310,12 +310,12 @@ export const businessWebsiteIngress = onRequest(
         lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
-      if (reservation && reservation !== false) {
+      if (reservation) {
         await reservation.set({ processedAt: admin.firestore.FieldValue.serverTimestamp(), result }, { merge: true });
       }
       res.status(200).json({ ok: true, ...result });
     } catch (error) {
-      if (reservation && reservation !== false) {
+      if (reservation) {
         await reservation.set({
           failedAt: admin.firestore.FieldValue.serverTimestamp(),
           error: error instanceof Error ? error.message : "Ingress failed",
