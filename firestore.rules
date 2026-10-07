@@ -705,6 +705,14 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
       }
+      match /businessIntegrations/{integrationId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
+      match /businessSettings/{settingsId} {
+        allow read: if isAuthenticated() && canAccessCompany(companyId);
+        allow write: if isAuthenticated() && canEditCompany(companyId);
+      }
       match /bankAccounts/{accountId} {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if isAuthenticated() && canEditCompany(companyId);
@@ -770,6 +778,19 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessCompany(companyId);
         allow write: if false;
       }
+    }
+
+    // Business website connector credentials and idempotency records are
+    // server-only. The client manages keys through authenticated Cloud Functions;
+    // raw connector tokens are never stored in Firestore.
+    match /businessApiKeys/{keyId} {
+      allow read, write: if false;
+    }
+    match /businessIngressEvents/{eventId} {
+      allow read, write: if false;
+    }
+    match /businessOutboundSecrets/{companyId} {
+      allow read, write: if false;
     }
 
     // Business setup modeller scenarios — private to the owner who created them.

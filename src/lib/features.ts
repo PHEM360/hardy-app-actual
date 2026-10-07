@@ -29,6 +29,7 @@ export const ROUTE_FEATURE_KEY: Record<string, FeatureKey> = {
   "/notes/quick": "notes",
   "/companies/social": "companies",
   "/companies/business-modeller": "companies",
+  "/companies/business-hub": "companies",
 };
 
 /** FeatureKey -> pageShares.page value. Invitees can open the route even without the feature enabled. */
@@ -62,6 +63,7 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/companies": "companies",
   "/companies/social": "companies",
   "/companies/business-modeller": "companies",
+  "/companies/business-hub": "companies",
   "/ai-analysis": "ai_analysis",
   "/calendar": "calendar",
   "/annual-leave": "annual_leave",
