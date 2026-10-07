@@ -27,6 +27,7 @@ interface AlarmLike {
   days: number[];
   enabled: boolean;
   label?: string;
+  tone?: string;
 }
 
 const STALE_RING_MS = 30 * 60_000;
@@ -62,6 +63,7 @@ export const tickAlarms = onSchedule("* * * * *", async () => {
         deviceId: deviceDoc.id,
         label: due.label || "",
         time: due.time,
+        tone: due.tone || "classic",
         since: FieldValue.serverTimestamp(),
         snoozedUntil: null,
       });

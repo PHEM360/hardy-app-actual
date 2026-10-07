@@ -5,9 +5,9 @@ import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CheckSquare, Plus, Trash2, Sun, Circle, CheckCircle2,
   Clock, Settings2, X, Flag,
-  LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote,
+  LayoutList, LayoutGrid, Columns2, ListChecks, StickyNote, Filter,
   Eye, EyeOff, Palette, ChevronRight, GripVertical,
-  Building2, Search, AlertTriangle, Activity,
+  Building2, Search,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -53,10 +53,40 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: strin
 ];
 
 const STATUSES: { value: TaskStatus; label: string; icon: any; color: string; hex: string }[] = [
-  { value: "todo",        label: "To Do",       icon: Circle, color: "text-muted-foreground", hex: "#94a3b8" },
-  { value: "in_progress", label: "In Progress", icon: Clock,  color: "text-blue-500",         hex: "#3b82f6" },
-  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-green-500",  hex: "#2E7D5B" },
+  { value: "todo",        label: "Not started", icon: Circle, color: "text-[#3B4759]", hex: "#3B4759" },
+  { value: "in_progress", label: "In progress", icon: Clock,  color: "text-[#17475C]", hex: "#17475C" },
+  { value: "done",        label: "Done",        icon: CheckCircle2, color: "text-[#1F6B4F]", hex: "#1F6B4F" },
 ];
+
+function statusLook(status: TaskStatus) {
+  return STATUSES.find((item) => item.value === status) ?? STATUSES[0];
+}
+
+function optionClass(on: boolean) {
+  return `rounded-md border px-3 py-2 text-xs font-bold ${
+    on
+      ? "btn-edge border-transparent bg-primary text-primary-foreground"
+      : "border-foreground/20 bg-card text-foreground"
+  }`;
+}
+
+function EmptyTasks({ copy, canAdd, onAdd }: { copy: string; canAdd: boolean; onAdd: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+      <div className="band bg-[#17475C] px-4 py-3 text-white">
+        <p className="font-display text-lg font-bold">No tasks to show</p>
+      </div>
+      <div className="space-y-3 p-4">
+        <p className="text-sm font-medium text-foreground">{copy}</p>
+        {canAdd && (
+          <Button type="button" onClick={onAdd}>
+            <Plus /> New task
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Urgency levels cycle: none → amber → red
 type UrgencyLevel = "none" | "amber" | "red";
@@ -72,11 +102,16 @@ function urgencyDotStyle(u: UrgencyLevel): string {
 }
 
 /** Solid chip showing how a task is going. Renders nothing when tracking is not set. */
-function TrackingChip({ task, className = "" }: { task: Pick<Task, "tracking">; className?: string }) {
+function TrackingChip({ task, className = "" }: { task: Pick<Task, "tracking" | "trackingNote">; className?: string }) {
   const info = taskTrackingInfo(task.tracking);
   if (!info) return null;
+  const note = task.trackingNote?.trim();
   return (
-    <span className={`flex-shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold text-white ${className}`} style={{ background: info.hex }}>
+    <span
+      title={note || info.label}
+      className={`flex-shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold text-white ${className}`}
+      style={{ background: info.hex }}
+    >
       {info.label}
     </span>
   );
@@ -118,14 +153,6 @@ function readStoredColour(): ColourBy {
   return "none";
 }
 
-function railBtnClass(on: boolean) {
-  return `relative flex w-full items-center gap-2 overflow-hidden rounded-xl px-2 py-2 text-left transition sm:px-3 ${
-    on
-      ? "bg-gradient-primary text-primary-foreground shadow-sm"
-      : "text-foreground hover:bg-card"
-  }`;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function StatusIcon({ status, className = "w-4 h-4" }: { status: TaskStatus; className?: string }) {
@@ -148,16 +175,20 @@ function UrgencyDot({ urgency, done, onClick }: { urgency: UrgencyLevel; done: b
 
 // Done checkbox — clicking toggles done status
 function DoneCheckbox({ done, onClick, size = "md" }: { done: boolean; onClick: (e: React.MouseEvent) => void; size?: "sm" | "md" }) {
-  const dim = size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4";
+  const hit = size === "sm" ? "h-10 w-10" : "h-11 w-11";
+  const box = size === "sm" ? "h-5 w-5" : "h-5 w-5";
   return (
     <button
       onClick={onClick}
-      title={done ? "Mark incomplete" : "Mark done"}
-      className={`flex-shrink-0 rounded transition-all duration-150 hover:scale-110 ${dim} flex items-center justify-center border-2 ${
-        done ? "border-green-500 bg-green-500 text-white" : "border-muted-foreground/40 hover:border-green-400"
-      }`}
+      title={done ? "Mark not done" : "Mark done"}
+      aria-label={done ? "Mark not done" : "Mark done"}
+      className={`flex flex-shrink-0 items-center justify-center ${hit}`}
     >
-      {done && <CheckCircle2 className="w-2.5 h-2.5" />}
+      <span className={`flex items-center justify-center rounded-md border-2 ${box} ${
+        done ? "border-[#1F6B4F] bg-[#1F6B4F] text-white" : "border-foreground/35 bg-card text-transparent"
+      }`}>
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      </span>
     </button>
   );
 }
@@ -217,6 +248,8 @@ function TaskDetailSheet({
   const [editingSubNotes, setEditingSubNotes] = useState("");
   const [dragSubIdx, setDragSubIdx] = useState<number | null>(null);
   const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
+  const [trackingDraft, setTrackingDraft] = useState<Task["tracking"] | "">("");
+  const [trackingNoteDraft, setTrackingNoteDraft] = useState("");
 
   if (!task) return null;
 
@@ -278,7 +311,7 @@ function TaskDetailSheet({
                 onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
               }}
               className="mt-0.5 flex-shrink-0 hover:scale-110 transition-transform"
-              title="Cycle status (To Do → In Progress → Done)"
+              title="Cycle status: not started, in progress, done"
             >
               <StatusIcon status={task.status} className="w-5 h-5" />
             </button>
@@ -305,9 +338,18 @@ function TaskDetailSheet({
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => task.id && void updateTask(task.id, { tracking: on ? ("" as never) : t.value })}
-                    className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on ? "btn-edge text-white" : "bg-card text-foreground"}`}
-                    style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+                    onClick={() => {
+                      if (!task.id) return;
+                      if (on) {
+                        setTrackingDraft("");
+                        void updateTask(task.id, { tracking: "" as never, trackingNote: "" });
+                        return;
+                      }
+                      setTrackingDraft(t.value);
+                      setTrackingNoteDraft(task.trackingNote || "");
+                    }}
+                    className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on || trackingDraft === t.value ? "btn-edge text-white" : "bg-card text-foreground"}`}
+                    style={on || trackingDraft === t.value ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
                     aria-pressed={on}
                   >
                     {t.label}
@@ -315,6 +357,27 @@ function TaskDetailSheet({
                 );
               })}
             </div>
+            {trackingDraft && (
+              <div className="space-y-2 rounded-lg border border-foreground/20 bg-card p-3">
+                <Label>Note for this status</Label>
+                <Textarea
+                  value={trackingNoteDraft}
+                  onChange={(event) => setTrackingNoteDraft(event.target.value)}
+                  placeholder="Why is it on track, adjusted, or off track?"
+                  className="min-h-[72px]"
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (!task.id || !trackingDraft) return;
+                    void updateTask(task.id, { tracking: trackingDraft, trackingNote: trackingNoteDraft.trim() });
+                    setTrackingDraft("");
+                  }}
+                >
+                  Save status
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Meta chips */}
@@ -784,7 +847,7 @@ function TaskForm({
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => set("tracking", "" as never)}
+            onClick={() => { set("tracking", "" as never); set("trackingNote", ""); }}
             className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${
               !form.tracking ? "btn-edge border-foreground bg-foreground text-background" : "border-foreground/20 bg-card text-foreground hover:border-foreground/50"
             }`}
@@ -802,10 +865,21 @@ function TaskForm({
                 style={on ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
               >
                 {t.label}
-              </button>
-            );
-          })}
+            </button>
+          );
+        })}
         </div>
+        {form.tracking && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status note</Label>
+            <Textarea
+              value={form.trackingNote || ""}
+              onChange={(event) => set("trackingNote", event.target.value)}
+              placeholder="This shows when someone hovers the status"
+              className="min-h-[72px] rounded-xl"
+            />
+          </div>
+        )}
       </div>
 
       {/* Category + Due Date */}
@@ -1281,74 +1355,43 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
     onStatusChange(isDone ? "todo" : "done");
   };
 
+  const look = statusLook(task.status);
+  const bar = accentColour || look.hex;
+  const meta = [task.company, task.dueDate ? formatTaskDue(task.dueDate) : "", subtaskCount ? `${subtaskDone}/${subtaskCount} steps` : ""]
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onOpen}
-      className={`group relative flex items-center gap-3 px-3.5 py-2.5 cursor-pointer transition-colors ${
-        selected ? "bg-primary/8" : "hover:bg-muted/50"
-      } ${isDone ? "opacity-50" : ""}`}
+      className={`flex cursor-pointer items-center gap-1 bg-card px-2 py-2 ${selected ? "bg-[#17475C]/10" : ""} ${isDone ? "opacity-70" : ""}`}
+      style={{ borderLeft: `4px solid ${bar}` }}
     >
-      {accentColour && (
-        <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full" style={{ background: accentColour }} />
-      )}
       <DoneCheckbox done={isDone} onClick={toggleDone} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <p className={`text-sm font-medium leading-snug truncate ${isDone ? "line-through text-muted-foreground" : "text-card-foreground"}`}>{task.title}</p>
-          {isHighPriority && !isDone && (
-            <Flag className={`w-3 h-3 flex-shrink-0 ${task.priority === "critical" ? "text-red-500 fill-red-500" : "text-orange-400 fill-orange-400"}`} />
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-[15px] font-semibold leading-snug ${isDone ? "text-foreground/55 line-through" : "text-foreground"}`}>{task.title}</p>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+          {task.category && (
+            <span className="rounded-md px-1.5 py-px text-[10px] font-bold text-white" style={{ background: catColour || "#3B4759" }}>{task.category}</span>
           )}
-          {task.status === "in_progress" && !isDone && (
-            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-sky-500/15 text-sky-800 dark:text-sky-200 flex-shrink-0">Doing</span>
+          {isHighPriority && !isDone && (
+            <span className="rounded-md bg-[#9B2C2C] px-1.5 py-px text-[10px] font-bold text-white">{task.priority === "critical" ? "Critical" : "High"}</span>
           )}
           {!isDone && <TrackingChip task={task} />}
-          {overdue && (
-            <span className="text-[10px] font-semibold px-1.5 py-px rounded-md bg-red-500/15 text-red-700 dark:text-red-300 flex-shrink-0">Overdue</span>
-          )}
+          {overdue && <span className="rounded-md bg-[#9B2C2C] px-1.5 py-px text-[10px] font-bold text-white">Overdue</span>}
+          {task.isToday && <span className="rounded-md bg-[#8A6424] px-1.5 py-px text-[10px] font-bold text-white">Today</span>}
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-          {task.category && (
-            catColour ? (
-              <span className="text-[10px] font-semibold px-1.5 py-px rounded-md flex-shrink-0" style={{ background: `${catColour}22`, color: catColour }}>{task.category}</span>
-            ) : (
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">{task.category}</span>
-            )
-          )}
-          {task.company && <span className="text-[10px] text-muted-foreground/70 truncate">· {task.company}</span>}
-          {task.dueDate && (
-            <span className={`text-[10px] flex-shrink-0 ${overdue ? "text-red-600 font-semibold" : "text-muted-foreground/70"}`}>
-              · {formatTaskDue(task.dueDate)}
-            </span>
-          )}
-          {subtaskCount > 0 && (
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70 flex-shrink-0">
-              <ListChecks className="w-2.5 h-2.5" />
-              {subtaskDone}/{subtaskCount}
-              <span className="w-10 h-1 bg-muted rounded-full overflow-hidden">
-                <span className="block h-full bg-emerald-400 rounded-full" style={{ width: `${(subtaskDone / subtaskCount) * 100}%` }} />
-              </span>
-            </span>
-          )}
-          {hasNotes && <StickyNote className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />}
-        </div>
+        {meta && <p className={`mt-0.5 truncate text-[11px] ${overdue ? "font-semibold text-[#9B2C2C]" : "text-foreground/70"}`}>{meta}{hasNotes ? ", notes" : ""}</p>}
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleToday(); }}
-          className={`p-1.5 rounded-lg transition-colors ${task.isToday ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}
-          title={task.isToday ? "Remove from Today" : "Add to Today"}
-        >
-          <Sun className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
-          title="Delete"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onToggleToday(); }}
+        className="flex h-11 w-11 flex-shrink-0 items-center justify-center"
+        title={task.isToday ? "Remove from Today" : "Add to Today"}
+        aria-label={task.isToday ? "Remove from Today" : "Add to Today"}
+      >
+        <Sun className={`h-4 w-4 ${task.isToday ? "text-[#8A6424]" : "text-foreground/35"}`} />
+      </button>
     </motion.div>
   );
 }
@@ -1380,6 +1423,7 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
     onUrgencyChange(cycleUrgency(urgency));
   };
 
+  const look = statusLook(task.status);
   return (
     <div
       draggable
@@ -1387,13 +1431,9 @@ function TileCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onUrg
       onDragOver={(e) => { e.preventDefault(); onDragOver(e); }}
       onDrop={(e) => { e.preventDefault(); onDrop(); }}
       onClick={onOpen}
-      className={`relative rounded-2xl border cursor-pointer hover:shadow-md transition-all group overflow-hidden ${isDone ? "opacity-55" : ""} ${isDragging ? "opacity-40 scale-95" : ""}`}
-      style={accentColour ? {
-        borderColor: `${accentColour}55`,
-        background: `linear-gradient(135deg, ${accentColour}20 0%, ${accentColour}08 100%)`,
-      } : { borderColor: undefined }}
+      className={`group relative cursor-pointer overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card ${isDragging ? "scale-95 opacity-40" : ""}`}
+      style={{ borderLeftWidth: 4, borderLeftColor: accentColour || look.hex }}
     >
-      {accentColour && <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="p-3">
         <div className="flex items-start gap-1.5 mb-2">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
@@ -1461,16 +1501,13 @@ function KanbanCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, onU
     onUrgencyChange(cycleUrgency(urgency));
   };
 
+  const look = statusLook(task.status);
   return (
     <motion.div layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
       onClick={onOpen}
-      className={`rounded-xl border cursor-pointer hover:shadow-sm transition-all group overflow-hidden ${isDone ? "opacity-55" : ""}`}
-      style={accentColour ? {
-        borderColor: `${accentColour}55`,
-        background: `linear-gradient(135deg, ${accentColour}18 0%, ${accentColour}08 100%)`,
-      } : { borderColor: undefined }}
+      className="group cursor-pointer overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card"
+      style={{ borderLeftWidth: 4, borderLeftColor: accentColour || look.hex }}
     >
-      {accentColour && <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${accentColour}, ${accentColour}88)` }} />}
       <div className="p-2">
         <div className="flex items-start gap-1.5 mb-1">
           <UrgencyDot urgency={urgency} done={isDone} onClick={handleUrgency} />
@@ -1518,9 +1555,6 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
   onUrgencyChange: (t: Task, u: UrgencyLevel) => void;
 }) {
   const [groupBy, setGroupBy] = useState<string>("status");
-  const [filterCategory, setFilterCategory] = useState<string>("");
-  const [filterCompany, setFilterCompany] = useState<string>("");
-  const [filterPriority, setFilterPriority] = useState<string>("");
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [showColToggle, setShowColToggle] = useState(false);
 
@@ -1551,13 +1585,7 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
     return [];
   }, [groupBy, settings, tasks]);
 
-  const visibleTasks = useMemo(() => {
-    let list = tasks;
-    if (filterCategory) list = list.filter((t) => t.category === filterCategory);
-    if (filterCompany) list = list.filter((t) => (t.company ?? "") === filterCompany);
-    if (filterPriority) list = list.filter((t) => t.priority === filterPriority);
-    return list;
-  }, [tasks, filterCategory, filterCompany, filterPriority]);
+  const visibleTasks = tasks;
 
   const getColTasks = (colKey: string) => {
     if (groupBy === "status") return visibleTasks.filter((t) => t.status === colKey);
@@ -1574,107 +1602,53 @@ function KanbanView({ tasks, settings, onOpen, onDelete, onToggleToday, onStatus
 
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
 
-  const hasActiveFilter = !!(filterCategory || filterCompany || filterPriority);
-
   return (
     <div>
-      {/* Single compact controls row */}
-      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-        {/* Group-by segmented pill */}
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5">
-          {groupOptions.map((o) => (
-            <button key={o.value} onClick={() => setGroupBy(o.value)}
-              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 whitespace-nowrap ${groupBy === o.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Filter dropdown(s) — only show if options exist */}
-        {(settings.categories.length > 0 || settings.companies.length > 0) && (
+      <div className="mb-3 space-y-2">
+        <label className="block space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Group board by</span>
           <select
-            value={filterCategory || filterCompany || filterPriority}
-            onChange={(e) => {
-              const val = e.target.value;
-              setFilterCategory(settings.categories.includes(val) ? val : "");
-              setFilterCompany(settings.companies.includes(val) ? val : "");
-              setFilterPriority(PRIORITIES.find((p) => p.value === val) ? val : "");
-            }}
-            className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none"
+            value={groupBy}
+            onChange={(event) => setGroupBy(event.target.value)}
+            className="h-11 w-full rounded-lg border border-foreground/25 bg-card px-3 text-sm"
           >
-            <option value="">All</option>
-            {settings.categories.length > 0 && <optgroup label="Category">
-              {settings.categories.map((c) => <option key={c} value={c}>{c}</option>)}
-            </optgroup>}
-            {settings.companies.length > 0 && <optgroup label="Company">
-              {settings.companies.map((c) => <option key={c} value={c}>{c}</option>)}
-            </optgroup>}
-            <optgroup label="Priority">
-              {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </optgroup>
+            {groupOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
-        )}
-        {/* Priority filter only (when no cats/cos) */}
-        {settings.categories.length === 0 && settings.companies.length === 0 && (
-          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className="text-[10px] font-semibold bg-muted/50 rounded-md px-3 py-1.5 border-0 cursor-pointer text-muted-foreground focus:outline-none">
-            <option value="">All priorities</option>
-            {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-        )}
-
-        {/* Clear filter dot */}
-        {hasActiveFilter && (
-          <button onClick={() => { setFilterCategory(""); setFilterCompany(""); setFilterPriority(""); }}
-            className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center hover:bg-primary/80 transition-colors" title="Clear filter">
-            ×
-          </button>
-        )}
-
-        {/* Column toggle button */}
-        <button onClick={() => setShowColToggle((v) => !v)}
-          className={`ml-auto flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${showColToggle ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}>
-          {showColToggle ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        </label>
+        <button type="button" className={optionClass(showColToggle)} onClick={() => setShowColToggle((value) => !value)}>
           Columns
-          {hiddenCols.size > 0 && <span className="ml-0.5 w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">{hiddenCols.size}</span>}
         </button>
+        {showColToggle && (
+          <div className="flex flex-wrap gap-1.5">
+            {columns.map((col) => (
+              <button key={col.key} type="button" className={optionClass(!hiddenCols.has(col.key))} onClick={() => toggleCol(col.key)}>
+                {col.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Column show/hide toggles — collapsible */}
-      <AnimatePresence>
-        {showColToggle && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} className="overflow-hidden mb-3">
-            <div className="flex flex-wrap gap-1.5 p-2 bg-muted/30 rounded-2xl">
-              {columns.map((col) => (
-                <button key={col.key} onClick={() => toggleCol(col.key)}
-                  className={`flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-150 ${
-                    hiddenCols.has(col.key) ? "bg-muted/40 text-muted-foreground/50" : "bg-primary/10 text-primary border border-primary/20"
-                  }`}>
-                  {hiddenCols.has(col.key) ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
-                  {col.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Kanban columns */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(visibleColumns.length, 5)}, minmax(0, 1fr))` }}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {visibleColumns.map((col) => {
           const colTasks = getColTasks(col.key);
           return (
             <div key={col.key} className="flex flex-col gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-md bg-muted/50">
-                {groupBy === "status" && <span className={col.color}><StatusIcon status={col.key as TaskStatus} className="w-3 h-3" /></span>}
-                {groupBy === "priority" && <Flag className={`w-3 h-3 ${col.color}`} />}
-                <span className="text-[11px] font-bold flex-1 truncate">{col.label}</span>
-                <span className="text-[9px] font-bold bg-background px-1.5 py-0.5 rounded-md text-muted-foreground">{colTasks.length}</span>
+              <div
+                className="band flex items-center gap-1.5 rounded-md px-2.5 py-2 text-white"
+                style={{ background: groupBy === "status" ? statusLook(col.key as TaskStatus).hex : "#17475C" }}
+              >
+                <span className="flex-1 truncate font-display text-sm font-bold">{col.label}</span>
+                <span className="font-display text-base font-bold tabular-nums">{colTasks.length}</span>
               </div>
               <div className="flex flex-col gap-1.5 min-h-[60px]">
                 <AnimatePresence mode="popLayout">
                   {colTasks.length === 0 ? (
-                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl bg-muted/40 px-3 py-6 text-center">
-                      <p className="text-[11px] text-foreground/70">Nothing here yet</p>
+                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-lg border border-foreground/15 bg-card px-3 py-4 text-center">
+                      <p className="text-xs font-semibold text-foreground/70">Nothing here yet</p>
                     </motion.div>
                   ) : (
                     colTasks.map((task) => (
@@ -1734,7 +1708,7 @@ function CompanyGroupView({
     setExpandedCompanies((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
 
   if (groups.length === 0) {
-    return <p className="text-sm text-muted-foreground text-center py-10">No tasks match this filter.</p>;
+    return <EmptyTasks copy="No tasks match this filter." canAdd={false} onAdd={() => undefined} />;
   }
 
   return (
@@ -1746,23 +1720,17 @@ function CompanyGroupView({
         const doneCount = companyTasks.filter((t) => t.status === "done").length;
 
         return (
-          <div key={companyKey} className="rounded-2xl border border-border/40 overflow-hidden bg-card shadow-soft">
-            {/* Company header */}
+          <div key={companyKey} className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
             <button
+              type="button"
               onClick={() => toggleCompany(companyKey)}
-              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors"
-              style={colour ? { borderLeftColor: colour, borderLeftWidth: 3 } : undefined}
+              className="band flex w-full items-center gap-3 px-4 py-3 text-white"
+              style={{ background: colour || "#17475C" }}
             >
-              {colour ? (
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colour }} />
-              ) : (
-                <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              )}
-              <span className="flex-1 text-sm font-bold text-left">{label}</span>
-              <span className="text-[11px] font-semibold text-muted-foreground mr-1">
-                {doneCount}/{companyTasks.length}
-              </span>
-              <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
+              <Building2 className="h-4 w-4 flex-shrink-0" />
+              <span className="flex-1 text-left font-display text-base font-bold">{label}</span>
+              <span className="font-display text-sm font-bold tabular-nums">{companyTasks.length - doneCount} open</span>
+              <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
             </button>
 
             {/* Task list */}
@@ -1786,7 +1754,8 @@ function CompanyGroupView({
                       return (
                         <div
                           key={task.id}
-                          className={`flex items-center gap-2.5 px-4 py-2.5 hover:bg-muted/40 transition-colors group/task cursor-pointer ${isDone ? "opacity-50" : ""}`}
+                          className="flex cursor-pointer items-center gap-2.5 border-t border-foreground/10 bg-card px-3 py-2"
+                          style={{ borderLeft: `4px solid ${statusLook(task.status).hex}` }}
                           onClick={() => onOpen(task)}
                         >
                           <button
@@ -1840,6 +1809,10 @@ const Tasks = () => {
   const { settings, loading: settingsLoading, saveSettings } = useTaskSettings();
 
   const [filter, setFilter] = useState<TaskFilter>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | TaskStatus>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [quickTitle, setQuickTitle] = useState("");
   const [showCompletedOverride, setShowCompletedOverride] = useState<boolean | null>(null);
@@ -1877,8 +1850,13 @@ const Tasks = () => {
   }, [updateTask]);
 
   const filtered = useMemo(
-    () => sortTasks(filterTasks(tasks, { filter, query, showCompleted })),
-    [tasks, filter, query, showCompleted],
+    () => sortTasks(filterTasks(tasks, { filter, query, showCompleted: showCompleted || statusFilter === "done" })).filter((task) => {
+      if (statusFilter !== "all" && task.status !== statusFilter) return false;
+      if (categoryFilter !== "all" && task.category !== categoryFilter) return false;
+      if (companyFilter !== "all" && (task.company || "") !== companyFilter) return false;
+      return true;
+    }),
+    [tasks, filter, query, showCompleted, statusFilter, categoryFilter, companyFilter],
   );
 
   const orderedTiles = useMemo(() => {
@@ -1965,10 +1943,7 @@ const Tasks = () => {
 
   const liveDetailTask = detailTask ? tasks.find((t) => t.id === detailTask.id) ?? detailTask : null;
 
-  const todayCount = tasks.filter((t) => t.isToday && t.status !== "done").length;
   const doneCount = tasks.filter((t) => t.status === "done").length;
-  const criticalCount = tasks.filter((t) => t.priority === "critical" && t.status !== "done").length;
-  const overdueCount = tasks.filter((t) => isTaskOverdue(t)).length;
 
   const emptyCopy = tasks.length === 0
     ? "No tasks yet. Add one below or tap New."
@@ -1976,20 +1951,10 @@ const Tasks = () => {
       ? "Nothing matches this filter."
       : "No open tasks. Show completed to see finished ones.";
 
-  const railItem = (id: TaskFilter, label: string, Icon: React.ElementType, count?: number, accent?: string) => {
-    const on = filter === id;
-    return (
-      <button key={id} type="button" onClick={() => setFilter(id)} className={railBtnClass(on)}>
-        {on && accent && <span className="absolute left-0 top-1.5 bottom-1.5 hidden w-1 rounded-full bg-white/80 sm:block" />}
-        {!on && accent && <span className="absolute left-0 top-1.5 bottom-1.5 hidden w-1 rounded-full sm:block" style={{ background: accent }} />}
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="w-full truncate text-[10px] font-semibold leading-tight sm:text-sm">{label}</span>
-        {count != null && count > 0 && (
-          <span className={`text-[10px] font-bold px-1.5 py-px rounded-md ${on ? "bg-white/20" : "bg-card text-foreground/70"}`}>{count}</span>
-        )}
-      </button>
-    );
-  };
+  const openTasks = tasks.filter((task) => task.status !== "done");
+  const notStartedCount = openTasks.filter((task) => task.status === "todo").length;
+  const inProgressCount = openTasks.filter((task) => task.status === "in_progress").length;
+  const filtersActive = statusFilter !== "all" || categoryFilter !== "all" || companyFilter !== "all" || query.trim() !== "";
 
   if (tasksLoading || settingsLoading) {
     return (
@@ -2004,14 +1969,14 @@ const Tasks = () => {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle={isOwnScope ? "What needs doing" : "Shared with you"}
+      subtitle={isOwnScope ? "Tap a task to open it. Tick it to mark it done." : "Shared with you"}
       icon={<CheckSquare className="w-5 h-5" />}
       sharePage="tasks"
       action={
         <div className="flex items-center gap-1.5">
           {canEdit && (
-            <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={openAdd}>
-              <Plus className="mr-1 h-4 w-4" /> New
+            <Button size="sm" onClick={openAdd}>
+              <Plus /> New
             </Button>
           )}
           <Button size="icon" variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Task settings">
@@ -2020,106 +1985,60 @@ const Tasks = () => {
         </div>
       }
     >
-      <div className="flex min-w-0 gap-3">
-        <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
-          <div className="sticky top-2 space-y-1">
-            {railItem("all", "All", CheckSquare, tasks.filter((t) => showCompleted || t.status !== "done").length)}
-            {railItem("today", "Today", Sun, todayCount, "hsl(38, 92%, 50%)")}
-            {railItem("overdue", "Overdue", AlertTriangle, overdueCount, "hsl(0, 72%, 51%)")}
-            {railItem("progress", "Doing", Clock, tasks.filter((t) => t.status === "in_progress").length, "hsl(199, 89%, 48%)")}
-            {railItem("critical", "Critical", Flag, criticalCount, "hsl(0, 72%, 51%)")}
-            <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Tracking</p>
-            {TASK_TRACKING.map((t) =>
-              railItem(`tracking:${t.value}`, t.label, Activity, tasks.filter((task) => task.tracking === t.value && (showCompleted || task.status !== "done")).length, t.hex)
-            )}
-            <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Categories</p>
-            {settings.categories.map((cat) =>
-              railItem(`category:${cat}`, cat, Circle, tasks.filter((t) => t.category === cat && (showCompleted || t.status !== "done")).length, settings.categoryColors?.[cat])
-            )}
-            {settings.companies.length > 0 && (
-              <>
-                <p className="hidden sm:block pt-2 pb-1 px-2 text-[10px] font-bold uppercase tracking-widest text-foreground/55">Companies</p>
-                {settings.companies.map((co) =>
-                  railItem(`company:${co}`, co, Building2, tasks.filter((t) => t.company === co && (showCompleted || t.status !== "done")).length, settings.companyColors?.[co])
-                )}
-              </>
-            )}
-          </div>
-        </aside>
-
-        <div className="min-w-0 flex-1 overflow-x-hidden">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tasks" className="h-10 rounded-xl border-2 bg-card pl-9 shadow-soft" />
-            </div>
-            <div className="flex items-center gap-1 rounded-2xl border-2 border-border bg-card p-1 shadow-soft">
-              {([["list", LayoutList, "List"], ["tile", LayoutGrid, "Tiles"], ["kanban", Columns2, "Board"], ["company", Building2, "By company"]] as [TaskView, React.ElementType, string][]).map(([mode, Icon, label]) => (
-                <button key={mode} type="button" title={label} onClick={() => changeView(mode)}
-                  className={`relative z-10 rounded-xl p-2 ${viewMode === mode ? "text-primary-foreground" : "text-foreground/70 hover:text-foreground"}`}
-                >
-                  {viewMode === mode && (
-                    <motion.span layoutId="tasks-view-tab" className="absolute inset-0 -z-10 rounded-xl bg-gradient-primary shadow-sm" transition={{ type: "spring", stiffness: 500, damping: 35 }} />
-                  )}
-                  <Icon className="h-4 w-4" />
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                const next = !showCompleted;
-                setShowCompletedOverride(next);
-                void saveSettings({ ...settings, showCompleted: next });
-              }}
-              title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
-              className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-2 rounded-xl border-2 transition-colors ${
-                showCompleted
-                  ? "border-emerald-400/40 bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
-                  : "border-border bg-card text-foreground/70 hover:text-foreground"
-              }`}
-            >
-              {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{showCompleted ? "Done shown" : "Done hidden"}</span>
-              {!showCompleted && doneCount > 0 && (
-                <span className="text-[10px] font-bold bg-card text-foreground px-1.5 py-px rounded-md border border-border">{doneCount}</span>
-              )}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {[
-              { id: "today" as TaskFilter, label: "Today", value: todayCount, text: "text-amber-800 dark:text-amber-200", bg: "bg-amber-500/15", border: "border-amber-400/40" },
-              { id: "critical" as TaskFilter, label: "Critical", value: criticalCount, text: "text-red-800 dark:text-red-200", bg: "bg-red-500/15", border: "border-red-400/40" },
-              { id: "overdue" as TaskFilter, label: "Overdue", value: overdueCount, text: "text-red-800 dark:text-red-200", bg: "bg-red-500/12", border: "border-red-400/35" },
-            ].map((s) => (
+      <div className="space-y-4 overflow-x-hidden">
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { key: "all" as const, label: "Total", value: tasks.length, color: "#14213D" },
+            { key: "todo" as const, label: "Not started", value: notStartedCount, color: "#3B4759" },
+            { key: "in_progress" as const, label: "In progress", value: inProgressCount, color: "#17475C" },
+          ]).map((stat) => {
+            const active = statusFilter === stat.key;
+            return (
               <button
-                key={s.label}
+                key={stat.label}
                 type="button"
-                onClick={() => setFilter(s.id)}
-                className={`rounded-xl border-2 ${s.border} ${s.bg} px-3 py-2 text-center transition ${filter === s.id ? "ring-2 ring-primary/40" : "hover:brightness-[1.03]"}`}
+                onClick={() => setStatusFilter(stat.key)}
+                aria-pressed={active}
+                className={`btn-edge rounded-lg p-2.5 text-left text-white ${active ? "ring-2 ring-[#C6A15B] ring-offset-2 ring-offset-background" : ""}`}
+                style={{ background: stat.color }}
               >
-                <p className={`text-xl font-bold font-display leading-none ${s.text}`}>{s.value}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/70 mt-1">{s.label}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{stat.label}</p>
+                <p className="mt-1 font-display text-2xl font-bold leading-none tabular-nums">{stat.value}</p>
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          {canEdit && (
-            <form
-              className="mb-3 flex gap-2"
-              onSubmit={(e) => { e.preventDefault(); void handleQuickAdd(); }}
-            >
-              <Input
-                value={quickTitle}
-                onChange={(e) => setQuickTitle(e.target.value)}
-                placeholder={filter === "today" ? "Add something for today" : "Add a task and press Enter"}
-                className="h-11 rounded-xl border-2 bg-card shadow-soft"
-              />
-              <Button type="submit" disabled={!quickTitle.trim()} className="h-11 rounded-xl bg-gradient-primary px-4">
-                Add
-              </Button>
-            </form>
-          )}
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" className={optionClass(filter === "today")} onClick={() => setFilter(filter === "today" ? "all" : "today")}>
+            Today
+          </button>
+          <button type="button" className={optionClass(filtersActive)} onClick={() => setFiltersOpen(true)}>
+            {filtersActive ? "Filtered" : "Filter"}
+          </button>
+          {([["list", "List"], ["tile", "Tiles"], ["kanban", "Board"], ["company", "Company"]] as [TaskView, string][]).map(([mode, label]) => (
+            <button key={mode} type="button" className={optionClass(viewMode === mode)} onClick={() => changeView(mode)}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {canEdit && (
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => { e.preventDefault(); void handleQuickAdd(); }}
+          >
+            <Input
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              placeholder={filter === "today" ? "Add something for today" : "Add a task"}
+              className="h-11"
+            />
+            <Button type="submit" disabled={!quickTitle.trim()}>
+              <Plus /> Add
+            </Button>
+          </form>
+        )}
 
           {viewMode === "company" ? (
             <CompanyGroupView
@@ -2139,71 +2058,130 @@ const Tasks = () => {
               onUrgencyChange={(t, u) => t.id && setUrgency(t.id, u)}
             />
           ) : viewMode === "tile" ? (
-            <div>
-              {orderedTiles.length === 0 ? (
-                <div className="rounded-2xl border-2 border-border bg-card px-6 py-14 text-center shadow-card">
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-                    <CheckSquare className="h-6 w-6" />
-                  </div>
-                  <p className="font-display text-xl font-bold">{emptyCopy}</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {orderedTiles.map((task) => (
-                    <TileCard
-                      key={task.id}
-                      task={task}
-                      settings={settings}
-                      colourBy={colourBy}
-                      isDragging={dragId.current === task.id}
-                      onOpen={() => openDetail(task)}
-                      onDelete={() => setPendingDelete(task)}
-                      onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
-                      onStatusChange={(s) => task.id && setStatus(task.id, s)}
-                      onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
-                      onDragStart={() => { dragId.current = task.id!; }}
-                      onDragOver={() => { dragOverId.current = task.id!; }}
-                      onDrop={() => handleDrop(task.id!)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            orderedTiles.length === 0 ? (
+              <EmptyTasks copy={emptyCopy} canAdd={canEdit && tasks.length === 0} onAdd={openAdd} />
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {orderedTiles.map((task) => (
+                  <TileCard
+                    key={task.id}
+                    task={task}
+                    settings={settings}
+                    colourBy={colourBy}
+                    isDragging={dragId.current === task.id}
+                    onOpen={() => openDetail(task)}
+                    onDelete={() => setPendingDelete(task)}
+                    onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
+                    onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                    onUrgencyChange={(u) => task.id && setUrgency(task.id, u)}
+                    onDragStart={() => { dragId.current = task.id!; }}
+                    onDragOver={() => { dragOverId.current = task.id!; }}
+                    onDrop={() => handleDrop(task.id!)}
+                  />
+                ))}
+              </div>
+            )
+          ) : filtered.length === 0 ? (
+            <EmptyTasks copy={emptyCopy} canAdd={canEdit && tasks.length === 0} onAdd={openAdd} />
           ) : (
-            <div className="rounded-2xl border-2 border-border bg-card overflow-hidden shadow-card">
-              {filtered.length === 0 ? (
-                <div className="px-6 py-14 text-center">
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-                    <CheckSquare className="h-6 w-6" />
-                  </div>
-                  <p className="font-display text-xl font-bold">{emptyCopy}</p>
-                  {canEdit && tasks.length === 0 && (
-                    <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={openAdd}>
-                      <Plus className="mr-1 h-4 w-4" /> New task
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="divide-y divide-border/40">
-                  {filtered.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      settings={settings}
-                      colourBy={colourBy}
-                      selected={detailOpen && detailTask?.id === task.id}
-                      onOpen={() => openDetail(task)}
-                      onDelete={() => setPendingDelete(task)}
-                      onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
-                      onStatusChange={(s) => task.id && setStatus(task.id, s)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="space-y-3">
+              {(["in_progress", "todo", "done"] as TaskStatus[]).map((value) => {
+                const status = statusLook(value);
+                const rows = filtered.filter((task) => task.status === value);
+                if (rows.length === 0) return null;
+                return (
+                  <section key={value} className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+                    <div className="band flex items-center justify-between px-3 py-2.5 text-white" style={{ background: status.hex }}>
+                      <p className="font-display text-base font-bold">{status.label}</p>
+                      <p className="font-display text-lg font-bold tabular-nums">{rows.length}</p>
+                    </div>
+                    <div className="divide-y divide-foreground/10">
+                      {rows.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          settings={settings}
+                          colourBy={colourBy}
+                          selected={detailOpen && detailTask?.id === task.id}
+                          onOpen={() => openDetail(task)}
+                          onDelete={() => setPendingDelete(task)}
+                          onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
+                          onStatusChange={(s) => task.id && setStatus(task.id, s)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           )}
         </div>
-      </div>
+
+      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <DialogContent className="mx-4 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Filter tasks</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block space-y-1">
+              <Label>Find</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-foreground/50" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tasks" className="h-11 pl-9" />
+              </div>
+            </label>
+            <label className="block space-y-1">
+              <Label>Status</Label>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | TaskStatus)}
+                className="h-11 w-full rounded-lg border border-foreground/25 bg-card px-3 text-sm"
+              >
+                <option value="all">Any status</option>
+                <option value="todo">Not started</option>
+                <option value="in_progress">In progress</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <Label>Category</Label>
+              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-11 w-full rounded-lg border border-foreground/25 bg-card px-3 text-sm">
+                <option value="all">Any category</option>
+                {settings.categories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <Label>Company</Label>
+              <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)} className="h-11 w-full rounded-lg border border-foreground/25 bg-card px-3 text-sm">
+                <option value="all">Any company</option>
+                {settings.companies.map((company) => <option key={company} value={company}>{company}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              className={`flex h-11 w-full items-center justify-between rounded-lg border px-3 text-sm font-bold ${
+                showCompleted ? "border-transparent bg-[#1F6B4F] text-white" : "border-foreground/25 bg-card"
+              }`}
+              onClick={() => {
+                const next = !showCompleted;
+                setShowCompletedOverride(next);
+                void saveSettings({ ...settings, showCompleted: next });
+              }}
+            >
+              Show finished tasks
+              <span className="font-display tabular-nums">{doneCount}</span>
+            </button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => { setStatusFilter("all"); setCategoryFilter("all"); setCompanyFilter("all"); setFilter("all"); setQuery(""); }}
+            >
+              Clear filters
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <TaskDetailSheet
         task={liveDetailTask}
@@ -2232,6 +2210,7 @@ const Tasks = () => {
               priority: editTask.priority,
               status: editTask.status,
               tracking: editTask.tracking,
+              trackingNote: editTask.trackingNote || "",
               category: editTask.category,
               company: editTask.company || "",
               dueDate: editTask.dueDate || "",

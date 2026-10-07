@@ -59,7 +59,7 @@ function SecurityFrame({
 }) {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-gradient-hero px-4 py-8 pt-[max(2rem,calc(env(safe-area-inset-top,0px)+1.5rem))]">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-card shadow-elevated">
+      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-card text-card-foreground shadow-elevated">
         <div className="bg-[color-mix(in_srgb,hsl(var(--primary))_14%,hsl(var(--card)))] px-6 py-7 text-center">
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-lg">
             {icon}
@@ -202,11 +202,12 @@ function AuthenticationPrompt({
       {showPasskey && (
         <>
           <Button
-            className="h-12 w-full rounded-xl bg-gradient-primary"
+            size="lg"
+            className="w-full"
             disabled={busy !== null || !passkeysSupported()}
             onClick={() => void verifyPasskey()}
           >
-            <Fingerprint className="mr-2 h-5 w-5" />
+            <Fingerprint />
             {busy === "passkey" ? "Checking passkey…" : "Continue with passkey"}
           </Button>
           <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
@@ -301,7 +302,8 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
       >
         <LocalPasskeyPortNotice />
         <Button
-          className="h-12 w-full rounded-xl bg-gradient-primary"
+          size="lg"
+          className="w-full"
           disabled={registering || !passkeysSupported()}
           onClick={() => {
             setRegistering(true);
@@ -313,7 +315,7 @@ export function MandatoryPasskeyGate({ children }: { children: ReactNode }) {
             }).finally(() => setRegistering(false));
           }}
         >
-          <Fingerprint className="mr-2 h-5 w-5" />
+          <Fingerprint />
           {registering ? "Creating passkey…" : "Create passkey"}
         </Button>
         {!passkeysSupported() && (

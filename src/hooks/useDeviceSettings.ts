@@ -10,6 +10,9 @@ import {
   type DisplayPage,
 } from "@/lib/displayPages";
 import { DEFAULT_NIGHT_MODE, type NightModeSettings } from "@/lib/displayNightMode";
+import type { AlarmToneId } from "@/lib/alarmTone";
+
+export type { AlarmToneId };
 
 export {
   BACKDROP_GROUPS,
@@ -62,15 +65,36 @@ export interface ClockSettings {
   size: ClockSize;
 }
 
+/** How a linked sunrise light behaves around one alarm. Brightness is 1 to 255. */
+export interface AlarmLightCue {
+  lightId: string;
+  /** Brightness when the light first comes on. */
+  startBrightness: number;
+  /** Minutes before the alarm the light turns on. */
+  leadMinutes: number;
+  /** Brightness the ramp finishes on. */
+  peakBrightness: number;
+  /** Minutes after it turns on to reach peak brightness. */
+  rampMinutes: number;
+  offMode: "after" | "at";
+  /** Minutes after peak brightness before the light turns off. */
+  offAfterMinutes: number;
+  /** Clock time "HH:mm" when offMode is "at". */
+  offAt: string;
+}
+
 export interface Alarm {
   id: string;
   time: string; // "HH:mm", 24h
   days: number[]; // 0=Sun..6=Sat; empty = one-off, fires once then disables itself
   label: string;
   enabled: boolean;
+  tone?: AlarmToneId;
   sunriseMinutes?: number;
   /** Sunrise lights (devices/{id} with deviceType "light") to ramp alongside this alarm. */
   linkedLightIds?: string[];
+  /** Per light wake plan. When set, this is what the sunrise tick follows. */
+  lightCues?: AlarmLightCue[];
 }
 
 export interface PhotoFrameSettings {

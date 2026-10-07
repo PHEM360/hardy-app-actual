@@ -76,6 +76,13 @@ export function Stars({ compact }: { compact: boolean }) {
       >
         <span className="absolute -right-1 -top-1 h-9 w-9 rounded-full bg-[#16203d]" />
       </div>
+      <div
+        className="absolute -left-[12%] top-[22%] h-[42%] w-[124%] -rotate-6 opacity-50 blur-md"
+        style={{
+          background: "linear-gradient(90deg, transparent 0%, rgba(186,206,255,0.08) 18%, rgba(255,244,220,0.28) 48%, rgba(170,190,255,0.12) 72%, transparent 100%)",
+          animation: "chrome-sky-drift 26s ease-in-out infinite",
+        }}
+      />
       <svg className="absolute left-[21%] top-[14%] h-[54%] w-[28%] opacity-45" viewBox="0 0 120 64">
         <g stroke="rgba(190,215,255,0.55)" strokeWidth="0.6" fill="none">
           <path d="M8 46 L32 25 L58 34 L83 12 L110 29" />
@@ -319,34 +326,46 @@ function SeasonFX({ season, compact }: { season: ChromeSeason; compact: boolean 
 }
 
 export function Aurora() {
+  const stars = useMemo(() => seeded(36, 6.4), []);
+  const curtains = [
+    { color: "rgba(72, 220, 170, 0.55)", top: "6%", height: "62%", duration: "16s", delay: "0s", blur: "22px" },
+    { color: "rgba(90, 150, 255, 0.42)", top: "16%", height: "54%", duration: "22s", delay: "1.6s", blur: "28px" },
+    { color: "rgba(168, 92, 255, 0.34)", top: "2%", height: "48%", duration: "19s", delay: "0.8s", blur: "18px" },
+    { color: "rgba(255, 214, 150, 0.16)", top: "28%", height: "36%", duration: "26s", delay: "2.4s", blur: "30px" },
+  ];
   return (
     <>
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,12,30,0.5),rgba(10,38,45,0.16))]" />
-      <svg
-        className="absolute -left-[8%] -top-[45%] h-[170%] w-[118%] overflow-visible mix-blend-screen"
-        viewBox="0 0 600 180"
-        preserveAspectRatio="none"
-        style={{ animation: "chrome-aurora-wave 12s ease-in-out infinite, chrome-aurora-shimmer 8s ease-in-out infinite" }}
-      >
-        <defs>
-          <linearGradient id="aurora-green" x1="0" x2="1">
-            <stop offset="0" stopColor="#59f7c2" stopOpacity="0" />
-            <stop offset=".25" stopColor="#59f7c2" stopOpacity=".74" />
-            <stop offset=".62" stopColor="#60d8ff" stopOpacity=".5" />
-            <stop offset="1" stopColor="#60d8ff" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="aurora-violet" x1="0" x2="1">
-            <stop offset="0" stopColor="#a579ff" stopOpacity="0" />
-            <stop offset=".45" stopColor="#a579ff" stopOpacity=".62" />
-            <stop offset=".82" stopColor="#ec73ff" stopOpacity=".38" />
-            <stop offset="1" stopColor="#ec73ff" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d="M-30 100 C80 18 150 154 266 62 C370 -18 454 128 640 28" fill="none" stroke="url(#aurora-green)" strokeWidth="42" strokeLinecap="round" />
-        <path d="M-50 145 C92 65 168 178 302 92 C408 24 485 126 650 66" fill="none" stroke="url(#aurora-violet)" strokeWidth="27" strokeLinecap="round" opacity=".82" />
-        <path d="M-20 70 C120 5 188 112 315 46 C420 -8 510 74 630 18" fill="none" stroke="rgba(180,255,224,.28)" strokeWidth="10" strokeLinecap="round" />
-      </svg>
-      <div className="absolute inset-x-0 bottom-0 h-[28%] opacity-40" style={{ background: "linear-gradient(180deg, transparent, rgba(30,110,92,0.28))" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(3,8,24,0.62), rgba(8,28,40,0.22) 55%, rgba(4,12,28,0.45))" }} />
+      {stars.map(({ a, b, c }, i) => (
+        <span
+          key={i}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: `${a * 100}%`,
+            top: `${b * 70}%`,
+            width: 1 + c * 1.4,
+            height: 1 + c * 1.4,
+            opacity: 0.35 + c * 0.5,
+            boxShadow: "0 0 4px rgba(220,235,255,0.7)",
+            animation: `greeting-twinkle ${2.4 + a * 3.2}s ease-in-out ${b * 3}s infinite`,
+          }}
+        />
+      ))}
+      {curtains.map((curtain) => (
+        <div
+          key={curtain.color}
+          className="absolute -left-[18%] w-[136%] mix-blend-screen"
+          style={{
+            top: curtain.top,
+            height: curtain.height,
+            background: `linear-gradient(90deg, transparent, ${curtain.color}, transparent 78%)`,
+            filter: `blur(${curtain.blur})`,
+            borderRadius: "40% 60% 50% 50%",
+            animation: `chrome-aurora-wave ${curtain.duration} ease-in-out ${curtain.delay} infinite, chrome-aurora-shimmer ${curtain.duration} ease-in-out ${curtain.delay} infinite`,
+          }}
+        />
+      ))}
+      <div className="absolute inset-x-0 bottom-0 h-[34%] opacity-50" style={{ background: "linear-gradient(180deg, transparent, rgba(8,40,48,0.45))" }} />
     </>
   );
 }
@@ -459,25 +478,32 @@ export function Harbour() {
 
 
 function Silk() {
+  const folds = [
+    { color: "rgba(196, 154, 92, 0.28)", at: "18% 30%", duration: "18s" },
+    { color: "rgba(120, 170, 210, 0.26)", at: "72% 62%", duration: "24s" },
+    { color: "rgba(150, 110, 170, 0.24)", at: "40% 78%", duration: "21s" },
+    { color: "rgba(255, 236, 210, 0.18)", at: "60% 20%", duration: "28s" },
+  ];
   return (
     <>
-      <div className="absolute inset-[-20%]" style={{ background: "radial-gradient(ellipse at 20% 30%, rgba(255,190,220,0.28), transparent 42%), radial-gradient(ellipse at 80% 70%, rgba(140,190,255,0.28), transparent 46%)" }} />
-      {["rgba(255,170,210,0.38)", "rgba(120,210,255,0.32)", "rgba(200,160,255,0.3)"].map((color, i) => (
+      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 120%, rgba(20,16,28,0.35), transparent 55%)" }} />
+      {folds.map((fold, i) => (
         <div
-          key={color}
-          className="absolute inset-[-30%] mix-blend-screen"
+          key={fold.color}
+          className="absolute inset-[-35%] mix-blend-screen"
           style={{
-            background: `conic-gradient(from ${i * 80}deg at ${30 + i * 18}% ${40 + i * 10}%, transparent, ${color}, transparent 28%)`,
-            filter: "blur(18px)",
-            animation: `chrome-silk-flow ${16 + i * 4}s ease-in-out ${i * 1.4}s infinite`,
+            background: `radial-gradient(ellipse at ${fold.at}, ${fold.color}, transparent 42%)`,
+            filter: "blur(16px)",
+            animation: `chrome-silk-flow ${fold.duration} ease-in-out ${i * 1.8}s infinite`,
           }}
         />
       ))}
       <div
-        className="absolute inset-y-[-30%] left-[-20%] w-[40%] mix-blend-screen"
+        className="absolute inset-y-[-40%] left-[-30%] w-[46%] mix-blend-screen"
         style={{
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.45), rgba(255,230,190,0.2), transparent)",
-          animation: "chrome-silk-sheen 9s ease-in-out infinite",
+          background: "linear-gradient(100deg, transparent 10%, rgba(255,248,236,0.42) 46%, rgba(198,161,91,0.18) 58%, transparent 78%)",
+          filter: "blur(8px)",
+          animation: "chrome-silk-sheen 11s ease-in-out infinite",
         }}
       />
     </>

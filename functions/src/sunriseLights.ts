@@ -14,12 +14,24 @@ import { addLondonDays, dayOfWeekFor, londonNow, londonTimeOn } from "./londonTi
 // (tickSunriseLights — also finishes any pending pairings, see
 // lightPairing.ts), and cutting a forgotten light off (onLightRevoked).
 
+interface AlarmLightCueLike {
+  lightId: string;
+  startBrightness?: number;
+  leadMinutes?: number;
+  peakBrightness?: number;
+  rampMinutes?: number;
+  offMode?: "after" | "at";
+  offAfterMinutes?: number;
+  offAt?: string;
+}
+
 interface AlarmLike {
   time: string;
   days: number[];
   enabled: boolean;
   sunriseMinutes?: number;
   linkedLightIds?: string[];
+  lightCues?: AlarmLightCueLike[];
 }
 
 function timestampMs(value: unknown): number {
@@ -105,6 +117,55 @@ function isWithinSchedule(schedule: ScheduleLike, nowMinutes: number, dayOfWeek:
  * links this light, so one light waking with two overlapping alarms takes
  * whichever is furthest along.
  */
+function clockOnDate(dateStr: string, hhmm: string, notBeforeMs: number): number {
+  let at = londonTimeOn(dateStr, hhmm);
+  if (at <= notBeforeMs) at = londonTimeOn(addLondonDays(dateStr, 1), hhmm);
+  return at;
+}
+
+/**
+ * Brightness this light should be at for one alarm cue, or null when the
+ * cue is not in its on window. The light comes on `leadMinutes` before the
+ * alarm at `startBrightness`, reaches `peakBrightness` after `rampMinutes`,
+ * then stays there until it turns off after a delay or at a clock time.
+ */
+function cueBrightness(alarm: AlarmLike, cue: AlarmLightCueLike, now: Date): number | null {
+  const lead = Math.max(0, cue.leadMinutes || 0);
+  const ramp = Math.max(1, cue.rampMinutes || 1);
+  const startBri = Math.max(1, Math.min(255, cue.startBrightness || 1));
+  const peakBri = Math.max(1, Math.min(255, cue.peakBrightness || 220));
+  const nowMs = now.getTime();
+  const { dateStr: today } = londonNow(now);
+  for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
+    const dateStr = dayOffset === 0 ? today : addLondonDays(today, dayOffset);
+    if (alarm.days.length > 0 && !alarm.days.includes(dayOfWeekFor(dateStr))) continue;
+    const alarmMs = londonTimeOn(dateStr, alarm.time);
+    const startMs = alarmMs - lead * 60_000;
+    const peakMs = startMs + ramp * 60_000;
+    const offMs = cue.offMode === "at" && cue.offAt
+      ? clockOnDate(dateStr, cue.offAt, startMs)
+      : peakMs + Math.max(1, cue.offAfterMinutes || 10) * 60_000;
+    if (nowMs < startMs || nowMs >= offMs) continue;
+    if (nowMs >= peakMs || peakMs <= startMs) return peakBri;
+    const t = (nowMs - startMs) / (peakMs - startMs);
+    return Math.round(startBri + (peakBri - startBri) * t);
+  }
+  return null;
+}
+
+function alarmCueBrightness(alarms: AlarmLike[], lightId: string, now: Date): number {
+  let brightest = 0;
+  for (const alarm of alarms) {
+    if (!alarm.enabled || !alarm.lightCues?.length) continue;
+    for (const cue of alarm.lightCues) {
+      if (cue.lightId !== lightId) continue;
+      const brightness = cueBrightness(alarm, cue, now);
+      if (brightness) brightest = Math.max(brightest, brightness);
+    }
+  }
+  return brightest;
+}
+
 function sunriseProgressForLight(alarms: AlarmLike[], lightId: string, now: Date): number {
   let strongest = 0;
   const nowMs = now.getTime();
@@ -303,6 +364,29 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
         .where("deviceType", "==", "display")
         .get();
       const alarms: AlarmLike[] = displayDocs.docs.flatMap((d) => (d.data().settings?.alarms || []) as AlarmLike[]);
+      const cueBrightnessNow = alarmCueBrightness(alarms, lightDoc.id, now);
+      const hasCue = alarms.some((alarm) => alarm.enabled && alarm.lightCues?.some((cue) => cue.lightId === lightDoc.id));
+      if (hasCue) {
+        if (cueBrightnessNow > 0) {
+          const sunrise = light.settings?.light?.sunrise || {};
+          const [r, g, b] = hexToRgb(sunrise.colorTo || sunrise.warmthColor || "#fff1c9");
+          await publishLightState(lightDoc.id, { on: true, bri: cueBrightnessNow, seg: [{ col: [[r, g, b]] }] }, 600);
+          await lightDoc.ref.update({
+            "settings.light.alarmDriven": true,
+            "settings.light.manual.on": true,
+            "settings.light.manual.brightness": cueBrightnessNow,
+          });
+        } else if (light.settings?.light?.alarmDriven && !scheduleWantsOn) {
+          await publishLightState(lightDoc.id, { on: false }, 20);
+          await lightDoc.ref.update({
+            "settings.light.alarmDriven": false,
+            "settings.light.manual.on": false,
+          });
+        } else if (light.settings?.light?.alarmDriven) {
+          await lightDoc.ref.update({ "settings.light.alarmDriven": false });
+        }
+        continue;
+      }
       const progress = sunriseProgressForLight(alarms, lightDoc.id, now);
       if (progress <= 0) continue; // no ramp due right now — leave the light at whatever it was last manually/schedule/auto-off set to
 

@@ -22,6 +22,7 @@ import {
   KeyRound,
   StickyNote,
   MonitorSmartphone,
+  AlarmClock,
   Palmtree,
   Images,
   Mail,
@@ -231,6 +232,13 @@ const SECTIONS: Section[] = [
         icon: Bell,
         route: "/notifications",
         gradient: "linear-gradient(135deg, hsl(44,90%,52%), hsl(32,80%,46%))",
+        iconColor: "#fff",
+      },
+      {
+        label: "Alarms",
+        icon: AlarmClock,
+        route: "/alarms",
+        gradient: "linear-gradient(135deg, #5C4318, #8A6424)",
         iconColor: "#fff",
       },
       {

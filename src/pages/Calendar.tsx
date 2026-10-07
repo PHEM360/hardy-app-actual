@@ -276,7 +276,7 @@ const CalendarPage = () => {
   const [feedDraft, setFeedDraft] = useState({ name: "", url: "" });
   const [feedBusy, setFeedBusy] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(() => new Date());
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false);
@@ -895,7 +895,7 @@ const CalendarPage = () => {
                   key={day.toISOString()}
                   type="button"
                   onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`group relative flex min-h-[64px] flex-col items-start border-b border-r border-border/25 p-1.5 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
+                  className={`group relative flex min-h-[88px] flex-col items-start border-b border-r border-border/25 p-1 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
                     !inMonth ? "bg-muted/10" : selected ? "bg-primary/10" : "bg-card hover:bg-primary/5"
                   }`}
                   style={today && inMonth ? { background: "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))" } : undefined}
@@ -924,11 +924,19 @@ const CalendarPage = () => {
                     )}
                   </div>
 
-                  {/* Mobile: compact dots — full detail is one tap away below */}
-                  <div className="flex flex-wrap gap-0.5 sm:hidden">
-                    {dayEvts.slice(0, 4).map((e) => (
-                      <span key={e.id} className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: getEventColor(e) }} />
+                  <div className="flex w-full min-w-0 flex-col gap-0.5 sm:hidden">
+                    {dayEvts.slice(0, 2).map((e) => (
+                      <span
+                        key={e.id}
+                        className="block w-full truncate rounded-sm px-0.5 text-[8px] font-bold leading-3 text-white"
+                        style={{ background: getEventColor(e) }}
+                      >
+                        {e.title}
+                      </span>
                     ))}
+                    {dayEvts.length > 2 && (
+                      <span className="text-[8px] font-bold text-foreground/70">+{dayEvts.length - 2}</span>
+                    )}
                   </div>
                 </button>
               );

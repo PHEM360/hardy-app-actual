@@ -168,7 +168,7 @@ function PageTile({
         } ${editMode ? "pointer-events-none" : ""}`}
       >
         <span
-          className={`flex shrink-0 items-center justify-center text-white shadow-sm ${tileIconWrapClass(preset, featured, compact)}`}
+          className={`flex shrink-0 items-center justify-center text-white shadow-card ring-1 ring-[#C6A15B] ring-offset-2 ring-offset-[#F8F4EC] ${tileIconWrapClass(preset, featured, compact)}`}
           style={{ background: tile.gradient }}
         >
           <Icon className={featured && (preset === "magazine" || preset === "spotlight") ? "h-6 w-6" : compact ? "h-4 w-4" : "h-5 w-5"} />
@@ -221,12 +221,12 @@ export default function HomeTiles({
     .filter((tile) => tile && accessibleIds.includes(tile.id));
 
   return (
-    <div className="page-gutter-x mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden pb-6">
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/30 bg-background/95 py-3 backdrop-blur-sm">
+    <div className="home-stage page-gutter-x mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden pb-6">
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#1A1814]/95 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div>
-            <p className="text-sm font-semibold text-foreground">Home</p>
-            <p className="text-[10px] text-muted-foreground">{HOME_TILE_PRESETS.find((item) => item.id === preset)?.label}</p>
+            <p className="font-display text-lg font-bold text-[#F8F4EC]">Home</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-[#C6A15B]">{HOME_TILE_PRESETS.find((item) => item.id === preset)?.label}</p>
           </div>
           {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
         </div>

@@ -242,11 +242,9 @@ describe("RemoteDisplays", () => {
     expect(saved[0].backdrop).toBe("sailing");
   });
 
-  it("lets an alarm be linked to a sunrise light", () => {
+  it("sends alarm setup to the alarms page", () => {
     render(<MemoryRouter><RemoteDisplays /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: /Add alarm/ }));
-    expect(screen.getByText("Also wake")).toBeInTheDocument();
-    // Now rendered twice: once in the Sunrise lights panel, once as a pickable chip.
-    expect(screen.getAllByText("Porch light").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("link", { name: "Open alarms" })).toHaveAttribute("href", "/alarms");
+    expect(screen.queryByRole("button", { name: /Add alarm/ })).not.toBeInTheDocument();
   });
 });

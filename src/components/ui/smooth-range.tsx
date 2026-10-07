@@ -13,12 +13,14 @@ export function SmoothRange({
   max,
   onCommit,
   className,
+  "aria-label": ariaLabel,
 }: {
   value: number;
   min: number;
   max: number;
   onCommit: (value: number) => void;
   className?: string;
+  "aria-label"?: string;
 }) {
   const [local, setLocal] = useState(value);
 
@@ -34,6 +36,7 @@ export function SmoothRange({
       onMouseUp={() => onCommit(local)}
       onTouchEnd={() => onCommit(local)}
       onKeyUp={() => onCommit(local)}
+      aria-label={ariaLabel}
       className={className}
     />
   );

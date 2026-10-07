@@ -36,6 +36,7 @@ import Display from "@/pages/Display";
 import DisplayPair from "@/pages/DisplayPair";
 import RemoteDisplays from "@/pages/RemoteDisplays";
 import ConnectedDevices from "@/pages/ConnectedDevices";
+import Alarms from "@/pages/Alarms";
 import TagScan from "@/pages/TagScan";
 import TagScanBySlug from "@/pages/TagScanBySlug";
 import LinkRedirect from "@/pages/LinkRedirect";
@@ -260,6 +261,7 @@ const App = () => (
             <Route path="/qr-codes" element={<QRCodes />} />
             <Route path="/remote-displays" element={<RemoteDisplays />} />
             <Route path="/connected-devices" element={<ConnectedDevices />} />
+            <Route path="/alarms" element={<Alarms />} />
             <Route
               path="/ai-analysis"
               element={

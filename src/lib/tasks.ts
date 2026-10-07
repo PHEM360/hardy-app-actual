@@ -1,7 +1,7 @@
 import { stripUndefined } from "@/lib/displayPages";
 import type { Task, TaskPriority, TaskSubtask, TaskTracking } from "@/types/app";
 
-const OPTIONAL_STRINGS = new Set(["description", "notes", "company", "dueDate", "tracking"]);
+const OPTIONAL_STRINGS = new Set(["description", "notes", "company", "dueDate", "tracking", "trackingNote"]);
 
 /** Tracking states in order from best to worst, with the solid colour each one shows as. */
 export const TASK_TRACKING: { value: TaskTracking; label: string; hex: string }[] = [

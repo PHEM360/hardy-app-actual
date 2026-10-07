@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
-import { FileUp, Receipt, Settings2, X } from "lucide-react";
+import { FileUp, Lightbulb, Receipt, Settings2, X } from "lucide-react";
+import { useMyDevices } from "@/hooks/useMyDevices";
+import { LightManualControls } from "@/components/display/LightManualControls";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HOME_TILES } from "@/lib/homeLayout";
@@ -44,12 +46,21 @@ export function TdQuickLinksWidget({
 }) {
   const cfg = (config ?? {}) as QuickLinksConfig;
   const tileIds = cfg.tileIds ?? [];
+  const { devices } = useMyDevices();
+  const lights = devices.filter((device) => device.deviceType === "light");
   const navigate = useNavigate();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  const selected = tileIds.map((id) => PICKABLE.find((t) => t.id === id)).filter(Boolean) as PickableTile[];
+  const deviceTiles = tileIds
+    .filter((id) => id.startsWith("light:"))
+    .map((id) => lights.find((light) => light.id === id.slice(6)))
+    .filter((light): light is (typeof lights)[number] => !!light);
+  const selected = tileIds
+    .filter((id) => !id.startsWith("light:"))
+    .map((id) => PICKABLE.find((t) => t.id === id))
+    .filter(Boolean) as PickableTile[];
 
   const toggleTile = (id: string) => {
     const next = tileIds.includes(id) ? tileIds.filter((t) => t !== id) : [...tileIds, id].slice(0, MAX_LINKS);
@@ -78,7 +89,7 @@ export function TdQuickLinksWidget({
           </button>
         }
       />
-      {selected.length === 0 ? (
+      {selected.length === 0 && deviceTiles.length === 0 ? (
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
@@ -89,13 +100,27 @@ export function TdQuickLinksWidget({
           Tap to choose pages
         </button>
       ) : (
-        <FitTileGrid
-          tiles={selected.map((tile) => ({ id: tile.id, label: tile.label, icon: tile.icon }))}
-          onRun={(id) => {
-            const tile = selected.find((t) => t.id === id);
-            if (tile) runTile(tile);
-          }}
-        />
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          {deviceTiles.length > 0 && (
+            <div className={`space-y-2 overflow-y-auto pr-0.5 ${selected.length > 0 ? "max-h-[58%]" : "min-h-0 flex-1"}`}>
+              {deviceTiles.map((light) => (
+                <div key={light.id} className="rounded-lg border border-foreground/20 bg-card px-2.5 py-2 shadow-card">
+                  <p className="mb-1 truncate text-xs font-bold">{light.label}</p>
+                  <LightManualControls light={light} compact />
+                </div>
+              ))}
+            </div>
+          )}
+          {selected.length > 0 && (
+            <FitTileGrid
+              tiles={selected.map((tile) => ({ id: tile.id, label: tile.label, icon: tile.icon }))}
+              onRun={(id) => {
+                const tile = selected.find((t) => t.id === id);
+                if (tile) runTile(tile);
+              }}
+            />
+          )}
+        </div>
       )}
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -103,8 +128,37 @@ export function TdQuickLinksWidget({
           <DialogHeader>
             <DialogTitle className="font-display">Choose quick links</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">Pick up to {MAX_LINKS} pages ({tileIds.length}/{MAX_LINKS}).</p>
+          <p className="text-xs text-foreground/70">Pick up to {MAX_LINKS}. A light stays in this box with its own switch and brightness ({tileIds.length}/{MAX_LINKS}).</p>
           <div className="grid max-h-[55vh] grid-cols-2 gap-2 overflow-y-auto pt-1">
+            {lights.map((light) => {
+              const id = `light:${light.id}`;
+              const active = tileIds.includes(id);
+              const disabled = !active && tileIds.length >= MAX_LINKS;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggleTile(id)}
+                  className={`col-span-2 rounded-lg border-2 px-3 py-2 text-left ${
+                    active
+                      ? "btn-edge border-primary bg-primary text-primary-foreground"
+                      : disabled
+                      ? "cursor-not-allowed border-foreground/10 bg-muted text-muted-foreground"
+                      : "border-foreground/20 bg-card text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-xs font-bold">
+                    <Lightbulb className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{light.label}</span>
+                    {active && <X className="h-3 w-3 shrink-0" />}
+                  </span>
+                  <span className={`mt-0.5 block text-[10px] ${active ? "text-primary-foreground/80" : "text-foreground/65"}`}>
+                    On, off and brightness from Today
+                  </span>
+                </button>
+              );
+            })}
             {PICKABLE.map((tile) => {
               const Icon = tile.icon;
               const active = tileIds.includes(tile.id);

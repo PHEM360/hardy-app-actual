@@ -22,8 +22,12 @@ function withClearedOptionals(updates: Partial<Task>) {
   if ("company" in updates && !String(updates.company || "").trim()) payload.company = deleteField();
   if ("description" in updates && !String(updates.description || "").trim()) payload.description = deleteField();
   if ("notes" in updates && !String(updates.notes || "").trim()) payload.notes = deleteField();
+  if ("trackingNote" in updates && !String(updates.trackingNote || "").trim()) payload.trackingNote = deleteField();
   // Choosing "Not set" must remove the stored value, not leave the old one behind.
-  if ("tracking" in updates && !taskTrackingInfo(updates.tracking)) payload.tracking = deleteField();
+  if ("tracking" in updates && !taskTrackingInfo(updates.tracking)) {
+    payload.tracking = deleteField();
+    payload.trackingNote = deleteField();
+  }
   return payload;
 }
 

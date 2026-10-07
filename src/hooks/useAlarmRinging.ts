@@ -8,6 +8,7 @@ export interface RingingAlarm {
   deviceId: string;
   label: string;
   time: string;
+  tone: string;
   since: number;
   snoozedUntil: number | null;
 }
@@ -39,6 +40,7 @@ export function useAlarmRinging(uid: string | null | undefined) {
         deviceId: String(data.deviceId || ""),
         label: String(data.label || ""),
         time: String(data.time || ""),
+        tone: String(data.tone || "classic"),
         since: timestampMs(data.since) || Date.now(),
         snoozedUntil: data.snoozedUntil ? timestampMs(data.snoozedUntil) : null,
       });
@@ -60,6 +62,7 @@ export function useAlarmRinging(uid: string | null | undefined) {
       deviceId: ringing.deviceId,
       label: ringing.label,
       time: ringing.time,
+      tone: ringing.tone,
       snoozedUntil: Timestamp.fromMillis(Date.now() + minutes * 60_000),
     }, { merge: true });
   }, [uid, ringing]);

@@ -309,7 +309,7 @@ const Login = () => {
           initial={{ opacity: 0, y: 80 }}
           animate={{ opacity: showSplash ? 0 : 1, y: showSplash ? 80 : 0 }}
           transition={{ type: "spring", stiffness: 120, damping: 20, delay: showSplash ? 3.4 : 3.4 - SPLASH_DURATION }}
-          className="bg-card rounded-t-3xl px-6 pt-6 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full sm:rounded-3xl sm:mb-16"
+          className="bg-card text-card-foreground rounded-t-3xl px-6 pt-6 pb-10 shadow-elevated safe-bottom relative z-10 max-w-lg mx-auto w-full sm:rounded-3xl sm:mb-16"
         >
             <motion.h2
               initial={{ opacity: 0, x: -10 }}
@@ -350,11 +350,12 @@ const Login = () => {
               </p>
               <Button
                 type="button"
+                size="lg"
                 disabled={passkeyLoading || loading}
-                className="mt-3 h-12 w-full rounded-xl bg-gradient-primary text-sm font-semibold"
+                className="mt-3 w-full"
                 onClick={() => void handlePasskeyLogin()}
               >
-                <Fingerprint className="mr-2 h-5 w-5" />
+                <Fingerprint />
                 {passkeyLoading ? "Checking passkey…" : "Continue with passkey"}
               </Button>
             </div>
@@ -415,8 +416,9 @@ const Login = () => {
             >
               <Button
                 type="submit"
+                size="lg"
                 disabled={loading}
-                className="w-full h-12 rounded-xl text-sm font-semibold bg-gradient-primary hover:opacity-90 transition-opacity"
+                className="w-full"
               >
                 {loading ? (
                   <motion.div
@@ -438,12 +440,12 @@ const Login = () => {
           </div>
           <Button
             type="button"
-            variant="outline"
+            size="lg"
             disabled={passkeyLoading || loading || !passkeysSupported()}
-            className="h-12 w-full rounded-xl text-sm font-semibold"
+            className="w-full"
             onClick={() => void handlePasskeyLogin()}
           >
-            <Fingerprint className="mr-2 h-5 w-5" />
+            <Fingerprint />
             {passkeyLoading ? "Checking passkey…" : "Sign in with passkey"}
           </Button>
           <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Cast, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, MapPin, MonitorSmartphone,
-  Moon, Palette, Plus, RotateCcw, Search, Sparkles, Sunrise, Trash2, Wifi, WifiOff, X, Zap,
+  Moon, Palette, Plus, RotateCcw, Search, Sparkles, Trash2, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,10 @@ import { useBirthdays } from "@/hooks/useBirthdays";
 import { useFamilyMessages } from "@/hooks/useFamilyMessages";
 import { RemoteLayoutEditor } from "@/components/display/RemoteLayoutEditor";
 import { DisplayPageRenderer } from "@/components/display/DisplayPageRenderer";
-import { AlarmsSettingsPanel } from "@/components/display/AlarmsSettingsPanel";
 import { NightModeSettingsPanel } from "@/components/display/NightModeSettingsPanel";
 import { SunriseLightsPanel } from "@/components/display/SunriseLightsPanel";
 import { DisplayPhotoLibrary } from "@/components/display/DisplayPhotoLibrary";
-import { nextNightEndIso, overrideUntilForAlarm } from "@/lib/displayNightMode";
+import { nextNightEndIso } from "@/lib/displayNightMode";
 import { lastSeenLabel, timestampMs } from "@/lib/deviceStatus";
 import { resolveDisplayPhotos, snapshotPhotoRefs } from "@/lib/photoSelection";
 import { toast } from "sonner";
@@ -98,7 +97,7 @@ export default function RemoteDisplays() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPagesRef = useRef<DisplayPage[] | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
-  const { device, loading: deviceLoading, updatePages, addAlarm, updateAlarm, deleteAlarm, updateNightMode, updateControl } = useDeviceSettings(selectedDeviceId);
+  const { device, loading: deviceLoading, updatePages, updateNightMode, updateControl } = useDeviceSettings(selectedDeviceId);
   const photoOwnerId = device?.uid || dataUid;
   // The exact same hook the physical screen runs at /display, so this preview
   // and the picker below can never show something different from what
@@ -1137,39 +1136,11 @@ export default function RemoteDisplays() {
               </div>
 
               <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-card">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sunrise className="h-4 w-4 text-amber-500" />
-                  <div>
-                    <h2 className="font-display text-base font-bold">Alarm clock</h2>
-                    <p className="text-[11px] text-muted-foreground">Sunrise mode gradually warms and brightens the display before the alarm.</p>
-                  </div>
-                </div>
-                <AlarmsSettingsPanel
-                  alarms={device.settings.alarms}
-                  lights={lights}
-                  onAdd={(alarm) => {
-                    void addAlarm(alarm);
-                    if (device.settings.nightMode.withAlarms && alarm.enabled) {
-                      void updateNightMode({
-                        override: "on",
-                        overrideUntil: overrideUntilForAlarm(alarm.time, new Date()),
-                      });
-                    }
-                  }}
-                  onUpdate={(id, patch) => {
-                    void updateAlarm(id, patch);
-                    if (patch.enabled === true && device.settings.nightMode.withAlarms) {
-                      const time = patch.time || device.settings.alarms.find((item) => item.id === id)?.time;
-                      if (time) {
-                        void updateNightMode({
-                          override: "on",
-                          overrideUntil: overrideUntilForAlarm(time, new Date()),
-                        });
-                      }
-                    }
-                  }}
-                  onDelete={deleteAlarm}
-                />
+                <h2 className="font-display text-base font-bold">Alarms</h2>
+                <p className="mt-1 text-[11px] text-muted-foreground">Set times, tones and sunrise lights on the Alarms page. Every linked screen uses that same list.</p>
+                <Button asChild className="mt-3">
+                  <Link to="/alarms">Open alarms</Link>
+                </Button>
               </div>
             </>
           )}

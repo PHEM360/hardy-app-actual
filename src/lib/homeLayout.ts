@@ -24,7 +24,9 @@ import {
   Users,
   Wallet,
   Zap,
+  AlarmClock,
 } from "lucide-react";
+import { JEWEL } from "@/lib/brandPalette";
 
 export type HomeLayoutMode = "today" | "tiles";
 
@@ -65,31 +67,36 @@ export interface HomeTilesState {
   preset?: HomeTilesPresetId;
 }
 
+function jewelFill(from: string, to: string) {
+  return `linear-gradient(155deg, ${from} 0%, ${to} 100%)`;
+}
+
 export const HOME_TILES: HomeTileDef[] = [
-  { id: "quick_links", label: "Quick Links", icon: Zap, accent: "hsl(178,55%,36%)", gradient: "linear-gradient(135deg,hsl(178,58%,42%),hsl(182,55%,46%))" },
-  { id: "unallocated", label: "Unallocated", route: "/unallocated", icon: Inbox, accent: "hsl(12,70%,52%)", gradient: "linear-gradient(135deg,hsl(12,70%,52%),hsl(25,65%,46%))" },
-  { id: "finance", label: "Finance", route: "/finance", icon: PiggyBank, accent: "hsl(25,62%,55%)", gradient: "linear-gradient(135deg,hsl(25,65%,58%),hsl(15,58%,52%))" },
-  { id: "pets", label: "Pets", route: "/pets", icon: Heart, accent: "hsl(0,65%,50%)", gradient: "linear-gradient(135deg,hsl(0,68%,55%),hsl(340,60%,48%))" },
-  { id: "notes", label: "Notes", route: "/notes", icon: StickyNote, accent: "hsl(42,85%,48%)", gradient: "linear-gradient(135deg,hsl(42,92%,52%),hsl(28,85%,48%))" },
-  { id: "photos", label: "Photos", route: "/photos", icon: Images, accent: "hsl(330,55%,48%)", gradient: "linear-gradient(135deg,hsl(330,58%,52%),hsl(345,52%,44%))" },
-  { id: "tasks", label: "Tasks", route: "/tasks", icon: CheckSquare, accent: "hsl(260,55%,55%)", gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
-  { id: "today", label: "Today", route: "/today", icon: Sun, accent: "hsl(38,92%,50%)", gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
-  { id: "calendar", label: "Calendar", route: "/calendar", icon: CalendarDays, accent: "hsl(220,60%,55%)", gradient: "linear-gradient(135deg,hsl(218,63%,58%),hsl(230,58%,50%))" },
-  { id: "households", label: "Households", route: "/households", icon: Users, accent: "hsl(30,60%,50%)", gradient: "linear-gradient(135deg,hsl(30,65%,54%),hsl(20,58%,47%))" },
-  { id: "hh-finance", label: "HH Finance", route: "/household-finance", icon: Wallet, accent: "hsl(140,55%,40%)", gradient: "linear-gradient(135deg,hsl(140,58%,44%),hsl(150,53%,37%))" },
-  { id: "companies", label: "Companies", route: "/companies", icon: Building2, accent: "hsl(210,50%,50%)", gradient: "linear-gradient(135deg,hsl(210,53%,54%),hsl(220,48%,47%))" },
-  { id: "health", label: "Health", route: "/weight", icon: Activity, accent: "hsl(152,55%,40%)", gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
-  { id: "logins", label: "Log Ins", route: "/login-details", icon: KeyRound, accent: "hsl(265,55%,55%)", gradient: "linear-gradient(135deg,hsl(265,58%,58%),hsl(275,53%,50%))" },
-  { id: "tattersalls", label: "Flats", route: "/tattersalls", icon: Building, accent: "hsl(195,50%,45%)", gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
-  { id: "freezer", label: "Freezer", route: "/freezer", icon: Snowflake, accent: "hsl(198,75%,50%)", gradient: "linear-gradient(135deg,hsl(198,75%,55%),hsl(215,70%,48%))" },
-  { id: "inheritance", label: "IHT Planner", route: "/inheritance", icon: Calculator, accent: "hsl(0,60%,52%)", gradient: "linear-gradient(135deg,hsl(0,60%,52%),hsl(340,55%,46%))" },
-  { id: "leave", label: "Annual Leave", route: "/annual-leave", icon: Plane, accent: "hsl(198,60%,50%)", gradient: "linear-gradient(135deg,hsl(198,60%,50%),hsl(210,55%,44%))" },
-  { id: "holidays", label: "Holidays", route: "/holidays", icon: Palmtree, accent: "hsl(172,48%,38%)", gradient: "linear-gradient(135deg,hsl(172,52%,42%),hsl(188,48%,36%))" },
-  { id: "ai", label: "AI Analysis", route: "/ai-analysis", icon: Sparkles, accent: "hsl(270,55%,52%)", gradient: "linear-gradient(135deg,hsl(270,55%,52%),hsl(250,50%,46%))" },
-  { id: "email", label: "Email", route: "/email", icon: Mail, accent: "hsl(239,70%,58%)", gradient: "linear-gradient(135deg,hsl(239,70%,58%),hsl(260,60%,50%))" },
-  { id: "softphone", label: "Phone", route: "/softphone", icon: Phone, accent: "hsl(152,48%,38%)", gradient: "linear-gradient(135deg,hsl(152,52%,42%),hsl(168,48%,36%))" },
-  { id: "displays", label: "Displays", route: "/remote-displays", icon: MonitorSmartphone, accent: "hsl(198,60%,46%)", gradient: "linear-gradient(135deg,hsl(198,65%,50%),hsl(210,60%,44%))" },
-  { id: "connected_devices", label: "Devices", route: "/connected-devices", icon: Cable, accent: "hsl(160,55%,40%)", gradient: "linear-gradient(135deg,hsl(160,58%,44%),hsl(172,52%,38%))" },
+  { id: "quick_links", label: "Quick Links", icon: Zap, accent: JEWEL.teal, gradient: jewelFill(JEWEL.teal, JEWEL.petrol) },
+  { id: "unallocated", label: "Unallocated", route: "/unallocated", icon: Inbox, accent: JEWEL.oxblood, gradient: jewelFill(JEWEL.oxblood, JEWEL.burgundy) },
+  { id: "finance", label: "Finance", route: "/finance", icon: PiggyBank, accent: JEWEL.bronze, gradient: jewelFill("#6E4E1A", JEWEL.bronze) },
+  { id: "pets", label: "Pets", route: "/pets", icon: Heart, accent: JEWEL.burgundy, gradient: jewelFill(JEWEL.burgundy, JEWEL.plum) },
+  { id: "notes", label: "Notes", route: "/notes", icon: StickyNote, accent: JEWEL.bronze, gradient: jewelFill(JEWEL.bronze, "#5C4318") },
+  { id: "photos", label: "Photos", route: "/photos", icon: Images, accent: JEWEL.plum, gradient: jewelFill(JEWEL.plum, JEWEL.aubergine) },
+  { id: "tasks", label: "Tasks", route: "/tasks", icon: CheckSquare, accent: JEWEL.indigo, gradient: jewelFill(JEWEL.indigo, JEWEL.aubergine) },
+  { id: "today", label: "Today", route: "/today", icon: Sun, accent: JEWEL.petrol, gradient: jewelFill(JEWEL.petrol, JEWEL.ink) },
+  { id: "calendar", label: "Calendar", route: "/calendar", icon: CalendarDays, accent: JEWEL.cobalt, gradient: jewelFill(JEWEL.cobalt, JEWEL.marine) },
+  { id: "alarms", label: "Alarms", route: "/alarms", icon: AlarmClock, accent: JEWEL.bronze, gradient: jewelFill("#5C4318", JEWEL.bronze) },
+  { id: "households", label: "Households", route: "/households", icon: Users, accent: JEWEL.marine, gradient: jewelFill(JEWEL.marine, JEWEL.petrol) },
+  { id: "hh-finance", label: "HH Finance", route: "/household-finance", icon: Wallet, accent: JEWEL.forest, gradient: jewelFill(JEWEL.forest, "#163828") },
+  { id: "companies", label: "Companies", route: "/companies", icon: Building2, accent: JEWEL.slate, gradient: jewelFill(JEWEL.slate, JEWEL.ink) },
+  { id: "health", label: "Health", route: "/weight", icon: Activity, accent: JEWEL.forest, gradient: jewelFill("#1F6B4F", JEWEL.forest) },
+  { id: "logins", label: "Log Ins", route: "/login-details", icon: KeyRound, accent: JEWEL.aubergine, gradient: jewelFill(JEWEL.aubergine, JEWEL.indigo) },
+  { id: "tattersalls", label: "Flats", route: "/tattersalls", icon: Building, accent: JEWEL.marine, gradient: jewelFill(JEWEL.petrol, JEWEL.marine) },
+  { id: "freezer", label: "Freezer", route: "/freezer", icon: Snowflake, accent: JEWEL.petrol, gradient: jewelFill("#123E48", JEWEL.petrol) },
+  { id: "inheritance", label: "IHT Planner", route: "/inheritance", icon: Calculator, accent: JEWEL.oxblood, gradient: jewelFill(JEWEL.burgundy, JEWEL.oxblood) },
+  { id: "leave", label: "Annual Leave", route: "/annual-leave", icon: Plane, accent: JEWEL.cobalt, gradient: jewelFill(JEWEL.marine, JEWEL.cobalt) },
+  { id: "holidays", label: "Holidays", route: "/holidays", icon: Palmtree, accent: JEWEL.teal, gradient: jewelFill(JEWEL.teal, JEWEL.forest) },
+  { id: "ai", label: "AI Analysis", route: "/ai-analysis", icon: Sparkles, accent: JEWEL.indigo, gradient: jewelFill(JEWEL.aubergine, JEWEL.indigo) },
+  { id: "email", label: "Email", route: "/email", icon: Mail, accent: JEWEL.aubergine, gradient: jewelFill(JEWEL.plum, JEWEL.aubergine) },
+  { id: "softphone", label: "Phone", route: "/softphone", icon: Phone, accent: JEWEL.forest, gradient: jewelFill(JEWEL.teal, JEWEL.forest) },
+  { id: "displays", label: "Displays", route: "/remote-displays", icon: MonitorSmartphone, accent: JEWEL.marine, gradient: jewelFill(JEWEL.cobalt, JEWEL.marine) },
+  { id: "connected_devices", label: "Devices", route: "/connected-devices", icon: Cable, accent: JEWEL.teal, gradient: jewelFill(JEWEL.forest, JEWEL.teal) },
 ];
 
 export const HOME_TILE_BY_ID = Object.fromEntries(HOME_TILES.map((tile) => [tile.id, tile])) as Record<string, HomeTileDef>;
@@ -104,6 +111,7 @@ export const DEFAULT_HOME_TILE_ORDER = [
   "tasks",
   "today",
   "calendar",
+  "alarms",
   "households",
   "companies",
   "health",

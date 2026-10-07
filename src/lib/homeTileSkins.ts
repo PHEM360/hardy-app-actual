@@ -71,7 +71,7 @@ export function tileSurface(
     };
   }
   return {
-    background: `color-mix(in srgb, ${accent} ${featured ? 22 : 16}%, hsl(var(--card)))`,
+    background: `linear-gradient(180deg, #F8F4EC 0%, color-mix(in srgb, ${accent} 22%, #E4DCCE) 100%)`,
     borderLeftWidth: 4,
     radius: "rounded-2xl",
   };

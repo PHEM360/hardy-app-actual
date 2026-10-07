@@ -1,9 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
+import { Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { HomeViewToggle } from "@/components/home/HomeViewToggle";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
-import { format } from "date-fns";
 import { Rnd } from "react-rnd";
 
 import {
@@ -17,7 +17,6 @@ import {
 } from "@/hooks/useTodayLayout";
 import type { TodayWidgetItem, TodayWidgetType } from "@/hooks/useTodayLayout";
 import { HEADER_COLOR_PRESETS } from "@/lib/chromeScenes";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { TdAiWidget }          from "@/components/widgets/today/TdAiWidget";
@@ -350,118 +349,82 @@ const Today = ({
     updateWidget(id, patch);
   }, [updateWidget]);
 
-  const today = new Date();
-
   return (
     <div className="page-gutter-x min-w-0 overflow-x-hidden pb-6" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/30">
+      <div className="sticky top-0 z-20">
         <div
-          className="py-2 flex items-center justify-between"
+          className="band px-3 py-2"
           style={{ background: pageStyle.headerColor || "var(--gradient-primary)" }}
         >
-          <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-white/80" />
-            <p className="text-sm font-bold text-white">Today</p>
-          </div>
-          <p className="text-[11px] text-white/70 font-medium">
-            {format(today, "EEEE d MMMM")}
-          </p>
-        </div>
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-2">
-            {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
-          <button
-            onClick={() => setAddOpen(true)}
-            className="btn-edge flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-[filter] hover:brightness-110"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add widget
-          </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="flex h-9 items-center gap-1 rounded-lg border border-foreground/25 bg-card px-2.5 text-xs font-bold text-foreground hover:border-primary" aria-label="Page colours">
-                  <Palette className="w-3.5 h-3.5" />
-                  Look
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64 p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em]st text-muted-foreground">Page header</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {HEADER_COLOR_PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      title={p.label}
-                      onClick={() => setPageStyle({ headerColor: p.value })}
-                      className="h-7 min-w-7 px-1.5 rounded-lg border text-[9px] font-semibold text-white"
-                      style={{ background: p.value || "var(--gradient-primary)" }}
-                    >
-                      {p.id === "theme" ? "Theme" : ""}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em]st text-muted-foreground">Page colour</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {PAGE_TINT_PRESETS.map((p) => {
-                    const active = (pageStyle.canvasTint || "") === p.value;
-                    return p.value ? (
-                      <button
-                        key={p.label}
-                        title={p.label}
-                        onClick={() => setPageStyle({ canvasTint: p.value })}
-                        className="w-7 h-7 rounded-lg border-2"
-                        style={{ backgroundColor: p.value, borderColor: active ? "hsl(178,62%,30%)" : "transparent" }}
-                      />
-                    ) : (
-                      <button
-                        key={p.label}
-                        title="Use the theme's own background"
-                        onClick={() => setPageStyle({ canvasTint: "" })}
-                        className="flex h-7 min-w-7 items-center justify-center rounded-lg border-2 bg-background px-1.5 text-[9px] font-semibold text-foreground"
-                        style={{ borderColor: active ? "hsl(178,62%,30%)" : "hsl(var(--border))" }}
-                      >
-                        Theme
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-muted-foreground">In Edit, tint individual widgets too.</p>
-              </PopoverContent>
-            </Popover>
-            {editMode && (
-              <button
-                onClick={resetLayout}
-                className="flex h-9 items-center gap-1 rounded-lg border border-foreground/25 bg-card px-2.5 text-xs font-bold text-foreground hover:border-primary"
-                title="Reset to starter widgets"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              onClick={() => setEditMode((v) => !v)}
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors ${
-                editMode
-                  ? "btn-edge bg-[#B7791F] text-white"
-                  : "border border-foreground/25 bg-card text-foreground hover:border-primary"
-              }`}
-            >
-              {editMode ? <><Check className="w-3.5 h-3.5" /> Done</> : <><Pencil className="w-3.5 h-3.5" /> Edit</>}
-            </button>
-          </div>
+          <p className="font-display text-lg font-bold text-white">Today</p>
         </div>
       </div>
 
-      {/* Edit mode banner */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {homeSwitch && <HomeViewToggle mode={homeSwitch.mode} onChange={homeSwitch.onChange} />}
+        <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+          <Plus /> Add widget
+        </Button>
+        <Button type="button" size="sm" variant={editMode ? "gold" : "outline"} onClick={() => setEditMode((value) => !value)}>
+          {editMode ? <Check /> : <Pencil />} {editMode ? "Done" : "Edit"}
+        </Button>
+        {editMode && (
+          <Button type="button" size="sm" variant="outline" onClick={resetLayout}>
+            <RotateCcw /> Reset
+          </Button>
+        )}
+      </div>
+
       <AnimatePresence>
         {editMode && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-2 rounded-lg bg-[#C9A24A] px-3 py-2 text-xs font-bold text-[#2A2110]"
+            className="mt-2 overflow-hidden rounded-lg border border-foreground/20 bg-card p-3 shadow-card"
           >
-            Drag anywhere — they stay where you drop them, with a little space so they never touch.
+            <p className="text-xs font-bold text-foreground">Drag a widget to move it. Pull a corner to resize.</p>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Header colour</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {HEADER_COLOR_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  title={preset.label}
+                  onClick={() => setPageStyle({ headerColor: preset.value })}
+                  className="h-8 min-w-8 rounded-md border border-white/20 px-1.5 text-[9px] font-semibold text-white"
+                  style={{ background: preset.value || "var(--gradient-primary)" }}
+                >
+                  {preset.id === "theme" ? "Theme" : ""}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Page colour</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {PAGE_TINT_PRESETS.map((preset) => {
+                const active = (pageStyle.canvasTint || "") === preset.value;
+                return preset.value ? (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    title={preset.label}
+                    onClick={() => setPageStyle({ canvasTint: preset.value })}
+                    className="h-8 w-8 rounded-md border-2"
+                    style={{ backgroundColor: preset.value, borderColor: active ? "#C6A15B" : "transparent" }}
+                  />
+                ) : (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setPageStyle({ canvasTint: "" })}
+                    className="flex h-8 items-center rounded-md border-2 bg-card px-2 text-[10px] font-bold"
+                    style={{ borderColor: active ? "#C6A15B" : "hsl(var(--border))" }}
+                  >
+                    Theme
+                  </button>
+                );
+              })}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

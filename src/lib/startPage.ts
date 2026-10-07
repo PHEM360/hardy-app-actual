@@ -13,6 +13,7 @@ export const START_PAGE_OPTIONS = [
   { path: "/photos", label: "Photos" },
   { path: "/email", label: "Email" },
   { path: "/calendar", label: "Calendar" },
+  { path: "/alarms", label: "Alarms" },
   { path: "/finance", label: "Finance" },
   { path: "/pets", label: "Pets" },
   { path: "/health", label: "Health" },

@@ -251,6 +251,7 @@ export interface Task {
   status: TaskStatus;
   urgency?: TaskUrgency;   // red/amber dot — separate from priority
   tracking?: TaskTracking; // on track / adjusted / needs adjusting / off track
+  trackingNote?: string;   // why that tracking status was chosen; shown on hover
   category: string;       // e.g. "Admin", "Development", "Personal"
   company?: string;       // company ID or name
   dueDate?: string;       // ISO date string

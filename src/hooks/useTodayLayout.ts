@@ -80,7 +80,7 @@ export const WIDGET_GEOMETRY_DEFAULTS: Record<TodayWidgetType, { wFrac: number; 
   pets_care:  { wFrac: 0.5, h: 180 },
   week:       { wFrac: 1.0, h: 160 },
   quicklinks: { wFrac: 1.0, h: 160 },
-  clock:      { wFrac: 0.5, h: 160 },
+  clock:      { wFrac: 0.5, h: 200 },
   lights:     { wFrac: 0.5, h: 240 },
   unallocated:{ wFrac: 0.5, h: 220 },
 };
@@ -124,7 +124,7 @@ export const TODAY_WIDGET_LABELS: Record<TodayWidgetType, string> = {
   pets_care: "Pet care",
   week: "This week",
   quicklinks: "Quick Links",
-  clock: "Clock",
+  clock: "Date and time",
   lights: "Lights",
   unallocated: "Unallocated expenses / documents",
 };

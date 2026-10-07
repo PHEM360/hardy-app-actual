@@ -3,7 +3,7 @@ import { AlarmClock, BellOff, Clock3 } from "lucide-react";
 import { useAlarmRinging } from "@/hooks/useAlarmRinging";
 import { useTabLeader } from "@/hooks/useTabLeader";
 import { useAutoUnlockAudio } from "@/hooks/useAutoUnlockAudio";
-import { playAlarmTone, stopAlarmTone } from "@/lib/alarmTone";
+import { playAlarmTone, stopAlarmTone, isAlarmToneId } from "@/lib/alarmTone";
 
 const SNOOZE_MINUTES = 9;
 
@@ -46,13 +46,13 @@ export function AlarmRingingOverlay({ uid }: { uid: string | null | undefined })
       stopAlarmTone();
       return;
     }
-    if (isLeader) playAlarmTone();
+    if (isLeader) playAlarmTone(isAlarmToneId(ringing?.tone) ? ringing.tone : "classic");
     const flashInterval = setInterval(() => setFlash((f) => !f), 600);
     return () => {
       clearInterval(flashInterval);
       stopAlarmTone();
     };
-  }, [active, isLeader]);
+  }, [active, isLeader, ringing?.tone]);
 
   if (!active || !ringing) return null;
 

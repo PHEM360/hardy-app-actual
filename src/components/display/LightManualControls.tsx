@@ -41,7 +41,7 @@ function LightToggle({ on, pending, onChange }: { on: boolean; pending: boolean;
  * on the Connected Devices page, and in the Remote Displays detail dialog),
  * since those are edited far less often than a plain on/off/brightness flip.
  */
-export function LightManualControls({ light }: { light: LinkedDevice }) {
+export function LightManualControls({ light, compact = false }: { light: LinkedDevice; compact?: boolean }) {
   const { device } = useDeviceSettings(light.id);
   const [pending, setPending] = useState(false);
   if (!device) return null;
@@ -59,32 +59,36 @@ export function LightManualControls({ light }: { light: LinkedDevice }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? "space-y-2" : "space-y-3"}>
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs">On</Label>
+        <Label className="text-xs">{compact ? (manual.on ? "On" : "Off") : "On"}</Label>
         <LightToggle on={manual.on} pending={pending} onChange={(value) => void send({ on: value })} />
       </div>
       <div className="flex items-center gap-3">
-        <Label className="w-20 shrink-0 text-xs">Brightness</Label>
+        {!compact && <Label className="w-20 shrink-0 text-xs">Brightness</Label>}
         <SmoothRange
           min={1}
           max={255}
           value={manual.brightness}
-          onCommit={(value) => void send({ brightness: value })}
+          onCommit={(value) => void send({ brightness: value, on: true })}
           className="flex-1"
+          aria-label={`Brightness for ${light.label}`}
         />
       </div>
-      <div className="flex items-center gap-3">
-        <Label className="w-20 shrink-0 text-xs">Colour</Label>
-        <input
-          type="color"
-          value={manual.colorHex}
-          disabled={!colorCapable}
-          onChange={(event) => void send({ colorHex: event.target.value })}
-          className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
-        />
-        {!colorCapable && <span className="text-[11px] text-muted-foreground">Single colour — can't be changed</span>}
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-3">
+          <Label className="w-20 shrink-0 text-xs">Colour</Label>
+          <input
+            type="color"
+            value={manual.colorHex}
+            disabled={!colorCapable}
+            onChange={(event) => void send({ colorHex: event.target.value })}
+            className="h-8 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          {!colorCapable && <span className="text-[11px] text-muted-foreground">Single colour. This light cannot change it.</span>}
+        </div>
+      )}
     </div>
   );
 }
+

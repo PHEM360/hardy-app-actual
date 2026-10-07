@@ -35,17 +35,13 @@ const TopBar = () => {
   const [householdMenuOpen, setHouseholdMenuOpen] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 30000);
+    const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
   const decorations = headerScene === "auto" ? (theme.decorations ?? []) : [];
 
-  const dateStr = format(now, "EEEE do MMM");
-  const timeStr = format(now, "HH:mm");
   const meta = [
-    headerShowDate ? dateStr : null,
-    headerShowTime ? timeStr : null,
     headerShowWeather && weather ? `${weather.temperature}° ${weather.description}` : null,
     backdrop.eventLabel,
   ].filter(Boolean).join(" · ");
@@ -109,7 +105,7 @@ const TopBar = () => {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, ease: "easeOut" }}
-              className="truncate font-display text-sm font-semibold tracking-wide text-white/95"
+              className="truncate font-display text-base font-semibold tracking-wide text-white sm:text-lg"
             >
               {firstName}
             </motion.p>
@@ -128,6 +124,13 @@ const TopBar = () => {
         )}
 
         <div className="flex items-center gap-1 flex-shrink-0">
+          {(headerShowDate || headerShowTime) && (
+            <p className="mr-1 whitespace-nowrap font-display text-base font-semibold tabular-nums text-white sm:text-lg">
+              {headerShowDate ? format(now, "EEE d MMM") : null}
+              {headerShowDate && headerShowTime ? <span className="mx-1.5 font-medium text-white/55">|</span> : null}
+              {headerShowTime ? format(now, "HH:mm") : null}
+            </p>
+          )}
           {namedHouseholds.length > 1 && (
             <Popover open={householdMenuOpen} onOpenChange={setHouseholdMenuOpen}>
               <PopoverTrigger asChild>
