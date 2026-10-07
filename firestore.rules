@@ -184,7 +184,6 @@ service cloud.firestore {
     function canViewPage(ownerId, page) {
       return isAuthenticated() && meetsModuleSecurity(moduleForPage(page)) && (
         isOwner(ownerId) ||
-        isAdmin() ||
         exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page)))
       );
     }
@@ -192,7 +191,6 @@ service cloud.firestore {
     function canEditPage(ownerId, page) {
       return isAuthenticated() && meetsModuleSecurity(moduleForPage(page)) && (
         isOwner(ownerId) ||
-        isAdmin() ||
         (exists(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))) &&
           get(/databases/$(database)/documents/pageShares/$(pageShareId(ownerId, page))).data.permission == "edit")
       );
@@ -202,8 +200,7 @@ service cloud.firestore {
     // legacy (ownerless) companies stay visible to everyone during migration.
     function canAccessCompany(companyId) {
       let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
-      return isAdmin() ||
-        !('ownerId' in c) ||
+      return !('ownerId' in c) ||
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
         sharedWithHasUid(c) ||
@@ -212,8 +209,7 @@ service cloud.firestore {
 
     function canEditCompany(companyId) {
       let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
-      return isAdmin() ||
-        !('ownerId' in c) ||
+      return !('ownerId' in c) ||
         c.ownerId == "" ||
         request.auth.uid == c.ownerId ||
         sharedWithHasUid(c) ||
@@ -225,8 +221,7 @@ service cloud.firestore {
     // visible to everyone during migration.
     function canAccessPet(petId) {
       let p = get(/databases/$(database)/documents/pets/$(petId)).data;
-      return isAdmin() ||
-        !('ownerId' in p) ||
+      return !('ownerId' in p) ||
         p.ownerId == "" ||
         request.auth.uid == p.ownerId ||
         sharedWithHasUid(p) ||
@@ -261,7 +256,7 @@ service cloud.firestore {
         request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) &&
         request.resource.data.get('isSuperAdmin', false) == resource.data.get('isSuperAdmin', false)
       );
-      allow delete: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId);
       // Don't allow direct client writes to other users' docs unless they're admin.
       // Superadmin/admin actions should prefer Cloud Functions.
 
@@ -410,7 +405,6 @@ service cloud.firestore {
     // Pets collection - owner + sharedWith, or a pets pageShare, or 35PFP legacy (no ownerId)
     match /pets/{petId} {
       allow read: if isAuthenticated() && (
-        isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
@@ -428,7 +422,6 @@ service cloud.firestore {
           sharedWithHasUid(resource.data) ||
           canEditPage(resource.data.ownerId, "pets")
         ) && (
-          isAdmin() ||
           request.auth.uid == resource.data.ownerId ||
           (
             request.resource.data.ownerId == resource.data.ownerId &&
@@ -564,7 +557,7 @@ service cloud.firestore {
 
     // Notifications - per user
     match /notifications/{userId}/items/{notifId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId);
     }
 
     // Flats (and the old Tattersalls path) — family-wide page, still passkey-gated.
@@ -594,7 +587,7 @@ service cloud.firestore {
 
     // Task settings - strictly per user (not shared alongside the Tasks page)
     match /taskSettings/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId);
     }
 
     // Password-vault records are ciphertext. Owners may migrate legacy records,
@@ -644,7 +637,6 @@ service cloud.firestore {
     // Legacy companies (no ownerId) remain readable by all authenticated users during migration.
     match /companies/{companyId} {
       allow read: if isAuthenticated() && (
-        isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
@@ -652,7 +644,6 @@ service cloud.firestore {
         canViewPage(resource.data.ownerId, "companies")
       );
       allow update: if isAuthenticated() && (
-        isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId ||
@@ -661,7 +652,6 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated();
       allow delete: if isAuthenticated() && (
-        isAdmin() ||
         !('ownerId' in resource.data) ||
         resource.data.ownerId == "" ||
         request.auth.uid == resource.data.ownerId
@@ -785,7 +775,7 @@ service cloud.firestore {
     // Business setup modeller scenarios — private to the owner who created them.
     match /businessSetups/{setupId} {
       allow read, update, delete: if isAuthenticated() && (
-        isAdmin() || request.auth.uid == resource.data.ownerId
+        request.auth.uid == resource.data.ownerId
       );
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
     }
@@ -836,7 +826,7 @@ service cloud.firestore {
       allow update: if canEditPage(userId, "notes") ||
         (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith &&
           resource.data.get("sharePermission", "view") == "edit");
-      allow delete: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId);
     }
     match /hubNotes/{userId}/items/{noteId} {
       allow read: if canViewPage(userId, "notes") ||
@@ -845,17 +835,17 @@ service cloud.firestore {
       allow update: if canEditPage(userId, "notes") ||
         (isAuthenticated() && "sharedWith" in resource.data && request.auth.uid in resource.data.sharedWith &&
           resource.data.get("sharePermission", "view") == "edit");
-      allow delete: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId);
     }
     match /hubNotes/{userId}/vault/{noteId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId);
     }
     match /hubNotes/{userId}/settings/{docId} {
       allow read: if docId == "vault"
-        ? (isOwner(userId) || isAdmin())
+        ? isOwner(userId)
         : canViewPage(userId, "notes");
       allow write: if docId == "vault"
-        ? (isOwner(userId) || isAdmin())
+        ? isOwner(userId)
         : canEditPage(userId, "notes");
     }
     match /noteGrants/{grantId} {
@@ -889,7 +879,7 @@ service cloud.firestore {
       allow read: if canViewPhotoAlbum(userId, albumId);
       allow create: if canEditPage(userId, "photos");
       allow update: if canEditPhotoAlbum(userId, albumId);
-      allow delete: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId);
     }
     match /photos/{userId}/albums/{albumId}/items/{photoId} {
       allow read: if canViewPhotoAlbum(userId, albumId);
@@ -1021,7 +1011,7 @@ service cloud.firestore {
 
     // Substances config - TOTP setup per user - strictly private, never shared
     match /substancesConfig/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId);
     }
 
     // Health profile - demographics & medical history per user, bundled into the "health" page share
@@ -1118,7 +1108,7 @@ service cloud.firestore {
     // Tracks when each company owner last got a "review your regular expenses"
     // nudge - written by Cloud Functions; readable by the owner it's about.
     match /expenseReviewReminders/{ownerId} {
-      allow read: if isOwner(ownerId) || isAdmin();
+      allow read: if isOwner(ownerId);
       allow write: if false; // Cloud Functions only
     }
 

@@ -28,6 +28,7 @@ import {
   seedMarketingDemo,
   suggestMarketingSchedule,
 } from "@/lib/marketingApi";
+import { openExternalUrl } from "@/lib/nativeApp";
 import { isMarketingProfileReady, seedMarketingProfileFromCompany } from "@/lib/marketingContent";
 import { MarketingHelpButton, MarketingOnboarding } from "@/components/companies/MarketingOnboarding";
 import {
@@ -1084,7 +1085,7 @@ function ConnectionsSection({
                 try {
                   const result = await getMarketingConnectionUrl(companyId, item);
                   if (result.available && result.authUrl) {
-                    window.location.href = result.authUrl;
+                    await openExternalUrl(result.authUrl);
                     return;
                   }
                   toast.message(result.reason || "Save the public profile for scans. Autopost needs the family app for this network.");

@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
+import { isNativeApp, publicWebOrigin } from "@/lib/nativeApp";
 
 export type BankAccountSnapshot = {
   id: string;
@@ -11,6 +12,9 @@ export type BankAccountSnapshot = {
 };
 
 export function bankRedirectUri() {
+  if (isNativeApp()) {
+    return `${publicWebOrigin()}/finance/bank-callback`;
+  }
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return `${window.location.origin}/finance/bank-callback`;
   }

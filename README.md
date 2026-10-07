@@ -1,95 +1,30 @@
-# Welcome to your Lovable project
+# Hardy Hub
 
-## Project info
+Private family app at [hardyapp.co.uk](https://hardyapp.co.uk). Vite, React, TypeScript, Tailwind, Firebase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Web app
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The dev server is http://localhost:8080. Production deploys with Firebase Hosting.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Phone app (App Store / Google Play)
 
-**Use GitHub Codespaces**
+The same codebase ships as **Hardy App** through Capacitor. Native projects live in `ios/` and `android/`.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
-
-## Firebase cleanup script
-
-This repository includes a conservative cleanup script template at `scripts/clean-firebase.ts` which can delete non-production test data from a Firebase project.
-
-Important notes:
-- The script is destructive. Do NOT run it without a full backup and verifying the whitelist constants inside the script.
-- You must provide service account credentials and set the environment variables before running.
-
-Quick usage:
-
-```bash
-# set path to your service account JSON key
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
-export FIREBASE_PROJECT_ID="hardyhub-7b30d"
-# safety flag: must be set to run deletions
-export REALLY_I_UNDERSTAND_THIS_IS_PERMANENT=1
-
-npx ts-node scripts/clean-firebase.ts
+```sh
+npm run native:sync
+npm run native:ios      # Mac + Xcode
+npm run native:android  # Android Studio
 ```
 
-Edit the `WHITELISTED_USER_EMAILS` and `WHITELISTED_COLLECTIONS` arrays inside the script before running.
+Step-by-step signing, associated domains, and store listing notes: [native/README.md](native/README.md).
+
+## Tests
+
+```sh
+npm test
+```

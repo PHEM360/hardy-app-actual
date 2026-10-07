@@ -23,6 +23,7 @@ import {
 import { isGooglePhotosShareUrl } from "@/lib/googlePhotosAlbum";
 import { albumLibraryKey } from "@/lib/photoSelection";
 import type { DriveFolderOption, PhotoAlbum, PhotoItem } from "@/types/photos";
+import { openExternalUrl } from "@/lib/nativeApp";
 
 type RailId = "all" | "shared" | string;
 
@@ -225,7 +226,7 @@ export default function Photos() {
   const connectDrive = async () => {
     setBusy(true);
     try {
-      window.location.href = await startGoogleDriveConnect();
+      await openExternalUrl(await startGoogleDriveConnect());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start Google Drive");
       setBusy(false);
@@ -297,7 +298,7 @@ export default function Photos() {
   const connectPhotos = async () => {
     setBusy(true);
     try {
-      window.location.href = await startGooglePhotosConnect();
+      await openExternalUrl(await startGooglePhotosConnect());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start Google Photos");
       setBusy(false);

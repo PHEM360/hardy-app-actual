@@ -1,7 +1,7 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "hardy-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,9 +11,25 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:display:browser": "node scripts/test-remote-display-browser.mjs"
+    "test:display:browser": "node scripts/test-remote-display-browser.mjs",
+    "native:assets": "python3 scripts/generate-native-assets.py && npx capacitor-assets generate --ios --android --iconBackgroundColor '#0f1923' --iconBackgroundColorDark '#0f1923' --splashBackgroundColor '#0f1923' --splashBackgroundColorDark '#0f1923'",
+    "native:sync": "npm run build && npx cap sync",
+    "native:patch": "node scripts/patch-native-projects.mjs",
+    "native:well-known": "node scripts/write-well-known.mjs",
+    "native:ios": "npm run native:sync && npm run native:patch && npx cap open ios",
+    "native:android": "npm run native:sync && npm run native:patch && npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/geolocation": "^7.1.8",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/ios": "^7.6.9",
+    "@capacitor/keyboard": "^7.0.6",
+    "@capacitor/splash-screen": "^7.0.5",
+    "@capacitor/status-bar": "^7.0.6",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -83,6 +99,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.6.9",
     "@eslint/js": "^9.32.0",
     "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/typography": "^0.5.16",

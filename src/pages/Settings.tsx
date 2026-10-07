@@ -36,6 +36,7 @@ import { usePhotos } from "@/hooks/usePhotos";
 import { HomeLayoutChooser } from "@/components/home/HomeLayoutChooser";
 import type { HomeLayoutMode } from "@/lib/homeLayout";
 import { DEFAULT_START_PAGE, START_PAGE_OPTIONS } from "@/lib/startPage";
+import { openExternalUrl } from "@/lib/nativeApp";
 
 // ── Avatar constants ──
 const EMOJI_OPTIONS = ["😊", "🐶", "🐱", "🐴", "⛵", "🌸", "🔥", "💎", "🎯", "🦊", "🐾", "🌈"];
@@ -392,7 +393,7 @@ const Settings = () => {
             busy={googleBusy === "photos"}
             setupNeeded={!googleOauthReady}
             onConnect={() => void runGoogleLink("photos", async () => {
-              window.location.href = await startGooglePhotosConnect();
+              await openExternalUrl(await startGooglePhotosConnect());
             })}
             onDisconnect={() => void runGoogleLink("photos", async () => {
               await disconnectGooglePhotos();
@@ -406,7 +407,7 @@ const Settings = () => {
             busy={googleBusy === "drive"}
             setupNeeded={!googleOauthReady}
             onConnect={() => void runGoogleLink("drive", async () => {
-              window.location.href = await startGoogleDriveConnect();
+              await openExternalUrl(await startGoogleDriveConnect());
             })}
             onDisconnect={() => void runGoogleLink("drive", async () => {
               await disconnectGoogleDrive();
@@ -420,7 +421,7 @@ const Settings = () => {
             busy={googleBusy === "calendar"}
             setupNeeded={!googleOauthReady}
             onConnect={() => void runGoogleLink("calendar", async () => {
-              window.location.href = await startGoogleCalendarConnect();
+              await openExternalUrl(await startGoogleCalendarConnect());
             })}
             onDisconnect={() => void runGoogleLink("calendar", async () => {
               await disconnectGoogleCalendar();
@@ -449,7 +450,7 @@ const Settings = () => {
               busy={googleBusy === "gmail"}
               setupNeeded={!googleOauthReady}
               onConnect={() => void runGoogleLink("gmail", async () => {
-                window.location.href = await startGmailConnect(user?.uid);
+                await openExternalUrl(await startGmailConnect(user?.uid));
               })}
             />
           )}
