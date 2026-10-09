@@ -22,6 +22,8 @@ export interface Birthday {
   sharedWith: BirthdaySharing;
   /** Up to MAX_BIRTHDAY_REMINDERS reminders, each fired via one or more channels. */
   reminders: ReminderConfig[];
+  /** When true, Today opens with a celebration on the day. */
+  urgent?: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

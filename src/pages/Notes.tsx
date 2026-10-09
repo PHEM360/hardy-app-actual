@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
@@ -7,19 +6,13 @@ import {
 } from "date-fns";
 import {
   StickyNote, Plus, Search, LayoutGrid, List, Columns2, CalendarDays, ListChecks,
-  Shield, Share2, Pin, CheckSquare, Settings2, FolderPlus,
-  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Filter,
+  Shield, Settings2, FolderPlus, Download, Smartphone, Pin,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup,
-  DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useNotes } from "@/hooks/useNotes";
 import { useNoteVault } from "@/hooks/useNoteVault";
@@ -38,17 +31,12 @@ import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesL
 import { noteCategoryOptions } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
 import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteCardStyle, noteSwatch } from "@/lib/noteStyle";
+import { JEWEL, JEWEL_CYCLE, jewelGradient } from "@/lib/brandPalette";
 import { toast } from "sonner";
 
 type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}` | `category:${string}`;
 
-const BOARD_TONES = [
-  { mix: "hsl(42, 85%, 48%)", label: "text-foreground" },
-  { mix: "hsl(0, 65%, 52%)", label: "text-foreground" },
-  { mix: "hsl(152, 50%, 40%)", label: "text-foreground" },
-  { mix: "hsl(210, 55%, 50%)", label: "text-foreground" },
-  { mix: "hsl(270, 55%, 55%)", label: "text-foreground" },
-];
+const BOARD_TONES = [JEWEL.bronze, JEWEL.oxblood, JEWEL.forest, JEWEL.cobalt, JEWEL.aubergine];
 
 function previewText(note: HubNote) {
   if (note.locked) return "Locked note";
@@ -331,6 +319,20 @@ export default function Notes() {
     noteCardStyle(noteSwatch(n, i, total, colorMode, notesApi.folders, shadeHue), listStyle, i);
 
   const pinnedRail = notesApi.notes.filter((n) => n.pinned && !n.archived);
+  const filters: { id: FilterId; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "pinned", label: "Pinned" },
+    { id: "tasks", label: "Lists" },
+    { id: "diagrams", label: "Diagrams" },
+    { id: "drawings", label: "Drawings" },
+    { id: "inbox", label: "Inbox" },
+    { id: "secure", label: "Secure" },
+    { id: "shared", label: "Shared" },
+    { id: "archived", label: "Archive" },
+    ...noteCategoryOptions(notesApi.prefs).map((category) => ({ id: `category:${category.id}` as FilterId, label: category.label })),
+    ...notesApi.folders.map((folder) => ({ id: `folder:${folder.id}` as FilterId, label: folder.emoji ? `${folder.emoji} ${folder.name}` : folder.name })),
+  ];
+  const lockedSecure = filter === "secure" && !vault.unlocked;
 
   useEffect(() => {
     const nextFilter = params.get("filter");
@@ -346,198 +348,143 @@ export default function Notes() {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle="Write, tick off, sketch or map it out"
+      subtitle="A private studio for lists, sketches and the things you need to keep"
       icon={<StickyNote className="w-5 h-5" />}
       sharePage="notes"
       action={
         <div className="flex items-center gap-1.5">
           {canEdit && (
-            <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => setStartOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" /> New
+            <Button size="sm" onClick={() => setStartOpen(true)}>
+              <Plus /> New
             </Button>
           )}
-          <Button size="icon" variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Notes settings">
-            <Settings2 className="h-4 w-4" />
+          <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)} aria-label="Notes settings">
+            <Settings2 />
           </Button>
         </div>
       }
     >
-      <div className="flex min-w-0 gap-3">
-        <aside className="hidden w-[10.5rem] shrink-0 sm:block">
-          <div className="sticky top-2 space-y-1.5">
-            <p className="px-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Pinned</p>
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-foreground/50" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes" className="h-11 border border-foreground/20 bg-card pl-9" />
+        </div>
+
+        <section className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+          <div className="band px-3 py-2 text-white" style={{ background: jewelGradient(JEWEL.burgundy) }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Pinned</p>
+          </div>
+          <div className="flex flex-wrap gap-2 p-3">
             {pinnedRail.length === 0 && (
-              <p className="rounded-xl border border-foreground/20 bg-card p-2.5 text-[11px] text-foreground/70">
-                Pin a note and it will stay here.
-              </p>
+              <p className="text-sm text-foreground/70">Pin a note and it will stay here for a one tap open.</p>
             )}
             {pinnedRail.map((note) => (
               <button
                 key={note.id}
                 type="button"
                 onClick={() => openNote(note)}
-                className="w-full rounded-xl border border-foreground/20 bg-card px-2.5 py-2 text-left shadow-card"
+                className="btn-edge min-h-10 max-w-full rounded-lg border border-foreground/20 bg-[#F8F4EC] px-3 py-2 text-left"
               >
-                <p className="truncate text-xs font-semibold">{note.title || "Untitled"}</p>
-                <p className="mt-0.5 truncate text-[10px] text-foreground/60">{previewText(note)}</p>
+                <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                  <Pin className="h-3.5 w-3.5 shrink-0" />
+                  {note.title || "Untitled"}
+                </p>
+                <p className="truncate text-[11px] text-foreground/60">{previewText(note)}</p>
               </button>
             ))}
           </div>
-        </aside>
+        </section>
 
-        <div className="min-w-0 flex-1 overflow-x-hidden">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-10 rounded-xl border-2 bg-card pl-9 shadow-soft" />
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter className="h-3.5 w-3.5" /> Filter
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-h-[70vh] w-56 overflow-y-auto">
-            <DropdownMenuLabel>Show</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={filter}
-              onValueChange={(value) => (value === "secure" ? openSecure() : setFilter(value as FilterId))}
-            >
-            {([
-              ["all", "All notes"],
-              ["pinned", "Pinned"],
-              ["tasks", "Checklists"],
-              ["diagrams", "Diagrams"],
-              ["drawings", "Drawings"],
-              ["inbox", "Inbox"],
-              ["secure", "Secure"],
-              ["shared", "Shared"],
-              ["archived", "Archive"],
-            ] as const).map(([id, label]) => (
-              <DropdownMenuRadioItem key={id} value={id}>
-                {label}
-              </DropdownMenuRadioItem>
-            ))}
-            {noteCategoryOptions(notesApi.prefs).length > 0 && <DropdownMenuSeparator />}
-            {noteCategoryOptions(notesApi.prefs).map((category) => (
-              <DropdownMenuRadioItem key={category.id} value={`category:${category.id}`}>
-                {category.label}
-              </DropdownMenuRadioItem>
-            ))}
-            {notesApi.folders.length > 0 && <DropdownMenuSeparator />}
-            {notesApi.folders.map((folder) => (
-              <DropdownMenuRadioItem key={folder.id} value={`folder:${folder.id}`}>
-                {folder.emoji ? `${folder.emoji} ${folder.name}` : folder.name}
-              </DropdownMenuRadioItem>
-            ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="flex items-center gap-1 rounded-2xl border-2 border-border bg-card p-1 shadow-soft">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              title={v.label}
-              onClick={() => { setView(v.id); notesApi.savePrefs({ defaultView: v.id }); }}
-              className={`relative z-10 rounded-xl p-2 ${view === v.id ? "text-primary-foreground" : "text-foreground/70 hover:text-foreground"}`}
-            >
-              {view === v.id && (
-                <motion.span layoutId="notes-view-tab" className="absolute inset-0 -z-10 rounded-xl bg-gradient-primary shadow-sm" transition={{ type: "spring", stiffness: 500, damping: 35 }} />
-              )}
-              <v.icon className="h-4 w-4" />
-            </button>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Notes", value: notesApi.notes.filter((n) => !n.archived).length, tone: JEWEL.petrol },
+            { label: "Pinned", value: pinnedRail.length, tone: JEWEL.burgundy },
+            { label: "Lists", value: notesApi.notes.filter((n) => noteHasChecklist(n) && !n.archived).length, tone: JEWEL.forest },
+          ].map((stat) => (
+            <div key={stat.label} className="btn-edge overflow-hidden rounded-xl text-white" style={{ background: jewelGradient(stat.tone) }}>
+              <p className="px-2.5 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{stat.label}</p>
+              <p className="px-2.5 pb-2 font-display text-2xl font-semibold">{stat.value}</p>
+            </div>
           ))}
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="rounded-xl border-2">
-              <Palette className="mr-1 h-3.5 w-3.5" /> Colour
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Colour notes by</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={colorMode}
-              onValueChange={(v) => notesApi.savePrefs({ colorMode: v as NotesColorMode })}
-            >
-              {COLOR_MODE_OPTIONS.map((opt) => (
-                <DropdownMenuRadioItem key={opt.id} value={opt.id}>
-                  <span>
-                    <span className="block">{opt.label}</span>
-                    <span className="text-[10px] text-muted-foreground">{opt.hint}</span>
-                  </span>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-            {colorMode === "shades" && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="flex flex-wrap gap-1.5 px-2 py-1.5">
-                  {["#f59e0b", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#ef4444"].map((hex) => (
-                    <button
-                      key={hex}
-                      type="button"
-                      className={`h-5 w-5 rounded-full border ${shadeHue === hex ? "border-foreground" : "border-transparent"}`}
-                      style={{ background: hex }}
-                      onClick={() => notesApi.savePrefs({ shadeHue: hex })}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="rounded-xl border-2">
-              <Layers className="mr-1 h-3.5 w-3.5" /> Style
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>List design</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={listStyle}
-              onValueChange={(v) => notesApi.savePrefs({ listStyle: v as NotesListStyle })}
-            >
-              {LIST_STYLE_OPTIONS.map((opt) => (
-                <DropdownMenuRadioItem key={opt.id} value={opt.id}>{opt.label}</DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
-      {filter === "secure" && !vault.unlocked && (
-        <div className="rounded-2xl border border-border/40 bg-card p-10 text-center shadow-card">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
-            <Shield className="h-6 w-6" />
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Show</p>
+          <div className="flex flex-wrap gap-1.5">
+            {filters.map((item) => {
+              const on = filter === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => (item.id === "secure" ? openSecure() : setFilter(item.id))}
+                  className={`btn-edge min-h-10 rounded-md px-2.5 text-xs font-semibold ${
+                    on ? "text-white" : "border border-foreground/20 bg-card text-foreground"
+                  }`}
+                  style={on ? { background: jewelGradient(JEWEL.petrol) } : undefined}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
-          <p className="font-display text-lg font-bold">Secure notes</p>
-          <p className="mt-1 text-sm text-muted-foreground">Unlock with Face ID or your passcode to see this folder.</p>
-          <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={() => setVaultOpen(true)}>Unlock</Button>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">View</p>
+          <div className="flex flex-wrap gap-1.5">
+            {VIEWS.map((item) => {
+              const on = view === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => { setView(item.id); notesApi.savePrefs({ defaultView: item.id }); }}
+                  className={`btn-edge flex min-h-10 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
+                    on ? "text-white" : "border border-foreground/20 bg-card text-foreground"
+                  }`}
+                  style={on ? { background: jewelGradient(JEWEL.aubergine) } : undefined}
+                >
+                  <item.icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+      {lockedSecure && (
+        <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+          <div className="band px-4 py-3 text-white" style={{ background: jewelGradient(JEWEL.ink) }}>
+            <p className="font-display text-lg font-semibold">Secure notes</p>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-foreground/70">Unlock with Face ID or your passcode to see this folder.</p>
+            <Button className="mt-4" onClick={() => setVaultOpen(true)}><Shield /> Unlock</Button>
+          </div>
         </div>
       )}
 
-      {view === "grid" && !(filter === "secure" && !vault.unlocked) && (
+      {view === "grid" && !lockedSecure && (
         visibleNotes.length === 0 ? (
-          <div className="rounded-2xl border border-border/40 bg-card px-6 py-14 text-center shadow-card">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-              <StickyNote className="h-6 w-6" />
+          <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+            <div className="band px-4 py-3 text-white" style={{ background: jewelGradient(JEWEL.petrol) }}>
+              <p className="font-display text-lg font-semibold">
+                {filter === "diagrams" ? "No diagrams yet" : filter === "tasks" ? "No lists yet" : "Nothing here yet"}
+              </p>
             </div>
-            <p className="font-display text-xl font-bold">
-              {filter === "diagrams" ? "No diagrams yet" : filter === "tasks" ? "No checklists yet" : "Nothing here yet"}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              {filter === "diagrams"
-                ? "Start from a home network, a flowchart, or a blank board."
-                : "Write a note, tick a list, sketch, or drop in a diagram."}
-            </p>
-            {canEdit && (
-              <Button className="mt-4 rounded-xl bg-gradient-primary" onClick={() => setStartOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" /> New
-              </Button>
-            )}
+            <div className="p-5">
+              <p className="text-sm text-foreground/70">
+                {filter === "diagrams"
+                  ? "Start from a home network, a flowchart, or a blank board."
+                  : "Write a note, tick a list, sketch, or drop in a diagram."}
+              </p>
+              {canEdit && (
+                <Button className="mt-4" onClick={() => setStartOpen(true)}>
+                  <Plus /> New
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <div className={listStyle === "compact" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" : "notes-masonry"}>
@@ -545,6 +492,7 @@ export default function Notes() {
               <NoteCard
                 key={`${n.ownerId}-${n.id}`}
                 note={n}
+                index={i}
                 listStyle={listStyle}
                 style={styleFor(n, i)}
                 canEdit={canEdit && !n.locked}
@@ -560,47 +508,44 @@ export default function Notes() {
         )
       )}
 
-          {view === "list" && (
+          {view === "list" && !lockedSecure && (
             <div className="space-y-2">
               {visibleNotes.map((n, i) => (
                 <button
                   key={`${n.ownerId}-${n.id}`}
                   type="button"
                   onClick={() => openNote(n)}
-                  className="flex w-full items-start gap-3 rounded-2xl px-4 py-3.5 text-left shadow-card"
-                  style={styleFor(n, i)}
+                  className="flex w-full items-start gap-3 overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card"
                 >
-                  {noteHasChecklist(n) ? (noteChecklistItems(n).every((item) => item.done) && noteChecklistItems(n).length ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-700" /> : <Circle className="mt-0.5 h-5 w-5" />) : <StickyNote className="mt-0.5 h-5 w-5" />}
-                  <div className="min-w-0 flex-1">
+                  <span className="w-1.5 self-stretch" style={{ background: JEWEL_CYCLE[i % JEWEL_CYCLE.length] }} />
+                  <div className="min-w-0 flex-1 py-3 pr-3">
                     <p className="truncate font-display font-bold">{n.locked ? "Locked note" : n.title || "Untitled"}</p>
-                    <p className="truncate text-sm opacity-70">{previewText(n)}</p>
+                    <p className="truncate text-sm text-foreground/70">{previewText(n)}</p>
                   </div>
-                  {n.dueDate && <span className="rounded-md bg-black/10 px-2 py-0.5 text-[11px] font-semibold">{format(parseISO(`${n.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}</span>}
+                  {n.dueDate && <span className="mr-3 mt-3 rounded-md bg-foreground/10 px-2 py-0.5 text-[11px] font-semibold">{format(parseISO(`${n.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}</span>}
                 </button>
               ))}
             </div>
           )}
 
-          {view === "board" && (
+          {view === "board" && !lockedSecure && (
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {boardColumns.map((col, ci) => (
                 <div
                   key={col.id}
-                  className="min-w-0 overflow-hidden rounded-2xl border border-border/40 p-2.5 shadow-card"
-                  style={{
-                    background: `color-mix(in srgb, ${BOARD_TONES[ci].mix} 14%, hsl(var(--card)))`,
-                    borderLeftWidth: 4,
-                    borderLeftColor: BOARD_TONES[ci].mix,
-                  }}
+                  className="min-w-0 overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card"
                 >
-                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {col.title} · {col.notes.length}
-                  </p>
-                  <div className="space-y-2">
+                  <div className="band px-3 py-2 text-white" style={{ background: jewelGradient(BOARD_TONES[ci]) }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em]">
+                      {col.title} · {col.notes.length}
+                    </p>
+                  </div>
+                  <div className="space-y-2 p-2.5">
                     {col.notes.map((n, i) => (
                       <NoteCard
                         key={n.id}
                         note={n}
+                        index={i}
                         listStyle={listStyle}
                         style={styleFor(n, i, col.notes.length)}
                         canEdit={canEdit && !n.locked}
@@ -618,14 +563,15 @@ export default function Notes() {
             </div>
           )}
 
-          {view === "calendar" && (
-            <div className="min-w-0 overflow-hidden rounded-2xl border border-border/40 bg-card p-3 shadow-card">
-              <div className="mb-3 flex items-center justify-between">
-                <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>Prev</Button>
-                <p className="font-display text-lg font-bold">{format(calMonth, "MMMM yyyy")}</p>
-                <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>Next</Button>
+          {view === "calendar" && !lockedSecure && (
+            <div className="min-w-0 overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+              <div className="band flex items-center justify-between px-3 py-2 text-white" style={{ background: jewelGradient(JEWEL.cobalt) }}>
+                <button type="button" className="rounded-md bg-white/15 px-2.5 py-1.5 text-xs font-semibold" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>Prev</button>
+                <p className="font-display text-lg font-semibold">{format(calMonth, "MMMM yyyy")}</p>
+                <button type="button" className="rounded-md bg-white/15 px-2.5 py-1.5 text-xs font-semibold" onClick={() => setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>Next</button>
               </div>
-              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-foreground/50">
+              <div className="p-3">
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d}>{d}</div>)}
               </div>
               <div className="mt-1 grid grid-cols-7 gap-1.5">
@@ -644,19 +590,21 @@ export default function Notes() {
                           setEditorOpen(true);
                         }
                       }}
-                      className={`min-h-[52px] min-w-0 overflow-hidden rounded-xl p-1 text-left sm:min-h-[72px] ${isSameMonth(day, calMonth) ? "bg-muted/40" : "opacity-40"} ${isToday(day) ? "ring-2 ring-primary" : ""}`}
+                      className={`min-h-[52px] min-w-0 overflow-hidden rounded-lg border p-1 text-left sm:min-h-[72px] ${
+                        isSameMonth(day, calMonth) ? "border-foreground/15 bg-card" : "border-transparent opacity-40"
+                      } ${isToday(day) ? "border-[#C6A15B] bg-[#17475C] text-white" : ""}`}
                     >
                       <span className="text-[11px] font-bold">{format(day, "d")}</span>
                       {count > 0 && (
                         <div className="mt-1 space-y-0.5">
                           {items.notes.slice(0, 2).map((n) => (
-                            <div key={n.id} className="truncate rounded-md bg-primary/15 px-1 text-[9px] font-semibold text-foreground" onClick={(e) => { e.stopPropagation(); openNote(n); }}>{n.title || "Note"}</div>
+                            <div key={n.id} className="truncate rounded-md bg-white/15 px-1 text-[9px] font-semibold" onClick={(e) => { e.stopPropagation(); openNote(n); }}>{n.title || "Note"}</div>
                           ))}
                           {items.hubEvents.slice(0, 1).map((e) => (
-                            <div key={e.id} className="truncate rounded-md bg-sky-300 px-1 text-[9px] font-semibold text-sky-950">{e.title}</div>
+                            <div key={e.id} className="truncate rounded-md bg-[#1C4A6E] px-1 text-[9px] font-semibold text-white">{e.title}</div>
                           ))}
                           {items.taskItems.slice(0, 1).map((t) => (
-                            <div key={t.id} className="truncate rounded-md bg-violet-300 px-1 text-[9px] font-semibold text-violet-950">{t.title}</div>
+                            <div key={t.id} className="truncate rounded-md bg-[#3A2A5E] px-1 text-[9px] font-semibold text-white">{t.title}</div>
                           ))}
                         </div>
                       )}
@@ -664,29 +612,31 @@ export default function Notes() {
                   );
                 })}
               </div>
+              </div>
             </div>
           )}
 
-          {view === "agenda" && (
+          {view === "agenda" && !lockedSecure && (
             <div className="space-y-2">
               {visibleNotes.filter((n) => n.dueDate).sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || "")).map((n, i) => (
-                <button key={n.id} type="button" onClick={() => openNote(n)} className="flex w-full min-w-0 items-center gap-3 rounded-2xl px-4 py-3 text-left shadow-card" style={styleFor(n, i)}>
-                  <span className="w-14 shrink-0 text-xs font-bold">
+                <button key={n.id} type="button" onClick={() => openNote(n)} className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card">
+                  <span className="flex h-full min-h-12 w-16 items-center justify-center text-xs font-bold text-white" style={{ background: jewelGradient(JEWEL_CYCLE[i % JEWEL_CYCLE.length]) }}>
                     {format(parseISO(`${n.dueDate!.slice(0, 10)}T12:00:00`), "d MMM")}
                   </span>
-                  <span className="min-w-0 truncate font-display font-semibold">{n.title || "Untitled"}</span>
+                  <span className="min-w-0 truncate py-3 pr-3 font-display font-semibold">{n.title || "Untitled"}</span>
                 </button>
               ))}
               {notesApi.prefs.showTasksPageItems && tasks.filter((t) => t.dueDate && t.status !== "done").map((t) => (
-                <div key={t.id} className="flex items-center gap-3 rounded-2xl bg-violet-200/70 px-4 py-3 text-sm dark:bg-violet-500/20">
-                  <span className="w-16 text-xs font-bold">{t.dueDate ? format(parseISO(t.dueDate), "d MMM") : ""}</span>
-                  Task · {t.title}
+                <div key={t.id} className="flex items-center gap-3 overflow-hidden rounded-xl border border-foreground/20 bg-card text-sm shadow-card">
+                  <span className="flex min-h-12 w-16 items-center justify-center text-xs font-bold text-white" style={{ background: jewelGradient(JEWEL.indigo) }}>
+                    {t.dueDate ? format(parseISO(t.dueDate), "d MMM") : ""}
+                  </span>
+                  <span className="py-3 pr-3">Task · {t.title}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
-      </div>
 
       <NoteEditor
         open={editorOpen}
@@ -768,6 +718,55 @@ export default function Notes() {
             <DialogTitle>Notes & home screen</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 text-sm">
+            <div className="rounded-xl border border-foreground/20 p-3">
+              <p className="font-medium">Colour notes by</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {COLOR_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => notesApi.savePrefs({ colorMode: opt.id as NotesColorMode })}
+                    className={`btn-edge min-h-10 rounded-md px-2.5 text-xs font-semibold ${
+                      colorMode === opt.id ? "text-white" : "border border-foreground/20 bg-card"
+                    }`}
+                    style={colorMode === opt.id ? { background: jewelGradient(JEWEL.petrol) } : undefined}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {colorMode === "shades" && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {["#8A6424", "#17475C", "#1F4D3A", "#4A2A52", "#6B2248", "#7A2E2A"].map((hex) => (
+                    <button
+                      key={hex}
+                      type="button"
+                      className={`h-7 w-7 rounded-md border ${shadeHue === hex ? "border-foreground" : "border-transparent"}`}
+                      style={{ background: hex }}
+                      onClick={() => notesApi.savePrefs({ shadeHue: hex })}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-xl border border-foreground/20 p-3">
+              <p className="font-medium">Card style</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {LIST_STYLE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => notesApi.savePrefs({ listStyle: opt.id as NotesListStyle })}
+                    className={`btn-edge min-h-10 rounded-md px-2.5 text-xs font-semibold ${
+                      listStyle === opt.id ? "text-white" : "border border-foreground/20 bg-card"
+                    }`}
+                    style={listStyle === opt.id ? { background: jewelGradient(JEWEL.aubergine) } : undefined}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
               <div>
                 <p className="font-medium">Show Hardy Hub calendar</p>

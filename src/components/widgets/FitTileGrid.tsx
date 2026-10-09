@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import { fitQuickLinkGrid, QUICK_LINK_GAP } from "@/lib/quickLinkGrid";
-import { JEWEL_CYCLE } from "@/lib/brandPalette";
+import { JEWEL_CYCLE, jewelGradient } from "@/lib/brandPalette";
 
 export interface FitTile {
   id: string;
@@ -52,7 +52,8 @@ export function FitTileGrid({ tiles, onRun, className = "" }: { tiles: FitTile[]
         >
           {tiles.map((tile, index) => {
             const Icon = tile.icon;
-            const style: CSSProperties = { height: layout.tileHeight, backgroundColor: tile.background ?? JEWEL_CYCLE[index % JEWEL_CYCLE.length] };
+            const tone = tile.background ?? JEWEL_CYCLE[index % JEWEL_CYCLE.length];
+            const style: CSSProperties = { height: layout.tileHeight, backgroundImage: jewelGradient(tone) };
             return (
               <button
                 key={tile.id}

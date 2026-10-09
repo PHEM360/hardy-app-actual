@@ -3,7 +3,13 @@ import type { HubNote, NotesListStyle } from "@/types/notes";
 import { NOTE_CATEGORIES, noteCategoryOptions, type NotesPrefs } from "@/types/notes";
 import { DiagramCanvas } from "@/components/notes/NoteDiagram";
 import { noteChecklistItems } from "@/lib/noteChecklist";
+import { JEWEL_CYCLE, jewelGradient } from "@/lib/brandPalette";
 import { format, parseISO } from "date-fns";
+
+function headerTone(swatch: string | undefined, index: number) {
+  if (!swatch) return jewelGradient(JEWEL_CYCLE[index % JEWEL_CYCLE.length]);
+  return `linear-gradient(158deg, color-mix(in srgb, ${swatch} 38%, #1A1814), color-mix(in srgb, ${swatch} 22%, #2A2110))`;
+}
 
 export function NoteCard({
   note,
@@ -14,6 +20,7 @@ export function NoteCard({
   canEdit,
   featured,
   prefs,
+  index = 0,
 }: {
   note: HubNote;
   style?: React.CSSProperties;
@@ -23,10 +30,10 @@ export function NoteCard({
   canEdit?: boolean;
   featured?: boolean;
   prefs?: Pick<NotesPrefs, "customCategories" | "hiddenCategoryIds">;
+  index?: number;
 }) {
-  const filled = listStyle === "filled";
   const compact = listStyle === "compact";
-  const paper = listStyle === "paper";
+  const filled = listStyle === "filled";
   const items = noteChecklistItems(note).filter((i) => i.text.trim());
   const done = items.filter((i) => i.done).length;
   const cat = noteCategoryOptions(prefs).find((c) => c.id === note.category) ?? NOTE_CATEGORIES.find((c) => c.id === note.category);
@@ -35,86 +42,84 @@ export function NoteCard({
   const diagram = note.diagram?.nodes?.length
     ? note.diagram
     : note.canvas?.blocks.find((block) => block.type === "diagram" && (block.diagram?.nodes.length ?? 0) > 0)?.diagram;
+  const swatch = typeof style?.backgroundColor === "string" ? style.backgroundColor : undefined;
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={`w-full text-left border-0 shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-elevated ${
-        compact ? "p-2.5 rounded-xl" : "p-4 rounded-[1.35rem]"
-      } ${paper ? "rounded-md font-serif" : ""}`}
-      style={style}
+      className={`w-full overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card ${compact ? "" : ""}`}
     >
-      <div className={`mb-2 flex items-center gap-1.5 ${filled ? "text-stone-700/70" : "text-foreground/55"}`}>
-        {note.pinned && <Pin className="h-3.5 w-3.5 fill-current" />}
-        {featured && <Home className="h-3.5 w-3.5" />}
-        {note.locked && <Lock className="h-3.5 w-3.5" />}
-        {items.length > 0 && <CheckSquare className="h-3.5 w-3.5" />}
-        {note.diagram?.nodes?.length || note.canvas?.blocks.some((block) => block.type === "diagram" && (block.diagram?.nodes.length ?? 0) > 0) ? <GitBranch className="h-3.5 w-3.5" /> : null}
-        {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
-        <span className="ml-auto flex items-center gap-1">
-          {featured && (
-            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-              Dashboard
-            </span>
-          )}
+      <div className="band px-3 py-2 text-white" style={{ background: headerTone(swatch, index) }}>
+        <div className="flex items-center gap-1.5">
+          {note.pinned && <Pin className="h-3.5 w-3.5 fill-current" />}
+          {featured && <Home className="h-3.5 w-3.5" />}
+          {note.locked && <Lock className="h-3.5 w-3.5" />}
+          {items.length > 0 && <CheckSquare className="h-3.5 w-3.5" />}
+          {diagram?.nodes?.length ? <GitBranch className="h-3.5 w-3.5" /> : null}
+          {note.kind === "drawing" && <PenLine className="h-3.5 w-3.5" />}
+          <p className={`min-w-0 flex-1 truncate font-display font-semibold ${compact ? "text-sm" : "text-base"}`}>
+            {note.locked ? "Locked note" : note.title || "Untitled"}
+          </p>
           {cat && (
-            <span className="rounded-md bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="rounded-md bg-white/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.12em]">
               {cat.label}
             </span>
           )}
-        </span>
+        </div>
       </div>
-      <p className={`font-display font-bold leading-snug ${compact ? "text-sm" : "text-base"}`}>
-        {note.locked ? "Locked note" : note.title || "Untitled"}
-      </p>
-      {!note.locked && note.body && (
-        <p className={`mt-1.5 whitespace-pre-wrap leading-relaxed ${compact ? "line-clamp-3 text-[11px]" : "line-clamp-6 text-[13px]"} ${filled ? "text-stone-800/85" : "text-foreground/75"}`}>
-          {note.body}
-        </p>
-      )}
-      {!note.locked && image?.type === "media" && (
-        <img src={image.url} alt="" className="mt-3 h-32 w-full rounded-xl object-cover" />
-      )}
-      {!note.locked && !image && drawing?.type === "drawing" && drawing.paths.length > 0 && (
-        <svg viewBox={`0 0 ${drawing.width} ${drawing.height}`} className="mt-3 h-28 w-full rounded-xl bg-white/75">
-          {drawing.paths.map((path, index) => (
-            <path key={index} d={path} fill="none" stroke={drawing.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          ))}
-        </svg>
-      )}
-      {!note.locked && items.length > 0 && (
-        <div className="mt-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-          <div className="h-1.5 overflow-hidden rounded-full bg-black/15">
-            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }} />
+      <div className={compact ? "p-2.5" : "p-3.5"} style={filled ? { backgroundColor: swatch } : undefined}>
+        {!note.locked && note.body && (
+          <p className={`whitespace-pre-wrap leading-relaxed text-foreground/80 ${compact ? "line-clamp-3 text-[11px]" : "line-clamp-6 text-[13px]"}`}>
+            {note.body}
+          </p>
+        )}
+        {!note.locked && image?.type === "media" && (
+          <img src={image.url} alt="" className="mt-3 h-32 w-full rounded-lg object-cover" />
+        )}
+        {!note.locked && !image && drawing?.type === "drawing" && drawing.paths.length > 0 && (
+          <svg viewBox={`0 0 ${drawing.width} ${drawing.height}`} className="mt-3 h-28 w-full rounded-lg bg-card">
+            {drawing.paths.map((path, pathIndex) => (
+              <path key={pathIndex} d={path} fill="none" stroke={drawing.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+          </svg>
+        )}
+        {!note.locked && items.length > 0 && (
+          <div className="mt-3 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+            <div className="h-1.5 overflow-hidden rounded-full bg-foreground/15">
+              <div className="h-full rounded-full bg-[#1F6B4F]" style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }} />
+            </div>
+            {items.slice(0, compact ? 3 : 6).map((item) => (
+              <label key={item.id} className="flex items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 accent-[#1F6B4F]"
+                  checked={item.done}
+                  disabled={!canEdit}
+                  onChange={(e) => onToggleItem?.(item.id, e.target.checked)}
+                />
+                <span className={item.done ? "text-foreground/50 line-through" : ""}>{item.text}</span>
+              </label>
+            ))}
+            {items.length > (compact ? 3 : 6) && (
+              <p className="text-[11px] text-foreground/60">+{items.length - (compact ? 3 : 6)} more</p>
+            )}
           </div>
-          {items.slice(0, compact ? 3 : 6).map((item) => (
-            <label key={item.id} className="flex items-start gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-3.5 w-3.5 accent-emerald-600"
-                checked={item.done}
-                disabled={!canEdit}
-                onChange={(e) => onToggleItem?.(item.id, e.target.checked)}
-              />
-              <span className={item.done ? "line-through opacity-55" : ""}>{item.text}</span>
-            </label>
-          ))}
-          {items.length > (compact ? 3 : 6) && (
-            <p className="text-[11px] opacity-60">+{items.length - (compact ? 3 : 6)} more</p>
-          )}
-        </div>
-      )}
-      {!note.locked && diagram?.nodes?.length ? (
-        <div className="mt-3 overflow-hidden rounded-xl bg-black/5">
-          <DiagramCanvas diagram={diagram} className="h-24 w-full" />
-        </div>
-      ) : null}
-      {note.dueDate && (
-        <p className={`mt-3 inline-flex rounded-md bg-black/10 px-2 py-0.5 text-[11px] font-semibold ${filled ? "text-stone-800" : "text-foreground/70"}`}>
-          {format(parseISO(`${note.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}
-        </p>
-      )}
+        )}
+        {!note.locked && diagram?.nodes?.length ? (
+          <div className="mt-3 overflow-hidden rounded-lg border border-foreground/15">
+            <DiagramCanvas diagram={diagram} className="h-24 w-full" />
+          </div>
+        ) : null}
+        {note.dueDate && (
+          <p className="mt-3 inline-flex rounded-md bg-foreground/10 px-2 py-0.5 text-[11px] font-semibold">
+            {format(parseISO(`${note.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}
+          </p>
+        )}
+        {featured && (
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">On the dashboard</p>
+        )}
+      </div>
     </button>
   );
 }

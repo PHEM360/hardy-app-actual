@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, RotateCcw } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,6 +14,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
 import { canAccessRoute } from "@/lib/features";
 import { HomeViewToggle } from "@/components/home/HomeViewToggle";
+import { UrgentOccasionOverlay } from "@/components/today/UrgentOccasionOverlay";
 import { HOME_TILE_BY_ID, HOME_TILE_PRESETS, homeTileQuickActions, packHomeTiles, visibleHomeTiles, type HomeLayoutMode, type HomeTileDef, type HomeTilesPresetId } from "@/lib/homeLayout";
 import { homeTileSkinClass, tileIconWrapClass, tileInkClass, tileMotionClass, tileSurface } from "@/lib/homeTileSkins";
 
@@ -249,6 +250,7 @@ export default function HomeTiles({
   homeSwitch?: { mode: HomeLayoutMode; onChange: (mode: HomeLayoutMode) => void };
 } = {}) {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [editMode, setEditMode] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const { layout, setRowSize, addRowSize, removeRowSize, moveTile, hideTile, showTile, resetLayout } = useHomeTilesLayout();
@@ -277,8 +279,17 @@ export default function HomeTiles({
     .map((id) => HOME_TILE_BY_ID[id])
     .filter((tile) => tile && accessibleIds.includes(tile.id));
 
+  useEffect(() => {
+    if (params.get("edit") !== "1") return;
+    setEditMode(true);
+    const next = new URLSearchParams(params);
+    next.delete("edit");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
   return (
     <div className="home-stage page-gutter-x mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden pb-6">
+      <UrgentOccasionOverlay />
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#1A1814]/95 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div>
@@ -311,11 +322,15 @@ export default function HomeTiles({
           <button
             type="button"
             onClick={() => { setEditMode((value) => !value); setShowHidden(false); }}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
-              editMode ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"
+            aria-label={editMode ? "Done editing home" : "Edit home tiles"}
+            title={editMode ? "Done" : "Edit home tiles"}
+            className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+              editMode
+                ? "border-[#C6A15B] bg-[#C6A15B] text-[#2A2110]"
+                : "border-white/20 bg-white/10 text-[#F8F4EC]"
             }`}
           >
-            {editMode ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+            {editMode ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
           </button>
         </div>
       </div>

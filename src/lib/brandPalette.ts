@@ -37,3 +37,8 @@ export const STATUS_COLOR = {
 
 /** The brass hairline that finishes header bands (the `band` CSS class uses the same value). */
 export const BRASS = "#C6A15B";
+
+/** A quiet jewel wash: lighter at the top, deeper at the base. For tiles and bands. */
+export function jewelGradient(hex: string, toward = "#0E1524"): string {
+  return `linear-gradient(158deg, color-mix(in srgb, ${hex} 86%, #ffffff) 0%, ${hex} 48%, color-mix(in srgb, ${hex} 68%, ${toward}) 100%)`;
+}

@@ -767,6 +767,12 @@ const Settings = () => {
                 toast.success(mode === "today" ? "Home is now Today" : "Home is now Tiles");
               }}
             />
+            <div className="mt-3">
+              <Button type="button" variant="outline" onClick={() => navigate("/dashboard?edit=1")}>
+                <Pencil /> Rearrange home
+              </Button>
+              <p className="mt-1.5 text-[10px] text-muted-foreground">Opens Home with the pencil already on, so you can move or hide tiles.</p>
+            </div>
           </div>
         </div>
       </div>

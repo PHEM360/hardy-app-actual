@@ -52,10 +52,18 @@ interface SheetContentProps
     VariantProps<typeof sheetVariants> {}
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, ...props }, ref) => (
+  ({ side = "right", className, children, onOpenAutoFocus, ...props }, ref) => (
     <SheetPortal>
       <SheetOverlay />
-      <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+      <SheetPrimitive.Content
+        ref={ref}
+        className={cn(sheetVariants({ side }), className)}
+        onOpenAutoFocus={(event) => {
+          if (window.matchMedia("(pointer: coarse)").matches) event.preventDefault();
+          onOpenAutoFocus?.(event);
+        }}
+        {...props}
+      >
         {children}
         <SheetPrimitive.Close className="overlay-close opacity-80 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:bg-accent hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="h-5 w-5" />

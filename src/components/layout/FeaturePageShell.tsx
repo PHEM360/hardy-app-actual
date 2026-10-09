@@ -15,9 +15,11 @@ interface FeaturePageShellProps {
   shareAccess?: React.ReactNode;
   /** Hide the back row (standalone calendar webapp). */
   hideBack?: boolean;
+  /** Trim phone side gutters by about 1mm so a month grid can use more width. */
+  tightGutter?: boolean;
 }
 
-const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess, hideBack }: FeaturePageShellProps) => {
+const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess, hideBack, tightGutter }: FeaturePageShellProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const comparePage = sharePage === "calendar" || sharePage === "notes" ? sharePage : null;
@@ -34,8 +36,8 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
     <div
       className="mx-auto w-full min-w-0 overflow-x-hidden py-4 sm:py-5"
       style={{
-        paddingLeft: "max(1rem, env(safe-area-inset-left, 0px))",
-        paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
+        paddingLeft: `max(${tightGutter ? "0.75rem" : "1rem"}, env(safe-area-inset-left, 0px))`,
+        paddingRight: `max(${tightGutter ? "0.75rem" : "1rem"}, env(safe-area-inset-right, 0px))`,
       }}
     >
       <motion.div

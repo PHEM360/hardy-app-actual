@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pencil, Check, RotateCcw, Trash2, Palette, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import { TdClockWidget }       from "@/components/widgets/today/TdClockWidget";
 import { TdLightsWidget }      from "@/components/widgets/today/TdLightsWidget";
 import { TdUnallocatedWidget } from "@/components/widgets/today/TdUnallocatedWidget";
 import { FamilyMessageBoardWidget } from "@/components/widgets/FamilyMessageBoardWidget";
+import { UrgentOccasionOverlay } from "@/components/today/UrgentOccasionOverlay";
 
 // ─── Widget content ────────────────────────────────────────────────────────────
 
@@ -327,6 +329,7 @@ const Today = ({
   homeSwitch?: { mode: HomeLayoutMode; onChange: (mode: HomeLayoutMode) => void };
 } = {}) => {
   useDueEventMessages();
+  const [params, setParams] = useSearchParams();
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -351,8 +354,17 @@ const Today = ({
     updateWidget(id, patch);
   }, [updateWidget]);
 
+  useEffect(() => {
+    if (params.get("edit") !== "1") return;
+    setEditMode(true);
+    const next = new URLSearchParams(params);
+    next.delete("edit");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
   return (
     <div className="page-gutter-x min-w-0 overflow-x-hidden pb-6" style={pageStyle.canvasTint ? { backgroundColor: pageStyle.canvasTint } : undefined}>
+      <UrgentOccasionOverlay />
       <div className="sticky top-0 z-20">
         <div
           className="band px-3 py-2"
@@ -367,8 +379,15 @@ const Today = ({
         <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
           <Plus /> Add widget
         </Button>
-        <Button type="button" size="sm" variant={editMode ? "gold" : "outline"} onClick={() => setEditMode((value) => !value)}>
-          {editMode ? <Check /> : <Pencil />} {editMode ? "Done" : "Edit"}
+        <Button
+          type="button"
+          size="sm"
+          variant={editMode ? "gold" : "outline"}
+          onClick={() => setEditMode((value) => !value)}
+          aria-label={editMode ? "Done editing Today" : "Edit Today layout"}
+          title={editMode ? "Done" : "Edit layout"}
+        >
+          {editMode ? <Check /> : <Pencil />}
         </Button>
         {editMode && (
           <Button type="button" size="sm" variant="outline" onClick={resetLayout}>

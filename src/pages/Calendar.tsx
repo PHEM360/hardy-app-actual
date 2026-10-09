@@ -6,7 +6,7 @@ import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
   AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw, Filter,
-  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake, Send,
+  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake, Send, Pencil,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -315,6 +315,7 @@ const CalendarPage = () => {
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false);
+  const [viewEvent, setViewEvent] = useState<CalendarEvent | null>(null);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -411,9 +412,14 @@ const CalendarPage = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [canEdit, selectedDay]);
 
+  const openView = (event: CalendarEvent) => {
+    setViewEvent(event);
+  };
+
   const openEdit = (event: CalendarEvent) => {
     // Virtual auto-imported rows have no stored document to patch.
     if (event.id?.startsWith("__")) return;
+    setViewEvent(null);
     const { date: sd, time: st } = splitISO(event.startDate, event.allDay);
     const { date: ed, time: et } = splitISO(event.endDate, event.allDay);
     setForm({
@@ -804,6 +810,7 @@ const CalendarPage = () => {
       icon={<CalendarDays className="w-5 h-5" />}
       sharePage={standalone ? undefined : "calendar"}
       hideBack={standalone}
+      tightGutter
     >
 
       <div className="min-w-0">
@@ -962,7 +969,7 @@ const CalendarPage = () => {
 
                   <div className="hidden w-full min-w-0 flex-col gap-1 sm:flex">
                     {dayEvts.slice(0, 4).map((e) => (
-                      <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}>
+                      <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openView(e); }}>
                         <EventChip event={e} color={getEventColor(e)} dense />
                       </div>
                     ))}
@@ -976,7 +983,7 @@ const CalendarPage = () => {
                       <span
                         key={e.id}
                         role="button"
-                        onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
+                        onClick={(ev) => { ev.stopPropagation(); openView(e); }}
                         className="block w-full truncate rounded-sm px-0.5 py-px text-[9px] font-bold leading-tight text-white"
                         style={{ background: getEventColor(e) }}
                       >
@@ -1045,7 +1052,7 @@ const CalendarPage = () => {
                       <span className="hidden text-[10px] text-muted-foreground/50 sm:block">Tap to add</span>
                     )}
                     {dayEvts.map((e) => (
-                      <button key={e.id} type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="block w-full text-left">
+                      <button key={e.id} type="button" onClick={(ev) => { ev.stopPropagation(); openView(e); }} className="block w-full text-left">
                         <EventChip event={e} color={getEventColor(e)} />
                       </button>
                     ))}
@@ -1106,7 +1113,7 @@ const CalendarPage = () => {
                   return (
                   <button
                     key={e.id}
-                    onClick={() => openEdit(e)}
+                    onClick={() => openView(e)}
                     className={`w-full text-left flex items-stretch gap-3 p-3 rounded-2xl border transition-colors group ${
                       e.priority === "urgent"
                         ? "border-red-500/30"
@@ -1210,7 +1217,7 @@ const CalendarPage = () => {
                 ) : (
                   <div className="space-y-1.5">
                     {dayEvts.map((e) => (
-                      <button key={e.id} type="button" onClick={() => openEdit(e)} className="block w-full text-left">
+                      <button key={e.id} type="button" onClick={() => openView(e)} className="block w-full text-left">
                         <EventChip event={e} color={getEventColor(e)} />
                       </button>
                     ))}
@@ -1222,6 +1229,90 @@ const CalendarPage = () => {
         </div>
       )}
       </div>
+
+      <Dialog open={!!viewEvent} onOpenChange={(open) => { if (!open) setViewEvent(null); }}>
+        <DialogContent aria-describedby={undefined} className="mx-2 flex max-h-[min(92dvh,calc(100dvh-0.75rem))] w-[calc(100%-1rem)] max-w-lg flex-col overflow-hidden p-0 pt-12">
+          <DialogHeader className="shrink-0 px-5">
+            <DialogTitle className="font-display text-left">{viewEvent?.title || "Event"}</DialogTitle>
+          </DialogHeader>
+          {viewEvent && (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-foreground/20 bg-card p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">When</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {viewEvent.allDay
+                      ? `${format(parseISO(`${londonDateFromIso(viewEvent.startDate)}T12:00:00`), "d MMM yyyy")} · All day`
+                      : `${format(parseISO(viewEvent.startDate), "d MMM yyyy · H:mm")} to ${format(parseISO(viewEvent.endDate), "H:mm")}`}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-foreground/20 bg-card p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Category</p>
+                  <p className="mt-1 text-sm font-semibold">{CAT[viewEvent.category]?.label ?? "Event"}</p>
+                </div>
+              </div>
+              {viewEvent.priority === "urgent" && (
+                <div className="rounded-xl border border-[#9B2C2C]/40 bg-[#9B2C2C] px-3 py-2 text-sm font-semibold text-white">
+                  Marked urgent
+                </div>
+              )}
+              {viewEvent.location && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Location</p>
+                  <p className="mt-1 text-sm font-medium">{viewEvent.location}</p>
+                </div>
+              )}
+              {viewEvent.description && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Details</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{viewEvent.description}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Who</p>
+                <p className="mt-1 text-sm font-medium">
+                  {viewEvent.memberId && viewEvent.memberId !== "all"
+                    ? hSettings.members.find((m) => m.id === viewEvent.memberId)?.name ?? viewEvent.memberId
+                    : "Everyone"}
+                </p>
+              </div>
+              {!!viewEvent.invitees?.length && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Invited</p>
+                  <p className="mt-1 text-sm">{viewEvent.invitees.join(", ")}</p>
+                </div>
+              )}
+              {!!viewEvent.notifications?.length && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Reminders</p>
+                  <p className="mt-1 text-sm">
+                    {viewEvent.notifications.map((n) => `${n.amount} ${n.unit} by ${n.via}`).join(", ")}
+                  </p>
+                </div>
+              )}
+              {!!viewEvent.messagePlans?.length && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Scheduled messages</p>
+                  <p className="mt-1 text-sm">{viewEvent.messagePlans.length} ready to send</p>
+                </div>
+              )}
+              {viewEvent.id?.startsWith("__") && (
+                <p className="text-sm text-foreground/70">This row is generated automatically and cannot be edited here.</p>
+              )}
+            </div>
+          )}
+          <div className="flex shrink-0 gap-2 border-t border-foreground/15 bg-card px-5 py-3">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setViewEvent(null)}>
+              Close
+            </Button>
+            {viewEvent && canEdit && !viewEvent.id?.startsWith("__") && (
+              <Button type="button" className="flex-1" onClick={() => openEdit(viewEvent)}>
+                <Pencil /> Edit
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add / Edit event dialog ── */}
       <Dialog open={addOpen} onOpenChange={(open) => { if (!open) closeForm(); }}>
@@ -1375,7 +1466,7 @@ const CalendarPage = () => {
             <div className="flex items-center justify-between p-3 rounded-xl border border-border/30 bg-muted/20">
               <div>
                 <p className="text-sm font-medium">Mark as urgent</p>
-                <p className="text-[11px] text-muted-foreground">Highlighted with red border on calendar</p>
+                <p className="text-[11px] text-muted-foreground">Highlighted on the calendar. If it falls today, Home opens with a celebration to acknowledge.</p>
               </div>
               <Switch
                 checked={form.priority === "urgent"}

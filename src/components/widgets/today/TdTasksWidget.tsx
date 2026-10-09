@@ -150,7 +150,11 @@ export function TdTasksWidget() {
       </div>
 
       <Sheet open={!!live} onOpenChange={(openSheet) => { if (!openSheet) setOpenTask(null); }}>
-        <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-xl">
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] overflow-y-auto rounded-t-xl"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <SheetHeader>
             <SheetTitle className="font-display text-left">{live?.title}</SheetTitle>
           </SheetHeader>

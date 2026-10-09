@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckSquare2, Receipt, KeyRound, CalendarPlus, ListPlus, Wallet, FileUp, Zap, Pencil, Home, StickyNote, Mail } from "lucide-react";
 import { accentGradient, WIDGET_ACCENT } from "@/lib/widgetAccents";
+import { JEWEL_CYCLE, jewelGradient } from "@/lib/brandPalette";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { AddExpenseDocumentDialog } from "@/components/capture/AddExpenseDocumentDialog";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
@@ -103,7 +104,7 @@ export function QuickLinksWidget() {
           </DialogHeader>
           <p className="text-xs text-muted-foreground">Choose which shortcuts appear.</p>
           <div className="space-y-1.5 pt-1">
-            {accessibleLinks.map((link) => {
+            {accessibleLinks.map((link, index) => {
               const on = enabledIds.includes(link.id);
               return (
                 <button
@@ -111,10 +112,13 @@ export function QuickLinksWidget() {
                   type="button"
                   onClick={() => toggleLink(link.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
-                    on ? "border-primary/30 bg-primary/5" : "border-border/50 bg-muted/30 opacity-60"
+                    on ? "border-foreground/25 bg-card" : "border-foreground/15 bg-card opacity-60"
                   }`}
                 >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white ${link.bg}`}>
+                  <div
+                    className="btn-edge flex h-7 w-7 items-center justify-center rounded-md text-white"
+                    style={{ backgroundImage: jewelGradient(JEWEL_CYCLE[index % JEWEL_CYCLE.length]) }}
+                  >
                     <link.icon className="w-3.5 h-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">

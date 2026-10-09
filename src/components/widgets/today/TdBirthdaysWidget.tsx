@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TdHead } from "./TdHead";
 
@@ -126,6 +127,7 @@ function BirthdayFormDialog({
   const [birthYear, setBirthYear] = useState(editing?.birthYear ? String(editing.birthYear) : "");
   const [sharing, setSharing] = useState<BirthdaySharing>(editing?.sharedWith ?? { mode: "none" });
   const [reminders, setReminders] = useState<ReminderConfig[]>(editing?.reminders ?? [newReminder()]);
+  const [urgent, setUrgent] = useState(editing?.urgent ?? false);
   const [saving, setSaving] = useState(false);
 
   const someUids = sharing.mode === "some" ? sharing.uids ?? [] : [];
@@ -147,6 +149,7 @@ function BirthdayFormDialog({
         householdId: activeHouseholdId,
         sharedWith: sharing,
         reminders: reminders.slice(0, MAX_BIRTHDAY_REMINDERS),
+        urgent,
       });
       onOpenChange(false);
     } finally {
@@ -187,6 +190,14 @@ function BirthdayFormDialog({
               </Select>
             </div>
           </div>
+          <div className="flex items-center justify-between rounded-xl border border-foreground/20 bg-card px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium">Mark as urgent</p>
+              <p className="text-[11px] text-foreground/70">On the day, Home opens with a celebration to acknowledge.</p>
+            </div>
+            <Switch checked={urgent} onCheckedChange={setUrgent} />
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs">Year born (optional)</Label>
             <Input
@@ -254,7 +265,7 @@ function BirthdayFormDialog({
             </div>
           </div>
 
-          <Button className="w-full rounded-xl bg-gradient-primary" disabled={!name.trim() || saving} onClick={() => void save()}>
+          <Button className="w-full" disabled={!name.trim() || saving} onClick={() => void save()}>
             {saving ? "Saving…" : "Save birthday"}
           </Button>
         </div>
@@ -300,10 +311,12 @@ export function TdBirthdaysWidget() {
             key={b.id}
             type="button"
             onClick={() => openEdit(b)}
-            className="flex w-full items-center justify-between gap-2 rounded-xl bg-background/60 border border-border/40 px-2.5 py-1.5 text-left hover:border-primary/40"
+            className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 text-left ${
+              b.urgent ? "border-[#9B2C2C]/40 bg-[#9B2C2C]/10" : "border-border/40 bg-background/60"
+            }`}
           >
             <div className="min-w-0">
-              <p className="text-xs font-medium truncate">{b.name}</p>
+              <p className="text-xs font-medium truncate">{b.urgent ? "! " : ""}{b.name}</p>
               <p className="text-[10px] text-muted-foreground">
                 {b.sharedWith.mode === "all" ? "Shared with household" : b.sharedWith.mode === "some" ? "Shared" : "Private"}
               </p>
@@ -337,6 +350,7 @@ export function TdBirthdaysWidget() {
       )}
 
       <BirthdayFormDialog
+        key={editing?.id ?? "new"}
         open={formOpen}
         onOpenChange={setFormOpen}
         editing={editing}
