@@ -125,10 +125,10 @@ const TopBar = () => {
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {(headerShowDate || headerShowTime) && (
-            <p className="mr-1 whitespace-nowrap font-display text-base font-semibold tabular-nums text-white sm:text-lg">
-              {headerShowDate ? format(now, "EEE d MMM") : null}
-              {headerShowDate && headerShowTime ? <span className="mx-1.5 font-medium text-white/55">|</span> : null}
-              {headerShowTime ? format(now, "HH:mm") : null}
+            <p className="mr-1 whitespace-nowrap font-display text-[1.05rem] font-semibold tracking-[0.04em] text-white sm:text-xl">
+              {headerShowDate ? <span>{format(now, "EEE d MMM")}</span> : null}
+              {headerShowDate && headerShowTime ? <span className="mx-2 font-light text-white/50">|</span> : null}
+              {headerShowTime ? <span className="tabular-nums tracking-[0.08em]">{format(now, "HH:mm")}</span> : null}
             </p>
           )}
           {namedHouseholds.length > 1 && (

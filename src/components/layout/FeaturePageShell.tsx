@@ -13,9 +13,11 @@ interface FeaturePageShellProps {
   sharePage?: string;
   /** Replaces the default whole-page share button when this page needs a custom share flow. */
   shareAccess?: React.ReactNode;
+  /** Hide the back row (standalone calendar webapp). */
+  hideBack?: boolean;
 }
 
-const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess }: FeaturePageShellProps) => {
+const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess, hideBack }: FeaturePageShellProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const comparePage = sharePage === "calendar" || sharePage === "notes" ? sharePage : null;
@@ -41,6 +43,7 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
         animate={{ opacity: 1, y: 0 }}
         className="mb-5"
       >
+        {!hideBack && (
         <div className="sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-1 backdrop-blur-sm">
           <button
             type="button"
@@ -51,6 +54,7 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
             Back
           </button>
         </div>
+        )}
         <div className="relative flex flex-wrap items-center gap-3 border-b border-foreground/20 pb-4 after:absolute after:-bottom-px after:left-0 after:h-[3px] after:w-14 after:bg-gold">
           {icon && (
             <div className="btn-edge flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">

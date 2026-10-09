@@ -11,6 +11,8 @@ export type BankAccountSnapshot = {
   linkedAccountId: string | null;
 };
 
+const CANONICAL_BANK_CALLBACK = "https://hardyapp.co.uk/api/truelayer/callback";
+
 export function bankRedirectUri() {
   if (isNativeApp()) {
     return `${publicWebOrigin()}/finance/bank-callback`;
@@ -18,7 +20,9 @@ export function bankRedirectUri() {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return `${window.location.origin}/finance/bank-callback`;
   }
-  return `${window.location.origin}/api/truelayer/callback`;
+  // TrueLayer only allowlists hardyapp.co.uk. Always send that URI, then the
+  // function sends the person back to the page they started from.
+  return CANONICAL_BANK_CALLBACK;
 }
 
 export async function getBankConnectStatus() {
@@ -37,13 +41,14 @@ export async function getBankConnectStatus() {
 }
 
 export async function startBankConnect(returnPath?: string) {
-  const call = httpsCallable<{ redirectUri: string; returnPath?: string }, { authUrl: string }>(
+  const call = httpsCallable<{ redirectUri: string; returnPath?: string; returnOrigin?: string }, { authUrl: string }>(
     functions,
     "startTrueLayerConnect"
   );
   const result = await call({
     redirectUri: bankRedirectUri(),
     returnPath: returnPath || window.location.pathname,
+    returnOrigin: window.location.origin,
   });
   return result.data.authUrl;
 }

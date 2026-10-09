@@ -66,6 +66,8 @@ export const ROUTE_PAGE_SHARE: Record<string, string> = {
   "/companies/business-hub": "companies",
   "/ai-analysis": "ai_analysis",
   "/calendar": "calendar",
+  "/calendar-app": "calendar",
+  "/calendar-focus": "calendar",
   "/annual-leave": "annual_leave",
   "/holidays": "holidays",
   "/notes": "notes",

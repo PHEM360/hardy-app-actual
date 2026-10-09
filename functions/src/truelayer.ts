@@ -566,7 +566,10 @@ export const startTrueLayerConnect = onCall(SECRET_CALL_OPTS, async (request) =>
   // TrueLayer only has hardyapp.co.uk allowlisted. Always send that URI, then
   // bounce the user back to the page they started from after the callback.
   const redirectUri = CANONICAL_REDIRECT_URI;
-  const returnOrigin = originFromRedirectUri(clientRedirect);
+  const requestedOrigin = String(request.data?.returnOrigin || "");
+  const returnOrigin = isAllowedReturnOrigin(requestedOrigin)
+    ? requestedOrigin
+    : originFromRedirectUri(clientRedirect);
   const resolved = await resolveEnv(redirectUri);
   const returnPath = safeReturnPath(request.data?.returnPath, "/finance");
   const state = randomUUID();

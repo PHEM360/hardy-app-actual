@@ -7,10 +7,9 @@ import {
 } from "date-fns";
 import {
   StickyNote, Plus, Search, LayoutGrid, List, Columns2, CalendarDays, ListChecks,
-  FolderPlus, Shield, Share2, Pin, Archive, CheckSquare, Settings2,
-  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Inbox, Folder, PenLine, GitBranch, Tag,
+  Shield, Share2, Pin, CheckSquare, Settings2, FolderPlus,
+  Download, Lock, CheckCircle2, Circle, Smartphone, Palette, Layers, Filter,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,19 +41,6 @@ import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteCardStyle, noteSwatch } fro
 import { toast } from "sonner";
 
 type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" | "secure" | "shared" | "archived" | `folder:${string}` | `category:${string}`;
-
-const FOLDER_ACCENT: Record<string, string> = {
-  yellow: "hsl(42, 85%, 48%)",
-  orange: "hsl(28, 80%, 52%)",
-  red: "hsl(0, 65%, 52%)",
-  pink: "hsl(330, 70%, 58%)",
-  purple: "hsl(270, 55%, 55%)",
-  blue: "hsl(210, 55%, 50%)",
-  teal: "hsl(178, 55%, 36%)",
-  green: "hsl(152, 50%, 40%)",
-  gray: "hsl(215, 14%, 46%)",
-  default: "hsl(270, 55%, 55%)",
-};
 
 const BOARD_TONES = [
   { mix: "hsl(42, 85%, 48%)", label: "text-foreground" },
@@ -344,27 +330,18 @@ export default function Notes() {
   const styleFor = (n: HubNote, i: number, total = visibleNotes.length) =>
     noteCardStyle(noteSwatch(n, i, total, colorMode, notesApi.folders, shadeHue), listStyle, i);
 
-  const railItem = (id: FilterId, label: string, Icon: LucideIcon, accent?: string) => {
-    const on = filter === id;
-    return (
-      <button
-        key={id}
-        type="button"
-        onClick={() => (id === "secure" ? openSecure() : setFilter(id))}
-        className={`relative flex w-full flex-col items-center gap-1 rounded-xl px-1.5 py-2 text-center transition sm:flex-row sm:gap-2 sm:px-2.5 sm:text-left ${
-          on
-            ? "bg-gradient-primary text-primary-foreground shadow-soft"
-            : "border border-border/50 bg-card text-foreground hover:border-primary/30"
-        }`}
-      >
-        {!on && accent && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 hidden w-1 rounded-full sm:block" style={{ background: accent }} />
-        )}
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="w-full truncate text-[10px] font-semibold leading-tight sm:text-sm">{label}</span>
-      </button>
-    );
-  };
+  const pinnedRail = notesApi.notes.filter((n) => n.pinned && !n.archived);
+
+  useEffect(() => {
+    const nextFilter = params.get("filter");
+    if (nextFilter === "pinned") setFilter("pinned");
+    if (params.get("new") === "1" && canEdit) setStartOpen(true);
+    if (!nextFilter && params.get("new") !== "1") return;
+    const next = new URLSearchParams(params);
+    next.delete("filter");
+    next.delete("new");
+    setParams(next, { replace: true });
+  }, [params, setParams, canEdit]);
 
   return (
     <FeaturePageShell
@@ -386,56 +363,76 @@ export default function Notes() {
       }
     >
       <div className="flex min-w-0 gap-3">
-        <aside className="w-[4.5rem] shrink-0 sm:w-[10.75rem]">
-          <div className="sticky top-2 space-y-1">
-            {railItem("all", "All", StickyNote)}
-            {railItem("pinned", "Pinned", Pin)}
-            {railItem("tasks", "Checklists", CheckSquare)}
-            {railItem("diagrams", "Diagrams", GitBranch, FOLDER_ACCENT.teal)}
-            {railItem("drawings", "Drawings", PenLine, FOLDER_ACCENT.purple)}
-            {railItem("inbox", "Inbox", Inbox)}
-            {noteCategoryOptions(notesApi.prefs).map((category) =>
-              railItem(`category:${category.id}`, category.label, Tag, category.swatch)
+        <aside className="hidden w-[10.5rem] shrink-0 sm:block">
+          <div className="sticky top-2 space-y-1.5">
+            <p className="px-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/60">Pinned</p>
+            {pinnedRail.length === 0 && (
+              <p className="rounded-xl border border-foreground/20 bg-card p-2.5 text-[11px] text-foreground/70">
+                Pin a note and it will stay here.
+              </p>
             )}
-            {notesApi.folders.map((f) =>
-              railItem(`folder:${f.id}`, `${f.emoji ? `${f.emoji} ` : ""}${f.name}`, Folder, FOLDER_ACCENT[f.color] || FOLDER_ACCENT.default)
-            )}
-            {railItem("secure", "Secure", Shield)}
-            {railItem("shared", "Shared", Share2)}
-            {railItem("archived", "Archive", Archive)}
-            {canEdit && (
-              <form
-                className="pt-2 space-y-1.5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!newFolder.trim()) return;
-                  notesApi.addFolder(newFolder.trim());
-                  setNewFolder("");
-                }}
+            {pinnedRail.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                onClick={() => openNote(note)}
+                className="w-full rounded-xl border border-foreground/20 bg-card px-2.5 py-2 text-left shadow-card"
               >
-                <Input value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="Folder" className="h-8 rounded-xl border-2 bg-card px-2 text-xs" />
-                <Button type="submit" size="sm" variant="outline" className="h-8 w-full rounded-xl text-[11px]">
-                  <FolderPlus className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
-                {filter.startsWith("folder:") && isOwnScope && (
-                  <Button type="button" size="sm" variant="ghost" className="h-8 w-full rounded-xl text-[11px]" onClick={() => {
-                    const f = notesApi.folders.find((x) => x.id === filter.slice(7));
-                    if (f) setShareTarget({ type: "folder", folder: f });
-                  }}>
-                    <Share2 className="mr-1 h-3.5 w-3.5" /> Share
-                  </Button>
-                )}
-              </form>
-            )}
+                <p className="truncate text-xs font-semibold">{note.title || "Untitled"}</p>
+                <p className="mt-0.5 truncate text-[10px] text-foreground/60">{previewText(note)}</p>
+              </button>
+            ))}
           </div>
         </aside>
 
         <div className="min-w-0 flex-1 overflow-x-hidden">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-10 rounded-xl border-2 bg-card pl-9 shadow-soft" />
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Filter className="h-3.5 w-3.5" /> Filter
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="max-h-[70vh] w-56 overflow-y-auto">
+            <DropdownMenuLabel>Show</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={filter}
+              onValueChange={(value) => (value === "secure" ? openSecure() : setFilter(value as FilterId))}
+            >
+            {([
+              ["all", "All notes"],
+              ["pinned", "Pinned"],
+              ["tasks", "Checklists"],
+              ["diagrams", "Diagrams"],
+              ["drawings", "Drawings"],
+              ["inbox", "Inbox"],
+              ["secure", "Secure"],
+              ["shared", "Shared"],
+              ["archived", "Archive"],
+            ] as const).map(([id, label]) => (
+              <DropdownMenuRadioItem key={id} value={id}>
+                {label}
+              </DropdownMenuRadioItem>
+            ))}
+            {noteCategoryOptions(notesApi.prefs).length > 0 && <DropdownMenuSeparator />}
+            {noteCategoryOptions(notesApi.prefs).map((category) => (
+              <DropdownMenuRadioItem key={category.id} value={`category:${category.id}`}>
+                {category.label}
+              </DropdownMenuRadioItem>
+            ))}
+            {notesApi.folders.length > 0 && <DropdownMenuSeparator />}
+            {notesApi.folders.map((folder) => (
+              <DropdownMenuRadioItem key={folder.id} value={`folder:${folder.id}`}>
+                {folder.emoji ? `${folder.emoji} ${folder.name}` : folder.name}
+              </DropdownMenuRadioItem>
+            ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex items-center gap-1 rounded-2xl border-2 border-border bg-card p-1 shadow-soft">
           {VIEWS.map((v) => (
             <button
@@ -798,6 +795,24 @@ export default function Notes() {
                 onChange={(next) => notesApi.savePrefs(next)}
               />
             </div>
+
+            {canEdit && (
+              <form
+                className="space-y-2 rounded-xl border border-border p-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newFolder.trim()) return;
+                  notesApi.addFolder(newFolder.trim());
+                  setNewFolder("");
+                }}
+              >
+                <p className="font-medium">Folders</p>
+                <div className="flex gap-2">
+                  <Input value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="New folder" className="h-10" />
+                  <Button type="submit" variant="outline"><FolderPlus /> Add</Button>
+                </div>
+              </form>
+            )}
 
             <div className="rounded-xl border border-border p-3 space-y-2">
               <p className="font-medium flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> External calendars</p>

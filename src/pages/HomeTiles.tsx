@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, RotateCcw } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GreetingWidget } from "@/components/widgets/GreetingWidget";
 import { QuickLinksWidget } from "@/components/widgets/QuickLinksWidget";
 import { UnallocatedInboxWidget } from "@/components/widgets/UnallocatedInboxWidget";
@@ -13,7 +14,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
 import { canAccessRoute } from "@/lib/features";
 import { HomeViewToggle } from "@/components/home/HomeViewToggle";
-import { HOME_TILE_BY_ID, HOME_TILE_PRESETS, packHomeTiles, visibleHomeTiles, type HomeLayoutMode, type HomeTileDef, type HomeTilesPresetId } from "@/lib/homeLayout";
+import { HOME_TILE_BY_ID, HOME_TILE_PRESETS, homeTileQuickActions, packHomeTiles, visibleHomeTiles, type HomeLayoutMode, type HomeTileDef, type HomeTilesPresetId } from "@/lib/homeLayout";
 import { homeTileSkinClass, tileIconWrapClass, tileInkClass, tileMotionClass, tileSurface } from "@/lib/homeTileSkins";
 
 const COL_CLASS: Record<number, string> = {
@@ -132,6 +133,26 @@ function PageTile({
   const surface = tileSurface(preset, tile.accent, featured);
   const ink = tileInkClass(preset, featured);
   const stacked = featured && (preset === "magazine" || preset === "spotlight");
+  const navigate = useNavigate();
+  const holdTimer = useRef<number | null>(null);
+  const held = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const actions = homeTileQuickActions(tile);
+
+  const clearHold = () => {
+    if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+
+  const startHold = () => {
+    if (editMode) return;
+    held.current = false;
+    clearHold();
+    holdTimer.current = window.setTimeout(() => {
+      held.current = true;
+    }, 450);
+  };
+
   return (
     <div
       className={`home-tile relative h-full min-w-0 overflow-hidden border shadow-card ${surface.radius} ${
@@ -157,9 +178,28 @@ function PageTile({
           </button>
         </div>
       )}
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+        <PopoverTrigger asChild>
       <button
         type="button"
-        onClick={onOpen}
+        onClick={() => {
+          if (held.current) {
+            held.current = false;
+            return;
+          }
+          onOpen();
+        }}
+        onPointerDown={startHold}
+        onPointerUp={() => {
+          clearHold();
+          if (held.current) setMenuOpen(true);
+        }}
+        onPointerCancel={clearHold}
+        onPointerLeave={clearHold}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
         disabled={editMode}
         className={`flex h-full w-full min-w-0 text-left ${
           stacked ? "flex-col justify-end gap-3 px-4 py-4" :
@@ -182,6 +222,23 @@ function PageTile({
           {tile.label}
         </span>
       </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-48 rounded-xl border border-foreground/20 p-1.5 shadow-card">
+          {actions.map((action) => (
+            <button
+              key={action.to + action.label}
+              type="button"
+              className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm font-semibold hover:bg-muted"
+              onClick={() => {
+                setMenuOpen(false);
+                navigate(action.to);
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

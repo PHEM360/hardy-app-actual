@@ -17,6 +17,7 @@ import {
 } from "@/hooks/useTodayLayout";
 import type { TodayWidgetItem, TodayWidgetType } from "@/hooks/useTodayLayout";
 import { HEADER_COLOR_PRESETS } from "@/lib/chromeScenes";
+import { useDueEventMessages } from "@/hooks/useDueEventMessages";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { TdAiWidget }          from "@/components/widgets/today/TdAiWidget";
@@ -325,6 +326,7 @@ const Today = ({
 }: {
   homeSwitch?: { mode: HomeLayoutMode; onChange: (mode: HomeLayoutMode) => void };
 } = {}) => {
+  useDueEventMessages();
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [editMode, setEditMode] = useState(false);

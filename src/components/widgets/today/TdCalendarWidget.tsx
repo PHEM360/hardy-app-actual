@@ -26,13 +26,21 @@ export function TdCalendarWidget() {
         {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
         {!loading && todays.length === 0 && <p className="text-xs text-muted-foreground">Nothing on the calendar today.</p>}
         {todays.map((event) => (
-          <div key={event.id} className="rounded-xl bg-background/60 border border-border/40 px-2.5 py-1.5">
-            <p className="text-xs font-medium truncate">{event.title}</p>
+          <button
+            key={event.id}
+            type="button"
+            onClick={() => navigate("/calendar")}
+            className="w-full rounded-xl border border-border/40 bg-background/60 px-2.5 py-1.5 text-left"
+          >
+            <p className="truncate text-xs font-medium">{event.title}</p>
             <p className="text-[10px] text-muted-foreground">
               {event.allDay ? "All day" : format(new Date(event.startDate), "HH:mm")}
               {isToday(new Date(event.startDate)) && event.location ? ` · ${event.location}` : ""}
             </p>
-          </div>
+            {(event.source === "birthday" || (event.messagePlans && event.messagePlans.length > 0)) && (
+              <p className="mt-0.5 text-[10px] font-semibold text-primary">Open to schedule a message</p>
+            )}
+          </button>
         ))}
       </div>
     </div>

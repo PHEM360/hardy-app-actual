@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
@@ -15,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { useTasks } from "@/hooks/useTasks";
 import { useTaskSettings } from "@/hooks/useTaskSettings";
@@ -253,11 +253,8 @@ function TaskDetailSheet({
 
   if (!task) return null;
 
-  const priority = PRIORITIES.find((p) => p.value === task.priority) ?? PRIORITIES[2];
-  const status = STATUSES.find((s) => s.value === task.status) ?? STATUSES[0];
   const subtaskCount = task.subtasks?.length ?? 0;
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
-  const isDone = task.status === "done";
 
   const patchSub = (subId: string, patch: Partial<TaskSubtask>) => {
     if (!task.id) return;
@@ -299,41 +296,17 @@ function TaskDetailSheet({
   const visibleSubtasks = (task.subtasks ?? []).filter((s) => showCompleted || !s.done);
   const hiddenDoneCount = subtaskCount - visibleSubtasks.length;
 
-  return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col gap-0">
-        {/* Header */}
-        <SheetHeader className="px-5 pt-5 pb-4 pr-12 border-b border-border/50 text-left">
-          <div className="flex items-start gap-3">
-            <button
-              onClick={() => {
-                const idx = STATUSES.findIndex((s) => s.value === task.status);
-                onStatusChange(STATUSES[(idx + 1) % STATUSES.length].value);
-              }}
-              className="mt-0.5 flex-shrink-0 hover:scale-110 transition-transform"
-              title="Cycle status: not started, in progress, done"
-            >
-              <StatusIcon status={task.status} className="w-5 h-5" />
-            </button>
-            <div className="flex-1 min-w-0">
-              <SheetTitle className={`text-base font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}>
-                {task.title}
-              </SheetTitle>
-              {task.description && (
-                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{task.description}</p>
-              )}
-            </div>
-          </div>
-        </SheetHeader>
+  if (!open) return null;
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {/* Tracking: one tap to say how the task is going */}
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/60">How is it going?</p>
-            <div className="flex flex-wrap gap-1.5">
+  return (
+    <div className="border-t border-foreground/20 bg-[#F3EDE2]">
+        <div className="space-y-2.5 px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <p className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-foreground/60">Going</p>
+            <div className="grid min-w-0 flex-1 grid-cols-4 gap-1">
               {TASK_TRACKING.map((t) => {
                 const on = task.tracking === t.value;
+                const picking = trackingDraft === t.value;
                 return (
                   <button
                     key={t.value}
@@ -348,8 +321,10 @@ function TaskDetailSheet({
                       setTrackingDraft(t.value);
                       setTrackingNoteDraft(task.trackingNote || "");
                     }}
-                    className={`rounded-md border-2 px-3 py-2 text-xs font-bold transition-colors ${on || trackingDraft === t.value ? "btn-edge text-white" : "bg-card text-foreground"}`}
-                    style={on || trackingDraft === t.value ? { background: t.hex, borderColor: t.hex } : { borderColor: `${t.hex}66` }}
+                    className={`btn-edge h-8 rounded-md border px-1 text-[10px] font-bold leading-tight ${
+                      on || picking ? "text-white" : "bg-card text-foreground"
+                    }`}
+                    style={on || picking ? { background: t.hex, borderColor: t.hex } : { borderColor: "rgba(26,24,20,0.25)" }}
                     aria-pressed={on}
                   >
                     {t.label}
@@ -357,77 +332,63 @@ function TaskDetailSheet({
                 );
               })}
             </div>
-            {trackingDraft && (
-              <div className="space-y-2 rounded-lg border border-foreground/20 bg-card p-3">
-                <Label>Note for this status</Label>
-                <Textarea
-                  value={trackingNoteDraft}
-                  onChange={(event) => setTrackingNoteDraft(event.target.value)}
-                  placeholder="Why is it on track, adjusted, or off track?"
-                  className="min-h-[72px]"
-                />
-                <Button
-                  type="button"
-                  onClick={() => {
-                    if (!task.id || !trackingDraft) return;
-                    void updateTask(task.id, { tracking: trackingDraft, trackingNote: trackingNoteDraft.trim() });
-                    setTrackingDraft("");
-                  }}
-                >
-                  Save status
-                </Button>
-              </div>
-            )}
+            <button type="button" onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center text-foreground/50" aria-label="Close">
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-
-          {/* Meta chips */}
-          <div className="flex flex-wrap gap-2">
-            <span className={`text-xs px-2.5 py-1 rounded-md font-medium ${priority.bg}`}>{priority.label}</span>
-            <span className={`text-xs px-2.5 py-1 rounded-md bg-muted font-medium ${status.color}`}>{status.label}</span>
-            <TrackingChip task={task} className="!px-2.5 !py-1 !text-xs" />
-            {task.category && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.category}</span>}
-            {task.company && <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">{task.company}</span>}
-            {task.dueDate && (
-              <span className="text-xs px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-medium">
-                Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-              </span>
-            )}
-            {task.isToday && <span className="text-xs px-2.5 py-1 rounded-md bg-amber-100 text-amber-700 font-medium">Today</span>}
-          </div>
-
-          {/* Tags */}
-          {task.tags?.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tags</p>
-              <div className="flex flex-wrap gap-1.5">
-                {task.tags.map((t) => (
-                  <span key={t} className="text-xs bg-muted px-2 py-0.5 rounded-md text-muted-foreground">{t}</span>
-                ))}
-              </div>
+          {trackingDraft && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={trackingNoteDraft}
+                onChange={(event) => setTrackingNoteDraft(event.target.value)}
+                placeholder="Optional note"
+                className="h-8 text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  if (!task.id || !trackingDraft) return;
+                  void updateTask(task.id, { tracking: trackingDraft, trackingNote: trackingNoteDraft.trim() });
+                  setTrackingDraft("");
+                }}
+              >
+                Save
+              </Button>
             </div>
           )}
 
-          {/* ── Subtasks ─────────────────────────────────────────────────── */}
+          {task.description && (
+            <p className="text-[11px] leading-snug text-foreground/70">{task.description}</p>
+          )}
+
+          {task.tags?.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {task.tags.map((t) => (
+                <span key={t} className="rounded-md bg-foreground/10 px-1.5 py-px text-[10px] font-bold text-foreground">{t}</span>
+              ))}
+            </div>
+          )}
+
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-foreground/60">
                 Subtasks
               </p>
               {subtaskCount > 0 && (
-                <span className="text-xs text-muted-foreground">{subtaskDone}/{subtaskCount}</span>
+                <span className="text-[10px] font-bold tabular-nums text-foreground/60">{subtaskDone}/{subtaskCount}</span>
               )}
             </div>
             {hiddenDoneCount > 0 && (
-              <p className="text-[11px] text-muted-foreground mb-2">
+              <p className="mb-1 text-[10px] text-foreground/60">
                 {hiddenDoneCount} completed {hiddenDoneCount === 1 ? "subtask" : "subtasks"} hidden
               </p>
             )}
 
-            {/* Progress bar */}
             {subtaskCount > 0 && (
-              <div className="h-1 bg-muted rounded-full overflow-hidden mb-3">
+              <div className="mb-1.5 h-1 overflow-hidden rounded-full bg-foreground/15">
                 <div
-                  className="h-full bg-green-400 rounded-full transition-all duration-300"
+                  className="h-full rounded-full bg-[#1F6B4F] transition-all duration-300"
                   style={{ width: `${(subtaskDone / subtaskCount) * 100}%` }}
                 />
               </div>
@@ -451,18 +412,13 @@ function TaskDetailSheet({
                     onDragOver={(e) => handleSubDragOver(e, idx)}
                     onDrop={handleSubDrop}
                     onDragEnd={() => { setDragSubIdx(null); setDragOverSubIdx(null); }}
-                    className={`rounded-xl border transition-all ${
+                    className={`rounded-lg border border-foreground/20 bg-card ${
                       dragOverSubIdx === idx && dragSubIdx !== idx
-                        ? "border-primary/50 bg-primary/5"
-                        : sub.done
-                        ? "bg-muted/20 border-border/30"
-                        : isExpanded
-                        ? "bg-card border-border shadow-sm"
-                        : "bg-muted/40 border-border/40 hover:border-border/70"
+                        ? "border-primary"
+                        : ""
                     }`}
                   >
-                    {/* ── Top row ── */}
-                    <div className="flex items-start gap-2 px-2 pt-2.5 pb-2">
+                    <div className="flex items-center gap-1.5 px-1.5 py-1.5">
                       {/* Drag handle */}
                       <span
                         className="mt-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
@@ -673,61 +629,49 @@ function TaskDetailSheet({
                     </Button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setShowQuickAdd(true)}
-                    className="w-full flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary py-1.5 px-2 rounded-xl hover:bg-primary/5 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" /> Add subtask
-                  </button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowQuickAdd(true)}>
+                    <Plus /> Add subtask
+                  </Button>
                 )}
               </div>
             )}
           </div>
 
-          {/* Notes */}
           {task.notes?.trim() && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Notes</p>
-              <div className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                {task.notes}
-              </div>
-            </div>
+            <p className="whitespace-pre-wrap rounded-lg border border-foreground/20 bg-card px-2 py-1.5 text-[11px] leading-snug text-foreground">
+              {task.notes}
+            </p>
           )}
 
-          {/* Custom fields */}
           {settings.customFields.filter((f) => task.customFields?.[f.id]).length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Custom Fields</p>
-              <div className="space-y-1.5">
-                {settings.customFields
-                  .filter((f) => task.customFields?.[f.id])
-                  .map((f) => (
-                    <div key={f.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{f.label}</span>
-                      <span className="font-medium">{task.customFields![f.id]}</span>
-                    </div>
-                  ))}
-              </div>
+            <div className="space-y-0.5">
+              {settings.customFields
+                .filter((f) => task.customFields?.[f.id])
+                .map((f) => (
+                  <div key={f.id} className="flex justify-between gap-2 text-[11px]">
+                    <span className="text-foreground/60">{f.label}</span>
+                    <span className="font-semibold">{task.customFields![f.id]}</span>
+                  </div>
+                ))}
             </div>
           )}
         </div>
 
-        {/* Footer actions */}
-        <div className="px-5 py-4 border-t border-border/50 flex gap-2">
+        <div className="flex gap-1.5 border-t border-foreground/15 px-3 py-2">
           <Button
             variant="outline"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onToggleToday(); }}
-            className={`flex-1 rounded-xl h-9 gap-1.5 ${task.isToday ? "border-amber-300 text-amber-600 bg-amber-50" : ""}`}
+            className={`flex-1 ${task.isToday ? "border-[#8A6424] text-[#8A6424]" : ""}`}
           >
-            <Sun className="w-3.5 h-3.5" />
-            {task.isToday ? "Remove from Today" : "Add to Today"}
+            <Sun />
+            {task.isToday ? "On Today" : "Add Today"}
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={onEdit}
-            className="flex-1 rounded-xl h-9"
+            className="flex-1"
           >
             Edit
           </Button>
@@ -735,13 +679,12 @@ function TaskDetailSheet({
             variant="outline"
             size="sm"
             onClick={onDelete}
-            className="h-9 w-9 px-0 rounded-xl text-destructive hover:bg-destructive/10 hover:border-destructive/40"
+            className="text-destructive"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 />
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+    </div>
   );
 }
 
@@ -1362,14 +1305,19 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
     .join(", ");
 
   return (
+    <div>
     <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onOpen}
-      className={`flex cursor-pointer items-center gap-1 bg-card px-2 py-2 ${selected ? "bg-[#17475C]/10" : ""} ${isDone ? "opacity-70" : ""}`}
-      style={{ borderLeft: `4px solid ${bar}` }}
+      className={`flex cursor-pointer items-center gap-2 px-3 py-3 ${
+        selected ? "bg-[#17475C] text-white" : isDone ? "bg-card opacity-70" : "bg-card"
+      }`}
+      style={{ borderLeft: `4px solid ${selected ? "#C6A15B" : bar}` }}
     >
       <DoneCheckbox done={isDone} onClick={toggleDone} />
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-[15px] font-semibold leading-snug ${isDone ? "text-foreground/55 line-through" : "text-foreground"}`}>{task.title}</p>
+        <p className={`truncate text-[15px] font-semibold leading-snug ${
+          selected ? "text-white" : isDone ? "text-foreground/55 line-through" : "text-foreground"
+        }`}>{task.title}</p>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           {task.category && (
             <span className="rounded-md px-1.5 py-px text-[10px] font-bold text-white" style={{ background: catColour || "#3B4759" }}>{task.category}</span>
@@ -1381,7 +1329,11 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
           {overdue && <span className="rounded-md bg-[#9B2C2C] px-1.5 py-px text-[10px] font-bold text-white">Overdue</span>}
           {task.isToday && <span className="rounded-md bg-[#8A6424] px-1.5 py-px text-[10px] font-bold text-white">Today</span>}
         </div>
-        {meta && <p className={`mt-0.5 truncate text-[11px] ${overdue ? "font-semibold text-[#9B2C2C]" : "text-foreground/70"}`}>{meta}{hasNotes ? ", notes" : ""}</p>}
+        {meta && (
+          <p className={`mt-0.5 truncate text-[11px] ${
+            selected ? "text-white/80" : overdue ? "font-semibold text-[#9B2C2C]" : "text-foreground/70"
+          }`}>{meta}{hasNotes ? ", notes" : ""}</p>
+        )}
       </div>
       <button
         type="button"
@@ -1390,9 +1342,11 @@ function TaskCard({ task, onOpen, onDelete, onToggleToday, onStatusChange, setti
         title={task.isToday ? "Remove from Today" : "Add to Today"}
         aria-label={task.isToday ? "Remove from Today" : "Add to Today"}
       >
-        <Sun className={`h-4 w-4 ${task.isToday ? "text-[#8A6424]" : "text-foreground/35"}`} />
+        <Sun className={`h-4 w-4 ${task.isToday ? "text-[#C6A15B]" : selected ? "text-white/55" : "text-foreground/35"}`} />
       </button>
+      <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${selected ? "rotate-90 text-white" : "text-foreground/35"}`} />
     </motion.div>
+    </div>
   );
 }
 
@@ -1752,8 +1706,8 @@ function CompanyGroupView({
                       const pData = PRIORITIES.find((p) => p.value === task.priority)!;
 
                       return (
+                        <div key={task.id}>
                         <div
-                          key={task.id}
                           className="flex cursor-pointer items-center gap-2.5 border-t border-foreground/10 bg-card px-3 py-2"
                           style={{ borderLeft: `4px solid ${statusLook(task.status).hex}` }}
                           onClick={() => onOpen(task)}
@@ -1787,6 +1741,7 @@ function CompanyGroupView({
                           </div>
                           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />
                         </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1803,6 +1758,7 @@ function CompanyGroupView({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Tasks = () => {
+  const [params, setParams] = useSearchParams();
   const { scopeUserId, permission, pageTitle, isOwnScope } = useSharedScope("tasks");
   const canEdit = permission === "edit";
   const { tasks, loading: tasksLoading, addTask, updateTask, deleteTask, toggleToday, setStatus } = useTasks(scopeUserId ?? undefined);
@@ -1834,6 +1790,19 @@ const Tasks = () => {
   useEffect(() => {
     if (settings.tileOrder?.length) setTileOrder(settings.tileOrder);
   }, [settings.tileOrder]);
+
+  useEffect(() => {
+    if (params.get("filter") === "today") setFilter("today");
+    if (params.get("new") === "1") {
+      setEditTask(null);
+      setDialogOpen(true);
+    }
+    if (params.get("filter") !== "today" && params.get("new") !== "1") return;
+    const next = new URLSearchParams(params);
+    next.delete("filter");
+    next.delete("new");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   const changeView = (mode: TaskView) => {
     setViewMode(mode);
@@ -1938,7 +1907,14 @@ const Tasks = () => {
   };
 
   const openAdd = () => { setEditTask(null); setDialogOpen(true); };
-  const openDetail = (task: Task) => { setDetailTask(task); setDetailOpen(true); };
+  const openDetail = (task: Task) => {
+    if (detailOpen && detailTask?.id === task.id) {
+      setDetailOpen(false);
+      return;
+    }
+    setDetailTask(task);
+    setDetailOpen(true);
+  };
   const openEdit = (task: Task) => { setEditTask(task); setDetailOpen(false); setDialogOpen(true); };
 
   const liveDetailTask = detailTask ? tasks.find((t) => t.id === detailTask.id) ?? detailTask : null;
@@ -1946,15 +1922,20 @@ const Tasks = () => {
   const doneCount = tasks.filter((t) => t.status === "done").length;
 
   const emptyCopy = tasks.length === 0
-    ? "No tasks yet. Add one below or tap New."
-    : showCompleted
-      ? "Nothing matches this filter."
-      : "No open tasks. Show completed to see finished ones.";
+    ? "No tasks yet. Type a title above and tap Add, or tap New."
+    : filter === "today"
+      ? "Nothing is marked for today. Add one above, or tap the sun on a task."
+      : filter === "overdue"
+        ? "Nothing is overdue."
+        : showCompleted
+          ? "Nothing matches this filter."
+          : "No open tasks. Open Find to show finished ones.";
 
   const openTasks = tasks.filter((task) => task.status !== "done");
-  const notStartedCount = openTasks.filter((task) => task.status === "todo").length;
-  const inProgressCount = openTasks.filter((task) => task.status === "in_progress").length;
+  const todayCount = openTasks.filter((task) => task.isToday || Boolean(task.subtasks?.some((item) => item.isToday && !item.done))).length;
+  const overdueCount = tasks.filter((task) => isTaskOverdue(task)).length;
   const filtersActive = statusFilter !== "all" || categoryFilter !== "all" || companyFilter !== "all" || query.trim() !== "";
+  const showingSubset = filter !== "all" || filtersActive;
 
   if (tasksLoading || settingsLoading) {
     return (
@@ -1969,7 +1950,7 @@ const Tasks = () => {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle={isOwnScope ? "Tap a task to open it. Tick it to mark it done." : "Shared with you"}
+      subtitle={isOwnScope ? "Tick to finish. Tap a row for details." : "Shared with you"}
       icon={<CheckSquare className="w-5 h-5" />}
       sharePage="tasks"
       action={
@@ -1988,37 +1969,41 @@ const Tasks = () => {
       <div className="space-y-4 overflow-x-hidden">
         <div className="grid grid-cols-3 gap-2">
           {([
-            { key: "all" as const, label: "Total", value: tasks.length, color: "#14213D" },
-            { key: "todo" as const, label: "Not started", value: notStartedCount, color: "#3B4759" },
-            { key: "in_progress" as const, label: "In progress", value: inProgressCount, color: "#17475C" },
-          ]).map((stat) => {
-            const active = statusFilter === stat.key;
-            return (
-              <button
-                key={stat.label}
-                type="button"
-                onClick={() => setStatusFilter(stat.key)}
-                aria-pressed={active}
-                className={`btn-edge rounded-lg p-2.5 text-left text-white ${active ? "ring-2 ring-[#C6A15B] ring-offset-2 ring-offset-background" : ""}`}
-                style={{ background: stat.color }}
-              >
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{stat.label}</p>
-                <p className="mt-1 font-display text-2xl font-bold leading-none tabular-nums">{stat.value}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={optionClass(filter === "today")} onClick={() => setFilter(filter === "today" ? "all" : "today")}>
-            Today
-          </button>
-          <button type="button" className={optionClass(filtersActive)} onClick={() => setFiltersOpen(true)}>
-            {filtersActive ? "Filtered" : "Filter"}
-          </button>
-          {([["list", "List"], ["tile", "Tiles"], ["kanban", "Board"], ["company", "Company"]] as [TaskView, string][]).map(([mode, label]) => (
-            <button key={mode} type="button" className={optionClass(viewMode === mode)} onClick={() => changeView(mode)}>
-              {label}
+            {
+              key: "open",
+              label: "Open",
+              value: openTasks.length,
+              color: "#14213D",
+              active: filter === "all" && statusFilter !== "done",
+              onClick: () => { setFilter("all"); setStatusFilter("all"); },
+            },
+            {
+              key: "today",
+              label: "Today",
+              value: todayCount,
+              color: "#8A6424",
+              active: filter === "today",
+              onClick: () => setFilter(filter === "today" ? "all" : "today"),
+            },
+            {
+              key: "overdue",
+              label: "Overdue",
+              value: overdueCount,
+              color: "#9B2C2C",
+              active: filter === "overdue",
+              onClick: () => setFilter(filter === "overdue" ? "all" : "overdue"),
+            },
+          ]).map((stat) => (
+            <button
+              key={stat.key}
+              type="button"
+              onClick={stat.onClick}
+              aria-pressed={stat.active}
+              className={`btn-edge rounded-lg p-2.5 text-left text-white ${stat.active ? "ring-2 ring-[#C6A15B] ring-offset-2 ring-offset-background" : ""}`}
+              style={{ background: stat.color }}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{stat.label}</p>
+              <p className="mt-1 font-display text-2xl font-bold leading-none tabular-nums">{stat.value}</p>
             </button>
           ))}
         </div>
@@ -2039,6 +2024,36 @@ const Tasks = () => {
             </Button>
           </form>
         )}
+
+        <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+          <div className="flex gap-1.5 p-2">
+            <button type="button" className={`${optionClass(filtersActive)} flex-1`} onClick={() => setFiltersOpen(true)}>
+              {filtersActive ? "Filtered" : "Find"}
+            </button>
+            {showingSubset && (
+              <button
+                type="button"
+                className={`${optionClass(false)} flex-1`}
+                onClick={() => {
+                  setStatusFilter("all");
+                  setCategoryFilter("all");
+                  setCompanyFilter("all");
+                  setFilter("all");
+                  setQuery("");
+                }}
+              >
+                Show all
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-1 border-t border-foreground/15 p-2">
+            {([["list", "List"], ["tile", "Tiles"], ["kanban", "Board"], ["company", "Company"]] as [TaskView, string][]).map(([mode, label]) => (
+              <button key={mode} type="button" className={`${optionClass(viewMode === mode)} w-full`} onClick={() => changeView(mode)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
           {viewMode === "company" ? (
             <CompanyGroupView
@@ -2091,14 +2106,14 @@ const Tasks = () => {
                 if (rows.length === 0) return null;
                 return (
                   <section key={value} className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
-                    <div className="band flex items-center justify-between px-3 py-2.5 text-white" style={{ background: status.hex }}>
-                      <p className="font-display text-base font-bold">{status.label}</p>
-                      <p className="font-display text-lg font-bold tabular-nums">{rows.length}</p>
+                    <div className="band flex items-center justify-between px-3 py-2 text-white" style={{ background: status.hex }}>
+                      <p className="font-display text-[15px] font-bold">{status.label}</p>
+                      <p className="font-display text-base font-bold tabular-nums">{rows.length}</p>
                     </div>
                     <div className="divide-y divide-foreground/10">
                       {rows.map((task) => (
+                        <div key={task.id}>
                         <TaskCard
-                          key={task.id}
                           task={task}
                           settings={settings}
                           colourBy={colourBy}
@@ -2108,6 +2123,21 @@ const Tasks = () => {
                           onToggleToday={() => task.id && toggleToday(task.id, task.isToday)}
                           onStatusChange={(s) => task.id && setStatus(task.id, s)}
                         />
+                        {detailOpen && liveDetailTask?.id === task.id && (
+                          <TaskDetailSheet
+                            task={liveDetailTask}
+                            open
+                            onClose={() => setDetailOpen(false)}
+                            onEdit={() => openEdit(liveDetailTask)}
+                            onDelete={() => setPendingDelete(liveDetailTask)}
+                            onToggleToday={() => liveDetailTask.id && toggleToday(liveDetailTask.id, liveDetailTask.isToday)}
+                            onStatusChange={(s) => liveDetailTask.id && setStatus(liveDetailTask.id, s)}
+                            updateTask={updateTask}
+                            settings={settings}
+                            showCompleted={showCompleted}
+                          />
+                        )}
+                        </div>
                       ))}
                     </div>
                   </section>
@@ -2183,18 +2213,27 @@ const Tasks = () => {
         </DialogContent>
       </Dialog>
 
-      <TaskDetailSheet
-        task={liveDetailTask}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        onEdit={() => liveDetailTask && openEdit(liveDetailTask)}
-        onDelete={() => liveDetailTask && setPendingDelete(liveDetailTask)}
-        onToggleToday={() => liveDetailTask?.id && toggleToday(liveDetailTask.id, liveDetailTask.isToday)}
-        onStatusChange={(s) => liveDetailTask?.id && setStatus(liveDetailTask.id, s)}
-        updateTask={updateTask}
-        settings={settings}
-        showCompleted={showCompleted}
-      />
+      {viewMode !== "list" && (
+        <Dialog open={detailOpen} onOpenChange={(open) => { if (!open) setDetailOpen(false); }}>
+          <DialogContent className="mx-2 max-h-[min(92dvh,calc(100dvh-0.75rem))] overflow-y-auto p-0 pt-12" aria-describedby={undefined}>
+            <DialogHeader className="sr-only">
+              <DialogTitle>Task</DialogTitle>
+            </DialogHeader>
+            <TaskDetailSheet
+              task={liveDetailTask}
+              open={detailOpen}
+              onClose={() => setDetailOpen(false)}
+              onEdit={() => liveDetailTask && openEdit(liveDetailTask)}
+              onDelete={() => liveDetailTask && setPendingDelete(liveDetailTask)}
+              onToggleToday={() => liveDetailTask?.id && toggleToday(liveDetailTask.id, liveDetailTask.isToday)}
+              onStatusChange={(s) => liveDetailTask?.id && setStatus(liveDetailTask.id, s)}
+              updateTask={updateTask}
+              settings={settings}
+              showCompleted={showCompleted}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditTask(null); }}>
         <DialogContent className="max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>

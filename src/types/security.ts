@@ -22,7 +22,7 @@ export const SECURITY_MODULES = [
   { id: "households", label: "Households", routes: ["/households", "/household-finance"] },
   { id: "pets", label: "Pets", routes: ["/pets"] },
   { id: "tasks", label: "Tasks", routes: ["/tasks"] },
-  { id: "calendar", label: "Calendar", routes: ["/calendar"] },
+  { id: "calendar", label: "Calendar", routes: ["/calendar", "/calendar-app", "/calendar-focus"] },
   { id: "inheritance", label: "IHT Planner", routes: ["/inheritance"] },
   { id: "freezer", label: "Freezer", routes: ["/freezer"] },
   { id: "tattersalls", label: "Flats", routes: ["/tattersalls"] },

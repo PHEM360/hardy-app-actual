@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MandatoryPasskeyGate, ModuleSecurityGate, PasskeyGate } from "@/components/security/SecurityGate";
 import { DEFAULT_SECURITY_SETTINGS } from "@/types/security";
-import { markSecurityAuthentication } from "@/lib/securitySession";
+import { markSecurityAuthentication, markSecurityAuthenticationAt } from "@/lib/securitySession";
 
 let enrolled = false;
 let tokenPasskeyVerifiedAt = 0;
@@ -103,7 +103,7 @@ describe("security gates", () => {
   it("asks again once the passkey period has run out", async () => {
     enrolled = true;
     tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 8 * 86_400;
-    markSecurityAuthentication("user-1", "passkey");
+    markSecurityAuthenticationAt("user-1", "passkey", Date.now() - 8 * 86_400 * 1000);
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>

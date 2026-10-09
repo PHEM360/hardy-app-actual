@@ -189,6 +189,40 @@ export function packHomeTiles(
   return rows;
 }
 
+export type HomeTileQuickAction = { label: string; to: string };
+
+export function homeTileQuickActions(tile: HomeTileDef): HomeTileQuickAction[] {
+  const open = tile.route ? [{ label: `Open ${tile.label}`, to: tile.route }] : [];
+  switch (tile.id) {
+    case "calendar":
+      return [
+        { label: "New event", to: "/calendar?new=1" },
+        { label: "Week view", to: "/calendar?view=week" },
+        { label: "Calendar app", to: "/calendar-app" },
+      ];
+    case "tasks":
+      return [
+        { label: "New task", to: "/tasks?new=1" },
+        { label: "Today's tasks", to: "/tasks?filter=today" },
+        ...open,
+      ];
+    case "notes":
+      return [
+        { label: "New note", to: "/notes?new=1" },
+        { label: "Pinned notes", to: "/notes?filter=pinned" },
+        ...open,
+      ];
+    case "today":
+      return [{ label: "Open Today", to: "/today" }, { label: "Home tiles", to: "/" }];
+    case "alarms":
+      return [{ label: "Open alarms", to: "/alarms" }];
+    case "finance":
+      return [{ label: "Open Finance", to: "/finance" }, { label: "Bank links", to: "/finance" }];
+    default:
+      return open;
+  }
+}
+
 export function moveHomeTile(order: string[], id: string, delta: number): string[] {
   const from = order.indexOf(id);
   if (from < 0) return order;

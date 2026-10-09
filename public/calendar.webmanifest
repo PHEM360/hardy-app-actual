@@ -1,0 +1,20 @@
+{
+  "name": "Hardy Hub Calendar",
+  "short_name": "Calendar",
+  "description": "Family calendar",
+  "start_url": "/calendar-app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#F4EFE6",
+  "theme_color": "#14213D",
+  "icons": [
+    {
+      "src": "/App Icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

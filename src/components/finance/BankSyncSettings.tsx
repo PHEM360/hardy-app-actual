@@ -43,16 +43,22 @@ export default function BankSyncSettings({
 
   const connect = async () => {
     if (configured === false) {
-      toast.error("Bank linking is not set up yet. A TrueLayer sandbox app still needs to be added.");
+      toast.error("Bank linking is not set up yet. Add the TrueLayer client ID and secret in Firebase, and allow https://hardyapp.co.uk/api/truelayer/callback in TrueLayer Console.");
       return;
     }
     setBusy("connect");
     try {
       const url = await startBankConnect(window.location.pathname);
+      if (!url) throw new Error("TrueLayer did not return a login address.");
       await openExternalUrl(url);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not start bank connection.";
-      toast.error(message.replace(/^FirebaseError:\s*/i, ""));
+      const raw = err instanceof Error ? err.message : "Could not start bank connection.";
+      const message = raw.replace(/^FirebaseError:\s*/i, "");
+      toast.error(
+        /unknown client|not enabled|invalid_client/i.test(message)
+          ? "TrueLayer did not recognise this app. Check the live client ID and secret, and that the callback https://hardyapp.co.uk/api/truelayer/callback is listed on the TrueLayer app."
+          : message,
+      );
       setBusy(null);
     }
   };

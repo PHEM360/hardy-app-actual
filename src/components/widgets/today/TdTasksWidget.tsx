@@ -63,8 +63,12 @@ export function TdTasksWidget() {
 
   const toggleSubtask = async (subtask: TaskSubtask) => {
     if (!live?.id) return;
+    const current = subtask.done ? "done" : subtask.status || "todo";
+    const next = STATUSES[(STATUSES.findIndex((item) => item.value === current) + 1) % STATUSES.length].value;
     await updateTask(live.id, {
-      subtasks: (live.subtasks || []).map((item) => (item.id === subtask.id ? { ...item, done: !item.done } : item)),
+      subtasks: (live.subtasks || []).map((item) =>
+        item.id === subtask.id ? { ...item, done: next === "done", status: next } : item,
+      ),
     });
   };
 
@@ -152,28 +156,39 @@ export function TdTasksWidget() {
           </SheetHeader>
           {live && (
             <div className="mt-4 space-y-4 pb-4">
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Notes</p>
-                <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-[96px]" placeholder="Add a note" />
-                <Button type="button" onClick={() => void saveNotes()}>Save notes</Button>
-              </div>
               <div className="space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Subtasks</p>
-                {(live.subtasks || []).map((subtask) => (
-                  <div key={subtask.id} className="flex items-center gap-2 rounded-lg border border-foreground/15 px-2 py-2">
-                    <button type="button" onClick={() => void toggleSubtask(subtask)} className="text-left text-sm">
-                      {subtask.done ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <Circle className="h-4 w-4" />}
-                    </button>
-                    <p className={`min-w-0 flex-1 text-sm ${subtask.done ? "text-foreground/50 line-through" : ""}`}>{subtask.title}</p>
-                    <button type="button" onClick={() => void removeSubtask(subtask.id)} aria-label={`Remove ${subtask.title}`}>
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                {(live.subtasks || []).map((subtask) => {
+                  const status = subtask.done ? "done" : subtask.status || "todo";
+                  const info = STATUSES.find((item) => item.value === status) ?? STATUSES[0];
+                  const StatusIcon = info.icon;
+                  return (
+                    <div key={subtask.id} className="flex items-center gap-2 rounded-lg border border-foreground/15 px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => void toggleSubtask(subtask)}
+                        className="flex items-center gap-2 text-left text-sm"
+                        aria-label={`Mark ${subtask.title} ${subtask.done ? "not done" : "done"}`}
+                      >
+                        <StatusIcon className={`h-4 w-4 ${info.color}`} />
+                      </button>
+                      <p className={`min-w-0 flex-1 text-sm ${subtask.done ? "text-foreground/50 line-through" : ""}`}>{subtask.title}</p>
+                      <span className="rounded-md bg-foreground/10 px-1.5 py-px text-[10px] font-bold">{info.value === "todo" ? "Not started" : info.value === "in_progress" ? "In progress" : "Done"}</span>
+                      <button type="button" onClick={() => void removeSubtask(subtask.id)} aria-label={`Remove ${subtask.title}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
                 <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void addSubtask(); }}>
                   <Input value={subTitle} onChange={(event) => setSubTitle(event.target.value)} placeholder="Add a step" className="h-11" />
                   <Button type="submit" disabled={!subTitle.trim()}><Plus /> Add</Button>
                 </form>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Notes</p>
+                <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-[96px]" placeholder="Add a note" />
+                <Button type="button" onClick={() => void saveNotes()}>Save notes</Button>
               </div>
             </div>
           )}

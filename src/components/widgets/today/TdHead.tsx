@@ -37,7 +37,10 @@ export function TdHead({
   return (
     <div
       className={`td-head band mb-2.5 flex flex-shrink-0 items-center justify-between gap-2 px-3 py-2 text-white ${flush ? "" : "-mx-3 -mt-3"}`}
-      style={{ backgroundColor: "var(--td-accent, hsl(var(--primary)))" }}
+      style={{
+        backgroundImage:
+          "linear-gradient(165deg, color-mix(in srgb, var(--td-accent, hsl(var(--primary))) 72%, white) 0%, var(--td-accent, hsl(var(--primary))) 58%, color-mix(in srgb, var(--td-accent, hsl(var(--primary))) 82%, #0b1220) 100%)",
+      }}
     >
       <div className="flex min-w-0 items-center gap-2">
         <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-white/15 text-[13px] leading-none ring-1 ring-inset ring-white/20">

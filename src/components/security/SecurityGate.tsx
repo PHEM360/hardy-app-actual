@@ -373,19 +373,22 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   const verificationKey = `${moduleId || "none"}:${location.key}`;
   const [verifiedKey, setVerifiedKey] = useState("");
   const verified = useMemo(() => verifiedKey === verificationKey, [verificationKey, verifiedKey]);
+  const passkeyWindowDays = moduleId === "personal_finance" ? 7 : settings.appUnlockIntervalDays;
   const { fresh: passkeyFresh, checking } = usePasskeyClaimFreshness(
-    settings.appUnlockIntervalDays,
-    !!user && !loading && requirement === "passkey" && !verified,
+    passkeyWindowDays,
+    !!user && !loading && (requirement === "passkey" || requirement === "either") && !verified,
   );
-  const passwordIsFresh = !!user && requirement === "password" &&
+  const passwordIsFresh = !!user && (requirement === "password" || requirement === "either") &&
     hasFreshSecurityAuthentication(user.uid, "password", settings.appUnlockIntervalDays);
+  const localPasskeyFresh = !!user && (requirement === "passkey" || requirement === "either") &&
+    hasFreshSecurityAuthentication(user.uid, "passkey", passkeyWindowDays);
 
   if (!user || loading || requirement === "none" || verified || passwordIsFresh) {
     return <>{children}</>;
   }
-  if (requirement === "passkey") {
+  if (requirement === "passkey" || requirement === "either") {
     if (checking) return <DogLoader fullPage text="Checking your recent passkey…" />;
-    if (passkeyFresh) return <>{children}</>;
+    if (passkeyFresh || localPasskeyFresh) return <>{children}</>;
   }
   return (
     <AuthenticationPrompt

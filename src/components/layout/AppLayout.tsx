@@ -12,7 +12,9 @@ const AppLayout = () => {
   const { dataUid } = useAuth();
   const isLogin = location.pathname === "/login";
   const hideChrome =
-    location.pathname === "/notes/quick" || location.pathname.startsWith("/widget");
+    location.pathname === "/notes/quick" ||
+    location.pathname === "/calendar-app" ||
+    location.pathname.startsWith("/widget");
 
   if (isLogin) return <Outlet />;
 

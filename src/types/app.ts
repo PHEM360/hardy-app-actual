@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import type { CalendarMessagePlan } from "@/lib/eventMessages";
 
 export type UserRole = "super_admin" | "admin" | "member";
 
@@ -979,6 +980,8 @@ export interface CalendarEvent {
   invitees?: string[];         // household member names
   createdBy?: string;          // user UID
   notifications?: CalendarNotificationPref[];
+  /** Messages to send at a chosen time (text, WhatsApp, email, iMessage). */
+  messagePlans?: CalendarMessagePlan[];
   source?: "local" | "google" | "import" | "birthday";
   feedId?: string;
   googleEventId?: string;

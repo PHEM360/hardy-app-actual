@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, MapPin,
   Bell, Settings, Clock, Users, Trash2, ChevronDown, Mail, MessageSquare, Smartphone,
   AlertTriangle, Palette, LayoutGrid, List, Link2, Download, RefreshCw, Filter,
-  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake,
+  User, Briefcase, HeartPulse, PartyPopper, Sparkles, Cake, Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -37,6 +37,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCalendar } from "@/hooks/useCalendar";
+import {
+  composerUrl,
+  emptyMessagePlan,
+  type CalendarMessagePlan,
+  type EventMessageVia,
+} from "@/lib/eventMessages";
+import { useDueEventMessages } from "@/hooks/useDueEventMessages";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useHouseholdSettings, useHouseholdItems } from "@/hooks/useHousehold";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
@@ -144,6 +151,28 @@ function splitISO(iso: string, allDay = false): { date: string; time: string } {
   return { date, time };
 }
 
+function toDateTimeValue(date: string, time: string) {
+  return `${date}T${time}`;
+}
+
+function fromDateTimeValue(value: string): { date: string; time: string } {
+  const [date = "", time = "09:00"] = value.split("T");
+  return { date, time: time.slice(0, 5) || "09:00" };
+}
+
+function useCalendarManifest() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (pathname !== "/calendar" && pathname !== "/calendar-app") return;
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const previousHref = link?.getAttribute("href") || "/manifest.webmanifest";
+    link?.setAttribute("href", "/calendar.webmanifest");
+    return () => {
+      link?.setAttribute("href", previousHref);
+    };
+  }, [pathname]);
+}
+
 function newId() {
   return `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -166,6 +195,7 @@ interface EventForm {
   allDay: boolean;
   invitees: string[];
   notifications: NotifRow[];
+  messagePlans: CalendarMessagePlan[];
 }
 
 function defaultForm(prefillDate?: Date): EventForm {
@@ -184,12 +214,17 @@ function defaultForm(prefillDate?: Date): EventForm {
     allDay: false,
     invitees: [],
     notifications: [],
+    messagePlans: [],
   };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const CalendarPage = () => {
+  useCalendarManifest();
+  useDueEventMessages();
+  const { pathname } = useLocation();
+  const standalone = pathname === "/calendar-app";
   const { scopeUserId, permission: sharePermission, pageTitle, isOwnScope } = useSharedScope("calendar");
   const canEdit = sharePermission === "edit";
   const { events, settings, addEvent, updateEvent, deleteEvent, deleteSyncedEvents, saveSettings } = useCalendar(scopeUserId ?? undefined);
@@ -325,8 +360,10 @@ const CalendarPage = () => {
 
   // Sync view when settings change
   useEffect(() => {
+    const viewParam = params.get("view");
+    if (viewParam === "month" || viewParam === "week" || viewParam === "agenda") return;
     setView(settings.defaultView ?? "month");
-  }, [settings.defaultView]);
+  }, [params, settings.defaultView]);
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
 
@@ -351,6 +388,16 @@ const CalendarPage = () => {
   };
 
   useEffect(() => {
+    const viewParam = params.get("view");
+    if (viewParam === "month" || viewParam === "week" || viewParam === "agenda") setView(viewParam);
+    if (params.get("new") !== "1") return;
+    openAdd();
+    const next = new URLSearchParams(params);
+    next.delete("new");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!canEdit || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
@@ -365,10 +412,8 @@ const CalendarPage = () => {
   }, [canEdit, selectedDay]);
 
   const openEdit = (event: CalendarEvent) => {
-    // Virtual events (auto-imported) and birthdays synced from the Birthdays
-    // widget are read-only here — manage birthdays from that widget instead,
-    // or turn them off entirely via Settings → Birthdays.
-    if (event.id?.startsWith("__") || event.source === "birthday") return;
+    // Virtual auto-imported rows have no stored document to patch.
+    if (event.id?.startsWith("__")) return;
     const { date: sd, time: st } = splitISO(event.startDate, event.allDay);
     const { date: ed, time: et } = splitISO(event.endDate, event.allDay);
     setForm({
@@ -385,6 +430,7 @@ const CalendarPage = () => {
       allDay: event.allDay ?? false,
       invitees: event.invitees ?? [],
       notifications: (event.notifications ?? []).map((n) => ({ ...n })),
+      messagePlans: (event.messagePlans ?? []).map((plan) => ({ ...plan })),
     });
     setEditEvent(event);
     setConfirmDelete(false);
@@ -421,6 +467,7 @@ const CalendarPage = () => {
       allDay: form.allDay,
       invitees: form.invitees,
       notifications: form.notifications,
+      messagePlans: form.messagePlans.filter((plan) => plan.body.trim()),
     };
     const description = form.description.trim();
     const location = form.location.trim();
@@ -755,7 +802,8 @@ const CalendarPage = () => {
     <FeaturePageShell
       title={pageTitle}
       icon={<CalendarDays className="w-5 h-5" />}
-      sharePage="calendar"
+      sharePage={standalone ? undefined : "calendar"}
+      hideBack={standalone}
     >
 
       <div className="min-w-0">
@@ -881,27 +929,27 @@ const CalendarPage = () => {
             ))}
           </div>
 
-          {/* Day cells — tap a day to see/manage its events below; tap an
-              event chip directly to edit it. */}
-          <div className="grid grid-cols-7">
+          {/* Day cells — tap empty space to add; tap an event to open it. */}
+          <div className="grid min-h-[min(72dvh,calc(100dvh-11.5rem))] grid-cols-7">
             {monthDays.map((day) => {
               const dayEvts = eventsForDay(day);
               const inMonth = isSameMonth(day, currentDate);
               const today = isToday(day);
               const selected = selectedDay && isSameDay(day, selectedDay);
+              const phoneShow = 3;
 
               return (
                 <button
                   key={day.toISOString()}
                   type="button"
-                  onClick={() => setSelectedDay((prev) => (prev && isSameDay(prev, day) ? null : day))}
-                  className={`group relative flex min-h-[88px] flex-col items-start border-b border-r border-border/25 p-1 text-left transition-colors sm:min-h-[110px] sm:p-2 md:min-h-[128px] [&:nth-child(7n)]:border-r-0 ${
+                  onClick={() => openAdd(day)}
+                  className={`group relative flex min-h-[5.85rem] flex-col items-start border-b border-r border-border/25 p-1 text-left transition-colors sm:min-h-[7.25rem] sm:p-1.5 md:min-h-[8.75rem] [&:nth-child(7n)]:border-r-0 ${
                     !inMonth ? "bg-muted/10" : selected ? "bg-primary/10" : "bg-card hover:bg-primary/5"
                   }`}
                   style={today && inMonth ? { background: "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))" } : undefined}
                 >
                   <span
-                    className={`mb-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] sm:h-7 sm:w-7 sm:text-xs ${
+                    className={`mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] sm:mb-1 sm:h-7 sm:w-7 sm:text-xs ${
                       today
                         ? "bg-gradient-primary font-extrabold text-primary-foreground shadow-sm"
                         : inMonth
@@ -912,30 +960,31 @@ const CalendarPage = () => {
                     {format(day, "d")}
                   </span>
 
-                  {/* Desktop/tablet: readable text chips */}
                   <div className="hidden w-full min-w-0 flex-col gap-1 sm:flex">
-                    {dayEvts.slice(0, 3).map((e) => (
+                    {dayEvts.slice(0, 4).map((e) => (
                       <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}>
                         <EventChip event={e} color={getEventColor(e)} dense />
                       </div>
                     ))}
-                    {dayEvts.length > 3 && (
-                      <span className="pl-1 text-[9px] font-bold text-muted-foreground">+{dayEvts.length - 3} more</span>
+                    {dayEvts.length > 4 && (
+                      <span className="pl-1 text-[9px] font-bold text-muted-foreground">+{dayEvts.length - 4} more</span>
                     )}
                   </div>
 
-                  <div className="flex w-full min-w-0 flex-col gap-0.5 sm:hidden">
-                    {dayEvts.slice(0, 2).map((e) => (
+                  <div className="flex w-full min-w-0 flex-1 flex-col gap-0.5 sm:hidden">
+                    {dayEvts.slice(0, phoneShow).map((e) => (
                       <span
                         key={e.id}
-                        className="block w-full truncate rounded-sm px-0.5 text-[8px] font-bold leading-3 text-white"
+                        role="button"
+                        onClick={(ev) => { ev.stopPropagation(); openEdit(e); }}
+                        className="block w-full truncate rounded-sm px-0.5 py-px text-[9px] font-bold leading-tight text-white"
                         style={{ background: getEventColor(e) }}
                       >
                         {e.title}
                       </span>
                     ))}
-                    {dayEvts.length > 2 && (
-                      <span className="text-[8px] font-bold text-foreground/70">+{dayEvts.length - 2}</span>
+                    {dayEvts.length > phoneShow && (
+                      <span className="text-[8px] font-bold text-foreground/70">+{dayEvts.length - phoneShow}</span>
                     )}
                   </div>
                 </button>
@@ -1175,16 +1224,16 @@ const CalendarPage = () => {
       </div>
 
       {/* ── Add / Edit event dialog ── */}
-      <Dialog open={addOpen} onOpenChange={closeForm}>
+      <Dialog open={addOpen} onOpenChange={(open) => { if (!open) closeForm(); }}>
         <DialogContent
           aria-describedby={undefined}
-          className="max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
+          className="mx-2 flex max-h-[min(92dvh,calc(100dvh-0.75rem))] w-[calc(100%-1rem)] max-w-lg flex-col overflow-hidden p-0 pt-12 sm:mx-4"
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0 px-5">
             <DialogTitle>{editEvent ? "Edit Event" : "New Event"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-1">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 pb-2 pt-1">
 
             {/* Title */}
             <div className="space-y-1.5">
@@ -1205,52 +1254,70 @@ const CalendarPage = () => {
               />
             </div>
 
-            {/* Start */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Start date</Label>
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, startDate: e.target.value, endDate: e.target.value }))
-                  }
-                />
-              </div>
-              {!form.allDay && (
+            {form.allDay ? (
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Start time</Label>
+                  <Label>Start date</Label>
                   <Input
-                    type="time"
-                    value={form.startTime}
-                    onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
+                    type="date"
+                    value={form.startDate}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, startDate: e.target.value, endDate: e.target.value }))
+                    }
                   />
                 </div>
-              )}
-            </div>
-
-            {/* End */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>End date</Label>
-                <Input
-                  type="date"
-                  value={form.endDate}
-                  min={form.startDate}
-                  onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                />
-              </div>
-              {!form.allDay && (
                 <div className="space-y-1.5">
-                  <Label>End time</Label>
+                  <Label>End date</Label>
                   <Input
-                    type="time"
-                    value={form.endTime}
-                    onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
+                    type="date"
+                    value={form.endDate}
+                    min={form.startDate}
+                    onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
                   />
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Starts</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toDateTimeValue(form.startDate, form.startTime)}
+                    onChange={(e) => {
+                      const { date, time } = fromDateTimeValue(e.target.value);
+                      setForm((f) => {
+                        const startMs = new Date(`${date}T${time}`).getTime();
+                        const endMs = new Date(`${f.endDate}T${f.endTime}`).getTime();
+                        if (!date) return f;
+                        if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs <= startMs) {
+                          const next = new Date(startMs + 60 * 60 * 1000);
+                          return {
+                            ...f,
+                            startDate: date,
+                            startTime: time,
+                            endDate: format(next, "yyyy-MM-dd"),
+                            endTime: format(next, "HH:mm"),
+                          };
+                        }
+                        return { ...f, startDate: date, startTime: time };
+                      });
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Ends</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toDateTimeValue(form.endDate, form.endTime)}
+                    min={toDateTimeValue(form.startDate, form.startTime)}
+                    onChange={(e) => {
+                      const { date, time } = fromDateTimeValue(e.target.value);
+                      setForm((f) => ({ ...f, endDate: date, endTime: time }));
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Category */}
             <div className="space-y-1.5">
@@ -1455,8 +1522,122 @@ const CalendarPage = () => {
               )}
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2 pt-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5" /> Scheduled message
+                </Label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      messagePlans: [
+                        ...f.messagePlans,
+                        emptyMessagePlan(toDateTimeValue(f.startDate, f.startTime || "08:00")),
+                      ],
+                    }))
+                  }
+                  className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              </div>
+              <p className="text-[11px] text-foreground/70">
+                Opens WhatsApp, Messages, or email at the time you pick. The app cannot send it silently.
+              </p>
+              {form.messagePlans.map((plan) => (
+                <div key={plan.id} className="space-y-2 rounded-xl border border-foreground/20 bg-card p-2.5">
+                  <div className="flex gap-2">
+                    <Select
+                      value={plan.via}
+                      onValueChange={(value) =>
+                        setForm((f) => ({
+                          ...f,
+                          messagePlans: f.messagePlans.map((item) =>
+                            item.id === plan.id ? { ...item, via: value as EventMessageVia } : item,
+                          ),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-[8.5rem] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sms">Text</SelectItem>
+                        <SelectItem value="imessage">iMessage</SelectItem>
+                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="datetime-local"
+                      className="h-9 flex-1 text-xs"
+                      value={plan.sendAt.slice(0, 16)}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          messagePlans: f.messagePlans.map((item) =>
+                            item.id === plan.id ? { ...item, sendAt: e.target.value } : item,
+                          ),
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          messagePlans: f.messagePlans.filter((item) => item.id !== plan.id),
+                        }))
+                      }
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <Input
+                    placeholder={plan.via === "email" ? "Email address" : "Phone number"}
+                    value={plan.to}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        messagePlans: f.messagePlans.map((item) =>
+                          item.id === plan.id ? { ...item, to: e.target.value } : item,
+                        ),
+                      }))
+                    }
+                  />
+                  <Textarea
+                    rows={2}
+                    placeholder="Message"
+                    value={plan.body}
+                    className="resize-none"
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        messagePlans: f.messagePlans.map((item) =>
+                          item.id === plan.id ? { ...item, body: e.target.value } : item,
+                        ),
+                      }))
+                    }
+                  />
+                  {plan.body.trim() && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(composerUrl(plan), "_blank", "noopener,noreferrer")}
+                    >
+                      <Send className="h-3.5 w-3.5" /> Send now
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 gap-2 border-t border-foreground/15 bg-card px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
               {editEvent && (
                 <>
                   {confirmDelete ? (
@@ -1486,7 +1667,6 @@ const CalendarPage = () => {
               >
                 {savingEvent ? "Saving…" : editEvent ? "Save changes" : "Create event"}
               </Button>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1915,6 +2095,10 @@ const CalendarPage = () => {
                 />
               </div>
             </div>
+
+            <p className="rounded-xl border border-foreground/20 bg-card p-3 text-[12px] text-foreground/80">
+              To keep Calendar on your phone home screen, open this page and use Add to Home Screen. It launches Calendar on its own, still signed in to Hardy Hub.
+            </p>
 
             <Button className="w-full" onClick={() => setSettingsOpen(false)}>
               Done

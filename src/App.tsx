@@ -279,6 +279,14 @@ const App = () => (
               }
             />
             <Route
+              path="/calendar-app"
+              element={
+                <RequireFeature featureKey="calendar">
+                  <CalendarPage />
+                </RequireFeature>
+              }
+            />
+            <Route
               path="/calendar-focus"
               element={
                 <RequireFeature featureKey="calendar">
