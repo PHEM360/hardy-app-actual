@@ -25,7 +25,7 @@ export function tileSurface(
   if (preset === "magazine") {
     return {
       background: featured
-        ? `linear-gradient(160deg, color-mix(in srgb, ${accent} 52%, #3a2418), color-mix(in srgb, ${accent} 18%, #f3eadc))`
+        ? `linear-gradient(160deg, color-mix(in oklab, ${accent} 84%, #ffffff) 0%, ${accent} 45%, color-mix(in oklab, ${accent} 62%, #14100C) 100%)`
         : "color-mix(in srgb, #f6efe3 82%, hsl(var(--card)))",
       borderLeftWidth: 0,
       radius: featured ? "rounded-[1.6rem]" : "rounded-xl",
@@ -48,7 +48,7 @@ export function tileSurface(
   if (preset === "spotlight") {
     return {
       background: featured
-        ? `linear-gradient(145deg, color-mix(in srgb, ${accent} 46%, #1a1612), color-mix(in srgb, ${accent} 16%, #2a241c))`
+        ? `radial-gradient(120% 90% at 0% 0%, color-mix(in oklab, ${accent} 80%, #ffffff) 0%, transparent 60%), linear-gradient(145deg, ${accent} 0%, color-mix(in oklab, ${accent} 48%, #14100C) 100%)`
         : "color-mix(in srgb, hsl(var(--card)) 88%, #1a1814)",
       borderLeftWidth: featured ? 0 : 0,
       radius: featured ? "rounded-[1.75rem]" : "rounded-xl",
@@ -71,7 +71,7 @@ export function tileSurface(
     };
   }
   return {
-    background: `linear-gradient(180deg, #F8F4EC 0%, color-mix(in srgb, ${accent} 22%, #E4DCCE) 100%)`,
+    background: `radial-gradient(120% 160% at 100% 100%, color-mix(in oklab, ${accent} 46%, #F8F4EC) 0%, color-mix(in oklab, ${accent} 20%, #F8F4EC) 38%, transparent 72%), linear-gradient(180deg, #FDFBF6 0%, #F2EBDD 100%)`,
     borderLeftWidth: 4,
     radius: "rounded-2xl",
   };

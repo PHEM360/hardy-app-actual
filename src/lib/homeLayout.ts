@@ -68,7 +68,7 @@ export interface HomeTilesState {
 }
 
 function jewelFill(from: string, to: string) {
-  return `linear-gradient(155deg, ${from} 0%, ${to} 100%)`;
+  return `linear-gradient(155deg, color-mix(in oklab, ${from} 78%, #ffffff) 0%, ${from} 42%, ${to} 100%)`;
 }
 
 export const HOME_TILES: HomeTileDef[] = [

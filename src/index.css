@@ -891,8 +891,10 @@ input[type="date"] {
   /* Homepage sits on a warm charcoal so the ivory tiles read as objects. */
   .home-stage {
     background:
-      radial-gradient(ellipse at 50% -8%, rgba(198, 161, 91, 0.18), transparent 46%),
-      #1A1814;
+      radial-gradient(ellipse 62% 340px at 50% 56px, rgba(198, 161, 91, 0.32), transparent 72%),
+      radial-gradient(ellipse 90% 55% at 100% 104%, rgba(23, 71, 92, 0.5), transparent 70%),
+      radial-gradient(ellipse 80% 45% at 0% 100%, rgba(74, 42, 82, 0.34), transparent 70%),
+      linear-gradient(180deg, #1A1814 0, #1A1814 72px, #231E17 34%, #15120E 100%);
     min-height: calc(100dvh - 4rem);
   }
 
