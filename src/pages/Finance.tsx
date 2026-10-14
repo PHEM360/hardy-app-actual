@@ -281,7 +281,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
     const bank = searchParams.get("bank");
     if (!bank) return;
     if (bank === "connected") {
-      toast.success("Bank connected. Link each account below — we’ll copy today’s balance and past month-ends.");
+      toast.success("Bank connected. Now attach each bank account below so its balances can come in.");
       setViewMode("settings");
     } else if (bank === "cancelled") {
       toast.info("Bank connection cancelled.");

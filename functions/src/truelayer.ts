@@ -14,6 +14,7 @@ import {
   resolveTrueLayerEnv,
   type TrueLayerEnv,
 } from "./truelayerEnv";
+import { historyBalances, monthsBefore, parseHistoryOptions, type HistoryOptions } from "./bankHistory";
 
 const truelayerClientId = defineSecret("TRUELAYER_CLIENT_ID");
 const truelayerClientSecret = defineSecret("TRUELAYER_CLIENT_SECRET");
@@ -244,51 +245,23 @@ function addUtcDays(iso: string, days: number) {
   return isoDateUtc(date);
 }
 
-function lastDayOfMonth(year: number, monthIndex: number) {
-  return isoDateUtc(new Date(Date.UTC(year, monthIndex + 1, 0)));
-}
-
 function txDay(timestamp: string) {
   return String(timestamp || "").slice(0, 10);
 }
 
-function monthEndDates(fromDay: string, today: string) {
-  const start = new Date(`${fromDay}T00:00:00Z`);
-  if (Number.isNaN(start.getTime())) return [];
-  const dates: string[] = [];
-  let year = start.getUTCFullYear();
-  let month = start.getUTCMonth();
-  for (let i = 0; i < 240; i += 1) {
-    const eom = lastDayOfMonth(year, month);
-    if (eom >= fromDay && eom <= today) dates.push(eom);
-    month += 1;
-    if (month > 11) {
-      month = 0;
-      year += 1;
-    }
-    if (`${year}-${String(month + 1).padStart(2, "0")}-01` > today) break;
-  }
-  return dates;
-}
-
-function monthEndBalance(eom: string, current: number, txs: TlTx[]) {
-  const withRunning = txs
-    .filter((tx) => txDay(tx.timestamp) <= eom && Number.isFinite(Number(tx.running_balance?.amount)))
-    .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
-  if (withRunning.length > 0) {
-    return roundGbp(Number(withRunning[withRunning.length - 1].running_balance?.amount));
-  }
-  const after = txs
-    .filter((tx) => txDay(tx.timestamp) > eom)
-    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-  return roundGbp(current - after);
-}
-
-async function fetchTransactions(accountId: string, access: string, today: string, env: TrueLayerEnv, extraHeaders?: Record<string, string>) {
+async function fetchTransactions(
+  accountId: string,
+  access: string,
+  today: string,
+  fromDay: string,
+  env: TrueLayerEnv,
+  extraHeaders?: Record<string, string>
+) {
   const byId = new Map<string, TlTx>();
   let to = today;
-  for (let i = 0; i < 40; i += 1) {
-    const from = addUtcDays(to, -89);
+  for (let i = 0; i < 40 && to >= fromDay; i += 1) {
+    const back = addUtcDays(to, -89);
+    const from = back < fromDay ? fromDay : back;
     try {
       const chunk = await tlGet<TlTx[]>(
         `/data/v1/accounts/${encodeURIComponent(accountId)}/transactions?from=${from}&to=${to}`,
@@ -442,16 +415,18 @@ async function writeHouseholdBalances(
 async function syncConnection(
   uid: string,
   connectionId: string,
-  opts: { history?: boolean; extraHeaders?: Record<string, string> } = {}
+  opts: { history?: HistoryOptions | null; extraHeaders?: Record<string, string> } = {}
 ) {
   const { access, env, accounts } = await loadRemoteAccounts(uid, connectionId);
   const conn = await connectionRef(uid, connectionId).get();
   const mappings = (conn.data()?.mappings || {}) as Record<string, string>;
+  const householdMappings = (conn.data()?.householdMappings || {}) as HouseholdMappings;
   const today = isoDateUtc(new Date());
-  const rows: { financeAccountId: string; amount: number; date: string }[] = [];
   const amountByBank = new Map<string, number>();
+  const historyByBank = new Map<string, { date: string; amount: number }[]>();
   let updated = 0;
-  let months = 0;
+  let points = 0;
+  let earliest: string | null = null;
 
   const readBalance = async (bankAccountId: string) => {
     if (amountByBank.has(bankAccountId)) return amountByBank.get(bankAccountId);
@@ -469,62 +444,61 @@ async function syncConnection(
     return rounded;
   };
 
+  // Worked out once per bank account, then written to every page it feeds.
+  const readHistory = async (bankAccountId: string, current: number) => {
+    const options = opts.history;
+    if (!options) return [];
+    const cached = historyByBank.get(bankAccountId);
+    if (cached) return cached;
+    const fromDay = monthsBefore(today, options.months);
+    const txs = await fetchTransactions(bankAccountId, access, today, fromDay, env, opts.extraHeaders);
+    const history = historyBalances({ today, current, txs, options });
+    historyByBank.set(bankAccountId, history);
+    points += history.length;
+    const oldest = history[history.length - 1]?.date;
+    if (oldest && (!earliest || oldest < earliest)) earliest = oldest;
+    return history;
+  };
+
+  const rowsFor = async (bankAccountId: string, financeAccountId: string) => {
+    const amount = await readBalance(bankAccountId);
+    if (amount == null) return null;
+    const history = await readHistory(bankAccountId, amount);
+    return [
+      { financeAccountId, amount, date: today },
+      ...history.map((row) => ({ financeAccountId, amount: row.amount, date: row.date })),
+    ];
+  };
+
+  const linkStamp = (bankAccountId: string) => ({
+    bankProvider: "truelayer",
+    bankConnectionId: connectionId,
+    bankAccountId,
+    bankLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const rows: { financeAccountId: string; amount: number; date: string }[] = [];
   for (const account of accounts) {
     const financeId = mappings[account.id];
     if (!financeId) continue;
-    const amount = await readBalance(account.id);
-    if (amount == null) continue;
-    rows.push({ financeAccountId: financeId, amount, date: today });
+    const accountRows = await rowsFor(account.id, financeId);
+    if (!accountRows) continue;
+    rows.push(...accountRows);
     updated += 1;
-
-    if (opts.history) {
-      const txs = await fetchTransactions(account.id, access, today, env, opts.extraHeaders);
-      const firstDay = txs.map((tx) => txDay(tx.timestamp)).filter(Boolean).sort()[0];
-      if (firstDay) {
-        for (const eom of monthEndDates(firstDay, today)) {
-          if (eom === today) continue;
-          rows.push({
-            financeAccountId: financeId,
-            amount: monthEndBalance(eom, amount, txs),
-            date: eom,
-          });
-          months += 1;
-        }
-      }
-    }
-
-    await db().doc(`finance/${uid}/accounts/${financeId}`).set(
-      {
-        bankProvider: "truelayer",
-        bankConnectionId: connectionId,
-        bankAccountId: account.id,
-        bankLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await db().doc(`finance/${uid}/accounts/${financeId}`).set(linkStamp(account.id), { merge: true });
   }
-
   await writeBalances(uid, rows);
 
-  const householdMappings = (conn.data()?.householdMappings || {}) as HouseholdMappings;
   for (const [householdId, map] of Object.entries(householdMappings)) {
     const hhRows: { financeAccountId: string; amount: number; date: string }[] = [];
     for (const account of accounts) {
       const hhAccountId = map?.[account.id];
       if (!hhAccountId) continue;
-      const amount = await readBalance(account.id);
-      if (amount == null) continue;
-      hhRows.push({ financeAccountId: hhAccountId, amount, date: today });
+      const accountRows = await rowsFor(account.id, hhAccountId);
+      if (!accountRows) continue;
+      hhRows.push(...accountRows);
       updated += 1;
-      await db().doc(`household/${householdId}/financeAccounts/${hhAccountId}`).set(
-        {
-          bankProvider: "truelayer",
-          bankConnectionId: connectionId,
-          bankAccountId: account.id,
-          bankLastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await db().doc(`household/${householdId}/financeAccounts/${hhAccountId}`).set(linkStamp(account.id), { merge: true });
     }
     await writeHouseholdBalances(householdId, hhRows);
   }
@@ -534,11 +508,14 @@ async function syncConnection(
       status: "active",
       lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: admin.firestore.FieldValue.delete(),
-      ...(opts.history ? { historyBackfilledAt: admin.firestore.FieldValue.serverTimestamp(), historyMonths: months } : {}),
+      ...(opts.history
+        ? { historyBackfilledAt: admin.firestore.FieldValue.serverTimestamp(), historyMonths: points, historyOptions: opts.history }
+        : {}),
     },
     { merge: true }
   );
-  return { updated, months };
+  // `months` is the old name for `points`. Older copies of the app still read it.
+  return { updated, months: points, points, earliest: earliest as string | null };
 }
 
 export const getTrueLayerStatus = onCall(SECRET_OPTS, async (request) => {
@@ -739,16 +716,19 @@ export const linkTrueLayerAccount = onCall(SECRET_CALL_OPTS, async (request) => 
     },
     { merge: true }
   );
+  // `sync: false` lets the app attach several accounts and then import once.
+  if (request.data?.sync === false) return { financeAccountId: targetId };
   try {
-    await syncConnection(uid, connectionId, { history: true, extraHeaders: psuHeaders(request) });
-  } catch (err) {
-    logger.warn("TrueLayer sync after link failed", {
-      uid,
-      connectionId,
-      error: err instanceof Error ? err.message : String(err),
+    const result = await syncConnection(uid, connectionId, {
+      history: parseHistoryOptions(request.data?.history) ?? parseHistoryOptions(true),
+      extraHeaders: psuHeaders(request),
     });
+    return { financeAccountId: targetId, ...result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn("TrueLayer sync after link failed", { uid, connectionId, error: message });
+    return { financeAccountId: targetId, syncError: message };
   }
-  return { financeAccountId: targetId };
 });
 
 export const unlinkTrueLayerAccount = onCall(async (request) => {
@@ -804,21 +784,23 @@ export const unlinkTrueLayerAccount = onCall(async (request) => {
 export const syncTrueLayerBalances = onCall(SECRET_CALL_OPTS, async (request) => {
   const uid = requireUid(request.auth);
   const connectionId = String(request.data?.connectionId || "").trim();
-  const history = request.data?.history === true;
+  const history = parseHistoryOptions(request.data?.history);
   const extraHeaders = psuHeaders(request);
   if (connectionId) {
     return syncConnection(uid, connectionId, { history, extraHeaders });
   }
   const snap = await db().collection(`finance/${uid}/bankConnections`).where("status", "in", ["active", "needs_reauth"]).get();
   let updated = 0;
-  let months = 0;
+  let points = 0;
+  let earliest: string | null = null;
   for (const docSnap of snap.docs) {
     if (docSnap.data().status !== "active") continue;
     const result = await syncConnection(uid, docSnap.id, { history, extraHeaders });
     updated += result.updated;
-    months += result.months;
+    points += result.points;
+    if (result.earliest && (!earliest || result.earliest < earliest)) earliest = result.earliest;
   }
-  return { updated, months };
+  return { updated, months: points, points, earliest };
 });
 
 export const disconnectTrueLayer = onCall(async (request) => {
@@ -896,7 +878,8 @@ export const trueLayerCallback = onRequest(
 
 export const syncAllTrueLayerBalances = onSchedule(
   {
-    schedule: "every 6 hours",
+    // The last run of each day is 9pm UK time, so the figure kept for a day is its 9pm balance.
+    schedule: "0 3,9,15,21 * * *",
     timeZone: "Europe/London",
     secrets: [truelayerClientId, truelayerClientSecret],
     timeoutSeconds: 300,

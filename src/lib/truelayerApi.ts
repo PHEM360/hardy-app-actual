@@ -62,6 +62,32 @@ export async function completeBankConnect(code: string, state: string) {
   return result.data;
 }
 
+export type BankHistoryFrequency = "daily" | "weekly" | "monthly";
+
+/** Which past balances to bring in: how far back, how often, and as at what UK time of day. */
+export type BankHistoryOptions = {
+  months: number;
+  frequency: BankHistoryFrequency;
+  time: string;
+};
+
+export type BankSyncResult = {
+  /** How many accounts on Hardy Hub received a balance. Zero means nothing is attached yet. */
+  updated: number;
+  /** How many past balances were saved. */
+  points: number;
+  /** The oldest day a balance was saved for. */
+  earliest: string | null;
+};
+
+function readSyncResult(data: Partial<BankSyncResult> & { months?: number }): BankSyncResult {
+  return {
+    updated: Number(data.updated || 0),
+    points: Number(data.points ?? data.months ?? 0),
+    earliest: data.earliest || null,
+  };
+}
+
 export async function linkBankAccount(input: {
   connectionId: string;
   bankAccountId: string;
@@ -69,10 +95,20 @@ export async function linkBankAccount(input: {
   createNew?: boolean;
   scope?: "personal" | "household";
   householdId?: string;
+  history?: BankHistoryOptions;
+  /** Pass false to attach without importing, when an import will follow. */
+  sync?: boolean;
 }) {
-  const call = httpsCallable<typeof input, { financeAccountId: string }>(functions, "linkTrueLayerAccount");
-  const result = await call(input);
-  return result.data;
+  const call = httpsCallable<typeof input, { financeAccountId: string; syncError?: string } & Partial<BankSyncResult>>(
+    functions,
+    "linkTrueLayerAccount",
+  );
+  const { data } = await call(input);
+  return {
+    financeAccountId: data.financeAccountId,
+    syncError: data.syncError,
+    result: data.updated == null ? null : readSyncResult(data),
+  };
 }
 
 export async function unlinkBankAccount(connectionId: string, bankAccountId: string, householdId?: string) {
@@ -83,13 +119,13 @@ export async function unlinkBankAccount(connectionId: string, bankAccountId: str
   await call({ connectionId, bankAccountId, ...(householdId ? { householdId } : {}) });
 }
 
-export async function syncBankBalances(connectionId?: string, history = false) {
-  const call = httpsCallable<{ connectionId?: string; history?: boolean }, { updated: number; months: number }>(
+export async function syncBankBalances(connectionId?: string, history?: BankHistoryOptions) {
+  const call = httpsCallable<{ connectionId?: string; history?: BankHistoryOptions }, Partial<BankSyncResult> & { months?: number }>(
     functions,
     "syncTrueLayerBalances"
   );
-  const result = await call({ ...(connectionId ? { connectionId } : {}), history });
-  return result.data;
+  const result = await call({ ...(connectionId ? { connectionId } : {}), ...(history ? { history } : {}) });
+  return readSyncResult(result.data);
 }
 
 export async function disconnectBank(connectionId: string) {
