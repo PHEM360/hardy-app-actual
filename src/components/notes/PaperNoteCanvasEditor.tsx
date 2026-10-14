@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Rnd } from "react-rnd";
 import {
-  CheckSquare, ChevronDown, Circle, Diamond, GitBranch, Image, ListPlus, Loader2, MapPin,
+  Check, CheckSquare, Circle, Diamond, GitBranch, Image, ListPlus, Loader2, MapPin,
   Mic, MousePointer2, PenLine, Plus, Square, StopCircle, Table2, Trash2, Type, X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { NoteDiagramEditor } from "@/components/notes/NoteDiagram";
@@ -41,17 +40,24 @@ function nextPosition(canvas: NoteCanvas) {
   return { x: 28 + (index % 4) * 18, y: 30 + (index % 5) * 24 };
 }
 
-const TOOL_STYLE = {
-  text: "border-sky-300/70 bg-sky-500/10 text-sky-800 hover:bg-sky-500/20 dark:text-sky-200",
-  table: "border-indigo-300/70 bg-indigo-500/10 text-indigo-800 hover:bg-indigo-500/20 dark:text-indigo-200",
-  shape: "border-violet-300/70 bg-violet-500/10 text-violet-800 hover:bg-violet-500/20 dark:text-violet-200",
-  draw: "border-rose-300/70 bg-rose-500/10 text-rose-800 hover:bg-rose-500/20 dark:text-rose-200",
-  checklist: "border-emerald-300/70 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20 dark:text-emerald-200",
-  diagram: "border-teal-300/70 bg-teal-500/10 text-teal-800 hover:bg-teal-500/20 dark:text-teal-200",
-  media: "border-blue-300/70 bg-blue-500/10 text-blue-800 hover:bg-blue-500/20 dark:text-blue-200",
-  audio: "border-orange-300/70 bg-orange-500/10 text-orange-800 hover:bg-orange-500/20 dark:text-orange-200",
-  location: "border-amber-300/70 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20 dark:text-amber-200",
+// Each tool keeps one jewel tone for its icon, so the row reads at a glance.
+const TOOL_TONE = {
+  text: "#17475C",
+  table: "#22407A",
+  shape: "#4A2A52",
+  draw: "#6E1F2F",
+  checklist: "#1F4D3A",
+  diagram: "#1B5E5A",
+  media: "#1C4A6E",
+  audio: "#7A2E2A",
+  location: "#8A6424",
 };
+
+function toolTile(active: boolean) {
+  return `flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-lg border px-0.5 text-[11px] font-bold transition-colors duration-150 disabled:opacity-50 ${
+    active ? "btn-edge border-[#6E1F2F] bg-[#6E1F2F] text-white" : "border-foreground/20 bg-background text-foreground"
+  }`;
+}
 
 export function PaperNoteCanvasEditor({
   canvas,
@@ -410,24 +416,31 @@ export function PaperNoteCanvasEditor({
   return (
     <div className="space-y-3">
       {toolsVisible && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white/75 p-2.5 shadow-card backdrop-blur">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              <Plus className="h-3.5 w-3.5" /> Add to paper
-            </span>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.text}`} onClick={addText}>
-              <Type className="mr-1.5 h-4 w-4" /> Text box
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.table}`} onClick={addTable}>
-              <Table2 className="mr-1.5 h-4 w-4" /> Table
-            </Button>
+        <div className="rounded-xl border border-foreground/20 bg-card p-2 shadow-card">
+          <p className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Add to the page</p>
+          <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-9">
+            <button type="button" className={toolTile(false)} onClick={addText}>
+              <Type className="h-5 w-5" style={{ color: TOOL_TONE.text }} /> Text
+            </button>
+            <button type="button" className={toolTile(false)} onClick={addChecklist}>
+              <CheckSquare className="h-5 w-5" style={{ color: TOOL_TONE.checklist }} /> List
+            </button>
+            <button type="button" className={toolTile(tool === "pen")} aria-pressed={tool === "pen"} onClick={() => setTool(tool === "pen" ? "select" : "pen")}>
+              <PenLine className="h-5 w-5" style={tool === "pen" ? undefined : { color: TOOL_TONE.draw }} /> Draw
+            </button>
+            <button type="button" className={toolTile(false)} disabled={uploading} onClick={() => mediaInput.current?.click()}>
+              {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Image className="h-5 w-5" style={{ color: TOOL_TONE.media }} />} Photo
+            </button>
+            <button type="button" className={toolTile(false)} onClick={addTable}>
+              <Table2 className="h-5 w-5" style={{ color: TOOL_TONE.table }} /> Table
+            </button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="sm" aria-label="Choose a shape" className={`h-9 rounded-xl ${TOOL_STYLE.shape}`}>
-                  <Square className="h-4 w-4" /><ChevronDown className="ml-1 h-3 w-3" />
-                </Button>
+                <button type="button" aria-label="Choose a shape" className={toolTile(tool.startsWith("shape:"))}>
+                  <Square className="h-5 w-5" style={tool.startsWith("shape:") ? undefined : { color: TOOL_TONE.shape }} /> Shape
+                </button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto rounded-2xl p-2" align="start">
+              <PopoverContent className="w-auto rounded-xl border border-foreground/20 p-2 shadow-card" align="start">
                 <div className="flex gap-2" aria-label="Shape choices">
                   {([
                     ["rectangle", Square, "Rectangle"],
@@ -440,32 +453,24 @@ export function PaperNoteCanvasEditor({
                       aria-label={label}
                       title={label}
                       onClick={() => setTool(`shape:${shape}`)}
-                      className="flex h-12 w-12 items-center justify-center rounded-xl border border-violet-200 bg-violet-50 text-violet-700 transition hover:border-violet-400 hover:bg-violet-100"
+                      className="btn-edge flex h-12 w-12 items-center justify-center rounded-lg text-white"
+                      style={{ background: TOOL_TONE.shape }}
                     >
-                      <Icon className="h-7 w-7" />
+                      <Icon className="h-6 w-6" />
                     </button>
                   ))}
                 </div>
               </PopoverContent>
             </Popover>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.draw} ${tool === "pen" ? "ring-2 ring-rose-400" : ""}`} onClick={() => setTool(tool === "pen" ? "select" : "pen")}>
-              <PenLine className="mr-1.5 h-4 w-4" /> Draw
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.checklist}`} onClick={addChecklist}>
-              <CheckSquare className="mr-1.5 h-4 w-4" /> Checklist
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.diagram}`} onClick={addDiagram}>
-              <GitBranch className="mr-1.5 h-4 w-4" /> Diagram
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.media}`} disabled={uploading} onClick={() => mediaInput.current?.click()}>
-              {uploading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Image className="mr-1.5 h-4 w-4" />} Photo / video
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${recording ? "border-red-400 bg-red-500 text-white" : TOOL_STYLE.audio}`} disabled={uploading} onClick={() => void toggleRecording()}>
-              {recording ? <StopCircle className="mr-1.5 h-4 w-4" /> : <Mic className="mr-1.5 h-4 w-4" />} {recording ? "Stop" : "Audio"}
-            </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 rounded-xl ${TOOL_STYLE.location}`} onClick={addLocation}>
-              <MapPin className="mr-1.5 h-4 w-4" /> Map
-            </Button>
+            <button type="button" className={toolTile(false)} onClick={addDiagram}>
+              <GitBranch className="h-5 w-5" style={{ color: TOOL_TONE.diagram }} /> Diagram
+            </button>
+            <button type="button" className={recording ? `${toolTile(false)} !border-[#9B2C2C] !bg-[#9B2C2C] !text-white` : toolTile(false)} disabled={uploading} onClick={() => void toggleRecording()}>
+              {recording ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" style={{ color: TOOL_TONE.audio }} />} {recording ? "Stop" : "Audio"}
+            </button>
+            <button type="button" className={toolTile(false)} onClick={addLocation}>
+              <MapPin className="h-5 w-5" style={{ color: TOOL_TONE.location }} /> Map
+            </button>
             <input ref={mediaInput} type="file" accept="image/*,video/*" className="hidden" onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void addUploadedMedia(file);
@@ -473,12 +478,12 @@ export function PaperNoteCanvasEditor({
             }} />
           </div>
           {tool !== "select" && (
-            <div className="mt-2 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2 text-xs text-white">
+            <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#14213D] py-1 pl-3 pr-1 text-xs font-medium text-white">
               <span className="flex items-center gap-2">
-                {tool === "pen" ? <PenLine className="h-3.5 w-3.5" /> : <MousePointer2 className="h-3.5 w-3.5" />}
-                {tool === "pen" ? "Draw directly anywhere on the paper." : "Drag on the paper to draw the shape at the size you want."}
+                {tool === "pen" ? <PenLine className="h-4 w-4 shrink-0" /> : <MousePointer2 className="h-4 w-4 shrink-0" />}
+                {tool === "pen" ? "Draw anywhere on the page with your finger." : "Drag on the page to draw the shape at the size you want."}
               </span>
-              <button type="button" onClick={() => setTool("select")} className="rounded-lg p-1 hover:bg-white/15" aria-label="Cancel tool"><X className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => setTool("select")} className="flex h-10 shrink-0 items-center gap-1 rounded-md bg-white/15 px-3 font-bold" aria-label="Finish with this tool">Done</button>
             </div>
           )}
         </div>
@@ -487,7 +492,7 @@ export function PaperNoteCanvasEditor({
       <div
         ref={paperRef}
         data-testid="note-paper"
-        className={`relative min-h-[560px] overflow-hidden rounded-[1.4rem] border border-amber-950/10 bg-[#fffdf8] text-slate-900 shadow-[0_18px_50px_rgba(75,55,25,.14)] ${
+        className={`relative min-h-[560px] overflow-hidden rounded-2xl border border-foreground/20 bg-[#fffdf8] text-slate-900 shadow-[0_18px_50px_rgba(75,55,25,.14)] ${
           tool === "pen" || tool.startsWith("shape:") ? "touch-none cursor-crosshair" : canEdit && tool === "select" ? "cursor-text" : ""
         }`}
         style={{
@@ -522,8 +527,8 @@ export function PaperNoteCanvasEditor({
         {visibleBlocks.length === 0 && !paperInk?.paths.length && (
           <div data-empty-paper className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-slate-400">
             <PenLine className="mb-3 h-8 w-8 opacity-40" />
-            <p className="font-display text-base font-bold text-slate-600">Your blank note</p>
-            <p className="mt-1 max-w-sm text-xs leading-relaxed">Click anywhere to write. Add a text box, table, checklist or diagram when you need one.</p>
+            <p className="font-display text-lg font-semibold text-slate-700">A blank page</p>
+            <p className="mt-1 max-w-sm text-sm leading-relaxed text-slate-600">Tap anywhere and start writing. Use the row above to add a list, a photo or a drawing.</p>
           </div>
         )}
 
@@ -560,7 +565,8 @@ export function PaperNoteCanvasEditor({
               key={block.id}
               bounds="parent"
               position={{ x: renderedX, y: block.y }}
-              size={{ width: renderedWidth, height: block.height }}
+              // A list always shows every item and its Add button without scrolling inside the block.
+              size={{ width: renderedWidth, height: block.type === "checklist" ? Math.max(block.height, block.items.length * 42 + (canEdit ? 124 : 76)) : block.height }}
               disableDragging={!toolsVisible || tool !== "select" || (paperWriting && !selected)}
               enableResizing={toolsVisible && tool === "select" && !paperWriting}
               minWidth={block.type === "shape" ? 30 : paperWriting ? 80 : 120}
@@ -677,7 +683,7 @@ export function PaperNoteCanvasEditor({
                 {block.type === "checklist" && (
                   <div className="h-full overflow-y-auto p-3">
                     <div className="mb-2 flex items-center gap-1.5">
-                      <CheckSquare className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <CheckSquare className="h-4 w-4 shrink-0 text-[#1F4D3A]" />
                       {canEdit ? (
                         <Input
                           value={block.title ?? "Checklist"}
@@ -692,11 +698,23 @@ export function PaperNoteCanvasEditor({
                     </div>
                     <div className="space-y-1.5">
                       {block.items.map((item, index) => (
-                        <div key={item.id} className="flex items-center gap-2">
-                          <input type="checkbox" checked={item.done} disabled={!interactive} onChange={(event) => {
-                            const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, done: event.target.checked } : entry);
-                            updateBlock(block.id, { items });
-                          }} />
+                        <div key={item.id} className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={item.done}
+                            aria-label={item.text ? `Tick ${item.text}` : "Tick item"}
+                            disabled={!interactive}
+                            onClick={() => {
+                              const items = block.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, done: !entry.done } : entry);
+                              updateBlock(block.id, { items });
+                            }}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center"
+                          >
+                            <span className={`flex h-6 w-6 items-center justify-center rounded-md border-2 transition-colors duration-150 ${item.done ? "border-[#1F6B4F] bg-[#1F6B4F] text-white" : "border-slate-500 bg-white"}`}>
+                              {item.done && <Check className="h-4 w-4" strokeWidth={3} />}
+                            </span>
+                          </button>
                           <Input
                             value={item.text}
                             readOnly={!canEdit}
@@ -721,15 +739,15 @@ export function PaperNoteCanvasEditor({
                               });
                               setPendingChecklistFocus(`${block.id}:${newItem.id}`);
                             }}
-                            className="h-8 border-0 bg-transparent px-1 shadow-none"
+                            className={`h-9 border-0 bg-transparent px-1 text-[15px] shadow-none ${item.done ? "text-slate-500 line-through" : ""}`}
                           />
-                          {canEdit && <button type="button" onClick={() => updateBlock(block.id, { items: block.items.filter((entry) => entry.id !== item.id) })} className="text-slate-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>}
+                          {canEdit && <button type="button" onClick={() => updateBlock(block.id, { items: block.items.filter((entry) => entry.id !== item.id) })} aria-label="Remove item" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500"><X className="h-4 w-4" /></button>}
                         </div>
                       ))}
                     </div>
                     {canEdit && (
-                      <button type="button" onClick={() => updateBlock(block.id, { items: [...block.items, { id: blockId(), text: "", done: false } satisfies NoteChecklistItem] })} className="mt-2 flex items-center gap-1 text-xs font-semibold text-emerald-700">
-                        <ListPlus className="h-3.5 w-3.5" /> Add item
+                      <button type="button" onClick={() => updateBlock(block.id, { items: [...block.items, { id: blockId(), text: "", done: false } satisfies NoteChecklistItem] })} className="btn-edge mt-2 flex h-10 items-center gap-2 rounded-lg bg-[#1F4D3A] px-3 text-xs font-bold text-white">
+                        <ListPlus className="h-4 w-4" /> Add item
                       </button>
                     )}
                   </div>
@@ -770,8 +788,8 @@ export function PaperNoteCanvasEditor({
       </div>
 
       {canEdit && (
-        <button type="button" onClick={() => onChange({ ...canvas, height: canvas.height + 280 })} className="mx-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-card hover:text-foreground">
-          <Plus className="h-3.5 w-3.5" /> Add more paper
+        <button type="button" onClick={() => onChange({ ...canvas, height: canvas.height + 280 })} className="mx-auto flex h-10 items-center gap-2 rounded-lg border border-foreground/30 bg-card px-4 text-xs font-bold text-foreground">
+          <Plus className="h-4 w-4" /> Make the page longer
         </button>
       )}
     </div>

@@ -22,8 +22,8 @@ describe("NoteCanvasEditor", () => {
       />,
     );
 
-    expect(screen.getByText("Your blank note")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Text box" }));
+    expect(screen.getByText("A blank page")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Text" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       blocks: [expect.objectContaining({ type: "text", text: "", boxed: true })],
     }));
@@ -62,7 +62,7 @@ describe("NoteCanvasEditor", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Text box" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Text" })).not.toBeInTheDocument();
   });
 
   it("creates a shape at the size dragged on the paper", () => {
@@ -113,7 +113,7 @@ describe("NoteCanvasEditor", () => {
     const { rerender } = render(
       <PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
     const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
     expect(withChecklist.blocks[0]).toEqual(expect.objectContaining({ type: "checklist", title: "Checklist" }));
 
@@ -148,7 +148,7 @@ describe("NoteCanvasEditor", () => {
     const { rerender } = render(
       <PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
     const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
     rerender(<PaperNoteCanvasEditor canvas={withChecklist} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
 
@@ -175,7 +175,7 @@ describe("NoteCanvasEditor", () => {
     const { rerender } = render(
       <PaperNoteCanvasEditor canvas={emptyCanvas} canEdit ownerId="owner" noteId="note" onChange={onChange} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
     const withChecklist = onChange.mock.calls.at(-1)?.[0] as NoteCanvas;
     rerender(<PaperNoteCanvasEditor canvas={withChecklist} canEdit ownerId="owner" noteId="note" onChange={onChange} />);
     fireEvent.change(screen.getByLabelText("Checklist title"), { target: { value: "Packing list" } });

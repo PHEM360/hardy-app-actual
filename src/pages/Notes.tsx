@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
@@ -6,7 +7,8 @@ import {
 } from "date-fns";
 import {
   StickyNote, Plus, Search, LayoutGrid, List, Columns2, CalendarDays, ListChecks,
-  Shield, Settings2, FolderPlus, Download, Smartphone, Pin,
+  Shield, Settings2, FolderPlus, Download, Smartphone, Pin, SlidersHorizontal, X,
+  CheckSquare, PenLine, GitBranch,
 } from "lucide-react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,7 @@ import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { NoteEditor } from "@/components/notes/NoteEditor";
 import { ShareNoteDialog } from "@/components/notes/ShareNoteDialog";
 import { VaultGate } from "@/components/notes/VaultGate";
-import { NoteCard } from "@/components/notes/NoteCard";
+import { NoteCard, noteDueTone } from "@/components/notes/NoteCard";
 import { NoteStartDialog } from "@/components/notes/NoteStartDialog";
 import { NoteCategorySettings } from "@/components/notes/NoteCategorySettings";
 import { noteHasDiagram } from "@/lib/noteDiagram";
@@ -30,7 +32,7 @@ import { noteHasChecklist, noteChecklistItems, patchNoteChecklist } from "@/lib/
 import type { HubNote, NoteDiagram, NoteFolder, NoteKind, NotesColorMode, NotesListStyle, NotesView } from "@/types/notes";
 import { noteCategoryOptions } from "@/types/notes";
 import { buildIcsCalendar, downloadIcs } from "@/lib/noteCalendar";
-import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteCardStyle, noteSwatch } from "@/lib/noteStyle";
+import { COLOR_MODE_OPTIONS, LIST_STYLE_OPTIONS, noteAccent, noteCardStyle, noteSwatch } from "@/lib/noteStyle";
 import { JEWEL, JEWEL_CYCLE, jewelGradient } from "@/lib/brandPalette";
 import { toast } from "sonner";
 
@@ -38,35 +40,82 @@ type FilterId = "all" | "pinned" | "tasks" | "drawings" | "diagrams" | "inbox" |
 
 const BOARD_TONES = [JEWEL.bronze, JEWEL.oxblood, JEWEL.forest, JEWEL.cobalt, JEWEL.aubergine];
 
-function previewText(note: HubNote) {
+function listTitle(note: HubNote) {
   if (note.locked) return "Locked note";
-  if (note.kind === "drawing") return `${note.canvas?.blocks.length || 0} canvas item${note.canvas?.blocks.length === 1 ? "" : "s"}`;
-  if (noteHasDiagram(note)) return "Diagram";
-  const items = noteChecklistItems(note);
-  if (items.length) {
-    const done = items.filter((i) => i.done).length;
-    return `${done}/${items.length} checked`;
-  }
-  return note.body?.slice(0, 140) || "Empty note";
+  const firstLine = (note.body || "").trim().split("\n")[0] || "";
+  return note.title.trim() || (firstLine.length <= 60 ? firstLine : "") || "Untitled";
 }
 
+function previewText(note: HubNote) {
+  if (note.locked) return "Unlock to read";
+  if (note.kind === "drawing") return "Sketch";
+  if (noteHasDiagram(note)) return "Diagram";
+  const items = noteChecklistItems(note).filter((i) => i.text.trim());
+  if (items.length) {
+    const done = items.filter((i) => i.done).length;
+    return `${done} of ${items.length} ticked`;
+  }
+  const body = (note.body || "").trim();
+  const title = listTitle(note);
+  const rest = body.startsWith(title) ? body.slice(title.length).trim() : body;
+  return rest.slice(0, 140) || (noteHasChecklist(note) ? "Empty list" : "No more text");
+}
+
+const START_TILES: { label: string; kind: NoteKind; icon: typeof StickyNote; tone: string; diagram?: boolean }[] = [
+  { label: "Note", kind: "note", icon: StickyNote, tone: JEWEL.petrol },
+  { label: "List", kind: "checklist", icon: CheckSquare, tone: JEWEL.forest },
+  { label: "Sketch", kind: "drawing", icon: PenLine, tone: JEWEL.burgundy },
+  { label: "Diagram", kind: "note", icon: GitBranch, tone: JEWEL.aubergine, diagram: true },
+];
+
 const VIEWS: { id: NotesView; label: string; icon: typeof LayoutGrid }[] = [
-  { id: "grid", label: "Grid", icon: LayoutGrid },
+  { id: "grid", label: "Cards", icon: LayoutGrid },
   { id: "list", label: "List", icon: List },
   { id: "board", label: "Board", icon: Columns2 },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "agenda", label: "Agenda", icon: ListChecks },
+  { id: "agenda", label: "Dated", icon: ListChecks },
 ];
 
-export default function Notes() {
+/** Sample data for the signed out /dev/notes-preview route. Nothing is saved. */
+export type NotesPreview = { notes: HubNote[]; folders: NoteFolder[] };
+
+export default function Notes({ preview }: { preview?: NotesPreview } = {}) {
   const [params, setParams] = useSearchParams();
   const { scopeUserId, pageTitle, isOwnScope, permission } = useSharedScope("notes");
-  const notesApi = useNotes(scopeUserId ?? undefined);
+  const liveNotesApi = useNotes(scopeUserId ?? undefined);
+  const [previewNotes, setPreviewNotes] = useState<HubNote[]>(preview?.notes ?? []);
+  const notesApi = useMemo(() => {
+    if (!preview) return liveNotesApi;
+    return {
+      ...liveNotesApi,
+      notes: previewNotes,
+      folders: preview.folders,
+      loading: false,
+      canEdit: true,
+      uid: "preview",
+      updateNote: async (note: HubNote, patch: Partial<HubNote>) => {
+        setPreviewNotes((list) => list.map((n) => (n.id === note.id ? { ...n, ...patch } : n)));
+      },
+      addNote: async (patch: Partial<HubNote> & { vault?: boolean }) => {
+        const id = patch.id || crypto.randomUUID();
+        const blank: HubNote = {
+          id, ownerId: "preview", folderId: null, kind: "note", title: "", body: "", color: "default", category: "personal",
+          pinned: false, archived: false, tags: [], checklist: [], locked: false, vault: false, sharedWith: [],
+        };
+        setPreviewNotes((list) => [...list, { ...blank, ...patch, id, vault: false }]);
+        return id;
+      },
+      deleteNote: async (note: HubNote) => {
+        setPreviewNotes((list) => list.filter((n) => n.id !== note.id));
+      },
+      savePrefs: async () => {},
+    } as typeof liveNotesApi;
+  }, [liveNotesApi, preview, previewNotes]);
   const vault = useNoteVault();
   const { events, addEvent, updateEvent } = useCalendar(scopeUserId ?? undefined);
   const { tasks } = useTasks(scopeUserId ?? undefined);
   const { pinNotesFirst, unpinNotes } = useDashboardLayout();
-  const canEdit = permission === "edit" && notesApi.canEdit;
+  const canEdit = preview ? true : permission === "edit" && notesApi.canEdit;
 
   const [filter, setFilter] = useState<FilterId>("all");
   const [view, setView] = useState<NotesView>(notesApi.prefs.defaultView);
@@ -83,6 +132,9 @@ export default function Notes() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newFolder, setNewFolder] = useState("");
   const [calMonth, setCalMonth] = useState(new Date());
+  const [quick, setQuick] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [startAt, setStartAt] = useState<"kind" | "diagram">("kind");
   const colorMode = notesApi.prefs.colorMode ?? "note";
   const listStyle = notesApi.prefs.listStyle ?? "keep";
   const shadeHue = notesApi.prefs.shadeHue ?? "#f59e0b";
@@ -125,6 +177,7 @@ export default function Notes() {
       setCreatingDiagram(null);
       setCreatingId(crypto.randomUUID());
       setActive(null);
+      setStartAt("diagram");
       setStartOpen(true);
       const next = new URLSearchParams(params);
       next.delete("new");
@@ -315,23 +368,91 @@ export default function Notes() {
     toast.success("Calendar file downloaded — import it in Google Calendar or Apple Calendar");
   };
 
+  const accentFor = (n: HubNote, i: number, total = visibleNotes.length) =>
+    noteAccent(noteSwatch(n, i, total, colorMode, notesApi.folders, shadeHue), i);
   const styleFor = (n: HubNote, i: number, total = visibleNotes.length) =>
     noteCardStyle(noteSwatch(n, i, total, colorMode, notesApi.folders, shadeHue), listStyle, i);
 
-  const pinnedRail = notesApi.notes.filter((n) => n.pinned && !n.archived);
-  const filters: { id: FilterId; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "pinned", label: "Pinned" },
-    { id: "tasks", label: "Lists" },
-    { id: "diagrams", label: "Diagrams" },
-    { id: "drawings", label: "Drawings" },
-    { id: "inbox", label: "Inbox" },
-    { id: "secure", label: "Secure" },
-    { id: "shared", label: "Shared" },
-    { id: "archived", label: "Archive" },
-    ...noteCategoryOptions(notesApi.prefs).map((category) => ({ id: `category:${category.id}` as FilterId, label: category.label })),
-    ...notesApi.folders.map((folder) => ({ id: `folder:${folder.id}` as FilterId, label: folder.emoji ? `${folder.emoji} ${folder.name}` : folder.name })),
+  const liveNotes = notesApi.notes.filter((n) => !n.archived);
+  const primaryFilters: { id: FilterId; label: string; count: number | null; icon?: typeof Pin }[] = [
+    { id: "all", label: "All", count: liveNotes.length },
+    { id: "tasks", label: "Lists", count: liveNotes.filter((n) => noteHasChecklist(n)).length },
+    { id: "pinned", label: "Pinned", count: liveNotes.filter((n) => n.pinned).length },
+    { id: "secure", label: "Secure", count: null, icon: Shield },
   ];
+  const moreFilterGroups: { title: string; items: { id: FilterId; label: string }[] }[] = [
+    {
+      title: "Type",
+      items: [
+        { id: "diagrams", label: "Diagrams" },
+        { id: "drawings", label: "Sketches" },
+      ],
+    },
+    {
+      title: "Kept in",
+      items: [
+        { id: "inbox", label: "No folder" },
+        { id: "shared", label: "Shared with me" },
+        { id: "archived", label: "Archive" },
+        ...notesApi.folders.map((folder) => ({ id: `folder:${folder.id}` as FilterId, label: folder.emoji ? `${folder.emoji} ${folder.name}` : folder.name })),
+      ],
+    },
+    {
+      title: "Category",
+      items: noteCategoryOptions(notesApi.prefs).map((category) => ({ id: `category:${category.id}` as FilterId, label: category.label })),
+    },
+  ];
+  const extraFilter = moreFilterGroups.flatMap((group) => group.items).find((item) => item.id === filter);
+  const showSections = view === "grid" && filter === "all" && !query.trim();
+  const pinnedNotes = showSections ? visibleNotes.filter((n) => n.pinned) : [];
+  const otherNotes = showSections ? visibleNotes.filter((n) => !n.pinned) : visibleNotes;
+
+  const quickAdd = async () => {
+    const text = quick.trim();
+    if (!text || !canEdit) return;
+    const id = crypto.randomUUID();
+    const lines = text.split("\n");
+    await notesApi.addNote({
+      id,
+      kind: "note",
+      title: lines[0].slice(0, 80),
+      body: text,
+      canvas: {
+        version: 1,
+        height: 560,
+        blocks: [{ id: `paper-text-${id}`, type: "text", x: 24, y: 28, width: 320, height: Math.max(56, lines.length * 28 + 28), text, textStyle: "body", boxed: false }],
+      },
+      vault: filter === "secure",
+    });
+    setQuick("");
+    toast.success("Note saved");
+  };
+
+  const renderCards = (list: HubNote[]) => (
+    <div className={listStyle === "compact" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" : "notes-masonry"}>
+      {list.map((n) => {
+        const i = visibleNotes.indexOf(n);
+        return (
+          <NoteCard
+            key={`${n.ownerId}-${n.id}`}
+            note={n}
+            index={i}
+            listStyle={listStyle}
+            style={styleFor(n, i)}
+            accent={accentFor(n, i)}
+            canEdit={canEdit && !n.locked}
+            featured={notesApi.prefs.dashboardNoteId === n.id}
+            prefs={notesApi.prefs}
+            onOpen={() => openNote(n)}
+            onToggleItem={(itemId, done) => {
+              notesApi.updateNote(n, patchNoteChecklist(n, itemId, done));
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+
   const lockedSecure = filter === "secure" && !vault.unlocked;
 
   useEffect(() => {
@@ -348,105 +469,174 @@ export default function Notes() {
   return (
     <FeaturePageShell
       title={pageTitle}
-      subtitle="A private studio for lists, sketches and the things you need to keep"
+      subtitle="Lists, sketches and the things worth keeping"
       icon={<StickyNote className="w-5 h-5" />}
       sharePage="notes"
       action={
-        <div className="flex items-center gap-1.5">
-          {canEdit && (
-            <Button size="sm" onClick={() => setStartOpen(true)}>
-              <Plus /> New
-            </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)} aria-label="Notes settings">
-            <Settings2 />
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" className="h-10" onClick={() => setSettingsOpen(true)}>
+          <Settings2 /> Settings
+        </Button>
       }
     >
-      <div className="space-y-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-foreground/50" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes" className="h-11 border border-foreground/20 bg-card pl-9" />
-        </div>
-
-        <section className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
-          <div className="band px-3 py-2 text-white" style={{ background: jewelGradient(JEWEL.burgundy) }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Pinned</p>
-          </div>
-          <div className="flex flex-wrap gap-2 p-3">
-            {pinnedRail.length === 0 && (
-              <p className="text-sm text-foreground/70">Pin a note and it will stay here for a one tap open.</p>
-            )}
-            {pinnedRail.map((note) => (
-              <button
-                key={note.id}
-                type="button"
-                onClick={() => openNote(note)}
-                className="btn-edge min-h-10 max-w-full rounded-lg border border-foreground/20 bg-[#F8F4EC] px-3 py-2 text-left"
-              >
-                <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
-                  <Pin className="h-3.5 w-3.5 shrink-0" />
-                  {note.title || "Untitled"}
-                </p>
-                <p className="truncate text-[11px] text-foreground/60">{previewText(note)}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: "Notes", value: notesApi.notes.filter((n) => !n.archived).length, tone: JEWEL.petrol },
-            { label: "Pinned", value: pinnedRail.length, tone: JEWEL.burgundy },
-            { label: "Lists", value: notesApi.notes.filter((n) => noteHasChecklist(n) && !n.archived).length, tone: JEWEL.forest },
-          ].map((stat) => (
-            <div key={stat.label} className="btn-edge overflow-hidden rounded-xl text-white" style={{ background: jewelGradient(stat.tone) }}>
-              <p className="px-2.5 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{stat.label}</p>
-              <p className="px-2.5 pb-2 font-display text-2xl font-semibold">{stat.value}</p>
+      <div className="space-y-4" style={{ "--sec": JEWEL.petrol } as CSSProperties}>
+        {canEdit && (
+          <section className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+            <form
+              className="flex items-center gap-2 p-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void quickAdd();
+              }}
+            >
+              <Input
+                value={quick}
+                onChange={(event) => setQuick(event.target.value)}
+                placeholder="Jot something down"
+                aria-label="Quick note"
+                className="h-11 flex-1 border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
+              />
+              <Button type="submit" className="h-11" disabled={!quick.trim()}>
+                <Plus /> Save
+              </Button>
+            </form>
+            <div className="grid grid-cols-4 gap-2 border-t border-foreground/15 bg-background p-2">
+              {START_TILES.map((tile) => (
+                <button
+                  key={tile.label}
+                  type="button"
+                  onClick={() => {
+                    if (tile.diagram) {
+                      setStartAt("diagram");
+                      setStartOpen(true);
+                    } else {
+                      openNote(null, tile.kind);
+                    }
+                  }}
+                  className="btn-edge flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-lg px-1 text-white"
+                  style={{ background: jewelGradient(tile.tone) }}
+                >
+                  <tile.icon className="h-5 w-5" />
+                  <span className="text-xs font-bold">{tile.label}</span>
+                </button>
+              ))}
             </div>
-          ))}
+          </section>
+        )}
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/60" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes" aria-label="Search notes" className="h-11 border border-foreground/30 bg-card pl-10 pr-10 text-base" />
+          {query && (
+            <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-md text-foreground/70">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Show</p>
-          <div className="flex flex-wrap gap-1.5">
-            {filters.map((item) => {
+        <div className="space-y-2">
+          <div className="grid grid-cols-5 gap-2">
+            {primaryFilters.map((item) => {
               const on = filter === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
+                  aria-pressed={on}
                   onClick={() => (item.id === "secure" ? openSecure() : setFilter(item.id))}
-                  className={`btn-edge min-h-10 rounded-md px-2.5 text-xs font-semibold ${
-                    on ? "text-white" : "border border-foreground/20 bg-card text-foreground"
+                  className={`flex min-h-[3.5rem] flex-col items-center justify-center rounded-lg border px-1 transition-colors duration-150 ${
+                    on ? "btn-edge border-[var(--sec)] bg-[var(--sec)] text-white" : "border-foreground/20 bg-card text-foreground"
                   }`}
-                  style={on ? { background: jewelGradient(JEWEL.petrol) } : undefined}
                 >
-                  {item.label}
+                  {item.icon ? <item.icon className="h-5 w-5" /> : <span className="font-display text-lg font-semibold leading-none tabular-nums">{item.count}</span>}
+                  <span className={`mt-1 text-[10px] font-bold uppercase tracking-[0.12em] ${on ? "text-white/85" : "text-foreground/70"}`}>{item.label}</span>
                 </button>
               );
             })}
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((value) => !value)}
+              className={`flex min-h-[3.5rem] flex-col items-center justify-center rounded-lg border px-1 transition-colors duration-150 ${
+                moreOpen || extraFilter ? "btn-edge border-[#4A2A52] bg-[#4A2A52] text-white" : "border-foreground/20 bg-card text-foreground"
+              }`}
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+              <span className={`mt-1 text-[10px] font-bold uppercase tracking-[0.12em] ${moreOpen || extraFilter ? "text-white/85" : "text-foreground/70"}`}>Filter</span>
+            </button>
           </div>
+
+          {extraFilter && !moreOpen && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-[#4A2A52] py-1 pl-3 pr-1 text-white">
+              <p className="min-w-0 truncate text-sm font-semibold">Showing {extraFilter.label}</p>
+              <button type="button" onClick={() => setFilter("all")} className="flex h-10 shrink-0 items-center gap-1 rounded-md bg-white/15 px-3 text-xs font-bold">
+                <X className="h-3.5 w-3.5" /> Clear
+              </button>
+            </div>
+          )}
+
+          <AnimatePresence initial={false}>
+            {moreOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-3 rounded-xl border border-foreground/20 bg-card p-3 shadow-card" style={{ "--sec": JEWEL.aubergine } as CSSProperties}>
+                  {moreFilterGroups.filter((group) => group.items.length > 0).map((group) => (
+                    <div key={group.title}>
+                      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">{group.title}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.items.map((item) => {
+                          const on = filter === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => {
+                                setFilter(on ? "all" : item.id);
+                                setMoreOpen(false);
+                              }}
+                              className={`min-h-10 rounded-md border px-3 text-xs font-bold transition-colors duration-150 ${
+                                on ? "btn-edge border-[var(--sec)] bg-[var(--sec)] text-white" : "border-foreground/20 bg-background text-foreground"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">View</p>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-end justify-between gap-3 border-b border-foreground/20 pb-2">
+          <p className="font-display text-xl font-semibold leading-none">
+            {lockedSecure ? "Secure notes" : `${visibleNotes.length} ${visibleNotes.length === 1 ? "note" : "notes"}`}
+          </p>
+          <div className="flex gap-1 rounded-lg border border-foreground/20 bg-card p-1" role="group" aria-label="Layout">
             {VIEWS.map((item) => {
               const on = view === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
+                  aria-pressed={on}
+                  aria-label={`${item.label} layout`}
+                  title={item.label}
                   onClick={() => { setView(item.id); notesApi.savePrefs({ defaultView: item.id }); }}
-                  className={`btn-edge flex min-h-10 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
-                    on ? "text-white" : "border border-foreground/20 bg-card text-foreground"
+                  className={`flex h-10 items-center justify-center gap-1.5 rounded-md text-xs font-bold transition-colors duration-150 ${
+                    on ? "btn-edge bg-[var(--sec)] px-2.5 text-white" : "w-10 text-foreground/75"
                   }`}
-                  style={on ? { background: jewelGradient(JEWEL.aubergine) } : undefined}
                 >
-                  <item.icon className="h-3.5 w-3.5" />
-                  {item.label}
+                  <item.icon className="h-4 w-4" />
+                  {on && item.label}
                 </button>
               );
             })}
@@ -456,79 +646,94 @@ export default function Notes() {
       {lockedSecure && (
         <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
           <div className="band px-4 py-3 text-white" style={{ background: jewelGradient(JEWEL.ink) }}>
-            <p className="font-display text-lg font-semibold">Secure notes</p>
+            <p className="font-display text-lg font-semibold">Secure notes are locked</p>
           </div>
           <div className="p-5">
-            <p className="text-sm text-foreground/70">Unlock with Face ID or your passcode to see this folder.</p>
+            <p className="text-sm text-foreground/80">Unlock with Face ID or your passcode to see this folder.</p>
             <Button className="mt-4" onClick={() => setVaultOpen(true)}><Shield /> Unlock</Button>
           </div>
         </div>
       )}
 
-      {view === "grid" && !lockedSecure && (
-        visibleNotes.length === 0 ? (
-          <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
-            <div className="band px-4 py-3 text-white" style={{ background: jewelGradient(JEWEL.petrol) }}>
-              <p className="font-display text-lg font-semibold">
-                {filter === "diagrams" ? "No diagrams yet" : filter === "tasks" ? "No lists yet" : "Nothing here yet"}
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-foreground/70">
-                {filter === "diagrams"
+      {!lockedSecure && visibleNotes.length === 0 && view !== "calendar" && (
+        <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+          <div className="band px-4 py-3 text-white" style={{ background: jewelGradient(JEWEL.petrol) }}>
+            <p className="font-display text-lg font-semibold">
+              {query.trim() ? "Nothing matches that search" : filter === "diagrams" ? "No diagrams yet" : filter === "tasks" ? "No lists yet" : "Nothing here yet"}
+            </p>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-foreground/80">
+              {query.trim()
+                ? "Try a shorter word, or clear the search to see everything."
+                : filter === "diagrams"
                   ? "Start from a home network, a flowchart, or a blank board."
                   : "Write a note, tick a list, sketch, or drop in a diagram."}
+            </p>
+            {query.trim() ? (
+              <Button className="mt-4" variant="outline" onClick={() => setQuery("")}><X /> Clear search</Button>
+            ) : canEdit ? (
+              <Button className="mt-4" onClick={() => { setStartAt("kind"); setStartOpen(true); }}>
+                <Plus /> New note
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {view === "grid" && !lockedSecure && visibleNotes.length > 0 && (
+        <div className="space-y-4">
+          {pinnedNotes.length > 0 && (
+            <div>
+              <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">
+                <Pin className="h-3.5 w-3.5 fill-current text-[#C6A15B]" /> Pinned
               </p>
-              {canEdit && (
-                <Button className="mt-4" onClick={() => setStartOpen(true)}>
-                  <Plus /> New
-                </Button>
-              )}
+              {renderCards(pinnedNotes)}
             </div>
-          </div>
-        ) : (
-          <div className={listStyle === "compact" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" : "notes-masonry"}>
-            {visibleNotes.map((n, i) => (
-              <NoteCard
-                key={`${n.ownerId}-${n.id}`}
-                note={n}
-                index={i}
-                listStyle={listStyle}
-                style={styleFor(n, i)}
-                canEdit={canEdit && !n.locked}
-                featured={notesApi.prefs.dashboardNoteId === n.id}
-                prefs={notesApi.prefs}
-                onOpen={() => openNote(n)}
-                onToggleItem={(itemId, done) => {
-                  notesApi.updateNote(n, patchNoteChecklist(n, itemId, done));
-                }}
-              />
-            ))}
-          </div>
-        )
+          )}
+          {otherNotes.length > 0 && (
+            <div>
+              {pinnedNotes.length > 0 && (
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Everything else</p>
+              )}
+              {renderCards(otherNotes)}
+            </div>
+          )}
+        </div>
       )}
 
           {view === "list" && !lockedSecure && (
             <div className="space-y-2">
-              {visibleNotes.map((n, i) => (
-                <button
-                  key={`${n.ownerId}-${n.id}`}
-                  type="button"
-                  onClick={() => openNote(n)}
-                  className="flex w-full items-start gap-3 overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card"
-                >
-                  <span className="w-1.5 self-stretch" style={{ background: JEWEL_CYCLE[i % JEWEL_CYCLE.length] }} />
-                  <div className="min-w-0 flex-1 py-3 pr-3">
-                    <p className="truncate font-display font-bold">{n.locked ? "Locked note" : n.title || "Untitled"}</p>
-                    <p className="truncate text-sm text-foreground/70">{previewText(n)}</p>
-                  </div>
-                  {n.dueDate && <span className="mr-3 mt-3 rounded-md bg-foreground/10 px-2 py-0.5 text-[11px] font-semibold">{format(parseISO(`${n.dueDate.slice(0, 10)}T12:00:00`), "d MMM")}</span>}
-                </button>
-              ))}
+              {visibleNotes.map((n, i) => {
+                const items = noteChecklistItems(n).filter((item) => item.text.trim());
+                const due = n.dueDate ? noteDueTone(n.dueDate, items.length > 0 && items.every((item) => item.done)) : null;
+                return (
+                  <button
+                    key={`${n.ownerId}-${n.id}`}
+                    type="button"
+                    onClick={() => openNote(n)}
+                    className="flex min-h-14 w-full items-stretch overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card transition-transform duration-150 active:translate-y-px"
+                  >
+                    <span className="w-1.5 shrink-0" style={{ background: accentFor(n, i) }} />
+                    <div className="min-w-0 flex-1 px-3 py-2.5">
+                      <p className="flex items-center gap-1.5 font-display font-semibold">
+                        {n.pinned && <Pin className="h-3.5 w-3.5 shrink-0 fill-current text-[#C6A15B]" aria-label="Pinned" />}
+                        <span className="truncate">{listTitle(n)}</span>
+                      </p>
+                      <p className="truncate text-sm text-foreground/75">{previewText(n)}</p>
+                    </div>
+                    {due && (
+                      <span className="mr-3 shrink-0 self-center rounded-md px-2 py-1 text-[11px] font-bold" style={{ background: due.background, color: due.color }}>
+                        {format(parseISO(`${n.dueDate!.slice(0, 10)}T12:00:00`), "d MMM")}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          {view === "board" && !lockedSecure && (
+          {view === "board" && !lockedSecure && visibleNotes.length > 0 && (
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {boardColumns.map((col, ci) => (
                 <div
@@ -548,6 +753,7 @@ export default function Notes() {
                         index={i}
                         listStyle={listStyle}
                         style={styleFor(n, i, col.notes.length)}
+                        accent={accentFor(n, i, col.notes.length)}
                         canEdit={canEdit && !n.locked}
                         featured={notesApi.prefs.dashboardNoteId === n.id}
                         prefs={notesApi.prefs}
@@ -598,7 +804,7 @@ export default function Notes() {
                       {count > 0 && (
                         <div className="mt-1 space-y-0.5">
                           {items.notes.slice(0, 2).map((n) => (
-                            <div key={n.id} className="truncate rounded-md bg-white/15 px-1 text-[9px] font-semibold" onClick={(e) => { e.stopPropagation(); openNote(n); }}>{n.title || "Note"}</div>
+                            <div key={n.id} className="truncate rounded-md bg-[#6E1F2F] px-1 text-[9px] font-semibold text-white" onClick={(e) => { e.stopPropagation(); openNote(n); }}>{n.title || "Note"}</div>
                           ))}
                           {items.hubEvents.slice(0, 1).map((e) => (
                             <div key={e.id} className="truncate rounded-md bg-[#1C4A6E] px-1 text-[9px] font-semibold text-white">{e.title}</div>
@@ -686,6 +892,7 @@ export default function Notes() {
       <NoteStartDialog
         open={startOpen}
         onOpenChange={setStartOpen}
+        startAt={startAt}
         onPick={(choice) => openNote(null, choice.kind, choice.diagram ?? null, choice.title ?? "")}
       />
 

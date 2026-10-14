@@ -22,7 +22,7 @@ interface FeaturePageShellProps {
 const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, shareAccess, hideBack, tightGutter }: FeaturePageShellProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const comparePage = sharePage === "calendar" || sharePage === "notes" ? sharePage : null;
+  const comparePage = sharePage === "calendar" ? sharePage : null;
   const focusPath = comparePage ? `/${comparePage}-focus` : "";
   const currentPath = comparePage ? `/${comparePage}` : "";
   const focusSelected = !!comparePage && location.pathname === focusPath;

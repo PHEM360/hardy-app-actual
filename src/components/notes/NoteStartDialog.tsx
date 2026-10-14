@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { CheckSquare, GitBranch, PenLine, StickyNote } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, CheckSquare, ChevronLeft, GitBranch, PenLine, StickyNote } from "lucide-react";
+import { JEWEL, jewelGradient } from "@/lib/brandPalette";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,23 +14,32 @@ export type NoteStartChoice = {
   title?: string;
 };
 
-const KINDS: { id: NoteKind; label: string; hint: string; icon: typeof StickyNote }[] = [
-  { id: "note", label: "Note", hint: "A blank sheet. Just start typing.", icon: StickyNote },
-  { id: "checklist", label: "Checklist", hint: "Jobs you can tick off.", icon: CheckSquare },
-  { id: "drawing", label: "Sketch", hint: "Draw on paper.", icon: PenLine },
-  { id: "note", label: "Diagram", hint: "Flows, networks, family maps.", icon: GitBranch },
+const KINDS: { id: NoteKind; label: string; hint: string; icon: typeof StickyNote; tone: string }[] = [
+  { id: "note", label: "Note", hint: "A blank sheet. Just start typing.", icon: StickyNote, tone: JEWEL.petrol },
+  { id: "checklist", label: "Checklist", hint: "Jobs you can tick off.", icon: CheckSquare, tone: JEWEL.forest },
+  { id: "drawing", label: "Sketch", hint: "Draw on paper.", icon: PenLine, tone: JEWEL.burgundy },
+  { id: "note", label: "Diagram", hint: "Flows, networks, family maps.", icon: GitBranch, tone: JEWEL.aubergine },
 ];
+
+const TILE = "overflow-hidden rounded-xl border border-foreground/20 bg-card text-left shadow-card transition-transform duration-150 active:translate-y-px active:brightness-95";
 
 export function NoteStartDialog({
   open,
   onOpenChange,
   onPick,
+  startAt = "kind",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (choice: NoteStartChoice) => void;
+  /** Open straight on the diagram templates when the person already chose Diagram. */
+  startAt?: "kind" | "diagram";
 }) {
-  const [step, setStep] = useState<"kind" | "diagram" | "title">("kind");
+  const [step, setStep] = useState<"kind" | "diagram" | "title">(startAt);
+
+  useEffect(() => {
+    if (open) setStep(startAt);
+  }, [open, startAt]);
   const [pending, setPending] = useState<NoteStartChoice | null>(null);
   const [title, setTitle] = useState("");
 
@@ -71,7 +81,7 @@ export function NoteStartDialog({
           </DialogDescription>
         </DialogHeader>
         {step === "kind" && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {KINDS.map((kind, index) => {
               const Icon = kind.icon;
               return (
@@ -90,13 +100,15 @@ export function NoteStartDialog({
                     }
                     askTitle({ kind: kind.id });
                   }}
-                  className="rounded-2xl border border-border/50 bg-card p-4 text-left shadow-card transition hover:border-primary/40"
+                  className={`${TILE} flex items-stretch`}
                 >
-                  <span className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
+                  <span className="btn-edge flex w-12 shrink-0 items-center justify-center text-white" style={{ background: jewelGradient(kind.tone) }}>
                     <Icon className="h-5 w-5" />
                   </span>
-                  <p className="font-display text-sm font-bold">{kind.label}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{kind.hint}</p>
+                  <span className="min-w-0 flex-1 p-3">
+                    <span className="block font-display text-base font-semibold">{kind.label}</span>
+                    <span className="mt-0.5 block text-xs leading-snug text-foreground/80">{kind.hint}</span>
+                  </span>
                 </button>
               );
             })}
@@ -104,9 +116,9 @@ export function NoteStartDialog({
         )}
         {step === "diagram" && (
           <div className="space-y-2">
-            <button type="button" className="text-xs font-semibold text-primary" onClick={() => setStep("kind")}>
-              Back
-            </button>
+            <Button type="button" variant="outline" size="sm" className="h-10" onClick={() => setStep("kind")}>
+              <ChevronLeft /> Back
+            </Button>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {DIAGRAM_TEMPLATES.map((template) => {
                 const preview = template.build();
@@ -115,17 +127,17 @@ export function NoteStartDialog({
                     key={template.id}
                     type="button"
                     onClick={() => askTitle({ kind: "note", diagram: template.build() })}
-                    className="rounded-2xl border border-border/50 bg-card p-3 text-left shadow-card transition hover:border-primary/40"
+                    className={`${TILE} p-3`}
                   >
-                    <div className="mb-2 h-20 overflow-hidden rounded-xl bg-background">
+                    <div className="mb-2 h-20 overflow-hidden rounded-lg border border-foreground/15 bg-[#fffdf8]">
                       {preview.nodes.length ? (
                         <DiagramCanvas diagram={preview} className="h-full w-full" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">Blank</div>
+                        <div className="flex h-full items-center justify-center text-xs font-semibold text-foreground/70">Blank board</div>
                       )}
                     </div>
-                    <p className="text-sm font-semibold">{template.label}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{template.hint}</p>
+                    <p className="font-display text-sm font-semibold">{template.label}</p>
+                    <p className="mt-0.5 text-xs text-foreground/80">{template.hint}</p>
                   </button>
                 );
               })}
@@ -134,9 +146,9 @@ export function NoteStartDialog({
         )}
         {step === "title" && (
           <div className="space-y-3">
-            <button type="button" className="text-xs font-semibold text-primary" onClick={() => setStep(pending?.diagram !== undefined ? "diagram" : "kind")}>
-              Back
-            </button>
+            <Button type="button" variant="outline" size="sm" className="h-10" onClick={() => setStep(pending?.diagram !== undefined ? "diagram" : "kind")}>
+              <ChevronLeft /> Back
+            </Button>
             <Input
               autoFocus
               value={title}
@@ -149,9 +161,10 @@ export function NoteStartDialog({
               }}
               placeholder="Title"
               aria-label="Note title"
+              className="h-11 border-foreground/30 bg-card text-base"
             />
-            <Button className="w-full rounded-xl bg-gradient-primary" disabled={!title.trim()} onClick={finish}>
-              Continue
+            <Button className="w-full" disabled={!title.trim()} onClick={finish}>
+              <ArrowRight /> Continue
             </Button>
           </div>
         )}

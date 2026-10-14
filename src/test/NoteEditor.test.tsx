@@ -55,26 +55,26 @@ const savedNote: HubNote = {
 describe("NoteEditor paper layout", () => {
   it("keeps colour and filing extras behind Options on a new note", async () => {
     renderEditor();
-    expect(screen.queryByText("General notes · Personal")).not.toBeInTheDocument();
-    expect(screen.queryByText("Save to tab")).not.toBeInTheDocument();
+    expect(screen.queryByText("Folder")).not.toBeInTheDocument();
+    expect(screen.queryByText("Listed under")).not.toBeInTheDocument();
     expect(screen.getByTestId("note-paper")).toBeInTheDocument();
-    expect(screen.getByText("Your blank note")).toBeInTheDocument();
+    expect(screen.getByText("A blank page")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("note-paper"), { clientX: 40, clientY: 50 });
     expect(await screen.findByPlaceholderText("Start typing…")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Note details/ }));
-    expect(screen.getByText("General notes · Personal")).toBeInTheDocument();
-    expect(screen.getByText("Save to tab")).toBeInTheDocument();
-    expect(screen.getByText("Save in")).toBeInTheDocument();
+    expect(screen.getByText("Folder")).toBeInTheDocument();
     expect(screen.getByText("Personal")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^More/ }));
+    expect(screen.getByText("Listed under")).toBeInTheDocument();
+    expect(screen.getByText("Tags")).toBeInTheDocument();
   });
 
   it("opens an existing note in view mode until Edit is pressed", () => {
     renderEditor(vi.fn().mockResolvedValue(undefined), { note: savedNote, noteId: "n1" });
     expect(screen.getByRole("button", { name: /Edit/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Options/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Checklist" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "List" })).not.toBeInTheDocument();
     expect(screen.getByText("Shopping")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Edit/ }));
@@ -83,9 +83,8 @@ describe("NoteEditor paper layout", () => {
 
   it("saves an on-paper checklist through the legacy-compatible fields", async () => {
     const onSave = renderEditor();
-    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
-    fireEvent.change(screen.getByPlaceholderText("Title (optional)"), { target: { value: "Weekend jobs" } });
-    fireEvent.click(screen.getByRole("button", { name: "Checklist" }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Weekend jobs" } });
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
     fireEvent.change(screen.getByPlaceholderText("List item"), { target: { value: "Clean kitchen" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -110,6 +109,23 @@ describe("NoteEditor paper layout", () => {
     ));
   });
 
+  it("saves what was written when the sheet is closed", async () => {
+    const onSave = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Ring the plumber" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Ring the plumber" }),
+      expect.anything(),
+    ));
+  });
+
+  it("does not save an untouched new note when the sheet is closed", () => {
+    const onSave = renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("opens a diagram board when a template is passed in", () => {
     renderEditor(vi.fn().mockResolvedValue(undefined), {
       noteId: "new-diagram",
@@ -125,8 +141,8 @@ describe("NoteEditor paper layout", () => {
 
   it("saves show-on-dashboard when the switch is on", async () => {
     const onSave = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Milk" } });
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
-    fireEvent.change(screen.getByPlaceholderText("Title (optional)"), { target: { value: "Milk" } });
     fireEvent.click(screen.getByRole("switch", { name: "Show on dashboard" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 

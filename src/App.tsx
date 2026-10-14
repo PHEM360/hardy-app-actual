@@ -47,7 +47,6 @@ import Softphone from "@/pages/Softphone";
 import AnnualLeave from "@/pages/AnnualLeave";
 import Holidays from "@/pages/Holidays";
 import Notes from "@/pages/Notes";
-import NotesFocus from "@/pages/NotesFocus";
 import Unallocated from "@/pages/Unallocated";
 import Photos from "@/pages/Photos";
 import Email from "@/pages/Email";
@@ -59,6 +58,7 @@ import HolidaysPreview from "@/pages/HolidaysPreview";
 import FinancePreview from "@/pages/FinancePreview";
 import FlatsInvestmentPreview from "@/pages/FlatsInvestmentPreview";
 import HouseholdNotesPreview from "@/pages/HouseholdNotesPreview";
+import NotesPreview from "@/pages/NotesPreview";
 import SocialMobilePreview from "@/pages/SocialMobilePreview";
 import RequireAuth from "@/auth/RequireAuth";
 import RequireRole from "@/auth/RequireRole";
@@ -100,6 +100,7 @@ const App = () => (
               <Route path="/dev/holidays-preview" element={<HolidaysPreview />} />
               <Route path="/dev/flats-investment-preview" element={<FlatsInvestmentPreview />} />
               <Route path="/dev/household-notes-preview" element={<HouseholdNotesPreview />} />
+              <Route path="/dev/notes-preview" element={<NotesPreview />} />
               <Route path="/dev/social-mobile-preview" element={<SocialMobilePreview />} />
             </>
           )}
@@ -336,11 +337,7 @@ const App = () => (
             />
             <Route
               path="/notes-focus"
-              element={
-                <RequireFeature featureKey="notes">
-                  <NotesFocus />
-                </RequireFeature>
-              }
+              element={<Navigate to="/notes" replace />}
             />
             <Route
               path="/notes/quick"

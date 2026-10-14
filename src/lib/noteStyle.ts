@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { HubNote, NoteFolder, NotesColorMode, NotesListStyle } from "@/types/notes";
 import { NOTE_COLORS, resolveNoteCategory } from "@/types/notes";
+import { JEWEL, JEWEL_CYCLE } from "@/lib/brandPalette";
 
 const KIND_SWATCH: Record<string, string> = {
   note: "#fde68a",
@@ -137,3 +138,28 @@ export const LIST_STYLE_OPTIONS: { id: NotesListStyle; label: string }[] = [
   { id: "filled", label: "Bold fill" },
   { id: "compact", label: "Compact" },
 ];
+
+/**
+ * The deep tone a note wears on its spine, icon chip and editor band. Note
+ * colours are stored as light swatches, so this deepens one into a jewel tone
+ * that takes white text.
+ */
+const JEWEL_FOR_SWATCH: Record<string, string> = {
+  "#fde68a": JEWEL.bronze,
+  "#fdba74": JEWEL.oxblood,
+  "#fca5a5": JEWEL.burgundy,
+  "#f9a8d4": JEWEL.plum,
+  "#d8b4fe": JEWEL.aubergine,
+  "#c4b5fd": JEWEL.indigo,
+  "#93c5fd": JEWEL.cobalt,
+  "#bfdbfe": JEWEL.marine,
+  "#5eead4": JEWEL.teal,
+  "#86efac": JEWEL.forest,
+  "#e2e8f0": JEWEL.slate,
+  "#cbd5e1": JEWEL.slate,
+};
+
+export function noteAccent(swatch: string | null | undefined, index = 0): string {
+  if (!swatch || swatch.startsWith("hsl(var(")) return JEWEL_CYCLE[index % JEWEL_CYCLE.length];
+  return JEWEL_FOR_SWATCH[swatch.toLowerCase()] ?? `color-mix(in oklab, ${swatch} 55%, #14100C)`;
+}
