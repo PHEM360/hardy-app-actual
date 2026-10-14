@@ -7,6 +7,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, isExpired } from "./pairingUtils";
 import { hasSeenActivity, lightTopic, publishLightState, pollRetainedStatuses, MQTT_SECRETS } from "./mqttBroker";
 import { addLondonDays, dayOfWeekFor, londonNow, londonTimeOn } from "./londonTime";
+import { alarmCueBrightness, lightHasAlarmCue, type CueAlarmLike } from "./alarmLightCues";
 
 // Ongoing control for sunrise lights: manual on/off/brightness/colour from
 // the webapp (sendLightCommand), the once-a-minute sunrise ramp that reads
@@ -14,24 +15,10 @@ import { addLondonDays, dayOfWeekFor, londonNow, londonTimeOn } from "./londonTi
 // (tickSunriseLights — also finishes any pending pairings, see
 // lightPairing.ts), and cutting a forgotten light off (onLightRevoked).
 
-interface AlarmLightCueLike {
-  lightId: string;
-  startBrightness?: number;
-  leadMinutes?: number;
-  peakBrightness?: number;
-  rampMinutes?: number;
-  offMode?: "after" | "at";
-  offAfterMinutes?: number;
-  offAt?: string;
-}
-
-interface AlarmLike {
-  time: string;
-  days: number[];
-  enabled: boolean;
+interface AlarmLike extends CueAlarmLike {
+  id?: string;
   sunriseMinutes?: number;
   linkedLightIds?: string[];
-  lightCues?: AlarmLightCueLike[];
 }
 
 function timestampMs(value: unknown): number {
@@ -105,67 +92,13 @@ function isWithinSchedule(schedule: ScheduleLike, nowMinutes: number, dayOfWeek:
 }
 
 /**
- * Adapted from src/lib/sunriseAlarm.ts's getSunriseProgress, but resolving
- * "HH:mm on day X" against Europe/London (via londonTime.ts) rather than the
- * Cloud Functions runtime's own UTC clock — the frontend version runs in an
- * actual UK browser so it never had this problem, but here `now.setHours(...)`
- * would silently target the wrong instant (by the UK's current DST offset),
- * so a linked light's ramp could finish before or after the alarm actually
- * meant to, or (worse) after a one-off alarm had already auto-disabled
- * itself from the display's own correct, local-time firing — see alarms.ts.
+ * The older "sunrise" link (linkedLightIds + sunriseMinutes): a ramp that
+ * runs up to the alarm time and then leaves the light where it is. Alarms
+ * saved from the Alarms page use light cues instead (see alarmLightCues.ts).
+ * "HH:mm on day X" is resolved against Europe/London, not the runtime's UTC.
  * Returns 0..1, the strongest ramp progress across every enabled alarm that
- * links this light, so one light waking with two overlapping alarms takes
- * whichever is furthest along.
+ * links this light.
  */
-function clockOnDate(dateStr: string, hhmm: string, notBeforeMs: number): number {
-  let at = londonTimeOn(dateStr, hhmm);
-  if (at <= notBeforeMs) at = londonTimeOn(addLondonDays(dateStr, 1), hhmm);
-  return at;
-}
-
-/**
- * Brightness this light should be at for one alarm cue, or null when the
- * cue is not in its on window. The light comes on `leadMinutes` before the
- * alarm at `startBrightness`, reaches `peakBrightness` after `rampMinutes`,
- * then stays there until it turns off after a delay or at a clock time.
- */
-function cueBrightness(alarm: AlarmLike, cue: AlarmLightCueLike, now: Date): number | null {
-  const lead = Math.max(0, cue.leadMinutes || 0);
-  const ramp = Math.max(1, cue.rampMinutes || 1);
-  const startBri = Math.max(1, Math.min(255, cue.startBrightness || 1));
-  const peakBri = Math.max(1, Math.min(255, cue.peakBrightness || 220));
-  const nowMs = now.getTime();
-  const { dateStr: today } = londonNow(now);
-  for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
-    const dateStr = dayOffset === 0 ? today : addLondonDays(today, dayOffset);
-    if (alarm.days.length > 0 && !alarm.days.includes(dayOfWeekFor(dateStr))) continue;
-    const alarmMs = londonTimeOn(dateStr, alarm.time);
-    const startMs = alarmMs - lead * 60_000;
-    const peakMs = startMs + ramp * 60_000;
-    const offMs = cue.offMode === "at" && cue.offAt
-      ? clockOnDate(dateStr, cue.offAt, startMs)
-      : peakMs + Math.max(1, cue.offAfterMinutes || 10) * 60_000;
-    if (nowMs < startMs || nowMs >= offMs) continue;
-    if (nowMs >= peakMs || peakMs <= startMs) return peakBri;
-    const t = (nowMs - startMs) / (peakMs - startMs);
-    return Math.round(startBri + (peakBri - startBri) * t);
-  }
-  return null;
-}
-
-function alarmCueBrightness(alarms: AlarmLike[], lightId: string, now: Date): number {
-  let brightest = 0;
-  for (const alarm of alarms) {
-    if (!alarm.enabled || !alarm.lightCues?.length) continue;
-    for (const cue of alarm.lightCues) {
-      if (cue.lightId !== lightId) continue;
-      const brightness = cueBrightness(alarm, cue, now);
-      if (brightness) brightest = Math.max(brightest, brightness);
-    }
-  }
-  return brightest;
-}
-
 function sunriseProgressForLight(alarms: AlarmLike[], lightId: string, now: Date): number {
   let strongest = 0;
   const nowMs = now.getTime();
@@ -359,13 +292,29 @@ export const tickSunriseLights = onSchedule({ schedule: "* * * * *", secrets: MQ
         });
       }
 
-      const displayDocs = await db.collection("devices")
-        .where("uid", "==", light.uid)
-        .where("deviceType", "==", "display")
-        .get();
-      const alarms: AlarmLike[] = displayDocs.docs.flatMap((d) => (d.data().settings?.alarms || []) as AlarmLike[]);
+      // Alarms live on the account's screens. Older screens were paired
+      // before `deviceType` was written, so a screen is "anything that is
+      // not a light" here, the same test the app uses when it saves alarms.
+      const accountDevices = await db.collection("devices").where("uid", "==", light.uid).get();
+      const alarmsById = new Map<string, AlarmLike>();
+      let unkeyed = 0;
+      for (const deviceDoc of accountDevices.docs) {
+        const device = deviceDoc.data();
+        if (device.deviceType === "light" || device.revoked === true) continue;
+        for (const alarm of (Array.isArray(device.settings?.alarms) ? device.settings.alarms : []) as AlarmLike[]) {
+          if (!alarm || typeof alarm.time !== "string") continue;
+          const key = alarm.id || `unkeyed-${unkeyed++}`;
+          const seen = alarmsById.get(key);
+          // The same alarm is stored on every screen. Keep the copy that is
+          // still on, or failing that the one that rang most recently.
+          if (!seen || (alarm.enabled && !seen.enabled) || (alarm.lastFiredAt || 0) > (seen.lastFiredAt || 0)) {
+            alarmsById.set(key, { ...alarm, days: Array.isArray(alarm.days) ? alarm.days : [], lastFiredAt: Math.max(alarm.lastFiredAt || 0, seen?.lastFiredAt || 0) || undefined });
+          }
+        }
+      }
+      const alarms = [...alarmsById.values()];
       const cueBrightnessNow = alarmCueBrightness(alarms, lightDoc.id, now);
-      const hasCue = alarms.some((alarm) => alarm.enabled && alarm.lightCues?.some((cue) => cue.lightId === lightDoc.id));
+      const hasCue = lightHasAlarmCue(alarms, lightDoc.id, now.getTime());
       if (hasCue) {
         if (cueBrightnessNow > 0) {
           const sunrise = light.settings?.light?.sunrise || {};

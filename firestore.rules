@@ -422,10 +422,13 @@ service cloud.firestore {
           sharedWithHasUid(resource.data) ||
           canEditPage(resource.data.ownerId, "pets")
         ) && (
-          request.auth.uid == resource.data.ownerId ||
+          // Read with defaults: older pets have no ownerId or sharedWith
+          // field at all, and comparing a missing field is an error, which
+          // denied every care update (weights, flea and worming doses) on them.
+          (resource.data.get('ownerId', '') != '' && request.auth.uid == resource.data.ownerId) ||
           (
-            request.resource.data.ownerId == resource.data.ownerId &&
-            request.resource.data.sharedWith == resource.data.sharedWith
+            request.resource.data.get('ownerId', '') == resource.data.get('ownerId', '') &&
+            request.resource.data.get('sharedWith', []) == resource.data.get('sharedWith', [])
           )
         )
       );

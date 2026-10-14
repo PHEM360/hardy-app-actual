@@ -38,14 +38,14 @@ export const tickAlarms = onSchedule("* * * * *", async () => {
   const { minutesOfDay, dayOfWeek } = londonNow(now);
   const nowKey = `${String(Math.floor(minutesOfDay / 60)).padStart(2, "0")}:${String(minutesOfDay % 60).padStart(2, "0")}`;
 
-  const displayDocs = await db.collection("devices")
-    .where("deviceType", "==", "display")
-    .where("revoked", "==", false)
-    .get();
+  // Older screens were paired before `deviceType` was written, so a screen
+  // is "anything that is not a light", the same test the app uses.
+  const deviceDocs = await db.collection("devices").where("revoked", "==", false).get();
 
-  for (const deviceDoc of displayDocs.docs) {
+  for (const deviceDoc of deviceDocs.docs) {
     try {
       const data = deviceDoc.data();
+      if (data.deviceType === "light") continue;
       const uid = String(data.uid || "");
       if (!uid) continue;
       const alarms: AlarmLike[] = Array.isArray(data.settings?.alarms) ? data.settings.alarms : [];
@@ -73,7 +73,9 @@ export const tickAlarms = onSchedule("* * * * *", async () => {
       // of how many displays/tabs are watching it.
       if (!due.days?.length) {
         await deviceDoc.ref.update({
-          "settings.alarms": alarms.map((alarm) => (alarm.id === due.id ? { ...alarm, enabled: false } : alarm)),
+          // lastFiredAt lets a linked light finish its plan after the alarm
+          // has switched itself off (see alarmLightCues.ts).
+          "settings.alarms": alarms.map((alarm) => (alarm.id === due.id ? { ...alarm, enabled: false, lastFiredAt: now.getTime() } : alarm)),
         });
       }
     } catch (err) {

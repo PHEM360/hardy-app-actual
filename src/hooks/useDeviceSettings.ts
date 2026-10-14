@@ -95,6 +95,8 @@ export interface Alarm {
   linkedLightIds?: string[];
   /** Per light wake plan. When set, this is what the sunrise tick follows. */
   lightCues?: AlarmLightCue[];
+  /** Set by the server when a one-off alarm rings, so its light can finish its plan. */
+  lastFiredAt?: number;
 }
 
 export interface PhotoFrameSettings {

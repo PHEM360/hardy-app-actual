@@ -128,7 +128,7 @@ function LightCueEditor({
           </button>
         </div>
         {cue.offMode === "after" ? (
-          <NumberField label="Minutes after full brightness" value={cue.offAfterMinutes} min={1} max={240} suffix="mins" onChange={(value) => onChange({ offAfterMinutes: value })} />
+          <NumberField label="Stay on after the alarm" value={cue.offAfterMinutes} min={1} max={240} suffix="mins" onChange={(value) => onChange({ offAfterMinutes: value })} />
         ) : (
           <label className="block space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-foreground/70">Off at</span>
@@ -143,7 +143,7 @@ function LightCueEditor({
 function cueSummary(cue: AlarmLightCue, label: string) {
   const off = cue.offMode === "at"
     ? `off at ${cue.offAt}`
-    : `off ${cue.offAfterMinutes} min after full brightness`;
+    : `off ${cue.offAfterMinutes} min after the alarm`;
   return `${label}: ${briToPct(cue.startBrightness)}% ${cue.leadMinutes} min before, then ${briToPct(cue.peakBrightness)}% after ${cue.rampMinutes} min, ${off}.`;
 }
 
