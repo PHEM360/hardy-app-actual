@@ -196,36 +196,40 @@ service cloud.firestore {
       );
     }
 
-    // Shared-ownership helper for companies (and their subcollections/settings):
-    // legacy (ownerless) companies stay visible to everyone during migration.
+    // Shared-ownership helper for companies. Ownerless/legacy docs are admin
+    // only so they cannot be read by every enrolled member during migration.
     function canAccessCompany(companyId) {
       let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
-      return !('ownerId' in c) ||
-        c.ownerId == "" ||
-        request.auth.uid == c.ownerId ||
-        sharedWithHasUid(c) ||
-        canViewPage(c.ownerId, "companies");
+      return isAdmin() || (
+        c.get('ownerId', '') != "" && (
+          request.auth.uid == c.ownerId ||
+          sharedWithHasUid(c) ||
+          canViewPage(c.ownerId, "companies")
+        )
+      );
     }
 
     function canEditCompany(companyId) {
       let c = get(/databases/$(database)/documents/companies/$(companyId)).data;
-      return !('ownerId' in c) ||
-        c.ownerId == "" ||
-        request.auth.uid == c.ownerId ||
-        sharedWithHasUid(c) ||
-        canEditPage(c.ownerId, "companies");
+      return isAdmin() || (
+        c.get('ownerId', '') != "" && (
+          request.auth.uid == c.ownerId ||
+          sharedWithHasUid(c) ||
+          canEditPage(c.ownerId, "companies")
+        )
+      );
     }
 
-    // Shared-ownership helper for pets (and their subcollections, e.g. dog
-    // tags) — same model as canAccessCompany: legacy (ownerless) pets stay
-    // visible to everyone during migration.
+    // Shared-ownership helper for pets. Ownerless/legacy pets are admin only.
     function canAccessPet(petId) {
       let p = get(/databases/$(database)/documents/pets/$(petId)).data;
-      return !('ownerId' in p) ||
-        p.ownerId == "" ||
-        request.auth.uid == p.ownerId ||
-        sharedWithHasUid(p) ||
-        canViewPage(p.ownerId, "pets");
+      return isAdmin() || (
+        p.get('ownerId', '') != "" && (
+          request.auth.uid == p.ownerId ||
+          sharedWithHasUid(p) ||
+          canViewPage(p.ownerId, "pets")
+        )
+      );
     }
 
     // NOTE: deliberately does NOT trust users/{uid}.householdId / householdIds —
@@ -242,20 +246,35 @@ service cloud.firestore {
       );
     }
 
-    // Users collection - users can read/write their own data, admins can manage all
+    // Public directory used by share pickers: name + email only (no roles/features).
+    // Written exclusively by Cloud Functions (onUserProfileWrite / inviteUser).
+    match /userDirectory/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Users collection - own profile + admins. Members do not list every profile.
     match /users/{userId} {
-      allow read: if isAuthenticated() || (isFirebaseOwner(userId) && !hasDisplayClaim());
-      allow create: if isAuthenticated();
-      // A user may update their own profile, but never their own role/admin
-      // flags — those must only change via an admin's write (Admin.tsx) or a
-      // trusted Cloud Function, never a self-write. Without this, any signed-in
-      // user could set isAdmin/isSuperAdmin on themselves directly.
-      allow update: if isAdmin() || (
+      allow read: if isFirebaseOwner(userId) || isAdmin() || isOwnerAccount();
+      allow create: if isFirebaseAuthenticated() &&
+        !hasDisplayClaim() &&
+        request.auth.uid == userId;
+      // Self-updates cannot change role/admin flags or enabledFeatures.
+      // Admins may change features and profile fields, but not roles.
+      // Role changes go through the setUserRole Cloud Function (Admin SDK).
+      allow update: if (
         isOwner(userId) &&
         request.resource.data.get('role', '') == resource.data.get('role', '') &&
         request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) &&
+        request.resource.data.get('isSuperAdmin', false) == resource.data.get('isSuperAdmin', false) &&
+        request.resource.data.get('enabledFeatures', []) == resource.data.get('enabledFeatures', [])
+      ) || (
+        isAdmin() &&
+        !isSuperAdmin() &&
+        request.resource.data.get('role', '') == resource.data.get('role', '') &&
+        request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) &&
         request.resource.data.get('isSuperAdmin', false) == resource.data.get('isSuperAdmin', false)
-      );
+      ) || isSuperAdmin();
       allow delete: if isOwner(userId);
       // Don't allow direct client writes to other users' docs unless they're admin.
       // Superadmin/admin actions should prefer Cloud Functions.
@@ -307,13 +326,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Households - formal multi-membership entity. Any current member can read/
-    // update (e.g. invite another member); only the creator or an admin can
-    // delete the household itself.
+    // Households - formal multi-membership entity. Members may add/remove one
+    // person at a time; creator stays in memberIds unless an admin edits.
     match /households/{householdId} {
-      allow read, update: if isAuthenticated() && (
+      allow read: if isAuthenticated() && (
         isAdmin() || request.auth.uid in resource.data.memberIds
       );
+      allow update: if isAuthenticated() && (
+        isAdmin() || request.auth.uid in resource.data.memberIds
+      ) &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.memberIds is list &&
+        request.resource.data.memberIds.size() <= resource.data.memberIds.size() + 1 &&
+        request.resource.data.memberIds.size() >= resource.data.memberIds.size() - 1 &&
+        (isAdmin() || resource.data.createdBy in request.resource.data.memberIds);
       allow create: if isAuthenticated() && (
         isAdmin() ||
         (request.auth.uid in request.resource.data.memberIds &&
@@ -1053,11 +1079,12 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "health");
     }
 
-    // Shared app config. The AI key is still readable by signed-in family
-    // members so in-app chat works; only admins may change it.
+    // Shared app config. The OpenAI key must never live here for clients —
+    // family AI chat uses the familyAiChat Cloud Function + Secret Manager.
+    // The legacy `ai` doc is denied to clients so any leftover key cannot leak.
     match /appConfig/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isOwnerAccount();
+      allow read: if isAuthenticated() && docId != "ai";
+      allow write: if (isAdmin() || isOwnerAccount()) && docId != "ai";
     }
 
     // Custom health tabs - per user, bundled into the "health" page share

@@ -138,7 +138,6 @@ function eventsByDay(events: CalendarEvent[], categories: string[] | undefined) 
     map.set(key, [...(map.get(key) || []), event]);
   });
   // #region agent log
-  fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H4',location:'DisplayPageRenderer.tsx:eventsByDay',message:'display month keys vs London dates',data:{eventCount:events.length,mismatchCount:mismatches.length,samples:mismatches.slice(0,6)},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   return map;
 }

@@ -4,7 +4,7 @@ import { DEFAULT_NOTIF_PREFS, NotifChannel, NotificationPrefs, ScheduledNotifTyp
 
 export async function loadPrefs(uid: string): Promise<NotificationPrefs> {
   const snap = await admin.firestore().doc(`notificationPrefs/${uid}`).get();
-  if (!snap.exists) return { ...DEFAULT_NOTIF_PREFS };
+  if (!snap.exists) return JSON.parse(JSON.stringify(DEFAULT_NOTIF_PREFS)) as NotificationPrefs;
   const data = snap.data() as NotificationPrefs;
   return {
     ...DEFAULT_NOTIF_PREFS,
@@ -12,8 +12,42 @@ export async function loadPrefs(uid: string): Promise<NotificationPrefs> {
     email: { ...DEFAULT_NOTIF_PREFS.email, ...(data.email || {}) },
     sms: { ...DEFAULT_NOTIF_PREFS.sms, ...(data.sms || {}) },
     push: { ...DEFAULT_NOTIF_PREFS.push, ...(data.push || {}) },
-    events: { ...DEFAULT_NOTIF_PREFS.events, ...(data.events || {}) },
+    quietHours: {
+      ...DEFAULT_NOTIF_PREFS.quietHours!,
+      ...(data.quietHours || {}),
+    },
+    events: {
+      ...DEFAULT_NOTIF_PREFS.events,
+      ...(data.events || {}),
+      dailyDigest: {
+        ...DEFAULT_NOTIF_PREFS.events.dailyDigest,
+        ...(data.events?.dailyDigest || {}),
+      },
+    },
   };
+}
+
+/** True when current London local time falls inside quiet hours. */
+export function isInQuietHours(prefs: NotificationPrefs, now = new Date()): boolean {
+  const qh = prefs.quietHours;
+  if (!qh?.enabled) return false;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const nowMins = hour * 60 + minute;
+  const [sh, sm] = (qh.start || "22:00").split(":").map(Number);
+  const [eh, em] = (qh.end || "07:00").split(":").map(Number);
+  const startMins = (sh || 0) * 60 + (sm || 0);
+  const endMins = (eh || 0) * 60 + (em || 0);
+  if (startMins === endMins) return false;
+  if (startMins < endMins) return nowMins >= startMins && nowMins < endMins;
+  // Spans midnight
+  return nowMins >= startMins || nowMins < endMins;
 }
 
 export async function resolveAuthEmail(uid: string): Promise<string> {

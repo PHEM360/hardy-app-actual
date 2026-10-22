@@ -4,10 +4,7 @@ export type ReminderUnit = "minutes" | "hours" | "days" | "weeks" | "months" | "
 export interface ReminderConfig {
   id: string;
   mode: "relative" | "onDayAt";
-  // onDayAt: send at this time on the due date
-  // relative: send at this time on the offset date (for days/weeks/months/years)
-  //           or subtract from dueDate+timeOfDay (for minutes/hours)
-  timeOfDay: string; // "HH:MM", default "09:00"
+  timeOfDay: string;
   relativeAmount?: number;
   relativeUnit?: ReminderUnit;
   relativeDirection?: "before" | "after";
@@ -27,19 +24,29 @@ export interface TaskDuePrefs {
 export interface DailyDigestPrefs {
   enabled: boolean;
   channels: NotifChannel[];
-  time: string; // "HH:MM"
+  time: string;
+  includeTasks?: boolean;
+  includeCalendar?: boolean;
+  includeBirthdays?: boolean;
+  includePets?: boolean;
+}
+
+export interface QuietHoursPrefs {
+  enabled: boolean;
+  start: string;
+  end: string;
 }
 
 export interface NotificationPrefs {
   email: { enabled: boolean; address: string };
   sms: { enabled: boolean; phone: string };
   push: { enabled: boolean };
+  quietHours?: QuietHoursPrefs;
   events: {
     taskDue: TaskDuePrefs;
     taskCompleted: EventPrefs;
     taskAdded: EventPrefs;
     dailyDigest: DailyDigestPrefs;
-    /** Calendar / household / pets / meds use per-item channels; these master switches gate delivery. */
     calendar?: EventPrefs;
     household?: EventPrefs;
     pets?: EventPrefs;
@@ -69,7 +76,6 @@ export interface ScheduledNotification {
   medId?: string;
   householdId?: string;
   birthdayId?: string;
-  /** Stable key for cancel/reschedule, e.g. calendar:{eventId}:{reminderId} */
   sourceKey?: string;
   taskTitle?: string;
   type: ScheduledNotifType;
@@ -85,6 +91,7 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
   email: { enabled: false, address: "" },
   sms: { enabled: false, phone: "" },
   push: { enabled: false },
+  quietHours: { enabled: false, start: "22:00", end: "07:00" },
   events: {
     taskDue: {
       enabled: true,
@@ -94,7 +101,15 @@ export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
     },
     taskCompleted: { enabled: false, channels: ["push"] },
     taskAdded: { enabled: false, channels: ["push"] },
-    dailyDigest: { enabled: false, channels: ["email"], time: "09:00" },
+    dailyDigest: {
+      enabled: false,
+      channels: ["push"],
+      time: "08:00",
+      includeTasks: true,
+      includeCalendar: true,
+      includeBirthdays: true,
+      includePets: false,
+    },
     calendar: { enabled: true, channels: ["push", "email", "sms"] },
     household: { enabled: true, channels: ["push", "email", "sms"] },
     pets: { enabled: true, channels: ["push", "email", "sms"] },

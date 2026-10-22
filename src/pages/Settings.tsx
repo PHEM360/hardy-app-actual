@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
-import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, Eye, EyeOff, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck, LayoutGrid, Copy } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Moon, Sun, LogOut, GripVertical, X, Brain, CheckCircle2, MonitorSmartphone, Pencil, Check, Fingerprint, ShieldCheck, LayoutGrid, Copy } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import { canAccessRoute, DEFAULT_BOTTOM_NAV } from "@/lib/features";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
 import { useHouseholdNames } from "@/hooks/useHouseholdNames";
 import { CreatableMultiSelect } from "@/components/ui/creatable-multi-select";
-import { useAiConfig } from "@/hooks/useAiConfig";
 import { useMyDevices } from "@/hooks/useMyDevices";
 import { useSecuritySettings } from "@/hooks/useSecuritySettings";
 import { authenticateWithPasskey, passkeyErrorMessage, registerPasskey } from "@/lib/passkeys";
@@ -169,14 +168,6 @@ const Settings = () => {
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
   const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
-
-  // AI Configuration
-  const { apiKey: savedApiKey, saveApiKey } = useAiConfig();
-  const [geminiKeyInput, setGeminiKeyInput] = useState("");
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [geminiSaving, setGeminiSaving] = useState(false);
-  const [geminiSaved, setGeminiSaved] = useState(false);
-  useEffect(() => { if (savedApiKey) setGeminiKeyInput(savedApiKey); }, [savedApiKey]);
 
   const isAdmin =
     role === "admin" ||
@@ -894,62 +885,22 @@ const Settings = () => {
           <span className="w-5 h-5 rounded-md bg-violet-600 flex items-center justify-center text-white text-[10px]">AI</span>
           AI Configuration
         </h3>
-        <div className="p-4 rounded-xl bg-card border border-border/50 shadow-soft space-y-4">
+        <div className="p-4 rounded-xl bg-card border border-foreground/20 shadow-card space-y-3">
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-violet-500/15 flex-shrink-0">
-              <Brain className="w-4 h-4 text-violet-600" />
+            <div className="btn-edge p-2 rounded-lg bg-primary text-primary-foreground flex-shrink-0">
+              <Brain className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-card-foreground">OpenAI API Key</p>
+              <p className="text-sm font-semibold text-card-foreground">Family AI (server managed)</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Powers AI Health Assessment using GPT-4o Mini. Only an admin can save this shared key. Get one at{" "}
-                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-violet-600 underline">platform.openai.com</a>
+                In-app chat and health AI call a Cloud Function. The OpenAI key lives in Secret Manager
+                (OPENAI_API_KEY) and is never stored in the browser or Firestore.
               </p>
             </div>
           </div>
-          <div className="space-y-2">
-            <div className="relative">
-              <Input
-                type={showGeminiKey ? "text" : "password"}
-                value={geminiKeyInput}
-                onChange={(e) => { setGeminiKeyInput(e.target.value); setGeminiSaved(false); }}
-                placeholder="sk-…"
-                className="h-11 rounded-xl pr-10 text-sm font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowGeminiKey((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <Button
-              onClick={async () => {
-                setGeminiSaving(true);
-                try {
-                  await saveApiKey(geminiKeyInput.trim());
-                  setGeminiSaved(true);
-                  setTimeout(() => setGeminiSaved(false), 3000);
-                } catch {
-                  toast.error("Only an admin can change the shared AI key");
-                } finally {
-                  setGeminiSaving(false);
-                }
-              }}
-              disabled={geminiSaving || !geminiKeyInput.trim()}
-              className="w-full h-10 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm gap-2"
-            >
-              {geminiSaved
-                ? <><CheckCircle2 className="w-4 h-4" />Key saved</>
-                : geminiSaving ? "Saving…" : "Save API Key"}
-            </Button>
-          </div>
-          {savedApiKey && (
-            <p className="text-[11px] text-green-600 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3" /> API key is configured · AI Health Assessment is enabled
-            </p>
-          )}
+          <p className="text-[11px] text-foreground/80 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3" /> Key is not editable in the app
+          </p>
         </div>
       </div>
 

@@ -24,8 +24,23 @@ service firebase.storage {
         userDoc.isAdmin == true || userDoc.isSuperAdmin == true;
     }
 
+    function isPasskeyEnrolledStorage() {
+      return request.auth != null &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('passkeyEnrolled', false) == true;
+    }
+
+    // Interactive app users must be passkey-enrolled (mirrors Firestore isAuthenticated).
     function isInteractiveUser() {
-      return request.auth != null && !('deviceId' in request.auth.token);
+      return request.auth != null &&
+        !('deviceId' in request.auth.token) &&
+        isPasskeyEnrolledStorage();
+    }
+
+    function hasFeatureStorage(feature) {
+      let userDoc = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return isHouseholdAdmin(userDoc) ||
+        feature in userDoc.get('enabledFeatures', []);
     }
 
     function isActiveDisplayFor(userId) {
@@ -75,11 +90,13 @@ service firebase.storage {
       let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
       return isInteractiveUser() && (
         isHouseholdAdmin(userDoc) ||
-        !('ownerId' in company) ||
-        company.ownerId == "" ||
-        request.auth.uid == company.ownerId ||
-        ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
-        canViewPageStorage(company.ownerId, "companies")
+        (
+          company.get('ownerId', '') != "" && (
+            request.auth.uid == company.ownerId ||
+            ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
+            canViewPageStorage(company.ownerId, "companies")
+          )
+        )
       );
     }
 
@@ -88,11 +105,13 @@ service firebase.storage {
       let company = firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
       return isInteractiveUser() && (
         isHouseholdAdmin(userDoc) ||
-        !('ownerId' in company) ||
-        company.ownerId == "" ||
-        request.auth.uid == company.ownerId ||
-        ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
-        canEditPageStorage(company.ownerId, "companies")
+        (
+          company.get('ownerId', '') != "" && (
+            request.auth.uid == company.ownerId ||
+            ('sharedWith' in company && request.auth.uid in company.sharedWith) ||
+            canEditPageStorage(company.ownerId, "companies")
+          )
+        )
       );
     }
 
@@ -102,11 +121,11 @@ service firebase.storage {
     }
 
     match /tattersalls/{allPaths=**} {
-      allow read, write: if isInteractiveUser();
+      allow read, write: if isInteractiveUser() && hasFeatureStorage('tattersalls');
     }
 
     match /flats/{flatId}/{allPaths=**} {
-      allow read, write: if isInteractiveUser();
+      allow read, write: if isInteractiveUser() && hasFeatureStorage('tattersalls');
     }
 
     // Company files use the same owner/share model as the company document.
