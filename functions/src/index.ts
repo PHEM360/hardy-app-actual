@@ -131,7 +131,7 @@ export {
 // ── Alarms — ring on every device for the account, muteable from any of them ──
 export { tickAlarms } from "./alarms";
 export { familyAiChat } from "./familyAiChat";
-export { setUserRole, onUserProfileWrite } from "./userAdmin";
+export { setUserRole, onUserProfileWrite, syncMyUserDirectory } from "./userAdmin";
 
 // ── Family softphone (Twilio) ──
 export {

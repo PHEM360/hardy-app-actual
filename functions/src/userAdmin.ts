@@ -52,3 +52,11 @@ export const onUserProfileWrite = onDocumentWritten("users/{userId}", async (eve
   const after = event.data?.after?.exists ? event.data.after.data() : undefined;
   await syncUserDirectory(uid, after);
 });
+
+/** Any signed-in user can refresh their own directory card after deploy. */
+export const syncMyUserDirectory = onCall(async (request) => {
+  const uid = requireUid(request);
+  const snap = await admin.firestore().doc(`users/${uid}`).get();
+  await syncUserDirectory(uid, snap.data());
+  return { success: true };
+});

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase";
 
 export interface AppUser {
   id: string;
@@ -16,6 +17,9 @@ export function useAppUsers(): AppUser[] {
   const [users, setUsers] = useState<AppUser[]>([]);
 
   useEffect(() => {
+    // Ensure this device's own card exists after the directory migration.
+    void httpsCallable(functions, "syncMyUserDirectory")({}).catch(() => undefined);
+
     return onSnapshot(
       collection(db, "userDirectory"),
       (snap) => {
