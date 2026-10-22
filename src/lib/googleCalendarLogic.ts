@@ -54,7 +54,6 @@ export function mapGoogleCalendarEvent(
   if (!startDate || !endDate) return null;
   const allDay = Boolean(item.start?.date && !item.start?.dateTime);
   // #region agent log
-  if (allDay) fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H1',location:'googleCalendarLogic.ts:mapGoogleCalendarEvent',message:'mapped Google all-day event',data:{googleStart:item.start?.date||null,googleEnd:item.end?.date||null,storedStart:startDate,storedEnd:endDate},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   return {
     title: String(item.summary || "(No title)"),
@@ -82,7 +81,6 @@ export function toGoogleCalendarBody(event: {
     const start = event.startDate.slice(0, 10);
     const end = event.endDate.slice(0, 10);
     // #region agent log
-    fetch('http://127.0.0.1:7273/ingest/12c3017c-bccf-4cf4-8368-d19daf135fd3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0e345a'},body:JSON.stringify({sessionId:'0e345a',runId:'audit',hypothesisId:'H2',location:'googleCalendarLogic.ts:toGoogleCalendarBody',message:'pushing all-day event to Google',data:{start,end,sameDay:start===end},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     return {
       summary: event.title,

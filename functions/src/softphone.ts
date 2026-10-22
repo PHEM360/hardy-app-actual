@@ -7,6 +7,7 @@ import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import Twilio from "twilio";
+import { requireFeature } from "./authz";
 
 const twilioSid = defineSecret("TWILIO_ACCOUNT_SID");
 const twilioToken = defineSecret("TWILIO_AUTH_TOKEN");
@@ -25,6 +26,12 @@ function requireUid(request: { auth?: { uid: string; token?: Record<string, unkn
     throw new HttpsError("permission-denied", "Remote display credentials cannot use the phone.");
   }
   return request.auth.uid;
+}
+
+async function requireSoftphone(request: { auth?: { uid: string; token?: Record<string, unknown> } }) {
+  const uid = requireUid(request);
+  await requireFeature(uid, "softphone", request.auth?.token?.email as string | undefined);
+  return uid;
 }
 
 function secretValue(secret: { value: () => string }) {
@@ -78,7 +85,7 @@ async function phoneOwnerUids(): Promise<string[]> {
 }
 
 export const getSoftphoneConfig = onCall({ secrets: VOICE_SECRETS }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireSoftphone(request);
   const settings = (await admin.firestore().doc(`phoneSettings/${uid}`).get()).data() || {};
   return {
     smsReady: smsReady(),
@@ -93,7 +100,7 @@ export const getSoftphoneConfig = onCall({ secrets: VOICE_SECRETS }, async (requ
 });
 
 export const getSoftphoneVoiceToken = onCall({ secrets: VOICE_SECRETS }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireSoftphone(request);
   if (!voiceReady()) {
     throw new HttpsError(
       "failed-precondition",
@@ -122,7 +129,7 @@ export const getSoftphoneVoiceToken = onCall({ secrets: VOICE_SECRETS }, async (
 });
 
 export const sendSoftphoneSms = onCall({ secrets: SMS_SECRETS }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireSoftphone(request);
   if (!smsReady()) throw new HttpsError("failed-precondition", "Twilio SMS is not configured yet.");
   const to = e164(String(request.data?.to || ""));
   const body = String(request.data?.body || "").trim().slice(0, 1600);
@@ -147,7 +154,7 @@ export const sendSoftphoneSms = onCall({ secrets: SMS_SECRETS }, async (request)
 });
 
 export const startSoftphoneCall = onCall({ secrets: SMS_SECRETS }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireSoftphone(request);
   if (!smsReady()) throw new HttpsError("failed-precondition", "Twilio calling is not configured yet.");
   const to = e164(String(request.data?.to || ""));
   if (!to) throw new HttpsError("invalid-argument", "Enter a phone number.");

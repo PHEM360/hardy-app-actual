@@ -4,8 +4,9 @@ import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 import { ScheduledNotification } from "./types";
 import { sendNotification } from "./sender";
-import { loadPrefs, resolveAuthEmail, escapeHtml, sanitizeNotifTitle } from "./helpers";
+import { loadPrefs, resolveAuthEmail, escapeHtml, sanitizeNotifTitle, isInQuietHours, activeChannels } from "./helpers";
 import { londonLocalToUtc, londonTodayString } from "./calculations";
+import { buildDailyBrief } from "./dailyBrief";
 
 const APP_ORIGIN = "https://hardyapp.co.uk";
 
@@ -37,19 +38,52 @@ export const processScheduledNotifications = onSchedule(
       const notif = doc.data() as ScheduledNotification;
       try {
         const prefs = await loadPrefs(notif.uid);
-        const authEmail = await resolveAuthEmail(notif.uid);
 
+        // Quiet hours: hold non-brief notifications until the window ends.
+        // Daily brief always sends at its chosen time (user picked that slot).
+        if (notif.type !== "dailyDigest" && isInQuietHours(prefs)) {
+          continue;
+        }
+
+        // Re-check master channel switches at send time.
+        const channels = activeChannels(notif.channels || [], prefs);
+        if (!channels.length) {
+          await doc.ref.update({
+            sent: true,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            skipped: "no-active-channels",
+          });
+          continue;
+        }
+
+        const authEmail = await resolveAuthEmail(notif.uid);
         const emailTo = prefs.email.enabled ? (prefs.email.address || authEmail) : "";
         const smsTo = prefs.sms.enabled ? prefs.sms.phone : "";
 
-        const title = sanitizeNotifTitle(notif.taskTitle ?? "Reminder");
-        const subject = buildSubject(notif.type, title);
-        const text = buildText(notif.type, title);
+        let subject = buildSubject(notif.type, sanitizeNotifTitle(notif.taskTitle ?? "Reminder"));
+        let text = buildText(notif.type, sanitizeNotifTitle(notif.taskTitle ?? "Reminder"));
+        let htmlBody = `<p>${escapeHtml(text)}</p>`;
+
+        if (notif.type === "dailyDigest") {
+          if (!prefs.events.dailyDigest.enabled) {
+            await doc.ref.update({
+              sent: true,
+              sentAt: admin.firestore.FieldValue.serverTimestamp(),
+              skipped: "digest-disabled",
+            });
+            continue;
+          }
+          const brief = await buildDailyBrief(notif.uid, prefs.events.dailyDigest);
+          subject = brief.title;
+          text = brief.text;
+          htmlBody = brief.html;
+        }
+
         const clickPath = clickPathFor(notif.type);
 
         await sendNotification({
           uid: notif.uid,
-          channels: notif.channels,
+          channels,
           emailEnabled: prefs.email.enabled,
           emailTo,
           smsEnabled: prefs.sms.enabled,
@@ -57,7 +91,7 @@ export const processScheduledNotifications = onSchedule(
           pushEnabled: prefs.push.enabled,
           subject,
           textBody: text,
-          htmlBody: `<p>${escapeHtml(text)}</p>`,
+          htmlBody,
           pushClickPath: clickPath,
           actionUrl: clickPath ? `${APP_ORIGIN}${clickPath}` : undefined,
           actionLabel: clickPath ? "Open in Hardy Hub" : undefined,
@@ -75,12 +109,12 @@ export const processScheduledNotifications = onSchedule(
         logger.error("Failed to send scheduled notification", { id: doc.id, err });
       }
     }
-  }
+  },
 );
 
 export const scheduleDailyDigests = onSchedule(
   {
-    schedule: "0 0 * * *", // midnight London time
+    schedule: "0 0 * * *",
     timeZone: "Europe/London",
     secrets: [postmarkKey, twilioSid, twilioToken, twilioFrom],
   },
@@ -95,7 +129,7 @@ export const scheduleDailyDigests = onSchedule(
       if (!prefs.events.dailyDigest.enabled) continue;
 
       const uid = prefsDoc.id;
-      const [dh, dm] = (prefs.events.dailyDigest.time || "09:00").split(":").map(Number);
+      const [dh, dm] = (prefs.events.dailyDigest.time || "08:00").split(":").map(Number);
       const sendAt = londonLocalToUtc(y, mo, d, dh, dm);
 
       if (sendAt <= new Date()) continue;
@@ -111,7 +145,7 @@ export const scheduleDailyDigests = onSchedule(
         await db.collection("scheduledNotifications").add({
           uid,
           type: "dailyDigest",
-          taskTitle: `Daily digest for ${todayStr}`,
+          taskTitle: `Daily brief for ${todayStr}`,
           sourceKey: `digest:${uid}:${todayStr}`,
           scheduledFor: admin.firestore.Timestamp.fromDate(sendAt),
           channels: prefs.events.dailyDigest.channels,
@@ -120,7 +154,7 @@ export const scheduleDailyDigests = onSchedule(
         });
       }
     }
-  }
+  },
 );
 
 function clickPathFor(type: ScheduledNotification["type"]): string {
@@ -128,8 +162,9 @@ function clickPathFor(type: ScheduledNotification["type"]): string {
     case "taskDue":
     case "taskCompleted":
     case "taskAdded":
-    case "dailyDigest":
       return "/tasks";
+    case "dailyDigest":
+      return "/today";
     case "calendarEvent":
       return "/calendar";
     case "householdRenewal":
@@ -156,7 +191,7 @@ function buildSubject(type: ScheduledNotification["type"], title: string): strin
     case "taskAdded":
       return `New task: ${title}`;
     case "dailyDigest":
-      return "Your daily task digest";
+      return "Your daily brief";
     case "calendarEvent":
       return `Upcoming: ${title}`;
     case "householdRenewal":
@@ -166,7 +201,7 @@ function buildSubject(type: ScheduledNotification["type"], title: string): strin
     case "medication":
       return `Medication: ${title}`;
     case "birthday":
-      return `🎂 ${title}`;
+      return title;
     case "expenseReview":
       return "Time to review your regular expenses";
     default:
@@ -183,7 +218,7 @@ function buildText(type: ScheduledNotification["type"], title: string): string {
     case "taskAdded":
       return `A new task has been added: "${title}".`;
     case "dailyDigest":
-      return "Here's your daily summary of tasks due today. Open Hardy Hub to review them.";
+      return "Here is your daily brief. Open Hardy Hub to review the day.";
     case "calendarEvent":
       return `"${title}" is coming up soon.`;
     case "householdRenewal":

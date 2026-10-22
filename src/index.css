@@ -881,6 +881,19 @@ input[type="date"] {
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
+    --app-nav-h: 4rem;
+    --kbd: 0px;
+  }
+
+  /* App shell owns scrolling; stop document rubber-banding behind fixed chrome. */
+  html.native-app,
+  html.native-app body,
+  html.native-app #root {
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    width: 100%;
   }
 
   .safe-top {

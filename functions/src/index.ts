@@ -17,6 +17,11 @@ import * as functionsV1 from "firebase-functions/v1";
 import { PDFParse } from "pdf-parse";
 import { postmarkKey } from "./notifications/scheduler";
 import { sendTransactionalEmail } from "./notifications/sender";
+import {
+	requireAdmin,
+	requireTrueSuperAdmin,
+	syncUserDirectory,
+} from "./authz";
 
 // AI Analysis — key lives only in Secret Manager, never sent to the browser.
 // Set it once with: firebase functions:secrets:set OPENAI_API_KEY
@@ -50,24 +55,9 @@ function requireAuth(context: { auth?: { uid: string; token: any } }) {
 	return uid;
 }
 
-const OWNER_EMAIL = "chris.hardy.07@googlemail.com";
-
+/** Admin-or-above gate (legacy name kept for existing call sites). */
 async function requireSuperAdmin(uid: string, authEmail?: string) {
-	const snap = await admin.firestore().doc(`users/${uid}`).get();
-	const data = snap.data() || {};
-	const rawRole = String(data.role || "").toLowerCase();
-	// Accept a couple of common spellings from earlier iterations
-	// (e.g. "super-admin" in Firestore).
-	const normalizedRole = rawRole.replace(/\s+/g, "").replace(/-/g, "");
-	const role = (normalizedRole as UserRole | "") || "member";
-	const isSuperAdminLegacy = data.isSuperAdmin === true;
-	const profileEmail = String(data.email || "").toLowerCase();
-	const tokenEmail = String(authEmail || "").toLowerCase();
-	const isOwnerEmail = profileEmail === OWNER_EMAIL || tokenEmail === OWNER_EMAIL;
-	// Allow superadmin, admin, or the owner email account
-	if (role !== "superadmin" && role !== "admin" && !isSuperAdminLegacy && !isOwnerEmail) {
-		throw new HttpsError("permission-denied", "Admin privileges required.");
-	}
+	await requireAdmin(uid, authEmail);
 }
 
 // ── Notification functions ──
@@ -140,6 +130,8 @@ export {
 
 // ── Alarms — ring on every device for the account, muteable from any of them ──
 export { tickAlarms } from "./alarms";
+export { familyAiChat } from "./familyAiChat";
+export { setUserRole, onUserProfileWrite } from "./userAdmin";
 
 // ── Family softphone (Twilio) ──
 export {
@@ -252,13 +244,22 @@ export {
 
 export const inviteUser = onCall(async (request) => {
 	const uid = requireAuth(request);
-	await requireSuperAdmin(uid, request.auth?.token?.email);
 
 	const firstName = String(request.data?.firstName || "").trim();
 	const surname = String(request.data?.surname || "").trim();
 	const email = String(request.data?.email || "").trim().toLowerCase();
 	const password = String(request.data?.password || "");
-	const role = (String(request.data?.role || "member") as UserRole) || "member";
+	const rawRole = String(request.data?.role || "member").toLowerCase().replace(/\s+/g, "").replace(/-/g, "");
+	if (rawRole !== "member" && rawRole !== "admin") {
+		throw new HttpsError("invalid-argument", "Role must be member or admin.");
+	}
+	const role = rawRole as UserRole;
+	// Only a true superadmin (or owner email) may invite another admin.
+	if (role === "admin") {
+		await requireTrueSuperAdmin(uid, request.auth?.token?.email);
+	} else {
+		await requireAdmin(uid, request.auth?.token?.email);
+	}
 
 	if (!firstName || !email || !password) {
 		throw new HttpsError("invalid-argument", "firstName, email, and password are required.");
@@ -296,6 +297,7 @@ export const inviteUser = onCall(async (request) => {
 	try {
 		const created = await admin.auth().createUser({ email, password, displayName });
 		await admin.firestore().doc(`users/${created.uid}`).set(profile, { merge: true });
+		await syncUserDirectory(created.uid, profile);
 		return { uid: created.uid };
 	} catch (err: any) {
 		if (err?.code === "auth/email-already-exists") {
@@ -308,6 +310,7 @@ export const inviteUser = onCall(async (request) => {
 			// and set the new temporary password so they can sign in.
 			await admin.auth().updateUser(existing.uid, { password, displayName });
 			await admin.firestore().doc(`users/${existing.uid}`).set(profile, { merge: true });
+			await syncUserDirectory(existing.uid, profile);
 			logger.info("inviteUser restored leftover auth account", { email, uid: existing.uid });
 			return { uid: existing.uid, restored: true };
 		}
@@ -427,6 +430,13 @@ export const listAppUsers = onCall(async (request) => {
 	});
 
 	users.sort((a, b) => a.name.localeCompare(b.name));
+	// Keep share-picker directory in sync whenever an admin loads the user list.
+	await Promise.all(
+		authUsers.map((record) => syncUserDirectory(record.uid, profileByUid.get(record.uid) || {
+			email: record.email || "",
+			displayName: record.displayName || "",
+		})),
+	);
 	return { users };
 });
 
@@ -437,25 +447,25 @@ export const onAuthUserCreated = functionsV1.auth.user().onCreate(async (user) =
 	if (snap.exists) return;
 	const displayName = String(user.displayName || "").trim();
 	const parts = displayName.split(/\s+/).filter(Boolean);
-	await ref.set(
-		{
-			email: user.email || "",
-			firstName: parts[0] || "",
-			surname: parts.slice(1).join(" ") || "",
-			displayName,
-			role: "member",
-			enabled: !user.disabled,
-			createdAt: FieldValue.serverTimestamp(),
-			createdBy: "auth-onCreate",
-		},
-		{ merge: true }
-	);
+	const profile = {
+		email: user.email || "",
+		firstName: parts[0] || "",
+		surname: parts.slice(1).join(" ") || "",
+		displayName,
+		role: "member",
+		enabled: !user.disabled,
+		createdAt: FieldValue.serverTimestamp(),
+		createdBy: "auth-onCreate",
+	};
+	await ref.set(profile, { merge: true });
+	await syncUserDirectory(user.uid, profile);
 	logger.info("onAuthUserCreated: profile created", { uid: user.uid, email: user.email });
 });
 
 /** Deleting an Auth account (Admin or Firebase console) also removes the Firestore profile. */
 export const onAuthUserDeleted = functionsV1.auth.user().onDelete(async (user) => {
 	await admin.firestore().doc(`users/${user.uid}`).delete().catch(() => undefined);
+	await syncUserDirectory(user.uid, undefined);
 	logger.info("onAuthUserDeleted: profile removed", { uid: user.uid, email: user.email });
 });
 

@@ -24,7 +24,18 @@ export function useNotificationPrefs() {
             email: { ...DEFAULT_NOTIF_PREFS.email, ...(data.email || {}) },
             sms: { ...DEFAULT_NOTIF_PREFS.sms, ...(data.sms || {}) },
             push: { ...DEFAULT_NOTIF_PREFS.push, ...(data.push || {}) },
-            events: { ...DEFAULT_NOTIF_PREFS.events, ...(data.events || {}) },
+            quietHours: {
+              ...DEFAULT_NOTIF_PREFS.quietHours!,
+              ...(data.quietHours || {}),
+            },
+            events: {
+              ...DEFAULT_NOTIF_PREFS.events,
+              ...(data.events || {}),
+              dailyDigest: {
+                ...DEFAULT_NOTIF_PREFS.events.dailyDigest,
+                ...(data.events?.dailyDigest || {}),
+              },
+            },
           });
         } else {
           setPrefs(DEFAULT_NOTIF_PREFS);
