@@ -1040,6 +1040,7 @@ const Settings = () => {
                 const requirement = securityDraft.moduleRequirements[module.id] || "none";
                 const isLogins = module.id === "passwords";
                 const isRemoteDisplays = module.id === "remote_displays";
+                const isFinance = module.id === "personal_finance";
                 return (
                   <label key={module.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
                     <span className="min-w-0 flex-1 truncate text-xs font-semibold">{module.label}</span>
@@ -1047,7 +1048,7 @@ const Settings = () => {
                       <span className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
                         Vault unlock
                       </span>
-                    ) : isRemoteDisplays ? (
+                    ) : isRemoteDisplays || isFinance ? (
                       <span className="rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
                         Signed in
                       </span>

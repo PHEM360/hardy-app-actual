@@ -365,7 +365,7 @@ export function ModuleSecurityGate({ children }: { children: ReactNode }) {
   const moduleId = moduleForPath(location.pathname);
   // Log Ins uses its own vault unlock. Remote Displays only needs a signed-in account.
   const requirement =
-    moduleId === "passwords" || moduleId === "remote_displays"
+    moduleId === "passwords" || moduleId === "remote_displays" || moduleId === "personal_finance"
       ? "none"
       : moduleId
         ? settings.moduleRequirements[moduleId] || "none"

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MandatoryPasskeyGate, ModuleSecurityGate, PasskeyGate } from "@/components/security/SecurityGate";
 import { DEFAULT_SECURITY_SETTINGS } from "@/types/security";
-import { markSecurityAuthentication, markSecurityAuthenticationAt } from "@/lib/securitySession";
+import { markSecurityAuthentication } from "@/lib/securitySession";
 
 let enrolled = false;
 let tokenPasskeyVerifiedAt = 0;
@@ -76,21 +76,8 @@ describe("security gates", () => {
     expect(screen.queryByText("Private app")).not.toBeInTheDocument();
   });
 
-  it("requires another passkey when opening Finance", async () => {
+  it("opens Finance after sign in without a second page passkey", async () => {
     enrolled = true;
-    render(
-      <MemoryRouter initialEntries={["/finance"]}>
-        <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Protected page" })).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Continue with passkey" })).toBeInTheDocument();
-    expect(screen.queryByText("Finance content")).not.toBeInTheDocument();
-  });
-
-  it("reuses a passkey login when opening Finance within seven days", async () => {
-    enrolled = true;
-    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 3 * 86_400;
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
@@ -98,19 +85,6 @@ describe("security gates", () => {
     );
     await waitFor(() => expect(screen.getByText("Finance content")).toBeInTheDocument());
     expect(screen.queryByRole("heading", { name: "Protected page" })).not.toBeInTheDocument();
-  });
-
-  it("asks again once the passkey period has run out", async () => {
-    enrolled = true;
-    tokenPasskeyVerifiedAt = Math.floor(Date.now() / 1000) - 8 * 86_400;
-    markSecurityAuthenticationAt("user-1", "passkey", Date.now() - 8 * 86_400 * 1000);
-    render(
-      <MemoryRouter initialEntries={["/finance"]}>
-        <ModuleSecurityGate><p>Finance content</p></ModuleSecurityGate>
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Protected page" })).toBeInTheDocument());
-    expect(screen.queryByText("Finance content")).not.toBeInTheDocument();
   });
 
   it("opens remote displays without an extra page passkey", () => {

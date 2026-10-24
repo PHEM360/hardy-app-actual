@@ -43,7 +43,7 @@ export const DEFAULT_SECURITY_SETTINGS: AppSecuritySettings = {
   appUnlockMethod: "passkey",
   appUnlockIntervalDays: 7,
   moduleRequirements: {
-    personal_finance: "passkey",
+    personal_finance: "none",
     // Log Ins uses the vault PIN / Face ID gate instead of a page passkey.
     passwords: "none",
     // Remote Displays only needs a signed-in account — no extra page passkey.
@@ -72,6 +72,8 @@ export function normalizeSecuritySettings(value?: StoredSecuritySettings | null)
       ...(value?.moduleRequirements || {}),
       // Always vault-gated — never stack a page passkey in front of Log Ins.
       passwords: "none",
+      // Finance opens after sign in. A second phone passkey was blocking the page.
+      personal_finance: "none",
       // Logged-in family members can open Remote Displays without a second check.
       remote_displays: "none",
     },

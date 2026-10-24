@@ -62,7 +62,7 @@ const Login = () => {
   const trustedDevice = trustedDeviceCanAutoUnlock(7);
 
   // Helps confirm deployments are updating. Remove anytime.
-  const BUILD_STAMP = "2026-09-12T00:00Z";
+  const BUILD_STAMP = "2026-10-22T18:00Z";
 
   useEffect(() => {
     // A device that already proved a passkey inside the trust window skips

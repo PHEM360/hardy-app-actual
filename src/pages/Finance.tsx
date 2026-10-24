@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import FeaturePageShell from "@/components/layout/FeaturePageShell";
 import {
-  Wallet, Plus, Scale, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
-  Settings2, X, CalendarRange, BarChart3, ArrowUpDown, Upload, Sparkles, StickyNote, Calculator, Brain, Landmark,
+  Wallet, Plus, Eye, EyeOff, Archive, RotateCcw, Table2, LineChart as LineChartIcon,
+  Settings2, X, CalendarRange, ArrowUpDown, Upload, Sparkles, StickyNote, Landmark,
+  ArrowLeftRight, ChevronDown, ChevronUp, CheckSquare, Square, Trash2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { deleteField } from "firebase/firestore";
@@ -17,7 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { useFinance, type Account, type AccountFee, type BalanceEntry, type FeeKind, type FundAllocation, type InterestRatePeriod } from "@/hooks/useFinance";
+import { useFinance, type Account, type AccountFee, type BalanceEntry, type FeeKind, type FinanceNote, type FinanceTodo, type FinanceTransaction, type FundAllocation, type InterestRatePeriod } from "@/hooks/useFinance";
+import { useAppUsers } from "@/hooks/useAppUsers";
 import { useSharedScope } from "@/hooks/useSharedScope";
 import { useFinanceSettings } from "@/hooks/useFinanceSettings";
 import { resolveAccountType } from "@/lib/financeAccounts";
@@ -35,6 +37,7 @@ import FinancialModellerPanel from "@/components/finance/FinancialModellerPanel"
 import {
   buildPivotTable, computeChartYDomain, formatGBP,
 } from "@/lib/financeCalculations";
+import { balanceOnOrBefore } from "@/lib/financeTransfer";
 import { totalPropertyValue, type FinanceAsset } from "@/lib/financeAssets";
 import { accountFeeTotals, buildFinanceInsights, formatPct, formatSignedGBP, type PeriodDelta } from "@/lib/financeInsights";
 import type { FinanceStatId } from "@/lib/financeDisplay";
@@ -200,23 +203,19 @@ function TileDelta({ label, delta }: { label: string; delta: PeriodDelta }) {
   );
 }
 
-type ViewMode = "chart" | "table" | "summary" | "analysis" | "modeller" | "tax" | "pension" | "platforms" | "settings";
+type ViewMode = "overview" | "history" | "spending" | "planning" | "settings";
 
 const VIEW_MODES: { id: ViewMode; label: string; Icon: typeof LineChartIcon }[] = [
-  { id: "chart", label: "Chart", Icon: LineChartIcon },
-  { id: "table", label: "Table", Icon: Table2 },
-  { id: "summary", label: "Summary", Icon: BarChart3 },
-  { id: "analysis", label: "Analysis", Icon: Brain },
-  { id: "modeller", label: "Modeller", Icon: Sparkles },
-  { id: "tax", label: "Tax", Icon: Calculator },
-  { id: "pension", label: "Pension", Icon: Landmark },
-  { id: "platforms", label: "Compare", Icon: Scale },
+  { id: "overview", label: "Overview", Icon: LineChartIcon },
+  { id: "history", label: "History", Icon: Table2 },
+  { id: "spending", label: "Spending", Icon: ArrowUpDown },
+  { id: "planning", label: "Planning", Icon: Sparkles },
   { id: "settings", label: "Settings", Icon: Settings2 },
 ];
 
 interface FinanceProps {
   /** Dev-only preview hook (see FinancePreview.tsx) — bypasses Firestore/auth entirely. */
-  mockData?: { accounts: Account[]; entries: BalanceEntry[]; assets?: FinanceAsset[] };
+  mockData?: { accounts: Account[]; entries: BalanceEntry[]; assets?: FinanceAsset[]; transactions?: FinanceTransaction[]; notes?: FinanceNote[]; todos?: FinanceTodo[] };
 }
 
 const Finance = ({ mockData }: FinanceProps = {}) => {
@@ -224,6 +223,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const isDark = useIsDarkMode();
   const palette = isDark ? ACCOUNT_COLORS_DARK : ACCOUNT_COLORS_LIGHT;
+  const appUsers = useAppUsers();
 
   const { scopeUserId, permission: scopePermission, pageTitle, isOwnScope } = useSharedScope("finance");
   const canEdit = mockData ? false : scopePermission === "edit";
@@ -232,7 +232,15 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const accounts = mockData?.accounts ?? live.accounts;
   const entries = mockData?.entries ?? live.entries;
   const assets = mockData?.assets ?? live.assets;
-  const { loading, addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries, addAsset, updateAsset, deleteAsset } = live;
+  const transactions = mockData?.transactions ?? live.transactions;
+  const notes = mockData?.notes ?? live.notes;
+  const todos = mockData?.todos ?? live.todos;
+  const {
+    loading, addAccount, updateAccount, transferAndCloseAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries,
+    addFinanceNote, deleteFinanceNote,
+    addFinanceTodo, updateFinanceTodo, deleteFinanceTodo,
+    addAsset, updateAsset, deleteAsset,
+  } = live;
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   // Keep selectedAccounts in sync when accounts load
   useMemo(() => {
@@ -241,7 +249,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
     }
   }, [accounts.length]);
   const [timePeriod, setTimePeriod] = useState(0);
-  const [viewMode, setViewMode] = useState<ViewMode>("chart");
+  const [viewMode, setViewMode] = useState<ViewMode>("overview");
   const [showHidden, setShowHidden] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [addBalanceOpen, setAddBalanceOpen] = useState(false);
@@ -257,6 +265,10 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [newBalanceAmount, setNewBalanceAmount] = useState("");
   const [newBalanceDate, setNewBalanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [newBalanceNote, setNewBalanceNote] = useState("");
+  const [notesOpen, setNotesOpen] = useState(true);
+  const [newGeneralNote, setNewGeneralNote] = useState("");
+  const [newTodoTitle, setNewTodoTitle] = useState("");
+  const [newTodoAssignee, setNewTodoAssignee] = useState("unassigned");
   const [noteEditor, setNoteEditor] = useState<{ entryId: string; accountName: string; date: string; note: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showTaxYears, setShowTaxYears] = useState(true);
@@ -276,6 +288,15 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
   const [assumptionInterestRates, setAssumptionInterestRates] = useState<InterestRatePeriod[]>([]);
   const [assumptionOpenedOn, setAssumptionOpenedOn] = useState("");
   const [assumptionAllocations, setAssumptionAllocations] = useState<FundAllocation[]>([]);
+  const [closeTransferId, setCloseTransferId] = useState<string | null>(null);
+  const [transferDestMode, setTransferDestMode] = useState<"existing" | "new">("existing");
+  const [transferToId, setTransferToId] = useState("");
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0]);
+  const [transferNewName, setTransferNewName] = useState("");
+  const [transferNewType, setTransferNewType] = useState("Savings");
+  const [transferNewCustomType, setTransferNewCustomType] = useState("");
+  const [transferNewOpenedOn, setTransferNewOpenedOn] = useState("");
+  const [transferBusy, setTransferBusy] = useState(false);
 
   useEffect(() => {
     const bank = searchParams.get("bank");
@@ -432,6 +453,26 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
     [insights]
   );
 
+  const spending = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const allowedAccounts = new Set(visibleAccounts.map((account) => account.id));
+    const recent = transactions.filter((tx) => allowedAccounts.has(tx.accountId) && new Date(tx.date) >= cutoff);
+    const expenses = recent.filter((tx) => tx.amount < 0);
+    const income = recent.filter((tx) => tx.amount > 0);
+    const spendTotal = expenses.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    const incomeTotal = income.reduce((sum, tx) => sum + tx.amount, 0);
+    const byCategory = Object.values(expenses.reduce<Record<string, { category: string; amount: number; count: number }>>((acc, tx) => {
+      const category = tx.category || "Spending";
+      acc[category] = acc[category] ?? { category, amount: 0, count: 0 };
+      acc[category].amount += Math.abs(tx.amount);
+      acc[category].count += 1;
+      return acc;
+    }, {})).sort((a, b) => b.amount - a.amount);
+    const largest = [...expenses].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 8);
+    return { recent, expenses, spendTotal, incomeTotal, byCategory, largest };
+  }, [transactions, visibleAccounts]);
+
   const pivot = useMemo(() => buildPivotTable(entries), [entries]);
   const sortedPivotDates = useMemo(
     () => (tableSortDesc ? [...pivot.dates].reverse() : pivot.dates),
@@ -476,13 +517,101 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
     setNoteEditor(null);
   };
 
+  const saveGeneralNote = async () => {
+    const text = newGeneralNote.trim();
+    if (!text) return;
+    await addFinanceNote(text);
+    setNewGeneralNote("");
+    setNotesOpen(true);
+  };
+
+  const saveFinanceTodo = async () => {
+    const title = newTodoTitle.trim();
+    if (!title) return;
+    const assignee = appUsers.find((user) => user.id === newTodoAssignee);
+    await addFinanceTodo({
+      title,
+      assigneeUid: assignee?.id,
+      assigneeName: assignee?.name,
+    });
+    setNewTodoTitle("");
+    setNewTodoAssignee("unassigned");
+    setNotesOpen(true);
+  };
+
   const toggleHide = (id: string) => {
     const acc = accounts.find((a) => a.id === id);
     if (acc) updateAccount(id, { hidden: !acc.hidden });
   };
-  const toggleActive = (id: string) => {
-    const acc = accounts.find((a) => a.id === id);
-    if (acc) updateAccount(id, { active: !acc.active });
+  const beginCloseAccount = (id: string) => {
+    const acc = accounts.find((account) => account.id === id);
+    if (!acc) return;
+    if (!acc.active) {
+      if (mockData) return;
+      updateAccount(id, { active: true, closedOn: deleteField() } as Partial<Account>);
+      return;
+    }
+    const latest = latestBalances.find((account) => account.id === id)?.latestBalance ?? 0;
+    if (latest === 0) {
+      if (mockData) {
+        toast.info("Preview only. Transfer is not saved.");
+        setManageAccountId(null);
+        return;
+      }
+      updateAccount(id, { active: false, closedOn: new Date().toISOString().split("T")[0] });
+      setManageAccountId(null);
+      toast.success("Account closed");
+      return;
+    }
+    const firstOther = accounts.find((account) => account.id !== id && account.active);
+    setManageAccountId(null);
+    setTransferDestMode(firstOther ? "existing" : "new");
+    setTransferToId(firstOther?.id ?? "");
+    setTransferDate(new Date().toISOString().split("T")[0]);
+    setTransferNewName("");
+    setTransferNewType(accountTypes.includes(acc.type) || acc.type === "Other" ? acc.type : "Other");
+    setTransferNewCustomType(accountTypes.includes(acc.type) || acc.type === "Other" ? "" : acc.type);
+    setTransferNewOpenedOn(new Date().toISOString().split("T")[0]);
+    setCloseTransferId(id);
+  };
+
+  const handleCloseAndTransfer = async () => {
+    if (!closeTransferId) return;
+    if (transferDestMode === "existing" && !transferToId) {
+      toast.error("Choose the account that should receive the money.");
+      return;
+    }
+    if (transferDestMode === "new" && !transferNewName.trim()) {
+      toast.error("Name the new account first.");
+      return;
+    }
+    if (mockData) {
+      toast.info("Preview only. Transfer is not saved.");
+      setCloseTransferId(null);
+      return;
+    }
+    setTransferBusy(true);
+    try {
+      const type = resolveAccountType(transferNewType, transferNewCustomType);
+      const result = await transferAndCloseAccount({
+        fromId: closeTransferId,
+        toId: transferDestMode === "existing" ? transferToId : undefined,
+        newAccount: transferDestMode === "new"
+          ? { name: transferNewName, type, openedOn: transferNewOpenedOn }
+          : undefined,
+        date: transferDate,
+      });
+      if (transferDestMode === "new") await ensureType(type);
+      if (result?.toId) {
+        setSelectedAccounts((prev) => (prev.includes(result.toId) ? prev : [...prev, result.toId]));
+      }
+      toast.success("Account closed and funds transferred");
+      setCloseTransferId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not transfer the account.");
+    } finally {
+      setTransferBusy(false);
+    }
   };
   const renameAccount = (id: string) => {
     if (!renameValue.trim()) return;
@@ -537,6 +666,10 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
 
   const managingAccount = manageAccountId ? accounts.find(a => a.id === manageAccountId) : null;
   const managingEntries = manageAccountId ? entries.filter(e => e.accountId === manageAccountId).sort((a, b) => b.date.localeCompare(a.date)) : [];
+  const closingAccount = closeTransferId ? latestBalances.find((account) => account.id === closeTransferId) : null;
+  const closingTransferAmount = closeTransferId ? balanceOnOrBefore(closeTransferId, entries, transferDate) : 0;
+  const transferDestinations = accounts.filter((account) => account.id !== closeTransferId && account.active);
+  const transferReady = transferDestMode === "existing" ? Boolean(transferToId) : Boolean(transferNewName.trim());
 
   if (loading && !mockData) {
     return (
@@ -690,6 +823,11 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                         Linked
                       </span>
                     )}
+                    {!acc.active && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: "#7A2E2A" }}>
+                        Closed
+                      </span>
+                    )}
                   </div>
                   <p className="text-base font-bold font-display text-foreground">
                     {formatGBP(acc.latestBalance)}
@@ -698,6 +836,11 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   {(acc.openedOn || insight?.openedOn) && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
                       Opened {new Date(acc.openedOn || insight.openedOn!).toLocaleDateString("en-GB")}
+                    </p>
+                  )}
+                  {acc.closedOn && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Closed {new Date(acc.closedOn).toLocaleDateString("en-GB")}
                     </p>
                   )}
                   {insight?.currentRate && (
@@ -754,6 +897,120 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         onDelete={deleteAsset}
       />
 
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-card">
+        <button
+          type="button"
+          onClick={() => setNotesOpen((open) => !open)}
+          className="band flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-white"
+          style={{ background: "#1F4D3A" }}
+        >
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/75">Notes and jobs</p>
+            <h3 className="font-display text-lg font-bold">Finance notebook</h3>
+          </div>
+          {notesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        {notesOpen && (
+          <div className="grid gap-4 p-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-foreground/70">General notes</p>
+                <p className="text-xs text-foreground/60">{notes.length} saved</p>
+              </div>
+              {canEdit && (
+                <div className="space-y-2 rounded-xl border border-foreground/20 bg-background p-3">
+                  <Textarea
+                    value={newGeneralNote}
+                    onChange={(event) => setNewGeneralNote(event.target.value)}
+                    placeholder="Add a general finance note"
+                    className="min-h-[86px] rounded-lg"
+                  />
+                  <Button onClick={() => void saveGeneralNote()} disabled={!newGeneralNote.trim()}>
+                    <StickyNote />
+                    Save note
+                  </Button>
+                </div>
+              )}
+              <div className="space-y-2">
+                {notes.length === 0 ? (
+                  <p className="rounded-xl border border-foreground/20 bg-background p-3 text-sm text-foreground/75">No finance notes yet.</p>
+                ) : notes.map((note) => (
+                  <div key={note.id} className="rounded-xl border border-foreground/20 bg-background p-3 shadow-card">
+                    <p className="whitespace-pre-wrap text-sm text-foreground">{note.text}</p>
+                    {canEdit && (
+                      <div className="mt-2 flex justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => void deleteFinanceNote(note.id)}>
+                          <Trash2 />
+                          Delete
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-foreground/70">Finance to do</p>
+                <p className="text-xs text-foreground/60">{todos.filter((todo) => !todo.done).length} open</p>
+              </div>
+              {canEdit && (
+                <div className="space-y-2 rounded-xl border border-foreground/20 bg-background p-3">
+                  <Input
+                    value={newTodoTitle}
+                    onChange={(event) => setNewTodoTitle(event.target.value)}
+                    placeholder="e.g. Chase Santander transfer"
+                    className="h-11 rounded-lg"
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Select value={newTodoAssignee} onValueChange={setNewTodoAssignee}>
+                      <SelectTrigger className="h-11 rounded-lg">
+                        <SelectValue placeholder="Assign to" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {appUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={() => void saveFinanceTodo()} disabled={!newTodoTitle.trim()} className="h-11">
+                      <Plus />
+                      Add task
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                {todos.length === 0 ? (
+                  <p className="rounded-xl border border-foreground/20 bg-background p-3 text-sm text-foreground/75">No finance tasks yet.</p>
+                ) : todos.map((todo) => (
+                  <div key={todo.id} className="flex items-start gap-2 rounded-xl border border-foreground/20 bg-background p-3 shadow-card">
+                    {canEdit ? (
+                      <button type="button" onClick={() => void updateFinanceTodo(todo.id, { done: !todo.done })} className="mt-0.5 text-primary">
+                        {todo.done ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    ) : (
+                      <span className="mt-0.5 text-primary">{todo.done ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}</span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-bold ${todo.done ? "text-foreground/55 line-through" : "text-foreground"}`}>{todo.title}</p>
+                      <p className="text-[11px] text-foreground/60">{todo.assigneeName || "Unassigned"}</p>
+                    </div>
+                    {canEdit && (
+                      <Button variant="ghost" size="sm" onClick={() => void deleteFinanceTodo(todo.id)}>
+                        <Trash2 />
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </motion.div>
+
       {/* Controls Row */}
       <div
         className="mb-5 flex flex-wrap items-center gap-2 rounded-3xl border-2 border-primary/25 p-2.5 shadow-card"
@@ -780,7 +1037,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
           ))}
         </div>
 
-        {viewMode === "chart" && (
+        {viewMode === "overview" && (
           <>
             <Select value={String(timePeriod)} onValueChange={(v) => setTimePeriod(Number(v))}>
               <SelectTrigger className="h-9 rounded-xl text-xs w-28 bg-card border-2">
@@ -807,12 +1064,6 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
               Projection
             </button>
           </>
-        )}
-        {viewMode !== "analysis" && (
-          <button onClick={() => setViewMode("analysis")} className={pillClass(false)}>
-            <Brain className="w-3.5 h-3.5" />
-            Analysis
-          </button>
         )}
 
         <div className="flex-1" />
@@ -876,7 +1127,7 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
       </div>
 
       {/* Chart View */}
-      {viewMode === "chart" && (
+      {viewMode === "overview" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-card">
           <div
             className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5"
@@ -1070,8 +1321,21 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </motion.div>
       )}
 
+      {viewMode === "overview" && (
+        <div className="space-y-5">
+          <FinanceSummary
+            accounts={visibleAccounts}
+            entries={entries}
+            taxYears={TAX_YEARS}
+            colorFor={colorFor}
+            show={showStat}
+          />
+          <FinanceAnalysisPanel accounts={visibleAccounts} />
+        </div>
+      )}
+
       {/* Table View — spreadsheet-style pivot: dates down, accounts across */}
-      {viewMode === "table" && (
+      {viewMode === "history" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl bg-card border-2 border-border shadow-card mb-5 overflow-hidden">
           <div className="p-3 border-b border-border flex items-center justify-between bg-muted/40">
             <p className="text-xs text-muted-foreground">{sortedPivotDates.length} logged date{sortedPivotDates.length === 1 ? "" : "s"}</p>
@@ -1160,38 +1424,100 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
         </motion.div>
       )}
 
-      {viewMode === "summary" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <FinanceSummary
-            accounts={visibleAccounts}
-            entries={entries}
-            taxYears={TAX_YEARS}
-            colorFor={colorFor}
-            show={showStat}
-          />
+      {viewMode === "spending" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-card">
+          <div className="band flex flex-wrap items-end justify-between gap-3 px-4 py-4 text-white" style={{ background: "#17475C" }}>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/75">Bank transaction view</p>
+              <h3 className="font-display text-2xl font-bold">Spending breakdown</h3>
+              <p className="mt-1 text-xs text-white/80">Last 90 days from imported TrueLayer transactions.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-white/35 bg-white/15 px-3 py-2">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/70">Spent</p>
+                <p className="font-display text-xl font-bold">{formatGBP(spending.spendTotal)}</p>
+              </div>
+              <div className="rounded-xl border border-white/35 bg-white/15 px-3 py-2">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/70">Income</p>
+                <p className="font-display text-xl font-bold">{formatGBP(spending.incomeTotal)}</p>
+              </div>
+            </div>
+          </div>
+          {spending.recent.length === 0 ? (
+            <div className="p-5">
+              <div className="rounded-xl border border-foreground/20 bg-background p-4 shadow-card">
+                <p className="font-display text-lg font-bold text-foreground">No transaction data yet</p>
+                <p className="mt-1 text-sm text-foreground/80">
+                  Balance tracking, returns, transfers and graph notes still work. To see spending categories, connect a bank in Settings and import history.
+                </p>
+                {canEdit && (
+                  <Button className="mt-4" onClick={() => setViewMode("settings")}>
+                    <Landmark />
+                    Open bank settings
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+              <div className="rounded-xl border border-foreground/20 bg-background p-3 shadow-card">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-foreground/70">By category</p>
+                  <p className="text-xs text-foreground/70">{spending.expenses.length} payments</p>
+                </div>
+                <div className="space-y-2">
+                  {spending.byCategory.map((row, index) => {
+                    const pct = spending.spendTotal > 0 ? (row.amount / spending.spendTotal) * 100 : 0;
+                    const color = ACCOUNT_COLORS_LIGHT[index % ACCOUNT_COLORS_LIGHT.length];
+                    return (
+                      <div key={row.category} className="rounded-lg border border-foreground/15 bg-card p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-foreground">{row.category}</p>
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-foreground/60">
+                              {row.count} {row.count === 1 ? "transaction" : "transactions"}
+                            </p>
+                          </div>
+                          <p className="font-display text-lg font-bold text-foreground">{formatGBP(row.amount)}</p>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-foreground/10">
+                          <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="rounded-xl border border-foreground/20 bg-background p-3 shadow-card">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-foreground/70">Largest payments</p>
+                <div className="space-y-2">
+                  {spending.largest.map((tx) => {
+                    const account = accounts.find((item) => item.id === tx.accountId);
+                    return (
+                      <div key={tx.id} className="rounded-lg border border-foreground/15 bg-card p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-foreground">{tx.merchantName || tx.description}</p>
+                            <p className="text-[11px] text-foreground/65">
+                              {new Date(tx.date).toLocaleDateString("en-GB")} · {account?.name || "Account"}
+                            </p>
+                          </div>
+                          <p className="font-display text-base font-bold text-rose-700 dark:text-rose-400">{formatGBP(Math.abs(tx.amount))}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
 
-      {viewMode === "analysis" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-          <FinanceAnalysisPanel accounts={visibleAccounts} />
-        </motion.div>
-      )}
-
-      {viewMode === "modeller" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
+      {viewMode === "planning" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 space-y-5">
           <FinancialModellerPanel accounts={visibleAccounts} entries={entries} scopeUserId={scopeUserId ?? undefined} canEdit={canEdit} />
-        </motion.div>
-      )}
-
-      {viewMode === "tax" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <FinanceTaxPanel />
-        </motion.div>
-      )}
-
-      {viewMode === "pension" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <PensionModellerPanel
             accounts={accounts}
             entries={entries}
@@ -1199,11 +1525,6 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
             canEdit={canEdit}
             onSave={savePensionModel}
           />
-        </motion.div>
-      )}
-
-      {viewMode === "platforms" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <PlatformComparisonPanel doc={platformComparison} canEdit={canEdit} onSave={savePlatformComparison} />
         </motion.div>
       )}
@@ -1279,16 +1600,20 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                 </Button>
               )}
               {/* Status actions */}
-              <div className="flex gap-2">
-                <Button onClick={() => { toggleActive(manageAccountId!); }} variant="outline" size="sm" className="flex-1 h-9 rounded-lg gap-1.5 text-xs">
-                  {managingAccount.active ? <Archive className="w-3.5 h-3.5" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                  {managingAccount.active ? "Close Account" : "Reopen Account"}
-                </Button>
-                <Button onClick={() => { toggleHide(manageAccountId!); }} variant="outline" size="sm" className="flex-1 h-9 rounded-lg gap-1.5 text-xs">
-                  {managingAccount.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  {managingAccount.hidden ? "Show" : "Hide"}
-                </Button>
-              </div>
+              {(canEdit || mockData) && (
+                <div className="flex gap-2">
+                  <Button onClick={() => { beginCloseAccount(manageAccountId!); }} variant="outline" size="sm" className="flex-1 h-9 rounded-lg gap-1.5 text-xs">
+                    {managingAccount.active ? <Archive className="w-3.5 h-3.5" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                    {managingAccount.active ? "Close and transfer" : "Reopen Account"}
+                  </Button>
+                  {canEdit && (
+                    <Button onClick={() => { toggleHide(manageAccountId!); }} variant="outline" size="sm" className="flex-1 h-9 rounded-lg gap-1.5 text-xs">
+                      {managingAccount.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      {managingAccount.hidden ? "Show" : "Hide"}
+                    </Button>
+                  )}
+                </div>
+              )}
               {/* Projection assumptions (used by the "Custom" scenario) */}
               <div className="space-y-2 p-3 rounded-xl bg-muted/50 border border-border">
                 <div className="flex items-center gap-1.5">
@@ -1374,6 +1699,102 @@ const Finance = ({ mockData }: FinanceProps = {}) => {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!closeTransferId} onOpenChange={(open) => !open && !transferBusy && setCloseTransferId(null)}>
+        <DialogContent aria-describedby={undefined} className="max-w-md mx-4 max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4" />
+              Close and transfer
+            </DialogTitle>
+          </DialogHeader>
+          {closingAccount && (
+            <div className="space-y-4 pt-1">
+              <div className="rounded-xl overflow-hidden border border-foreground/20 shadow-card">
+                <div className="band px-3 py-2 text-white" style={{ background: "#7A2E2A" }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Moving from {closingAccount.name}</p>
+                </div>
+                <div className="p-3" style={{ background: "#7A2E2A" }}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">Amount on transfer date</p>
+                  <p className="font-display text-3xl text-white">{formatGBP(closingTransferAmount)}</p>
+                  <p className="mt-1 text-xs text-white/85">
+                    The old account will show £0.00 after this and stay on the graph with a transfer note.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.12em]">Send the money to</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" className={pillClass(transferDestMode === "existing")} onClick={() => setTransferDestMode("existing")}>
+                    Existing account
+                  </button>
+                  <button type="button" className={pillClass(transferDestMode === "new")} onClick={() => setTransferDestMode("new")}>
+                    New account
+                  </button>
+                </div>
+              </div>
+
+              {transferDestMode === "existing" ? (
+                <div className="space-y-2">
+                  <Label className="text-xs">Destination</Label>
+                  {transferDestinations.length === 0 ? (
+                    <p className="text-sm text-foreground">There is no other open account yet. Add a new one.</p>
+                  ) : (
+                    <Select value={transferToId} onValueChange={setTransferToId}>
+                      <SelectTrigger className="h-11 rounded-lg">
+                        <SelectValue placeholder="Choose an account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transferDestinations.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Account name</Label>
+                    <Input
+                      placeholder="e.g. Vanguard ISA"
+                      value={transferNewName}
+                      onChange={(e) => setTransferNewName(e.target.value)}
+                      className="h-11 rounded-lg"
+                    />
+                  </div>
+                  <AccountTypeFields
+                    types={accountTypes}
+                    value={transferNewType}
+                    onChange={setTransferNewType}
+                    customValue={transferNewCustomType}
+                    onCustomChange={setTransferNewCustomType}
+                  />
+                  <div className="space-y-2">
+                    <Label>Date opened</Label>
+                    <Input type="date" value={transferNewOpenedOn} onChange={(e) => setTransferNewOpenedOn(e.target.value)} className="h-11 rounded-lg" />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Transfer date</Label>
+                <Input type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} className="h-11 rounded-lg" />
+              </div>
+
+              <Button
+                className="w-full"
+                disabled={transferBusy || !transferReady}
+                onClick={() => void handleCloseAndTransfer()}
+              >
+                <ArrowLeftRight />
+                {transferBusy ? "Transferring…" : "Close and transfer"}
+              </Button>
             </div>
           )}
         </DialogContent>

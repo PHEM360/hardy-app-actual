@@ -78,7 +78,7 @@ service cloud.firestore {
     }
 
     function defaultModuleRequirement(moduleId) {
-      return moduleId == "personal_finance" || moduleId == "passwords" ? "passkey" : "none";
+      return moduleId == "passwords" ? "passkey" : "none";
     }
 
     function moduleRequirement(moduleId) {
@@ -125,7 +125,7 @@ service cloud.firestore {
       // device biometrics. Requiring a separate page passkey caused a double
       // prompt and blocked PIN-only unlock from reading ciphertext.
       let requirement = moduleRequirement(moduleId);
-      return moduleId == "passwords"
+      return moduleId == "passwords" || moduleId == "personal_finance"
         ? isAuthenticated()
         : (
           requirement == "none" ||
@@ -492,6 +492,21 @@ service cloud.firestore {
     }
 
     match /finance/{userId}/entries/{entryId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
+    match /finance/{userId}/transactions/{transactionId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
+    match /finance/{userId}/notes/{noteId} {
+      allow read: if canViewPage(userId, "finance");
+      allow write: if canEditPage(userId, "finance");
+    }
+
+    match /finance/{userId}/todos/{todoId} {
       allow read: if canViewPage(userId, "finance");
       allow write: if canEditPage(userId, "finance");
     }

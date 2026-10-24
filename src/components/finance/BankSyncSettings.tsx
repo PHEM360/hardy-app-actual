@@ -82,7 +82,7 @@ function reportImport(result: BankSyncResult, options: BankHistoryOptions) {
     return;
   }
   const noun = FREQUENCY_CHOICES.find((f) => f.id === options.frequency)?.noun ?? options.frequency;
-  toast.success(`Brought in ${result.points} ${noun} balances back to ${formatDay(result.earliest)}.`);
+  toast.success(`Brought in ${result.points} ${noun} balances and spending data back to ${formatDay(result.earliest)}.`);
   const wanted = new Date();
   wanted.setMonth(wanted.getMonth() - options.months);
   const gapDays = (new Date(`${result.earliest}T00:00:00Z`).getTime() - wanted.getTime()) / 86_400_000;
@@ -195,7 +195,7 @@ export default function BankSyncSettings({
         {canEdit && connections.length > 0 && (
           <div className="space-y-3 rounded-lg border border-foreground/20 bg-background p-3">
             <div>
-              <p className="font-display text-sm font-bold text-foreground">Past balances to bring in</p>
+              <p className="font-display text-sm font-bold text-foreground">Past balances and spending to bring in</p>
               <p className="text-xs text-foreground/80">{historySummary} This is used when you attach an account and when you tap Import history.</p>
             </div>
             <div className="space-y-1.5">

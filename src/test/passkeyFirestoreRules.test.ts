@@ -46,6 +46,9 @@ describe("passkey Firestore enforcement", () => {
         setDoc(doc(admin.firestore(), "finance", "owner", "accounts", "main"), {
           name: "Current account",
         }),
+        setDoc(doc(admin.firestore(), "healthProfile", "owner"), {
+          ownerId: "owner",
+        }),
         setDoc(doc(admin.firestore(), "users", "owner", "credentials", "tesco"), {
           ownerId: "owner",
           encrypted: true,
@@ -71,29 +74,10 @@ describe("passkey Firestore enforcement", () => {
     await assertFails(getDoc(doc(db, "finance", "owner", "accounts", "main")));
   });
 
-  it("requires a recent passkey for Finance and Passwords by default", async () => {
-    const withoutStepUp = context("owner");
-    await assertFails(getDoc(doc(withoutStepUp, "finance", "owner", "accounts", "main")));
-    await assertFails(getDoc(doc(withoutStepUp, "users", "owner", "credentials", "tesco")));
-
-    const recentPasskey = context("owner", {
-      passkeyVerifiedAt: Math.floor(Date.now() / 1000),
-      authMethod: "passkey",
-    });
-    await assertSucceeds(getDoc(doc(recentPasskey, "finance", "owner", "accounts", "main")));
-    await assertSucceeds(getDoc(doc(recentPasskey, "users", "owner", "credentials", "tesco")));
-
-    const sixDayOldPasskey = context("owner", {
-      passkeyVerifiedAt: Math.floor((Date.now() - 6 * 24 * 60 * 60 * 1000) / 1000),
-      authMethod: "passkey",
-    });
-    await assertSucceeds(getDoc(doc(sixDayOldPasskey, "finance", "owner", "accounts", "main")));
-
-    const eightDayOldPasskey = context("owner", {
-      passkeyVerifiedAt: Math.floor((Date.now() - 8 * 24 * 60 * 60 * 1000) / 1000),
-      authMethod: "passkey",
-    });
-    await assertFails(getDoc(doc(eightDayOldPasskey, "finance", "owner", "accounts", "main")));
+  it("opens Finance after sign in and still allows the password vault for the owner", async () => {
+    const signedIn = context("owner");
+    await assertSucceeds(getDoc(doc(signedIn, "finance", "owner", "accounts", "main")));
+    await assertSucceeds(getDoc(doc(signedIn, "users", "owner", "credentials", "tesco")));
   });
 
   it("honours a user's no-extra-security choice", async () => {
@@ -111,13 +95,13 @@ describe("passkey Firestore enforcement", () => {
     await environment.withSecurityRulesDisabled(async (admin) => {
       await setDoc(doc(admin.firestore(), "users", "owner", "security", "settings"), {
         appUnlockIntervalDays: 1,
-        moduleRequirements: { personal_finance: "passkey" },
+        moduleRequirements: { health: "passkey" },
       });
     });
     const twoDayOldPasskey = context("owner", {
       passkeyVerifiedAt: Math.floor((Date.now() - 2 * 24 * 60 * 60 * 1000) / 1000),
     });
-    await assertFails(getDoc(doc(twoDayOldPasskey, "finance", "owner", "accounts", "main")));
+    await assertFails(getDoc(doc(twoDayOldPasskey, "healthProfile", "owner")));
   });
 
   it("migrates the old monthly default to seven days", async () => {
@@ -125,13 +109,13 @@ describe("passkey Firestore enforcement", () => {
       await setDoc(doc(admin.firestore(), "users", "owner", "security", "settings"), {
         version: 1,
         appUnlockIntervalDays: 30,
-        moduleRequirements: { personal_finance: "passkey" },
+        moduleRequirements: { health: "passkey" },
       });
     });
     const eightDayOldPasskey = context("owner", {
       passkeyVerifiedAt: Math.floor((Date.now() - 8 * 24 * 60 * 60 * 1000) / 1000),
     });
-    await assertFails(getDoc(doc(eightDayOldPasskey, "finance", "owner", "accounts", "main")));
+    await assertFails(getDoc(doc(eightDayOldPasskey, "healthProfile", "owner")));
   });
 
   it("requires a recent passkey before security settings can be weakened", async () => {

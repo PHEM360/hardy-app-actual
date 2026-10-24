@@ -30,6 +30,9 @@ type TlTx = {
   timestamp: string;
   amount?: number;
   description?: string;
+  merchant_name?: string;
+  transaction_category?: string;
+  transaction_classification?: string[];
   running_balance?: { amount?: number };
 };
 
@@ -249,6 +252,20 @@ function txDay(timestamp: string) {
   return String(timestamp || "").slice(0, 10);
 }
 
+function safeDocId(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120);
+}
+
+function transactionCategory(tx: TlTx) {
+  const direct = String(tx.transaction_category || "").trim();
+  if (direct) return direct;
+  const classified = Array.isArray(tx.transaction_classification)
+    ? tx.transaction_classification.filter(Boolean).pop()
+    : "";
+  if (classified) return String(classified);
+  return Number(tx.amount || 0) < 0 ? "Spending" : "Income";
+}
+
 async function fetchTransactions(
   accountId: string,
   access: string,
@@ -388,6 +405,37 @@ async function writeBalances(
   }
 }
 
+async function writeTransactions(
+  uid: string,
+  rows: { financeAccountId: string; tx: TlTx }[]
+) {
+  for (let i = 0; i < rows.length; i += 400) {
+    const batch = db().batch();
+    for (const row of rows.slice(i, i + 400)) {
+      const id = row.tx.transaction_id || `${row.tx.timestamp}_${row.tx.amount}_${row.tx.description || ""}`;
+      const amount = Number(row.tx.amount);
+      if (!Number.isFinite(amount)) continue;
+      batch.set(
+        db().doc(`finance/${uid}/transactions/bank_${row.financeAccountId}_${safeDocId(id)}`),
+        {
+          accountId: row.financeAccountId,
+          bankTransactionId: id,
+          date: txDay(row.tx.timestamp),
+          amount: roundGbp(amount),
+          description: String(row.tx.description || row.tx.merchant_name || "Bank transaction"),
+          merchantName: row.tx.merchant_name || admin.firestore.FieldValue.delete(),
+          category: transactionCategory(row.tx),
+          source: "truelayer",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+    await batch.commit();
+  }
+}
+
 async function writeHouseholdBalances(
   householdId: string,
   rows: { financeAccountId: string; amount: number; date: string }[]
@@ -423,6 +471,7 @@ async function syncConnection(
   const householdMappings = (conn.data()?.householdMappings || {}) as HouseholdMappings;
   const today = isoDateUtc(new Date());
   const amountByBank = new Map<string, number>();
+  const transactionsByBank = new Map<string, TlTx[]>();
   const historyByBank = new Map<string, { date: string; amount: number }[]>();
   let updated = 0;
   let points = 0;
@@ -444,6 +493,14 @@ async function syncConnection(
     return rounded;
   };
 
+  const readTransactions = async (bankAccountId: string, fromDay: string) => {
+    const cached = transactionsByBank.get(bankAccountId);
+    if (cached) return cached;
+    const txs = await fetchTransactions(bankAccountId, access, today, fromDay, env, opts.extraHeaders);
+    transactionsByBank.set(bankAccountId, txs);
+    return txs;
+  };
+
   // Worked out once per bank account, then written to every page it feeds.
   const readHistory = async (bankAccountId: string, current: number) => {
     const options = opts.history;
@@ -451,7 +508,7 @@ async function syncConnection(
     const cached = historyByBank.get(bankAccountId);
     if (cached) return cached;
     const fromDay = monthsBefore(today, options.months);
-    const txs = await fetchTransactions(bankAccountId, access, today, fromDay, env, opts.extraHeaders);
+    const txs = await readTransactions(bankAccountId, fromDay);
     const history = historyBalances({ today, current, txs, options });
     historyByBank.set(bankAccountId, history);
     points += history.length;
@@ -478,16 +535,24 @@ async function syncConnection(
   });
 
   const rows: { financeAccountId: string; amount: number; date: string }[] = [];
+  const txRows: { financeAccountId: string; tx: TlTx }[] = [];
   for (const account of accounts) {
     const financeId = mappings[account.id];
     if (!financeId) continue;
     const accountRows = await rowsFor(account.id, financeId);
     if (!accountRows) continue;
     rows.push(...accountRows);
+    const options = opts.history;
+    if (options) {
+      const fromDay = monthsBefore(today, options.months);
+      const txs = await readTransactions(account.id, fromDay);
+      txRows.push(...txs.map((tx) => ({ financeAccountId: financeId, tx })));
+    }
     updated += 1;
     await db().doc(`finance/${uid}/accounts/${financeId}`).set(linkStamp(account.id), { merge: true });
   }
   await writeBalances(uid, rows);
+  await writeTransactions(uid, txRows);
 
   for (const [householdId, map] of Object.entries(householdMappings)) {
     const hhRows: { financeAccountId: string; amount: number; date: string }[] = [];

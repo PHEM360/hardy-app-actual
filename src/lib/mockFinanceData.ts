@@ -1,11 +1,11 @@
-import type { Account, BalanceEntry, FinanceAsset } from "@/hooks/useFinance";
+import type { Account, BalanceEntry, FinanceAsset, FinanceNote, FinanceTodo, FinanceTransaction } from "@/hooks/useFinance";
 
 /**
  * Dev-only synthetic data for previewing the Finance page UI without Firestore
  * or auth. Only ever imported by FinancePreview.tsx, which is only routed to
  * behind `import.meta.env.DEV`.
  */
-export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceEntry[]; assets: FinanceAsset[] } {
+export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceEntry[]; assets: FinanceAsset[]; transactions: FinanceTransaction[]; notes: FinanceNote[]; todos: FinanceTodo[] } {
   const accounts: Account[] = [
     { id: "acc-current", name: "Joint Current Account", type: "Current", active: true, hidden: false, openedOn: "2021-03-12" },
     { id: "acc-isa", name: "Stocks & Shares ISA", type: "ISA", active: true, hidden: false, openedOn: "2020-05-18", growthAssumptionPct: 6, feePct: 0.25, ocfPct: 0.2, adviceFeeKind: "percent", adviceFeeAmount: 0.5, allocations: [
@@ -26,7 +26,7 @@ export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceE
       { id: "pen-bd", name: "Bonds", pct: 20, assetClass: "bond" },
       { id: "pen-cash", name: "Cash", pct: 10, assetClass: "cash" },
     ] },
-    { id: "acc-old-isa", name: "Cash ISA (closed)", type: "ISA", active: false, hidden: false, openedOn: "2016-04-06" },
+    { id: "acc-old-isa", name: "Cash ISA (closed)", type: "ISA", active: false, hidden: false, openedOn: "2016-04-06", closedOn: "2023-11-01" },
   ];
 
   const assets = [
@@ -87,5 +87,33 @@ export function buildMockFinanceData(): { accounts: Account[]; entries: BalanceE
     }
   }
 
-  return { accounts, entries, assets };
+  const lastClosed = [...entries].reverse().find((entry) => entry.accountId === "acc-old-isa");
+  if (lastClosed) {
+    lastClosed.balance = 0;
+    lastClosed.note = "Closed. Transferred £5,200.00 to Easy Access Savings.";
+    const dest = entries.find((entry) => entry.accountId === "acc-savings" && entry.date === lastClosed.date);
+    if (dest) dest.note = "Received £5,200.00 from Cash ISA (closed).";
+  }
+
+  const transactions: FinanceTransaction[] = [
+    { id: "tx-1", accountId: "acc-current", date: "2026-10-20", amount: -86.45, description: "Waitrose", merchantName: "Waitrose", category: "Groceries", source: "truelayer" },
+    { id: "tx-2", accountId: "acc-current", date: "2026-10-18", amount: -42.5, description: "Shell", merchantName: "Shell", category: "Transport", source: "truelayer" },
+    { id: "tx-3", accountId: "acc-current", date: "2026-10-16", amount: -128.99, description: "British Gas", merchantName: "British Gas", category: "Bills", source: "truelayer" },
+    { id: "tx-4", accountId: "acc-current", date: "2026-10-12", amount: -64.2, description: "The Crown", merchantName: "The Crown", category: "Eating out", source: "truelayer" },
+    { id: "tx-5", accountId: "acc-current", date: "2026-10-09", amount: -25.99, description: "Netflix", merchantName: "Netflix", category: "Subscriptions", source: "truelayer" },
+    { id: "tx-6", accountId: "acc-current", date: "2026-10-01", amount: 4200, description: "Salary", category: "Income", source: "truelayer" },
+    { id: "tx-7", accountId: "acc-current", date: "2026-09-25", amount: -92.1, description: "Tesco", merchantName: "Tesco", category: "Groceries", source: "truelayer" },
+    { id: "tx-8", accountId: "acc-current", date: "2026-09-18", amount: -210, description: "Council tax", category: "Bills", source: "truelayer" },
+  ];
+
+  const notes: FinanceNote[] = [
+    { id: "note-1", text: "Check ISA transfer paperwork before the end of the tax year." },
+  ];
+
+  const todos: FinanceTodo[] = [
+    { id: "todo-1", title: "Confirm Santander ISA account number", done: false, assigneeName: "Chris" },
+    { id: "todo-2", title: "Import October balances", done: true, assigneeName: "Chris" },
+  ];
+
+  return { accounts, entries, assets, transactions, notes, todos };
 }

@@ -19,6 +19,7 @@ import {
   financeAssetWriteData,
   type FinanceAsset,
 } from "@/lib/financeAssets";
+import { balanceOnOrBefore, buildTransferPlan } from "@/lib/financeTransfer";
 
 export type { FinanceAsset } from "@/lib/financeAssets";
 
@@ -53,6 +54,7 @@ export interface Account {
   active: boolean;
   hidden: boolean;
   openedOn?: string; // ISO date the account was opened
+  closedOn?: string; // ISO date the account was closed and funds transferred
   // Optional predictive-modelling assumptions, set per account for the "Custom" scenario.
   growthAssumptionPct?: number; // assumed annual growth rate, e.g. 5 for 5%/yr
   monthlyContribution?: number; // assumed regular monthly deposit
@@ -78,12 +80,40 @@ export interface BalanceEntry {
   note?: string;
 }
 
+export interface FinanceTransaction {
+  id: string;
+  accountId: string;
+  bankTransactionId?: string;
+  date: string;
+  amount: number;
+  description: string;
+  category: string;
+  merchantName?: string;
+  source?: "truelayer" | "manual";
+}
+
+export interface FinanceNote {
+  id: string;
+  text: string;
+}
+
+export interface FinanceTodo {
+  id: string;
+  title: string;
+  done: boolean;
+  assigneeUid?: string;
+  assigneeName?: string;
+}
+
 export function useFinance(scopeUserId?: string) {
   const { dataUid } = useAuth();
   const uid = scopeUserId ?? dataUid;
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<BalanceEntry[]>([]);
   const [assets, setAssets] = useState<FinanceAsset[]>([]);
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
+  const [notes, setNotes] = useState<FinanceNote[]>([]);
+  const [todos, setTodos] = useState<FinanceTodo[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -91,6 +121,9 @@ export function useFinance(scopeUserId?: string) {
       setAccounts([]);
       setEntries([]);
       setAssets([]);
+      setTransactions([]);
+      setNotes([]);
+      setTodos([]);
       setLoading(false);
       return;
     }
@@ -98,13 +131,19 @@ export function useFinance(scopeUserId?: string) {
     const accountsRef = collection(db, "finance", uid, "accounts");
     const entriesRef = collection(db, "finance", uid, "entries");
     const assetsRef = collection(db, "finance", uid, "assets");
+    const transactionsRef = collection(db, "finance", uid, "transactions");
+    const notesRef = collection(db, "finance", uid, "notes");
+    const todosRef = collection(db, "finance", uid, "todos");
 
     let accountsLoaded = false;
     let entriesLoaded = false;
     let assetsLoaded = false;
+    let transactionsLoaded = false;
+    let notesLoaded = false;
+    let todosLoaded = false;
 
     const checkDone = () => {
-      if (accountsLoaded && entriesLoaded && assetsLoaded) setLoading(false);
+      if (accountsLoaded && entriesLoaded && assetsLoaded && transactionsLoaded && notesLoaded && todosLoaded) setLoading(false);
     };
 
     const unsubAccounts = onSnapshot(
@@ -154,10 +193,57 @@ export function useFinance(scopeUserId?: string) {
       }
     );
 
+    const unsubTransactions = onSnapshot(
+      query(transactionsRef, orderBy("date")),
+      (snap) => {
+        setTransactions(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FinanceTransaction, "id">) }))
+        );
+        transactionsLoaded = true;
+        checkDone();
+      },
+      () => {
+        setTransactions([]);
+        transactionsLoaded = true;
+        checkDone();
+      }
+    );
+
+    const unsubNotes = onSnapshot(
+      query(notesRef, orderBy("createdAt")),
+      (snap) => {
+        setNotes(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FinanceNote, "id">) })));
+        notesLoaded = true;
+        checkDone();
+      },
+      () => {
+        setNotes([]);
+        notesLoaded = true;
+        checkDone();
+      }
+    );
+
+    const unsubTodos = onSnapshot(
+      query(todosRef, orderBy("createdAt")),
+      (snap) => {
+        setTodos(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FinanceTodo, "id">) })));
+        todosLoaded = true;
+        checkDone();
+      },
+      () => {
+        setTodos([]);
+        todosLoaded = true;
+        checkDone();
+      }
+    );
+
     return () => {
       unsubAccounts();
       unsubEntries();
       unsubAssets();
+      unsubTransactions();
+      unsubNotes();
+      unsubTodos();
     };
   }, [uid]);
 
@@ -173,7 +259,8 @@ export function useFinance(scopeUserId?: string) {
       };
       const openedOn = extras?.openedOn?.trim();
       if (openedOn) payload.openedOn = openedOn;
-      await addDoc(collection(db, "finance", uid, "accounts"), payload);
+      const created = await addDoc(collection(db, "finance", uid, "accounts"), payload);
+      return created.id;
     },
     [uid]
   );
@@ -184,6 +271,68 @@ export function useFinance(scopeUserId?: string) {
       await updateDoc(doc(db, "finance", uid, "accounts", accountId), updates as any);
     },
     [uid]
+  );
+
+  const transferAndCloseAccount = useCallback(
+    async (args: {
+      fromId: string;
+      toId?: string;
+      newAccount?: { name: string; type: string; openedOn?: string };
+      date: string;
+    }) => {
+      if (!uid) return;
+      const from = accounts.find((account) => account.id === args.fromId);
+      if (!from) throw new Error("Account not found");
+
+      let toId = args.toId;
+      let toName = accounts.find((account) => account.id === toId)?.name;
+      if (args.newAccount?.name.trim()) {
+        toId = await addAccount(args.newAccount.name, args.newAccount.type, {
+          openedOn: args.newAccount.openedOn,
+        });
+        toName = args.newAccount.name.trim();
+      }
+      if (!toId || !toName) throw new Error("Choose where the money should go");
+      if (toId === args.fromId) throw new Error("Choose a different account");
+
+      const plan = buildTransferPlan({
+        from: { id: from.id, name: from.name },
+        to: { id: toId, name: toName },
+        fromBalance: balanceOnOrBefore(from.id, entries, args.date),
+        toBalance: balanceOnOrBefore(toId, entries, args.date),
+        date: args.date,
+      });
+
+      const batch = writeBatch(db);
+      const upsert = (accountId: string, balance: number, note: string) => {
+        const existing = entries.find((entry) => entry.accountId === accountId && entry.date === plan.date);
+        const payload = {
+          accountId,
+          date: plan.date,
+          balance,
+          note,
+          createdAt: serverTimestamp(),
+        };
+        if (existing) {
+          batch.update(doc(db, "finance", uid, "entries", existing.id), {
+            balance,
+            note,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          batch.set(doc(collection(db, "finance", uid, "entries")), payload);
+        }
+      };
+      upsert(plan.fromId, plan.fromBalance, plan.fromNote);
+      upsert(plan.toId, plan.toBalance, plan.toNote);
+      batch.update(doc(db, "finance", uid, "accounts", plan.fromId), {
+        active: false,
+        closedOn: plan.date,
+      });
+      await batch.commit();
+      return { toId, plan };
+    },
+    [uid, accounts, entries, addAccount]
   );
 
   const addBalanceEntry = useCallback(
@@ -221,6 +370,75 @@ export function useFinance(scopeUserId?: string) {
     async (entryId: string) => {
       if (!uid) return;
       await deleteDoc(doc(db, "finance", uid, "entries", entryId));
+    },
+    [uid]
+  );
+
+  const addFinanceNote = useCallback(
+    async (text: string) => {
+      if (!uid) return;
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      await addDoc(collection(db, "finance", uid, "notes"), {
+        text: trimmed,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const updateFinanceNote = useCallback(
+    async (noteId: string, text: string) => {
+      if (!uid) return;
+      await updateDoc(doc(db, "finance", uid, "notes", noteId), {
+        text: text.trim(),
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const deleteFinanceNote = useCallback(
+    async (noteId: string) => {
+      if (!uid) return;
+      await deleteDoc(doc(db, "finance", uid, "notes", noteId));
+    },
+    [uid]
+  );
+
+  const addFinanceTodo = useCallback(
+    async (input: { title: string; assigneeUid?: string; assigneeName?: string }) => {
+      if (!uid) return;
+      const title = input.title.trim();
+      if (!title) return;
+      await addDoc(collection(db, "finance", uid, "todos"), {
+        title,
+        done: false,
+        assigneeUid: input.assigneeUid || "",
+        assigneeName: input.assigneeName || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const updateFinanceTodo = useCallback(
+    async (todoId: string, updates: Partial<FinanceTodo>) => {
+      if (!uid) return;
+      await updateDoc(doc(db, "finance", uid, "todos", todoId), {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid]
+  );
+
+  const deleteFinanceTodo = useCallback(
+    async (todoId: string) => {
+      if (!uid) return;
+      await deleteDoc(doc(db, "finance", uid, "todos", todoId));
     },
     [uid]
   );
@@ -300,8 +518,10 @@ export function useFinance(scopeUserId?: string) {
   );
 
   return {
-    accounts, entries, assets, loading,
-    addAccount, updateAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries,
+    accounts, entries, assets, transactions, notes, todos, loading,
+    addAccount, updateAccount, transferAndCloseAccount, addBalanceEntry, updateEntry, deleteEntry, importEntries,
+    addFinanceNote, updateFinanceNote, deleteFinanceNote,
+    addFinanceTodo, updateFinanceTodo, deleteFinanceTodo,
     addAsset, updateAsset, deleteAsset,
   };
 }
