@@ -405,13 +405,36 @@ export function hexToHsl(hex: string): Hsl {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
+function luminance(hsl: Hsl): number {
+  const hex = hslToHex(hsl).replace("#", "");
+  const channel = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+export function readableTextOn(hsl: Hsl): Hsl {
+  return luminance(hsl) > 0.179 ? "222 40% 9%" : "40 40% 97%";
+}
+
+/** Darkens a custom primary just enough for the light primary text to stay readable on it. */
+export function deepenForLightText(hsl: Hsl): Hsl {
+  const [h, s, l] = hsl.split(" ");
+  let lightness = parseInt(l);
+  while (lightness > 0 && luminance(`${h} ${s} ${lightness}%`) > 0.179) lightness -= 1;
+  return `${h} ${s} ${lightness}%`;
+}
+
 export function applyThemeVars(theme: AppTheme, customPrimary?: Hsl, customAccent?: Hsl) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   const isDark = root.classList.contains("dark");
   const vars = { ...(isDark ? theme.dark : theme.light) };
   if (customPrimary) {
+    customPrimary = isDark ? customPrimary : deepenForLightText(customPrimary);
     vars.primary = customPrimary;
+    vars["primary-foreground"] = readableTextOn(customPrimary);
     vars.ring = customPrimary;
     vars["chart-1"] = customPrimary;
     const [ph, ps, pl] = customPrimary.split(" ");
@@ -420,6 +443,7 @@ export function applyThemeVars(theme: AppTheme, customPrimary?: Hsl, customAccen
   }
   if (customAccent) {
     vars.gold = customAccent;
+    vars["gold-foreground"] = readableTextOn(customAccent);
     vars["chart-2"] = customAccent;
     vars["gradient-warm"] = `linear-gradient(135deg, hsl(${customAccent}), hsl(${customAccent}))`;
     vars["shadow-accent"] = `0 6px 20px -4px hsl(${customAccent} / 0.30)`;
