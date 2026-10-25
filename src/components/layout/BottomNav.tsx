@@ -1,45 +1,41 @@
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Home, PiggyBank, Heart, Shield, MoreHorizontal, LogOut,
+  Home, PiggyBank, Heart, Shield, MoreHorizontal,
   CheckSquare, Briefcase, Key, Activity, Users, Wallet, Building2, CalendarDays, Sun, StickyNote, Images,
   MonitorSmartphone, Palmtree, Phone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { cleanupFcmTokenOnSignOut } from "@/lib/fcmDeviceSettings";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { canAccessRoute, DEFAULT_BOTTOM_NAV, MAX_BOTTOM_NAV_ITEMS } from "@/lib/features";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
+import { JEWEL } from "@/lib/brandPalette";
 
-type NavItemDef = { icon: React.ElementType; label: string; color: string; gradient: string };
+type NavItemDef = { icon: React.ElementType; label: string; color: string };
 
 const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
-  "/dashboard":         { icon: Home,          label: "Home",       color: "hsl(178,55%,36%)",  gradient: "linear-gradient(135deg,hsl(178,58%,42%),hsl(182,55%,46%))" },
-  "/finance":           { icon: PiggyBank,     label: "Finance",    color: "hsl(25,62%,55%)",   gradient: "linear-gradient(135deg,hsl(25,65%,58%),hsl(15,58%,52%))" },
-  "/pets":              { icon: Heart,         label: "Pets",       color: "hsl(0,65%,50%)",    gradient: "linear-gradient(135deg,hsl(0,68%,55%),hsl(340,60%,48%))" },
-  "/admin":             { icon: Shield,        label: "Admin",      color: "hsl(205,55%,48%)",  gradient: "linear-gradient(135deg,hsl(205,58%,52%),hsl(215,53%,45%))" },
-  "/more":              { icon: MoreHorizontal,label: "More",       color: "hsl(191,33%,43%)",  gradient: "linear-gradient(135deg,hsl(200,45%,48%),hsl(210,42%,42%))" },
-  "/tasks":             { icon: CheckSquare,   label: "Tasks",      color: "hsl(260,55%,55%)",  gradient: "linear-gradient(135deg,hsl(258,62%,60%),hsl(270,55%,52%))" },
-  "/companies":         { icon: Briefcase,     label: "Companies",  color: "hsl(210,50%,50%)",  gradient: "linear-gradient(135deg,hsl(210,53%,54%),hsl(220,48%,47%))" },
-  "/login-details":     { icon: Key,           label: "Log Ins",    color: "hsl(265,55%,55%)",  gradient: "linear-gradient(135deg,hsl(265,58%,58%),hsl(275,53%,50%))" },
-  "/weight":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
-  "/health":            { icon: Activity,      label: "Health",     color: "hsl(152,55%,40%)",  gradient: "linear-gradient(135deg,hsl(152,58%,44%),hsl(160,53%,37%))" },
-  "/households":        { icon: Users,         label: "Households", color: "hsl(30,60%,50%)",   gradient: "linear-gradient(135deg,hsl(30,65%,54%),hsl(20,58%,47%))" },
-  "/household-finance": { icon: Wallet,        label: "HH Finance", color: "hsl(140,55%,40%)",  gradient: "linear-gradient(135deg,hsl(140,58%,44%),hsl(150,53%,37%))" },
-  "/tattersalls":       { icon: Building2,     label: "Flats",      color: "hsl(195,50%,45%)",  gradient: "linear-gradient(135deg,hsl(195,53%,48%),hsl(205,48%,42%))" },
-  "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: "hsl(220,60%,55%)",  gradient: "linear-gradient(135deg,hsl(218,63%,58%),hsl(230,58%,50%))" },
-  "/notes":             { icon: StickyNote,    label: "Notes",      color: "hsl(42,85%,48%)",   gradient: "linear-gradient(135deg,hsl(42,92%,52%),hsl(28,85%,48%))" },
-  "/photos":            { icon: Images,        label: "Photos",     color: "hsl(330,55%,48%)",  gradient: "linear-gradient(135deg,hsl(330,58%,52%),hsl(345,52%,44%))" },
-  "/today":             { icon: Sun,           label: "Today",      color: "hsl(38,92%,50%)",   gradient: "linear-gradient(135deg,hsl(38,95%,54%),hsl(25,88%,47%))" },
-  "/remote-displays":   { icon: MonitorSmartphone, label: "Remote Displays", color: "hsl(198,60%,46%)", gradient: "linear-gradient(135deg,hsl(198,65%,50%),hsl(210,60%,44%))" },
-  "/holidays":          { icon: Palmtree,      label: "Holidays",   color: "hsl(172,48%,38%)",  gradient: "linear-gradient(135deg,hsl(172,52%,42%),hsl(188,48%,36%))" },
-  "/softphone":         { icon: Phone,         label: "Phone",      color: "hsl(152,48%,38%)",  gradient: "linear-gradient(135deg,hsl(152,52%,42%),hsl(168,48%,36%))" },
+  "/dashboard":         { icon: Home,          label: "Home",       color: JEWEL.teal },
+  "/finance":           { icon: PiggyBank,     label: "Finance",    color: JEWEL.bronze },
+  "/pets":              { icon: Heart,         label: "Pets",       color: JEWEL.burgundy },
+  "/admin":             { icon: Shield,        label: "Admin",      color: JEWEL.cobalt },
+  "/more":              { icon: MoreHorizontal,label: "More",       color: JEWEL.slate },
+  "/tasks":             { icon: CheckSquare,   label: "Tasks",      color: JEWEL.indigo },
+  "/companies":         { icon: Briefcase,     label: "Companies",  color: JEWEL.marine },
+  "/login-details":     { icon: Key,           label: "Log Ins",    color: JEWEL.aubergine },
+  "/weight":            { icon: Activity,      label: "Health",     color: JEWEL.forest },
+  "/health":            { icon: Activity,      label: "Health",     color: JEWEL.forest },
+  "/households":        { icon: Users,         label: "Households", color: JEWEL.bronze },
+  "/household-finance": { icon: Wallet,        label: "HH Finance", color: JEWEL.moss },
+  "/tattersalls":       { icon: Building2,     label: "Flats",      color: JEWEL.petrol },
+  "/calendar":          { icon: CalendarDays,  label: "Calendar",   color: JEWEL.cobalt },
+  "/notes":             { icon: StickyNote,    label: "Notes",      color: JEWEL.bronze },
+  "/photos":            { icon: Images,        label: "Photos",     color: JEWEL.plum },
+  "/today":             { icon: Sun,           label: "Today",      color: JEWEL.bronze },
+  "/remote-displays":   { icon: MonitorSmartphone, label: "Displays", color: JEWEL.petrol },
+  "/holidays":          { icon: Palmtree,      label: "Holidays",   color: JEWEL.teal },
+  "/softphone":         { icon: Phone,         label: "Phone",      color: JEWEL.forest },
 };
-
-const DEFAULT_NAV = DEFAULT_BOTTOM_NAV;
 
 function NavButton({
   path,
@@ -55,21 +51,22 @@ function NavButton({
   const Icon = item.icon;
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors min-w-0"
+      className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors min-w-0 min-h-[44px]"
     >
-      <div className="relative flex items-center justify-center w-10 h-7">
+      <div className="relative flex items-center justify-center w-11 h-8">
         <AnimatePresence>
           {isActive && (
             <motion.div
-              key={`pill-${path}`}
-              layoutId="nav-pill"
-              className="absolute inset-0 rounded-full"
-              style={{ background: item.gradient }}
-              initial={{ opacity: 0, scale: 0.7 }}
+              key={`chip-${path}`}
+              layoutId="nav-chip"
+              className="btn-edge absolute inset-0 rounded-md"
+              style={{ background: item.color }}
+              initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.7 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ duration: 0.16 }}
             />
           )}
         </AnimatePresence>
@@ -79,7 +76,7 @@ function NavButton({
         />
       </div>
       <span
-        className="text-[10px] transition-colors truncate max-w-full px-0.5"
+        className="text-[10px] transition-colors truncate max-w-full px-0.5 tracking-wide"
         style={isActive ? { color: "#fff", fontWeight: 700 } : { color: "rgba(255,255,255,0.72)", fontWeight: 500 }}
       >
         {item.label}
@@ -98,13 +95,11 @@ const BottomNav = () => {
 
   const features = profile?.enabledFeatures ?? [];
   const usingCustomNav = Boolean(profile?.navItems && profile.navItems.length > 0);
-  const rawPaths = usingCustomNav ? profile!.navItems! : DEFAULT_NAV;
+  const rawPaths = usingCustomNav ? profile!.navItems! : DEFAULT_BOTTOM_NAV;
 
   const navItems = rawPaths
     .filter((path) => path !== "/more")
     .filter((path) => {
-      // Admin nav access is role-based only — the per-member "Admin" feature
-      // toggle doesn't actually grant the admin role, so it can't gate this.
       if (path === "/admin") return !isViewAs && !loading && (role === "admin" || role === "superadmin");
       if (loading) return path === "/dashboard" || path === "/today";
       return canAccessRoute(role, features, path, sharedPages);
@@ -118,25 +113,23 @@ const BottomNav = () => {
 
   return createPortal(
     <nav
-      className="z-50 w-full border-t border-white/5"
+      className="z-50 w-full border-t border-white/10"
       style={{
         position: "fixed",
         left: 0,
         right: 0,
         bottom: 0,
         width: "100%",
+        height: "calc(var(--app-nav-h, 4rem) + env(safe-area-inset-bottom, 0px))",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        background: "var(--chrome-nav, var(--gradient-hero))",
-        backgroundColor: "hsl(215, 32%, 18%)",
-        backdropFilter: "blur(16px)",
-        boxShadow: "0 1px 0 0 hsl(215, 32%, 18%)",
+        background: JEWEL.ink,
+        boxSizing: "border-box",
       }}
     >
-      {/* Paint below the nav so iOS/Android overscroll never flashes page mint through the home-indicator gap */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-full"
-        style={{ height: "100vh", background: "hsl(215, 32%, 18%)" }}
+        style={{ height: "100vh", background: JEWEL.ink }}
       />
       <div className="mx-auto flex h-16 w-full max-w-screen-xl items-center justify-around px-1">
         {navItems.map((item) => {
@@ -161,22 +154,6 @@ const BottomNav = () => {
           isActive={isMoreActive}
           onClick={() => navigate("/more")}
         />
-
-        <button
-          onClick={async () => {
-            await cleanupFcmTokenOnSignOut(auth.currentUser?.uid);
-            await signOut(auth);
-            navigate("/", { replace: true });
-          }}
-          className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-0.5"
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          <div className="flex h-7 w-10 items-center justify-center">
-            <LogOut className="h-4 w-4" style={{ color: "rgba(255,255,255,0.72)" }} />
-          </div>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.72)" }}>Sign out</span>
-        </button>
       </div>
     </nav>,
     document.body,

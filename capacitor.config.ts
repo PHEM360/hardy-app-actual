@@ -37,7 +37,8 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: false,
   },
   ios: {
-    contentInset: "automatic",
+    // CSS owns safe-area insets (TopBar / BottomNav). automatic double-pads with overlay status bar.
+    contentInset: "never",
     preferredContentMode: "mobile",
     backgroundColor: "#0f1923",
     scheme: "Hardy App",

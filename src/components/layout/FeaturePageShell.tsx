@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
-import { ChevronLeft, Sparkles } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PageShareBar from "@/components/sharing/PageShareBar";
+import { Button } from "@/components/ui/button";
+import { JEWEL } from "@/lib/brandPalette";
 
 interface FeaturePageShellProps {
   title: string;
@@ -46,16 +48,12 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
         className="mb-5"
       >
         {!hideBack && (
-        <div className="sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-1 backdrop-blur-sm">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="page-back group text-primary transition-colors hover:bg-card"
-          >
-            <ChevronLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.5} />
-            Back
-          </button>
-        </div>
+          <div className="sticky top-0 z-30 -mx-1 mb-3 border-b border-foreground/10 bg-background px-1 pb-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate(-1)}>
+              <ChevronLeft />
+              Back
+            </Button>
+          </div>
         )}
         <div className="relative flex flex-wrap items-center gap-3 border-b border-foreground/20 pb-4 after:absolute after:-bottom-px after:left-0 after:h-[3px] after:w-14 after:bg-gold">
           {icon && (
@@ -70,18 +68,18 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
             )}
           </div>
           {comparePage && (
-            <div className="flex shrink-0 items-center rounded-xl border border-border/60 bg-muted/55 p-1" aria-label={`${comparePage} design`}>
+            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/20 bg-card p-1" aria-label={`${comparePage} design`}>
               <button
                 type="button"
                 onClick={() => switchDesign(false)}
-                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${!focusSelected ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`btn-edge rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${!focusSelected ? "bg-primary text-primary-foreground" : "text-foreground/70"}`}
               >
                 Current
               </button>
               <button
                 type="button"
                 onClick={() => switchDesign(true)}
-                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${focusSelected ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`btn-edge rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition sm:text-xs ${focusSelected ? "bg-primary text-primary-foreground" : "text-foreground/70"}`}
               >
                 Focus
               </button>
@@ -95,19 +93,19 @@ const FeaturePageShell = ({ title, subtitle, children, icon, action, sharePage, 
         </div>
       </motion.div>
       {children || (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="rounded-2xl border-2 border-dashed border-border bg-gradient-card p-10 text-center shadow-soft"
-        >
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground">
-            <Sparkles className="h-5 w-5" />
+        <div className="overflow-hidden rounded-xl border border-foreground/20 bg-card shadow-card">
+          <div className="band px-4 py-3 text-white" style={{ background: JEWEL.petrol }}>
+            <p className="font-display text-lg font-semibold">Nothing here yet</p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            This feature is coming soon. The module structure is ready for development.
-          </p>
-        </motion.div>
+          <div className="space-y-3 p-5">
+            <p className="text-sm text-foreground/80">
+              This screen is ready when you add content. Use the controls above or open More to find related tools.
+            </p>
+            <Button type="button" onClick={() => navigate("/more")}>
+              Open More
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

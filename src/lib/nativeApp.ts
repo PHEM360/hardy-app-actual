@@ -46,6 +46,17 @@ export async function bootstrapNativeApp() {
     // Accessory bar is iOS-only.
   }
 
+  try {
+    Keyboard.addListener("keyboardWillShow", (info) => {
+      document.documentElement.style.setProperty("--kbd", `${Math.max(0, info.keyboardHeight || 0)}px`);
+    });
+    Keyboard.addListener("keyboardWillHide", () => {
+      document.documentElement.style.setProperty("--kbd", "0px");
+    });
+  } catch {
+    // Keyboard height events are best-effort.
+  }
+
   App.addListener("backButton", ({ canGoBack }) => {
     if (canGoBack || window.history.length > 1) {
       window.history.back();

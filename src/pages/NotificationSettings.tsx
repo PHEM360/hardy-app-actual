@@ -540,12 +540,67 @@ export default function NotificationSettings() {
               onChange={(ev) => upd({ events: { ...draft.events, medications: ev } })}
             />
 
-            {/* Daily digest */}
+            <EventCard
+              title="Birthdays"
+              description="Reminders for household birthdays."
+              prefs={draft.events.birthdays ?? { enabled: true, channels: ["push", "email", "sms"] }}
+              channelAvailability={channelAvailability}
+              onChange={(ev) => upd({ events: { ...draft.events, birthdays: ev } })}
+            />
+
+            {/* Quiet hours */}
             <SectionCard>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-md bg-blue-500 flex items-center justify-center text-white text-[10px] flex-shrink-0">D</span>
-                  Daily digest
+                  <span className="w-5 h-5 rounded-md bg-slate-700 flex items-center justify-center text-white text-[10px] flex-shrink-0">Q</span>
+                  Quiet hours
+                </h3>
+                <Switch
+                  checked={draft.quietHours?.enabled ?? false}
+                  onCheckedChange={(v) =>
+                    upd({
+                      quietHours: {
+                        enabled: v,
+                        start: draft.quietHours?.start || "22:00",
+                        end: draft.quietHours?.end || "07:00",
+                      },
+                    })
+                  }
+                />
+              </div>
+              <p className="text-xs text-muted-foreground -mt-1">
+                Hold task, calendar and other reminders overnight. Your daily brief still sends at the time you choose.
+              </p>
+              {draft.quietHours?.enabled && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input
+                    type="time"
+                    value={draft.quietHours.start}
+                    onChange={(e) =>
+                      upd({ quietHours: { ...draft.quietHours!, start: e.target.value } })
+                    }
+                    className="h-8 text-sm w-28"
+                  />
+                  <Label className="text-xs text-muted-foreground">to</Label>
+                  <Input
+                    type="time"
+                    value={draft.quietHours.end}
+                    onChange={(e) =>
+                      upd({ quietHours: { ...draft.quietHours!, end: e.target.value } })
+                    }
+                    className="h-8 text-sm w-28"
+                  />
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Daily brief */}
+            <SectionCard>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-white text-[10px] flex-shrink-0">B</span>
+                  Daily brief
                 </h3>
                 <Switch
                   checked={draft.events.dailyDigest.enabled}
@@ -555,10 +610,10 @@ export default function NotificationSettings() {
                 />
               </div>
               <p className="text-xs text-muted-foreground -mt-1">
-                A daily summary of tasks due today, sent at a time you choose.
+                A morning summary of your day, sent at a London time you choose. Turn on Push above to get it on your phone.
               </p>
               {draft.events.dailyDigest.enabled && (
-                <div className="space-y-2 pt-1">
+                <div className="space-y-3 pt-1">
                   <div className="flex items-center gap-2">
                     <Label className="text-xs text-muted-foreground w-14 flex-shrink-0">Send at</Label>
                     <Input
@@ -589,6 +644,36 @@ export default function NotificationSettings() {
                       }
                       available={channelAvailability}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Include in the brief</Label>
+                    {(
+                      [
+                        ["includeTasks", "Tasks due today"],
+                        ["includeCalendar", "Today's calendar"],
+                        ["includeBirthdays", "Upcoming birthdays"],
+                        ["includePets", "Pet care due"],
+                      ] as const
+                    ).map(([key, label]) => (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-foreground">{label}</span>
+                          <Switch
+                            checked={
+                              key === "includePets"
+                                ? draft.events.dailyDigest.includePets === true
+                                : draft.events.dailyDigest[key] !== false
+                            }
+                            onCheckedChange={(v) =>
+                              upd({
+                                events: {
+                                  ...draft.events,
+                                  dailyDigest: { ...draft.events.dailyDigest, [key]: v },
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                    ))}
                   </div>
                 </div>
               )}

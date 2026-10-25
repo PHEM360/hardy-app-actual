@@ -209,11 +209,14 @@ const Admin = () => {
   const changeRole = async (userId: string, newRole: "member" | "admin" | "superadmin") => {
     setActionLoading(true);
     try {
-      await setDoc(doc(db, "users", userId), { role: newRole }, { merge: true });
+      const call = httpsCallable(functions, "setUserRole");
+      await call({ uid: userId, role: newRole });
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         role: newRole === "superadmin" ? "Superadmin" : newRole === "admin" ? "Admin" : "Member",
       } : u));
+    } catch (error: any) {
+      window.alert(error?.message || "Could not change role.");
     } finally {
       setActionLoading(false);
     }

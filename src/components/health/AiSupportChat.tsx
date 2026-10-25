@@ -45,7 +45,7 @@ const CRISIS_RESOURCES = [
 ];
 
 export default function AiSupportChat({ tabName = "Support" }: { tabName?: string }) {
-  const { callGemini, apiKey } = useAiConfig();
+  const { callGemini } = useAiConfig();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

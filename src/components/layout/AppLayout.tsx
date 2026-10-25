@@ -20,22 +20,29 @@ const AppLayout = () => {
 
   if (hideChrome) {
     return (
-      <div className="min-h-[100dvh] bg-background safe-top">
+      <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-background safe-top">
         <FcmBootstrap />
         <AlarmRingingOverlay uid={dataUid} />
-        <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
+        <div className="h-full min-h-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+          <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
+        </div>
       </div>
     );
   }
 
   return (
     <HomeLayoutGate>
-      <div className="flex min-h-[100dvh] min-h-[100svh] flex-col bg-background">
+      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
         <FcmBootstrap />
         <AlarmRingingOverlay uid={dataUid} />
         <TopBar />
-        <main className="w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))]">
-          <div className="mx-auto w-full min-w-0 max-w-screen-sm sm:max-w-screen-md md:max-w-screen-lg xl:max-w-screen-xl">
+        <main
+          className="w-full min-w-0 min-h-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+          style={{
+            paddingBottom: "calc(var(--app-nav-h, 4rem) + env(safe-area-inset-bottom, 0px) + var(--kbd, 0px))",
+          }}
+        >
+          <div className="mx-auto w-full min-w-0 max-w-screen-sm sm:max-w-screen-md md:max-w-3xl lg:max-w-5xl xl:max-w-6xl">
             <ModuleSecurityGate><Outlet /></ModuleSecurityGate>
           </div>
         </main>

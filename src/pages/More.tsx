@@ -28,18 +28,23 @@ import {
   Mail,
   Phone,
   Inbox,
+  LogOut,
 } from "lucide-react";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { cleanupFcmTokenOnSignOut } from "@/lib/fcmDeviceSettings";
 import { useEffectiveRole } from "@/auth/useEffectiveRole";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { canAccessRoute } from "@/lib/features";
 import { useIncomingPageShares } from "@/hooks/usePageShares";
+import { Button } from "@/components/ui/button";
+import { JEWEL } from "@/lib/brandPalette";
 
 type MoreItem = {
   label: string;
   icon: React.ElementType;
   route: string;
-  gradient: string;
-  iconColor: string;
+  color: string;
 };
 
 type Section = { title: string; items: MoreItem[] };
@@ -48,220 +53,58 @@ const SECTIONS: Section[] = [
   {
     title: "Daily",
     items: [
-      {
-        label: "Tasks",
-        icon: CheckSquare,
-        route: "/tasks",
-        gradient: "linear-gradient(135deg, hsl(258,60%,58%), hsl(270,55%,52%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Notes",
-        icon: StickyNote,
-        route: "/notes",
-        gradient: "linear-gradient(135deg, hsl(42,92%,52%), hsl(28,85%,48%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Photos",
-        icon: Images,
-        route: "/photos",
-        gradient: "linear-gradient(135deg, hsl(330,58%,52%), hsl(345,52%,44%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Email",
-        icon: Mail,
-        route: "/email",
-        gradient: "linear-gradient(135deg, hsl(239,70%,58%), hsl(260,60%,50%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Unallocated",
-        icon: Inbox,
-        route: "/unallocated",
-        gradient: "linear-gradient(135deg, hsl(12,70%,52%), hsl(25,65%,46%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Today",
-        icon: Sun,
-        route: "/today",
-        gradient: "linear-gradient(135deg, hsl(38,95%,52%), hsl(25,85%,48%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Calendar",
-        icon: CalendarDays,
-        route: "/calendar",
-        gradient: "linear-gradient(135deg, hsl(218,60%,55%), hsl(230,55%,48%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Phone",
-        icon: Phone,
-        route: "/softphone",
-        gradient: "linear-gradient(135deg, hsl(152,52%,42%), hsl(168,48%,36%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Log Ins",
-        icon: KeyRound,
-        route: "/login-details",
-        gradient: "linear-gradient(135deg, hsl(265,55%,55%), hsl(275,53%,48%))",
-        iconColor: "#fff",
-      },
+      { label: "Tasks", icon: CheckSquare, route: "/tasks", color: JEWEL.indigo },
+      { label: "Notes", icon: StickyNote, route: "/notes", color: JEWEL.bronze },
+      { label: "Photos", icon: Images, route: "/photos", color: JEWEL.plum },
+      { label: "Email", icon: Mail, route: "/email", color: JEWEL.cobalt },
+      { label: "Unallocated", icon: Inbox, route: "/unallocated", color: JEWEL.oxblood },
+      { label: "Today", icon: Sun, route: "/today", color: JEWEL.bronze },
+      { label: "Calendar", icon: CalendarDays, route: "/calendar", color: JEWEL.marine },
+      { label: "Phone", icon: Phone, route: "/softphone", color: JEWEL.forest },
+      { label: "Log Ins", icon: KeyRound, route: "/login-details", color: JEWEL.aubergine },
     ],
   },
   {
     title: "Finance & Property",
     items: [
-      {
-        label: "My Finance",
-        icon: PiggyBank,
-        route: "/finance",
-        gradient: "linear-gradient(135deg, hsl(25,65%,56%), hsl(15,58%,50%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Companies",
-        icon: Building2,
-        route: "/companies",
-        gradient: "linear-gradient(135deg, hsl(206,60%,52%), hsl(216,55%,45%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "HH Finance",
-        icon: Home,
-        route: "/household-finance",
-        gradient: "linear-gradient(135deg, hsl(152,55%,40%), hsl(160,50%,34%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "IHT Planner",
-        icon: Calculator,
-        route: "/inheritance",
-        gradient: "linear-gradient(135deg, hsl(0,60%,52%), hsl(340,55%,46%))",
-        iconColor: "#fff",
-      },
+      { label: "My Finance", icon: PiggyBank, route: "/finance", color: JEWEL.bronze },
+      { label: "Companies", icon: Building2, route: "/companies", color: JEWEL.petrol },
+      { label: "HH Finance", icon: Home, route: "/household-finance", color: JEWEL.moss },
+      { label: "IHT Planner", icon: Calculator, route: "/inheritance", color: JEWEL.burgundy },
     ],
   },
   {
     title: "Work",
     items: [
-      {
-        label: "Annual Leave",
-        icon: Plane,
-        route: "/annual-leave",
-        gradient: "linear-gradient(135deg, hsl(198,60%,50%), hsl(210,55%,44%))",
-        iconColor: "#fff",
-      },
+      { label: "Annual Leave", icon: Plane, route: "/annual-leave", color: JEWEL.cobalt },
     ],
   },
   {
     title: "Travel",
     items: [
-      {
-        label: "Holidays",
-        icon: Palmtree,
-        route: "/holidays",
-        gradient: "linear-gradient(135deg, hsl(172,52%,42%), hsl(188,48%,36%))",
-        iconColor: "#fff",
-      },
+      { label: "Holidays", icon: Palmtree, route: "/holidays", color: JEWEL.teal },
     ],
   },
   {
     title: "Home & Wellbeing",
     items: [
-      {
-        label: "Households",
-        icon: Users,
-        route: "/households",
-        gradient: "linear-gradient(135deg, hsl(28,65%,52%), hsl(18,60%,46%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Pets",
-        icon: Heart,
-        route: "/pets",
-        gradient: "linear-gradient(135deg, hsl(0,68%,52%), hsl(340,60%,46%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Health",
-        icon: Activity,
-        route: "/weight",
-        gradient: "linear-gradient(135deg, hsl(148,55%,42%), hsl(158,50%,36%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Flats",
-        icon: Building,
-        route: "/tattersalls",
-        gradient: "linear-gradient(135deg, hsl(192,52%,46%), hsl(202,48%,40%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Freezer",
-        icon: Snowflake,
-        route: "/freezer",
-        gradient: "linear-gradient(135deg, hsl(198,75%,55%), hsl(215,70%,48%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "AI Analysis",
-        icon: Sparkles,
-        route: "/ai-analysis",
-        gradient: "linear-gradient(135deg, hsl(270,55%,52%), hsl(250,50%,46%))",
-        iconColor: "#fff",
-      },
+      { label: "Households", icon: Users, route: "/households", color: JEWEL.bronze },
+      { label: "Pets", icon: Heart, route: "/pets", color: JEWEL.burgundy },
+      { label: "Health", icon: Activity, route: "/weight", color: JEWEL.forest },
+      { label: "Flats", icon: Building, route: "/tattersalls", color: JEWEL.petrol },
+      { label: "Freezer", icon: Snowflake, route: "/freezer", color: JEWEL.marine },
+      { label: "AI Analysis", icon: Sparkles, route: "/ai-analysis", color: JEWEL.aubergine },
     ],
   },
   {
     title: "Settings",
     items: [
-      {
-        label: "Display / Themes",
-        icon: Palette,
-        route: "/themes",
-        gradient: "linear-gradient(135deg, hsl(314,55%,52%), hsl(280,50%,48%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Notifications",
-        icon: Bell,
-        route: "/notifications",
-        gradient: "linear-gradient(135deg, hsl(44,90%,52%), hsl(32,80%,46%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Alarms",
-        icon: AlarmClock,
-        route: "/alarms",
-        gradient: "linear-gradient(135deg, #5C4318, #8A6424)",
-        iconColor: "#fff",
-      },
-      {
-        label: "Remote Displays",
-        icon: MonitorSmartphone,
-        route: "/remote-displays",
-        gradient: "linear-gradient(135deg, hsl(198,65%,50%), hsl(210,60%,44%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Connected Devices",
-        icon: Cable,
-        route: "/connected-devices",
-        gradient: "linear-gradient(135deg, hsl(160,58%,44%), hsl(172,52%,38%))",
-        iconColor: "#fff",
-      },
-      {
-        label: "Settings",
-        icon: Settings,
-        route: "/settings",
-        gradient: "linear-gradient(135deg, hsl(215,20%,52%), hsl(220,16%,44%))",
-        iconColor: "#fff",
-      },
+      { label: "Display / Themes", icon: Palette, route: "/themes", color: JEWEL.plum },
+      { label: "Notifications", icon: Bell, route: "/notifications", color: JEWEL.bronze },
+      { label: "Alarms", icon: AlarmClock, route: "/alarms", color: JEWEL.bronze },
+      { label: "Remote Displays", icon: MonitorSmartphone, route: "/remote-displays", color: JEWEL.petrol },
+      { label: "Connected Devices", icon: Cable, route: "/connected-devices", color: JEWEL.teal },
+      { label: "Settings", icon: Settings, route: "/settings", color: JEWEL.slate },
     ],
   },
 ];
@@ -284,34 +127,35 @@ const More = () => {
   })).filter((section) => section.items.length > 0);
 
   return (
-    <div className="px-4 py-5 pb-24">
-      <h1 className="text-xl font-bold font-display text-foreground mb-5">More</h1>
+    <div className="page-gutter-x py-5 pb-8">
+      <h1 className="font-display text-2xl font-semibold text-foreground mb-5">More</h1>
 
       <div className="space-y-6">
         {visibleSections.map((section) => (
           <div key={section.title}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground/60 mb-3 px-1">
               {section.title}
             </p>
             <div className="grid grid-cols-3 gap-3">
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const d = delay;
-                delay += 0.05;
+                delay += 0.04;
                 return (
                   <motion.button
                     key={item.route}
-                    initial={{ opacity: 0, scale: 0.88 }}
+                    type="button"
+                    initial={{ opacity: 0, scale: 0.94 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: d, type: "spring", stiffness: 320, damping: 26 }}
+                    transition={{ delay: d, duration: 0.16 }}
                     onClick={() => navigate(item.route)}
-                    className="flex flex-col items-center gap-2.5 p-3 rounded-2xl border border-border bg-card shadow-soft active:scale-95 transition-all hover:shadow-elevated hover:-translate-y-0.5 hover:border-primary/30"
+                    className="flex flex-col items-center gap-2.5 p-3 rounded-xl border border-foreground/20 bg-card shadow-card active:scale-[0.97] transition-transform"
                   >
                     <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md"
-                      style={{ background: item.gradient }}
+                      className="btn-edge flex h-12 w-12 items-center justify-center rounded-lg text-white"
+                      style={{ background: item.color }}
                     >
-                      <Icon className="w-7 h-7" style={{ color: item.iconColor }} />
+                      <Icon className="w-6 h-6" />
                     </div>
                     <span className="text-[13px] font-semibold text-foreground text-center leading-tight">
                       {item.label}
@@ -322,6 +166,22 @@ const More = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="mt-8">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={async () => {
+            await cleanupFcmTokenOnSignOut(auth.currentUser?.uid);
+            await signOut(auth);
+            navigate("/", { replace: true });
+          }}
+        >
+          <LogOut />
+          Sign out
+        </Button>
       </div>
     </div>
   );
