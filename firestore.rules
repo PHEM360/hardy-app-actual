@@ -1085,13 +1085,11 @@ service cloud.firestore {
       allow write: if canEditPage(userId, "health");
     }
 
-    // Substance logs - per user, bundled into the "health" page share
+    // Substance logs - strictly private to the owner. Never included in health page share.
     match /substanceLogs/{userId} {
-      allow read: if canViewPage(userId, "health");
-      allow write: if canEditPage(userId, "health");
+      allow read, write: if isOwner(userId);
       match /logs/{logId} {
-        allow read: if canViewPage(userId, "health");
-        allow write: if canEditPage(userId, "health");
+        allow read, write: if isOwner(userId);
       }
     }
 
