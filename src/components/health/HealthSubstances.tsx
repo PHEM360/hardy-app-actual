@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FlaskConical, Plus, Trash2, Table2, LineChart as LineChartIcon, Calendar,
 } from "lucide-react";
@@ -27,6 +27,7 @@ import {
   formatDoseLabel,
   formatTotalAmount,
   isSwigUnit,
+  listChartSeries,
   mergeSubstanceOptions,
   sortLogsNewestFirst,
   substanceColor,
@@ -117,12 +118,15 @@ export default function HealthSubstances() {
   );
 
   const [selected, setSelected] = useState<string[]>([]);
+  const selectionInitialized = useRef(false);
 
   useEffect(() => {
-    if (selected.length > 0) return;
+    if (selectionInitialized.current) return;
     const fromLogs = Array.from(new Set(logs.map((l) => l.name)));
-    if (fromLogs.length > 0) setSelected(fromLogs);
-  }, [logs, selected.length]);
+    if (fromLogs.length === 0) return;
+    selectionInitialized.current = true;
+    setSelected(fromLogs);
+  }, [logs]);
 
   const filtered = useMemo(() => {
     const inPeriod = filterLogsByPeriod(logs, period);
@@ -130,7 +134,9 @@ export default function HealthSubstances() {
   }, [logs, period, selected]);
 
   const totals = useMemo(() => computeSubstanceTotals(filtered), [filtered]);
-  const chartRows = useMemo(() => buildDailyChartRows(filtered, selected), [filtered, selected]);
+  const chartSeries = useMemo(() => listChartSeries(filtered, selected), [filtered, selected]);
+  const chartSeriesKeys = useMemo(() => chartSeries.map((s) => s.key), [chartSeries]);
+  const chartRows = useMemo(() => buildDailyChartRows(filtered, chartSeries), [filtered, chartSeries]);
   const doseCount = filtered.length;
 
   const openLog = (name?: string) => {
@@ -294,56 +300,46 @@ export default function HealthSubstances() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-foreground/20">
-              <table className="w-full min-w-[320px] text-sm">
-                <thead>
-                  <tr className="bg-[hsl(215_35%_18%)] text-left text-white">
-                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em]">Date</th>
-                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em]">Time</th>
-                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em]">Substance</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em]">Dose</th>
-                    <th className="px-2 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((log, i) => (
-                    <tr
-                      key={log.id}
-                      className={i % 2 === 0 ? "bg-card" : "bg-[color-mix(in_srgb,var(--sec)_8%,hsl(var(--card)))]"}
-                    >
-                      <td className="px-3 py-2 tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          <Calendar className="h-3 w-3 opacity-60" />
-                          {format(parseISO(log.date), "d MMM yyyy")}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">{log.time}</td>
-                      <td className="px-3 py-2 font-semibold">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            className="inline-block h-2 w-2 rounded-full"
-                            style={{ backgroundColor: substanceColor(log.name, catalog) }}
-                          />
-                          {log.name}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right font-display font-bold tabular-nums">
+            <div className="space-y-2">
+              {filtered.map((log, i) => (
+                <div
+                  key={log.id}
+                  className={`flex items-start gap-2 rounded-lg border border-foreground/20 px-3 py-2.5 ${
+                    i % 2 === 0 ? "bg-card" : "bg-[color-mix(in_srgb,var(--sec)_8%,hsl(var(--card)))]"
+                  }`}
+                >
+                  <span
+                    className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: substanceColor(log.name, catalog) }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-sm font-bold text-foreground">{log.name}</p>
+                      <p className="shrink-0 font-display text-sm font-bold tabular-nums text-foreground">
                         {formatDoseLabel(log.dose, log.unit)}
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => deleteLog(log.id)}
-                          className="rounded-md p-2 text-foreground/50 hover:bg-destructive/10 hover:text-destructive"
-                          aria-label="Delete dose"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </p>
+                    </div>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs tabular-nums text-foreground/70">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="h-3 w-3 opacity-60" />
+                        {format(parseISO(log.date), "d MMM yyyy")}
+                      </span>
+                      <span>{log.time}</span>
+                    </p>
+                    {log.notes ? (
+                      <p className="mt-1 text-xs text-foreground/60">{log.notes}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deleteLog(log.id)}
+                    className="shrink-0 rounded-md p-2 text-foreground/50 hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Delete dose"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
           )
         ) : chartRows.length === 0 ? (
@@ -368,19 +364,20 @@ export default function HealthSubstances() {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                {selected.map((name) => (
+                {chartSeries.map((series) => (
                   <Bar
-                    key={name}
-                    dataKey={name}
-                    stackId="doses"
-                    fill={substanceColor(name, catalog)}
+                    key={series.key}
+                    dataKey={series.key}
+                    name={series.key}
+                    stackId={series.unit}
+                    fill={substanceColor(series.key, chartSeriesKeys)}
                     radius={[2, 2, 0, 0]}
                   />
                 ))}
               </BarChart>
             </ResponsiveContainer>
             <p className="mt-2 text-[10px] text-foreground/60">
-              Graph stacks daily amounts. A small swig counts as 1 and a big swig as 2.
+              Each substance and unit is its own series. Same units stack. A small swig counts as 1 and a big swig as 2.
             </p>
           </div>
         )}

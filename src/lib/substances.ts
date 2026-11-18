@@ -183,24 +183,58 @@ export function formatTotalAmount(total: SubstanceTotal): string {
   return `${rounded} ${total.unit}`;
 }
 
-/** One row per date with a numeric total per selected substance (for charts). */
-export function buildDailyChartRows(
+/** Chart series key: substance and unit stay separate so mg is never mixed with swig. */
+export function chartSeriesKey(name: string, unit: string): string {
+  return `${name} (${unit})`;
+}
+
+export function parseChartSeriesKey(key: string): { name: string; unit: string } | null {
+  const match = key.match(/^(.*) \(([^()]+)\)$/);
+  if (!match) return null;
+  return { name: match[1], unit: match[2] };
+}
+
+export interface ChartSeries {
+  key: string;
+  name: string;
+  unit: string;
+}
+
+/** Distinct substance+unit series present in the filtered logs for the selected names. */
+export function listChartSeries(
   logs: SubstanceLogLike[],
   substanceNames: string[],
+): ChartSeries[] {
+  const set = new Set(substanceNames);
+  const map = new Map<string, ChartSeries>();
+  for (const log of logs) {
+    if (!set.has(log.name)) continue;
+    const key = chartSeriesKey(log.name, log.unit);
+    if (!map.has(key)) map.set(key, { key, name: log.name, unit: log.unit });
+  }
+  return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** One row per date with a numeric total per substance+unit series. */
+export function buildDailyChartRows(
+  logs: SubstanceLogLike[],
+  series: ChartSeries[],
 ): Record<string, string | number>[] {
   const byDate = new Map<string, Record<string, number>>();
+  const seriesKeys = new Set(series.map((s) => s.key));
   for (const log of logs) {
-    if (!substanceNames.includes(log.name)) continue;
+    const key = chartSeriesKey(log.name, log.unit);
+    if (!seriesKeys.has(key)) continue;
     const row = byDate.get(log.date) ?? {};
-    row[log.name] = (row[log.name] ?? 0) + doseAmountForChart(log.dose, log.unit);
+    row[key] = (row[key] ?? 0) + doseAmountForChart(log.dose, log.unit);
     byDate.set(log.date, row);
   }
   return Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, amounts]) => {
       const row: Record<string, string | number> = { date };
-      for (const name of substanceNames) {
-        row[name] = amounts[name] ?? 0;
+      for (const s of series) {
+        row[s.key] = amounts[s.key] ?? 0;
       }
       return row;
     });

@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildDailyChartRows,
   canAccessSubstanceTracking,
+  chartSeriesKey,
   computeSubstanceTotals,
   doseAmountForChart,
   filterLogsByPeriod,
   filterLogsBySubstances,
   formatDoseLabel,
   formatTotalAmount,
+  listChartSeries,
   mergeSubstanceOptions,
   sortLogsNewestFirst,
 } from "@/lib/substances";
@@ -95,11 +97,29 @@ describe("filtering and totals", () => {
     expect(formatTotalAmount(swig)).toBe("2 swig units");
   });
 
-  it("builds daily chart rows", () => {
-    const rows = buildDailyChartRows(sample, ["Oramorph", "Codeine"]);
-    expect(rows[0]).toMatchObject({ date: "2026-03-10", Oramorph: 15, Codeine: 0 });
-    expect(rows[1]).toMatchObject({ date: "2026-03-11", Oramorph: 0, Codeine: 30 });
-    expect(rows[2]).toMatchObject({ date: "2026-03-12", Oramorph: 2, Codeine: 0 });
+  it("keeps incompatible units as separate chart series", () => {
+    const series = listChartSeries(sample, ["Oramorph", "Codeine"]);
+    expect(series.map((s) => s.key)).toEqual([
+      chartSeriesKey("Codeine", "mg"),
+      chartSeriesKey("Oramorph", "mg"),
+      chartSeriesKey("Oramorph", "swig"),
+    ]);
+    const rows = buildDailyChartRows(sample, series);
+    expect(rows[0]).toMatchObject({
+      date: "2026-03-10",
+      [chartSeriesKey("Oramorph", "mg")]: 15,
+      [chartSeriesKey("Oramorph", "swig")]: 0,
+      [chartSeriesKey("Codeine", "mg")]: 0,
+    });
+    expect(rows[1]).toMatchObject({
+      date: "2026-03-11",
+      [chartSeriesKey("Codeine", "mg")]: 30,
+    });
+    expect(rows[2]).toMatchObject({
+      date: "2026-03-12",
+      [chartSeriesKey("Oramorph", "swig")]: 2,
+      [chartSeriesKey("Oramorph", "mg")]: 0,
+    });
   });
 
   it("sorts newest first by date then time", () => {
