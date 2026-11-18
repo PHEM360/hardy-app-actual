@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Lock, Brain, FolderOpen, FileText, Download, Upload, Watch } from "lucide-react";
+import { HeartPulse, Plus, Pill, Activity, Sparkles, Trash2, Eye, EyeOff, FlaskConical, Brain, FolderOpen, FileText, Download, Upload, Watch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,9 @@ import { useHealthTabs, type FieldType } from "@/hooks/useHealthTabs";
 import { useHealthProfile } from "@/hooks/useHealthProfile";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useSharedScope } from "@/hooks/useSharedScope";
+import { useAuth } from "@/auth/AuthContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { canAccessSubstanceTracking } from "@/lib/substances";
 import { UploadDocumentDialog } from "@/components/documents/UploadDocumentDialog";
 import { format, parseISO } from "date-fns";
 
@@ -123,11 +126,19 @@ function MiniSparkline({
 type CoreTab = "overview" | "metrics" | "meds" | "substances" | "wearables" | "ai" | "documents";
 
 export default function Health() {
+  const { user, viewAs } = useAuth();
+  const { profile: userProfile } = useUserProfile();
   const { scopeUserId, pageTitle, isOwnScope } = useSharedScope("health");
   const { entries, heightEntries, bpEntries, measurements } = useWeightTracker(scopeUserId ?? undefined);
   const { medications } = useMeds(scopeUserId ?? undefined);
   const { tabs, addTab, deleteTab } = useHealthTabs(scopeUserId ?? undefined);
   const { profile, saveProfile } = useHealthProfile(scopeUserId ?? undefined);
+  const substancesEnabled = canAccessSubstanceTracking({
+    email: user?.email ?? userProfile?.email,
+    firstName: userProfile?.firstName,
+    isOwnScope,
+    viewingAsOther: Boolean(viewAs),
+  });
   const { logs: substanceLogs } = useSubstances();
   const { days: wearableDays } = useWearableHealth(scopeUserId ?? undefined);
 
@@ -166,15 +177,21 @@ export default function Health() {
     } finally { setNtSaving(false); }
   };
 
-  const CORE_TABS = [
+  const CORE_TABS = useMemo(() => [
     { id: "overview",    label: "Overview",       icon: <HeartPulse className="w-4 h-4" /> },
     { id: "metrics",     label: "Weight & Stats",  icon: <Activity className="w-4 h-4" /> },
     { id: "meds",        label: "Medications",     icon: <Pill className="w-4 h-4" /> },
-    { id: "substances",  label: "Substances",      icon: <FlaskConical className="w-4 h-4" /> },
+    ...(substancesEnabled
+      ? [{ id: "substances" as const, label: "Substances", icon: <FlaskConical className="w-4 h-4" /> }]
+      : []),
     { id: "wearables",   label: "Watch & Ring",    icon: <Watch className="w-4 h-4" /> },
     { id: "ai",          label: "AI Analysis",     icon: <Brain className="w-4 h-4" /> },
     { id: "documents",   label: "Documents",       icon: <FolderOpen className="w-4 h-4" /> },
-  ];
+  ], [substancesEnabled]);
+
+  useEffect(() => {
+    if (!substancesEnabled && activeTab === "substances") setActiveTab("overview");
+  }, [substancesEnabled, activeTab]);
 
   const activeCustomTab = tabs.find((t) => t.id === activeTab);
 
@@ -420,7 +437,7 @@ export default function Health() {
 
           {activeTab === "metrics" && <HealthMetrics scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "meds"    && <HealthMeds scopeUserId={scopeUserId ?? undefined} />}
-          {activeTab === "substances" && <HealthSubstances />}
+          {activeTab === "substances" && substancesEnabled && <HealthSubstances />}
           {activeTab === "wearables" && <HealthWearables scopeUserId={scopeUserId ?? undefined} />}
           {activeTab === "ai" && (
             <AiHealthAssessment
@@ -430,7 +447,7 @@ export default function Health() {
               measurements={measurements}
               medications={medications}
               profile={profile}
-              substanceLogs={substanceLogs}
+              substanceLogs={substancesEnabled ? substanceLogs : undefined}
               wearableDays={wearableDays}
             />
           )}
